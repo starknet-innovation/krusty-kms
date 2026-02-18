@@ -1,5 +1,0 @@
-cargo:rustc-link-search=native=/Users/theodorepender/Coding/kms/zig/zig-out/lib
-cargo:rustc-link-lib=kms
-cargo:rustc-link-arg=-Wl,-rpath,/Users/theodorepender/Coding/kms/zig/zig-out/lib
-cargo:rerun-if-changed=build.rs
-cargo:rerun-if-changed=/Users/theodorepender/Coding/kms/zig/include/kms.h
