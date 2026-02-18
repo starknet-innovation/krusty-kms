@@ -1,0 +1,15 @@
+{
+  "vectors": [
+    {
+      "name": "oz-account-derived-from-starknet-key",
+      "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+      "coin_type": 9004,
+      "index": 0,
+      "account_index": 0,
+      "class_hash": "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564",
+      "salt": "0x0",
+      "expected_public_key_x": "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e",
+      "expected_address": "0x6df2d05138d501f6aafe03c1d95b9ff824e2d96821934cd3d8148801865fefe"
+    }
+  ]
+}

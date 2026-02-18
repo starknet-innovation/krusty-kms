@@ -1,0 +1,4 @@
+module CKms {
+    umbrella "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/CKms/include"
+    export *
+}

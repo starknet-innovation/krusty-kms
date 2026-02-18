@@ -1,0 +1,17 @@
+[package]
+name = "rust-oracle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+kms = { path = "../../crates/core/kms", default-features = false }
+she-core = { path = "../../crates/core/she-core", default-features = false }
+tongo-sdk = { path = "../../crates/core/tongo-sdk", default-features = false }
+nostr-messaging = { path = "../../crates/core/nostr-messaging" }
+starknet-client = { path = "../../crates/core/starknet-client" }
+ghoul-common = { path = "../../crates/core/common" }
+starknet-types-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+bip39.workspace = true

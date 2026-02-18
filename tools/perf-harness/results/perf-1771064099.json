@@ -1,0 +1,370 @@
+{
+  "generated_at_unix": 1771064099,
+  "git_commit": "unknown",
+  "config": {
+    "samples": 2,
+    "warmup": 0,
+    "rust_bin": "/Users/theodorepender/Coding/kms/target/release/rust-oracle",
+    "zig_bin": "/Users/theodorepender/Coding/kms/tools/zig-oracle/zig-oracle-release",
+    "vectors": "/Users/theodorepender/Coding/kms/fixtures/vectors/parity/core-vectors.json"
+  },
+  "cases": [
+    {
+      "name": "mnemonic_to_seed",
+      "op": "kms.mnemonic_to_seed",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.703708,
+          6.49
+        ],
+        "median_ms": 6.596854,
+        "p95_ms": 6.703708,
+        "stddev_ms": 0.10685399999999978
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          62.339332999999996,
+          55.649167
+        ],
+        "median_ms": 58.994249999999994,
+        "p95_ms": 62.339332999999996,
+        "stddev_ms": 3.345082999999999
+      },
+      "ratio_zig_over_rust": 8.942785455006279
+    },
+    {
+      "name": "derive_keypair",
+      "op": "kms.derive_keypair_with_coin_type",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.52825,
+          6.4992909999999995
+        ],
+        "median_ms": 6.5137705,
+        "p95_ms": 6.52825,
+        "stddev_ms": 0.0144795000000002
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          74.388042,
+          73.79245800000001
+        ],
+        "median_ms": 74.09025,
+        "p95_ms": 74.388042,
+        "stddev_ms": 0.29779199999999406
+      },
+      "ratio_zig_over_rust": 11.3744028900005
+    },
+    {
+      "name": "pedersen_hash",
+      "op": "kms.pedersen_hash",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.190875,
+          6.610709
+        ],
+        "median_ms": 6.400792,
+        "p95_ms": 6.610709,
+        "stddev_ms": 0.2099169999999999
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          43.266125,
+          42.726833
+        ],
+        "median_ms": 42.996479,
+        "p95_ms": 43.266125,
+        "stddev_ms": 0.2696460000000016
+      },
+      "ratio_zig_over_rust": 6.717368569389538
+    },
+    {
+      "name": "poseidon_hash_many",
+      "op": "kms.poseidon_hash_many",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.5017499999999995,
+          6.43975
+        ],
+        "median_ms": 6.47075,
+        "p95_ms": 6.5017499999999995,
+        "stddev_ms": 0.030999999999999694
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          42.13125,
+          42.510125
+        ],
+        "median_ms": 42.320687500000005,
+        "p95_ms": 42.510125,
+        "stddev_ms": 0.18943750000000037
+      },
+      "ratio_zig_over_rust": 6.5403063787041695
+    },
+    {
+      "name": "curve_mul_generator",
+      "op": "she.curve_mul_generator",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.135624999999999,
+          6.540375
+        ],
+        "median_ms": 6.337999999999999,
+        "p95_ms": 6.540375,
+        "stddev_ms": 0.20237500000000042
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          55.873209,
+          49.0995
+        ],
+        "median_ms": 52.486354500000004,
+        "p95_ms": 55.873209,
+        "stddev_ms": 3.386854500000002
+      },
+      "ratio_zig_over_rust": 8.281217182076366
+    },
+    {
+      "name": "poe_prove_verify",
+      "op": "she.poe_prove_verify",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.5208330000000005,
+          6.559416000000001
+        ],
+        "median_ms": 6.540124500000001,
+        "p95_ms": 6.559416000000001,
+        "stddev_ms": 0.019291500000000017
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          86.811584,
+          87.061875
+        ],
+        "median_ms": 86.9367295,
+        "p95_ms": 87.061875,
+        "stddev_ms": 0.12514550000000213
+      },
+      "ratio_zig_over_rust": 13.292824853716468
+    },
+    {
+      "name": "elgamal_prove_verify_decrypt",
+      "op": "she.elgamal_encrypt_verify_decrypt",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.537584,
+          5.302125
+        ],
+        "median_ms": 5.9198545,
+        "p95_ms": 6.537584,
+        "stddev_ms": 0.6177294999999998
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          206.032708,
+          215.235
+        ],
+        "median_ms": 210.633854,
+        "p95_ms": 215.235,
+        "stddev_ms": 4.601146
+      },
+      "ratio_zig_over_rust": 35.58091740261522
+    },
+    {
+      "name": "range_prove_verify",
+      "op": "she.range_prove_verify",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.551833,
+          6.486417
+        ],
+        "median_ms": 6.519125000000001,
+        "p95_ms": 6.551833,
+        "stddev_ms": 0.03270799999999996
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          809.753959,
+          794.219041
+        ],
+        "median_ms": 801.9865,
+        "p95_ms": 809.753959,
+        "stddev_ms": 7.767459000000031
+      },
+      "ratio_zig_over_rust": 123.02057408011042
+    },
+    {
+      "name": "audit_prove_verify",
+      "op": "she.audit_prove_verify",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.573958,
+          5.6998750000000005
+        ],
+        "median_ms": 6.1369165,
+        "p95_ms": 6.573958,
+        "stddev_ms": 0.43704149999999986
+      },
+      "zig": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          231.005667,
+          237.630666
+        ],
+        "median_ms": 234.3181665,
+        "p95_ms": 237.630666,
+        "stddev_ms": 3.3124995000000013
+      },
+      "ratio_zig_over_rust": 38.18174265528951
+    },
+    {
+      "name": "tongo_fund",
+      "op": "tongo.fund",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.531667,
+          6.470792
+        ],
+        "median_ms": 6.5012295,
+        "p95_ms": 6.531667,
+        "stddev_ms": 0.030437499999999673
+      },
+      "zig": {
+        "status": "error",
+        "error": "oracle error: UnsupportedOperation",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "ratio_zig_over_rust": null
+    },
+    {
+      "name": "tongo_transfer",
+      "op": "tongo.transfer",
+      "rust": {
+        "status": "error",
+        "error": "oracle error: Cryptographic operation failed: Value 990 is not in range [0, 255]",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "zig": {
+        "status": "error",
+        "error": "oracle error: UnsupportedOperation",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "ratio_zig_over_rust": null
+    },
+    {
+      "name": "tongo_rollover",
+      "op": "tongo.rollover",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.583375,
+          6.472
+        ],
+        "median_ms": 6.527687500000001,
+        "p95_ms": 6.583375,
+        "stddev_ms": 0.05568749999999989
+      },
+      "zig": {
+        "status": "error",
+        "error": "oracle error: UnsupportedOperation",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "ratio_zig_over_rust": null
+    },
+    {
+      "name": "tongo_withdraw",
+      "op": "tongo.withdraw",
+      "rust": {
+        "status": "error",
+        "error": "oracle error: Cryptographic operation failed: Value 990 is not in range [0, 255]",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "zig": {
+        "status": "error",
+        "error": "oracle error: UnsupportedOperation",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "ratio_zig_over_rust": null
+    },
+    {
+      "name": "tongo_ragequit",
+      "op": "tongo.ragequit",
+      "rust": {
+        "status": "ok",
+        "error": null,
+        "samples_ms": [
+          6.5485,
+          6.463082999999999
+        ],
+        "median_ms": 6.505791499999999,
+        "p95_ms": 6.5485,
+        "stddev_ms": 0.04270850000000026
+      },
+      "zig": {
+        "status": "error",
+        "error": "oracle error: UnsupportedOperation",
+        "samples_ms": [],
+        "median_ms": null,
+        "p95_ms": null,
+        "stddev_ms": null
+      },
+      "ratio_zig_over_rust": null
+    }
+  ]
+}

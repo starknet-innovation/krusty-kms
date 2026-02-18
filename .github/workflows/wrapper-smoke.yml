@@ -1,0 +1,106 @@
+name: Wrapper Smoke
+
+on:
+  push:
+    paths:
+      - "packages/**"
+      - "zig/include/kms.h"
+      - ".github/workflows/wrapper-smoke.yml"
+  pull_request:
+    paths:
+      - "packages/**"
+      - "zig/include/kms.h"
+      - ".github/workflows/wrapper-smoke.yml"
+
+jobs:
+  header-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tools/sync_kms_header.sh
+      - run: git diff --exit-code
+
+  ts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/kms-ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npm run typecheck
+
+  py:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/kms-py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m compileall src
+
+  rs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/kms-rs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+      - run: zig build --build-file ../../zig/build.zig
+      - run: cargo test
+
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/kms-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+      - run: zig build --build-file ../../zig/build.zig
+      - run: go test ./...
+
+  swift:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: packages/kms-swift
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+      - name: Build Zig library dependency
+        run: zig build --build-file ../../zig/build.zig
+      - run: swift build
+
+  jvm:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/kms-jvm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.10
+      - run: gradle classes

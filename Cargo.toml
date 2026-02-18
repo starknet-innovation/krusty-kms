@@ -1,0 +1,59 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core/common",
+    "crates/core/kms",
+    "crates/core/nostr-messaging",
+    "crates/core/she-core",
+    "crates/core/starknet-client",
+    "crates/core/tongo-sdk",
+    "crates/wasm/kms-wasm",
+    "crates/wasm/nostr-wasm",
+    "crates/wasm/she-core-wasm",
+    "crates/wasm/tongo-wasm",
+    "crates/experimental/gaming-experimental/mental-poker",
+    "crates/experimental/gaming-experimental/mental-poker-wasm",
+    "crates/experimental/gaming-experimental/qb-game",
+    "packages/kms-rs",
+    "tools/rust-oracle",
+    "tools/equivalence-harness",
+    "tools/perf-harness",
+]
+default-members = [
+    "crates/core/common",
+    "crates/core/kms",
+    "crates/core/nostr-messaging",
+    "crates/core/she-core",
+    "crates/core/starknet-client",
+    "crates/core/tongo-sdk",
+    "crates/wasm/kms-wasm",
+    "crates/wasm/nostr-wasm",
+    "crates/wasm/she-core-wasm",
+    "crates/wasm/tongo-wasm",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["GHOUL Contributors"]
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+starknet-types-core = { version = "0.2.0", features = ["hash"] }
+bip39 = "2.2.0"
+hmac = "0.12.1"
+sha2 = "0.10.8"
+sha3 = "0.10.8"
+num-bigint = "0.4.6"
+num-traits = "0.2.19"
+num-integer = "0.1.46"
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = "1.0.138"
+hex = "0.4.3"
+thiserror = "1.0.69"
+rand = "0.8.5"
+rand_core = "0.6.4"
+rayon = "1.10.0"
+proptest = "1.6.0"
+criterion = "0.5.1"
+tokio = "1.43.0"

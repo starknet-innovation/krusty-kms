@@ -1,0 +1,243 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.GhoulKms-arm64-apple-macosx15.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/sources",
+      "importPath" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/GhoulKms/GhoulKms.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/CKms.build/empty.c.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "GhoulKms",
+      "moduleOutputPath" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/Modules/GhoulKms.swiftmodule",
+      "objects" : [
+        "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j14",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-Xcc",
+        "-fmodule-map-file=/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/CKms.build/module.modulemap",
+        "-Xcc",
+        "-I",
+        "-Xcc",
+        "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/CKms/include",
+        "-module-cache-path",
+        "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms-Swift.h",
+        "-swift-version",
+        "5",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "kms_swift"
+      ],
+      "outputFileMapPath" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/Modules/GhoulKms.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/GhoulKms/GhoulKms.swift"
+      ],
+      "tempsPath" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "GhoulKms" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "GhoulKms",
+      "-package-name",
+      "kms_swift",
+      "-incremental",
+      "-c",
+      "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/GhoulKms/GhoulKms.swift",
+      "-I",
+      "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j14",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-Xcc",
+      "-fmodule-map-file=/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/CKms.build/module.modulemap",
+      "-Xcc",
+      "-I",
+      "-Xcc",
+      "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/CKms/include",
+      "-module-cache-path",
+      "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms-Swift.h",
+      "-swift-version",
+      "5",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "kms_swift",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "CKms" : [
+
+    ],
+    "GhoulKms" : [
+      "CKms"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "enableAllTraits" : false
+  },
+  "writeCommands" : {
+    "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/GhoulKms/GhoulKms.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/sources"
+    },
+    "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

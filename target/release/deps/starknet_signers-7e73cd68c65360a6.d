@@ -1,0 +1,10 @@
+/Users/theodorepender/Coding/kms/target/release/deps/starknet_signers-7e73cd68c65360a6.d: /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/lib.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/key_pair.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/signer.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/local_wallet.rs
+
+/Users/theodorepender/Coding/kms/target/release/deps/libstarknet_signers-7e73cd68c65360a6.rlib: /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/lib.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/key_pair.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/signer.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/local_wallet.rs
+
+/Users/theodorepender/Coding/kms/target/release/deps/libstarknet_signers-7e73cd68c65360a6.rmeta: /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/lib.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/key_pair.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/signer.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/local_wallet.rs
+
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/lib.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/key_pair.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/signer.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/starknet-signers-0.14.0/src/local_wallet.rs:

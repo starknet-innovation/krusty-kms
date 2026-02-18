@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/master.swiftdeps"
+  },
+  "/Users/theodorepender/Coding/kms/packages/kms-swift/Sources/GhoulKms/GhoulKms.swift": {
+    "dependencies": "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms.d",
+    "object": "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms.swift.o",
+    "swiftmodule": "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms~partial.swiftmodule",
+    "swift-dependencies": "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms.swiftdeps"
+  }
+}

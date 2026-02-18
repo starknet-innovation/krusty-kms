@@ -1,0 +1,4 @@
+module GhoulKms {
+    header "/Users/theodorepender/Coding/kms/packages/kms-swift/.build/arm64-apple-macosx/debug/GhoulKms.build/GhoulKms-Swift.h"
+    requires objc
+}

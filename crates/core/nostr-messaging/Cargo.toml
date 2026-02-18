@@ -1,0 +1,27 @@
+[package]
+name = "nostr-messaging"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Nostr private messaging primitives (NIP-17/44 inspired) for Ghoul"
+
+[features]
+default = ["crypto"]
+crypto = []
+relay = ["nostr-sdk"]
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+rand = { workspace = true, features = ["std"] }
+hmac.workspace = true
+sha2.workspace = true
+hkdf = "0.12"
+chacha20 = "0.9"
+cipher = "0.4"
+k256 = { version = "0.13", features = ["ecdsa", "sha256", "ecdh"] }
+base64 = "0.22"
+hex = { workspace = true }
+nostr-sdk = { version = "0.29", default-features = false, optional = true }

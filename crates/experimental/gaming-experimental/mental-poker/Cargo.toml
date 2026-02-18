@@ -1,0 +1,53 @@
+[package]
+name = "mental-poker"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Mental poker protocol implementation for confidential card games on Starknet"
+readme = "README.md"
+keywords = ["cryptography", "mental-poker", "zero-knowledge", "starknet", "cards"]
+categories = ["cryptography", "games"]
+
+[features]
+default = ["parallel"]
+parallel = ["rayon", "she-core/parallel"]
+
+[dependencies]
+# Internal crates
+ghoul-common = { path = "../../../core/common" }
+she-core = { path = "../../../core/she-core", default-features = false }
+
+# Starknet types
+starknet-types-core.workspace = true
+
+# Cryptography
+sha2.workspace = true
+sha3.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+num-bigint.workspace = true
+num-traits.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Parallelism (optional)
+rayon = { workspace = true, optional = true }
+
+# WASM support - ensure proper random number generation in browsers
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "mental_poker"
+harness = false

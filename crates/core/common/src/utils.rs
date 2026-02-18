@@ -1,0 +1,210 @@
+//! Utility functions for TONGO protocol.
+
+use crate::{GhoulError, Result};
+use starknet_types_core::felt::Felt;
+
+/// Parse a hex string to Felt, handling various formats.
+pub fn parse_hex_to_felt(hex: &str) -> Result<Felt> {
+    Felt::from_hex(hex).map_err(|e| GhoulError::DeserializationError(e.to_string()))
+}
+
+/// Convert Felt to hex string with 0x prefix.
+pub fn felt_to_hex(felt: &Felt) -> String {
+    format!("{:#x}", felt)
+}
+
+/// Left-pad a hex string to the specified length.
+pub fn left_pad_hex(hex: &str, length: usize) -> String {
+    let hex_clean = hex.strip_prefix("0x").unwrap_or(hex);
+    if hex_clean.len() >= length {
+        hex_clean.to_string()
+    } else {
+        format!("{:0>width$}", hex_clean, width = length)
+    }
+}
+
+/// Serialize public key as concatenated x,y coordinates (128 hex chars).
+pub fn serialize_public_key_hex(x: &Felt, y: &Felt) -> String {
+    let x_hex = left_pad_hex(&format!("{:#x}", x).trim_start_matches("0x"), 64);
+    let y_hex = left_pad_hex(&format!("{:#x}", y).trim_start_matches("0x"), 64);
+    format!("0x{}{}", x_hex, y_hex)
+}
+
+/// Parse public key from concatenated hex format.
+pub fn parse_public_key_hex(hex: &str) -> Result<(Felt, Felt)> {
+    let cleaned = hex
+        .strip_prefix("0x")
+        .unwrap_or(hex)
+        .strip_prefix("04")
+        .unwrap_or(hex.strip_prefix("0x").unwrap_or(hex));
+
+    if cleaned.len() != 128 {
+        return Err(GhoulError::InvalidPublicKey(format!(
+            "Expected 128 hex chars, got {}",
+            cleaned.len()
+        )));
+    }
+
+    let x_hex = &cleaned[..64];
+    let y_hex = &cleaned[64..];
+
+    let x = Felt::from_hex(&format!("0x{}", x_hex))
+        .map_err(|e| GhoulError::InvalidPublicKey(e.to_string()))?;
+    let y = Felt::from_hex(&format!("0x{}", y_hex))
+        .map_err(|e| GhoulError::InvalidPublicKey(e.to_string()))?;
+
+    Ok((x, y))
+}
+
+/// Convert STRK (as string) to FRI (base units).
+pub fn strk_to_fri(strk: &str) -> Result<u128> {
+    let strk_clean = strk.trim().trim_end_matches("STRK").trim();
+    let strk_float: f64 = strk_clean
+        .parse()
+        .map_err(|_| GhoulError::InvalidAmount(format!("Invalid STRK amount: {}", strk)))?;
+
+    if strk_float < 0.0 {
+        return Err(GhoulError::InvalidAmount(
+            "Amount cannot be negative".to_string(),
+        ));
+    }
+
+    let fri = (strk_float * 1e18) as u128;
+    Ok(fri)
+}
+
+/// Convert FRI (base units) to STRK (as float).
+pub fn fri_to_strk(fri: u128) -> f64 {
+    fri as f64 / 1e18
+}
+
+/// Convert Tongo units to STRK using rate.
+pub fn tongo_to_strk(tongo_amount: u128, rate: u128) -> f64 {
+    let fri = tongo_amount.saturating_mul(rate);
+    fri_to_strk(fri)
+}
+
+/// Convert STRK to Tongo units using rate.
+pub fn strk_to_tongo(strk: &str, rate: u128) -> Result<u128> {
+    let fri = strk_to_fri(strk)?;
+    Ok(fri / rate)
+}
+
+/// Format Tongo balance as STRK with 2 decimal places.
+pub fn format_tongo_balance(tongo_amount: u128, rate: u128) -> String {
+    let strk = tongo_to_strk(tongo_amount, rate);
+    format!("{:.2} STRK", strk)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_hex_to_felt() {
+        let felt = parse_hex_to_felt("0x123").unwrap();
+        assert_eq!(felt, Felt::from(0x123u64));
+
+        let felt2 = parse_hex_to_felt("0xabcdef").unwrap();
+        assert_eq!(felt2, Felt::from(0xabcdefu64));
+
+        // Invalid hex should error
+        assert!(parse_hex_to_felt("not_hex").is_err());
+    }
+
+    #[test]
+    fn test_felt_to_hex() {
+        let felt = Felt::from(0x123u64);
+        let hex = felt_to_hex(&felt);
+        assert_eq!(hex, "0x123");
+
+        let felt_zero = Felt::ZERO;
+        let hex_zero = felt_to_hex(&felt_zero);
+        assert_eq!(hex_zero, "0x0");
+    }
+
+    #[test]
+    fn test_left_pad_hex() {
+        assert_eq!(left_pad_hex("abc", 6), "000abc");
+        assert_eq!(left_pad_hex("0xabc", 6), "000abc");
+        assert_eq!(left_pad_hex("abcdef", 6), "abcdef");
+        assert_eq!(left_pad_hex("abcdefgh", 6), "abcdefgh");
+    }
+
+    #[test]
+    fn test_serialize_public_key_hex() {
+        let x = Felt::from(0x1u64);
+        let y = Felt::from(0x2u64);
+        let hex = serialize_public_key_hex(&x, &y);
+        // Should be 0x + 64 chars for x + 64 chars for y
+        assert!(hex.starts_with("0x"));
+        assert_eq!(hex.len(), 2 + 128); // "0x" + 128 hex chars
+    }
+
+    #[test]
+    fn test_parse_public_key_hex() {
+        // Create a valid 128-char hex string
+        let x_hex = "0".repeat(63) + "1"; // 64 chars representing x=1
+        let y_hex = "0".repeat(63) + "2"; // 64 chars representing y=2
+        let full_hex = format!("0x{}{}", x_hex, y_hex);
+
+        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
+        assert_eq!(x, Felt::from(1u64));
+        assert_eq!(y, Felt::from(2u64));
+
+        // Test with "04" prefix (uncompressed point format)
+        let with_prefix = format!("04{}{}", x_hex, y_hex);
+        let (x2, y2) = parse_public_key_hex(&with_prefix).unwrap();
+        assert_eq!(x2, Felt::from(1u64));
+        assert_eq!(y2, Felt::from(2u64));
+    }
+
+    #[test]
+    fn test_parse_public_key_hex_invalid_length() {
+        // Too short
+        let result = parse_public_key_hex("0x123");
+        assert!(result.is_err());
+        if let Err(GhoulError::InvalidPublicKey(msg)) = result {
+            assert!(msg.contains("Expected 128 hex chars"));
+        }
+    }
+
+    #[test]
+    fn test_strk_conversion() {
+        assert_eq!(strk_to_fri("1.5").unwrap(), 1_500_000_000_000_000_000);
+        assert_eq!(strk_to_fri("1.5 STRK").unwrap(), 1_500_000_000_000_000_000);
+        assert_eq!(fri_to_strk(1_500_000_000_000_000_000), 1.5);
+    }
+
+    #[test]
+    fn test_strk_to_fri_negative() {
+        let result = strk_to_fri("-1.0");
+        assert!(result.is_err());
+        if let Err(GhoulError::InvalidAmount(msg)) = result {
+            assert!(msg.contains("negative"));
+        }
+    }
+
+    #[test]
+    fn test_strk_to_fri_invalid() {
+        let result = strk_to_fri("not_a_number");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tongo_conversion() {
+        let rate = 1_000_000_000_000_000_000; // 1e18
+        assert_eq!(tongo_to_strk(100, rate), 100.0);
+        assert_eq!(strk_to_tongo("100 STRK", rate).unwrap(), 100);
+    }
+
+    #[test]
+    fn test_format_tongo_balance() {
+        let rate = 1_000_000_000_000_000_000u128; // 1e18
+        let formatted = format_tongo_balance(100, rate);
+        assert_eq!(formatted, "100.00 STRK");
+
+        let formatted_small = format_tongo_balance(1, rate);
+        assert_eq!(formatted_small, "1.00 STRK");
+    }
+}

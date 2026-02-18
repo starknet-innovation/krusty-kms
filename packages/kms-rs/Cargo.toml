@@ -1,0 +1,16 @@
+[package]
+name = "ghoul-kms"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Rust FFI wrapper for Ghoul Zig KMS"
+repository = "https://github.com/theodorepender/kms"
+
+[lib]
+name = "ghoul_kms"
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[build-dependencies]

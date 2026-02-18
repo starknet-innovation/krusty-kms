@@ -1,0 +1,14 @@
+/Users/theodorepender/Coding/kms/target/release/deps/serde-1d54a12f27a34d22.d: /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/theodorepender/Coding/kms/target/release/build/serde-a54a1835e9b1dcbd/out/private.rs
+
+/Users/theodorepender/Coding/kms/target/release/deps/libserde-1d54a12f27a34d22.rlib: /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/theodorepender/Coding/kms/target/release/build/serde-a54a1835e9b1dcbd/out/private.rs
+
+/Users/theodorepender/Coding/kms/target/release/deps/libserde-1d54a12f27a34d22.rmeta: /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /Users/theodorepender/Coding/kms/target/release/build/serde-a54a1835e9b1dcbd/out/private.rs
+
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/Users/theodorepender/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/Users/theodorepender/Coding/kms/target/release/build/serde-a54a1835e9b1dcbd/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/theodorepender/Coding/kms/target/release/build/serde-a54a1835e9b1dcbd/out
