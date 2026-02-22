@@ -7,8 +7,10 @@
 //! - Error types
 
 pub mod error;
+pub mod secret_felt;
 pub mod types;
 pub mod utils;
 
 pub use error::{GhoulError, Result};
+pub use secret_felt::SecretFelt;
 pub use types::*;

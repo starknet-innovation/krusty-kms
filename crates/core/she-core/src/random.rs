@@ -7,6 +7,7 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use starknet_types_core::felt::Felt;
 use std::sync::{LazyLock, Mutex};
+use zeroize::Zeroize;
 
 const PARITY_DOMAIN: &[u8] = b"kms-parity-v1";
 
@@ -17,6 +18,22 @@ struct DeterministicRngState {
     counter: u64,
     block: [u8; 32],
     block_offset: usize,
+}
+
+impl Zeroize for DeterministicRngState {
+    fn zeroize(&mut self) {
+        self.seed.zeroize();
+        self.stream.zeroize();
+        self.block.zeroize();
+        self.counter = 0;
+        self.block_offset = 0;
+    }
+}
+
+impl Drop for DeterministicRngState {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 impl DeterministicRngState {

@@ -25,3 +25,4 @@ k256 = { version = "0.13", features = ["ecdsa", "sha256", "ecdh"] }
 base64 = "0.22"
 hex = { workspace = true }
 nostr-sdk = { version = "0.29", default-features = false, optional = true }
+zeroize.workspace = true

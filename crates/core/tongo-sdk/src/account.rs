@@ -1,7 +1,7 @@
 //! TONGO account management.
 
 use ghoul_common::ElGamalCiphertext;
-use ghoul_common::{AccountState, GhoulError, Result};
+use ghoul_common::{AccountState, GhoulError, Result, SecretFelt};
 use kms::{derive_keypair, derive_view_keypair, TongoKeyPair};
 use she_core::{ElGamal, StarkCurve};
 use starknet_types_core::felt::Felt;
@@ -62,7 +62,7 @@ impl TongoAccount {
         let public_key = StarkCurve::mul_generator(&private_key);
 
         let keypair = TongoKeyPair {
-            private_key,
+            private_key: SecretFelt::new(private_key),
             public_key,
         };
 
@@ -89,11 +89,11 @@ impl TongoAccount {
 
         Ok(Self {
             keypair: TongoKeyPair {
-                private_key: owner_private_key,
+                private_key: SecretFelt::new(owner_private_key),
                 public_key: owner_public_key,
             },
             view_keypair: Some(TongoKeyPair {
-                private_key: view_private_key,
+                private_key: SecretFelt::new(view_private_key),
                 public_key: view_public_key,
             }),
             state: AccountState::default(),
@@ -174,12 +174,12 @@ impl TongoAccount {
         &self,
         ciphertext: &ElGamalCiphertext,
     ) -> Result<starknet_types_core::curve::ProjectivePoint> {
-        let sk = self
+        let secret = self
             .view_keypair
             .as_ref()
             .map(|k| &k.private_key)
             .unwrap_or(&self.keypair.private_key);
-        ElGamal::decrypt(ciphertext, sk)
+        ElGamal::decrypt(ciphertext, &**secret)
     }
 }
 
@@ -230,8 +230,8 @@ mod tests {
         let contract_address = Felt::from(123456u64);
         let account =
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-        let view_sk = account.view_keypair.as_ref().unwrap().private_key;
-        let owner_sk = account.keypair.private_key;
+        let view_sk = &account.view_keypair.as_ref().unwrap().private_key;
+        let owner_sk = &account.keypair.private_key;
         assert_ne!(view_sk, owner_sk);
     }
 

@@ -622,7 +622,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         });
     }
 
-    let x = account.keypair.private_key;
+    let x: &Felt = &account.keypair.private_key;
     let g = StarkCurve::GENERATOR;
     let h = StarkCurve::GENERATOR_H;
 
@@ -840,7 +840,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 ///
 /// # Cyclomatic Complexity: 2
 pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<RagequitProof> {
-    let x = account.keypair.private_key;
+    let x: &Felt = &account.keypair.private_key;
     let g = StarkCurve::GENERATOR;
 
     // Compute y = g^x
