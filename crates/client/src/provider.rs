@@ -1,7 +1,7 @@
 //! Starknet RPC provider utilities.
 
 use krusty_kms_common::Result;
-use starknet::providers::{jsonrpc::HttpTransport, JsonRpcClient};
+use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use url::Url;
 
 /// Create a Starknet JSON-RPC provider from a URL.

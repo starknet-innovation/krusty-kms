@@ -27,7 +27,7 @@ Starknet RPC client for interacting with TONGO contracts on Starknet.
 The following components require integration with the live Starknet network:
 
 1. **RPC State Querying** - Fetch encrypted balances from TONGO contract
-2. **Transaction Signing** - Sign and submit transactions using starknet-rs
+2. **Transaction Signing** - Sign and submit transactions using starknet-rust
 3. **Calldata Serialization** - Convert Rust proofs to Cairo calldata format
 4. **ERC20 Approve Flow** - Token approval before fund operations
 5. **State Verification** - Query and decrypt state after transactions
@@ -37,7 +37,7 @@ The following components require integration with the live Starknet network:
 The crate supports deriving Starknet account contract addresses using the standard contract address calculation formula:
 
 ```rust
-use kms::{derive_keypair, derive_oz_account_address};
+use krusty_kms::{derive_keypair, derive_oz_account_address};
 use starknet_types_core::felt::Felt;
 
 // Derive a keypair from mnemonic
@@ -57,7 +57,7 @@ let account_address = derive_oz_account_address(&public_key_x, &class_hash, None
 Run the account derivation tests:
 
 ```bash
-cargo test -p starknet-client --test account_derivation
+cargo test -p krusty-kms-client --test account_derivation
 ```
 
 ## Next Steps
@@ -88,8 +88,8 @@ impl TongoClient {
 Add utilities for signing transactions using derived keys:
 
 ```rust
-use starknet::accounts::{Account, SingleOwnerAccount};
-use starknet::signers::{LocalWallet, SigningKey};
+use starknet_rust::accounts::{Account, SingleOwnerAccount};
+use starknet_rust::signers::{LocalWallet, SigningKey};
 
 pub fn create_signer(
     provider: JsonRpcClient<HttpTransport>,
