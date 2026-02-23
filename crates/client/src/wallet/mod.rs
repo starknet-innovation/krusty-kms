@@ -2,6 +2,9 @@
 
 pub mod utils;
 
+#[cfg(feature = "controller")]
+pub mod controller;
+
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
@@ -17,6 +20,24 @@ use tokio::sync::RwLock;
 
 use self::utils::{check_deployed, core_felt_to_rs};
 use crate::tx::Tx;
+
+/// Trait abstracting wallet execution so consumers work with either `Wallet`
+/// or `ControllerWallet` (behind the `controller` feature).
+#[async_trait::async_trait]
+pub trait WalletExecutor: Send + Sync {
+    /// Execute a list of calls as a single transaction.
+    async fn execute(&self, calls: Vec<Call>) -> Result<Tx>;
+    /// Estimate fees for a list of calls.
+    async fn estimate_fee(&self, calls: Vec<Call>) -> Result<starknet_rust::core::types::FeeEstimate>;
+    /// The wallet's on-chain address.
+    fn address(&self) -> &Address;
+    /// The chain ID this wallet targets.
+    fn chain_id(&self) -> ChainId;
+    /// The network preset.
+    fn network(&self) -> &NetworkPreset;
+    /// Check whether the account contract is deployed on-chain.
+    async fn is_deployed(&self) -> Result<bool>;
+}
 
 /// A Starknet wallet that can sign and submit transactions.
 pub struct Wallet {
@@ -171,5 +192,32 @@ impl Wallet {
     /// Start building a batched transaction.
     pub fn tx(&self) -> crate::tx::TxBuilder<'_> {
         crate::tx::TxBuilder::new(self)
+    }
+}
+
+#[async_trait::async_trait]
+impl WalletExecutor for Wallet {
+    async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
+        Wallet::execute(self, calls).await
+    }
+
+    async fn estimate_fee(&self, calls: Vec<Call>) -> Result<starknet_rust::core::types::FeeEstimate> {
+        Wallet::estimate_fee(self, calls).await
+    }
+
+    fn address(&self) -> &Address {
+        Wallet::address(self)
+    }
+
+    fn chain_id(&self) -> ChainId {
+        Wallet::chain_id(self)
+    }
+
+    fn network(&self) -> &NetworkPreset {
+        Wallet::network(self)
+    }
+
+    async fn is_deployed(&self) -> Result<bool> {
+        Wallet::is_deployed(self).await
     }
 }

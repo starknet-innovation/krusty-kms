@@ -3,7 +3,7 @@
 use crate::abi;
 use crate::tx::Tx;
 use crate::wallet::utils::{self, core_felt_to_rs};
-use crate::wallet::Wallet;
+use crate::wallet::WalletExecutor;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::amount::Amount;
 use krusty_kms_common::token::Token;
@@ -129,7 +129,7 @@ impl Erc20 {
     /// Execute a transfer through a wallet.
     pub async fn transfer(
         &self,
-        wallet: &Wallet,
+        wallet: &dyn WalletExecutor,
         to: &Address,
         amount: &Amount,
     ) -> Result<Tx> {
@@ -140,7 +140,7 @@ impl Erc20 {
     /// Execute an approval through a wallet.
     pub async fn approve(
         &self,
-        wallet: &Wallet,
+        wallet: &dyn WalletExecutor,
         spender: &Address,
         amount: &Amount,
     ) -> Result<Tx> {

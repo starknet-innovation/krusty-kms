@@ -25,4 +25,7 @@ pub use staking::{Staking, PoolPosition};
 pub use starknet_rust;
 pub use tx::{Tx, TxBuilder};
 pub use types::{AccountState, CipherBalance, DecryptedAccountState, decrypt_cipher_balance};
-pub use wallet::Wallet;
+pub use wallet::{Wallet, WalletExecutor};
+
+#[cfg(feature = "controller")]
+pub use wallet::controller::{ControllerWallet, FeeMode, SessionPolicy};

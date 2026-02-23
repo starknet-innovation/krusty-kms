@@ -3,17 +3,14 @@
 use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::curve::{AffinePoint, ProjectivePoint};
 use starknet_types_core::felt::Felt;
+use std::sync::LazyLock;
 
 /// Wrapper for Stark curve operations with ergonomic API.
 pub struct StarkCurve;
 
-impl StarkCurve {
-    /// Returns the G generator point of the Stark curve.
-    ///
-    /// This is the standard Stark curve generator.
-    ///
-    /// Cyclomatic Complexity: 1 (no branches, constants are validated at compile time)
-    pub const GENERATOR: ProjectivePoint = ProjectivePoint::new_unchecked(
+/// The G generator point of the Stark curve (lazily initialized).
+static GENERATOR_INNER: LazyLock<ProjectivePoint> = LazyLock::new(|| {
+    ProjectivePoint::new(
         Felt::from_raw([
             232005955912912577,
             299981207024966779,
@@ -32,13 +29,12 @@ impl StarkCurve {
             18446744073709551615,
             18446744073709551585,
         ]),
-    );
+    )
+});
 
-    /// Returns the H generator point (second independent generator).
-    ///
-    /// This is used for multi-exponent proofs (PoE2) where we need two
-    /// cryptographically independent generator points.
-    pub const GENERATOR_H: ProjectivePoint = ProjectivePoint::new_unchecked(
+/// The H generator point (lazily initialized).
+static GENERATOR_H_INNER: LazyLock<ProjectivePoint> = LazyLock::new(|| {
+    ProjectivePoint::new(
         Felt::from_raw([
             494630544989822523,
             132181179302948286,
@@ -57,7 +53,21 @@ impl StarkCurve {
             18446744073709551615,
             18446744073709551585,
         ]),
-    );
+    )
+});
+
+impl StarkCurve {
+    /// Returns the G generator point of the Stark curve.
+    #[inline]
+    pub fn generator() -> ProjectivePoint {
+        GENERATOR_INNER.clone()
+    }
+
+    /// Returns the H generator point (second independent generator).
+    #[inline]
+    pub fn generator_h() -> ProjectivePoint {
+        GENERATOR_H_INNER.clone()
+    }
 
     /// Multiply a point by a scalar using double-and-add algorithm.
     ///
@@ -72,7 +82,7 @@ impl StarkCurve {
     pub fn mul(scalar: &Felt, point: Option<&ProjectivePoint>) -> ProjectivePoint {
         let base = match point {
             Some(p) => p.clone(),
-            None => Self::GENERATOR,
+            None => Self::generator(),
         };
 
         Self::scalar_mul(&base, scalar)
@@ -84,7 +94,7 @@ impl StarkCurve {
     ///
     /// Cyclomatic Complexity: 1
     pub fn mul_generator(scalar: &Felt) -> ProjectivePoint {
-        Self::scalar_mul(&Self::GENERATOR, scalar)
+        Self::scalar_mul(&Self::generator(), scalar)
     }
 
     /// Scalar multiplication using double-and-add algorithm.
@@ -166,7 +176,7 @@ mod tests {
 
     #[test]
     fn test_generator() {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         assert!(!StarkCurve::is_infinity(&g));
 
         // Stark curve generator point coordinates (hardcoded constants)
@@ -194,7 +204,7 @@ mod tests {
         .expect("Generator H y-coordinate is a valid constant");
         let g_h =
             ProjectivePoint::from_affine(h_x, h_y).expect("Generator H is a valid curve point");
-        assert_eq!(g_h, StarkCurve::GENERATOR_H);
+        assert_eq!(g_h, StarkCurve::generator_h());
     }
 
     #[test]
@@ -206,7 +216,7 @@ mod tests {
 
     #[test]
     fn test_point_addition() {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let g2 = StarkCurve::add(&g, &g);
         let g2_direct = StarkCurve::mul_generator(&Felt::from(2u64));
 
@@ -218,7 +228,7 @@ mod tests {
 
     #[test]
     fn test_scalar_mul_basic() {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Test g^1 = g
         let g1 = StarkCurve::mul_generator(&Felt::from(1u64));
@@ -239,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_affine_projective_conversion() {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let affine = StarkCurve::projective_to_affine(&g).unwrap();
         let projective = StarkCurve::affine_to_projective(&affine);
         let affine2 = StarkCurve::projective_to_affine(&projective).unwrap();

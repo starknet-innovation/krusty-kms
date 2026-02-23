@@ -4,7 +4,7 @@ use crate::abi;
 use crate::staking::Staking;
 use crate::tx::Tx;
 use crate::wallet::utils::core_felt_to_rs;
-use crate::wallet::Wallet;
+use crate::wallet::WalletExecutor;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::amount::Amount;
 use krusty_kms_common::token::Token;
@@ -13,12 +13,12 @@ use starknet_rust::core::types::Call;
 
 /// A builder that accumulates `Call`s and sends them as a single multicall.
 pub struct TxBuilder<'w> {
-    wallet: &'w Wallet,
+    wallet: &'w dyn WalletExecutor,
     calls: Vec<Call>,
 }
 
 impl<'w> TxBuilder<'w> {
-    pub(crate) fn new(wallet: &'w Wallet) -> Self {
+    pub(crate) fn new(wallet: &'w dyn WalletExecutor) -> Self {
         Self {
             wallet,
             calls: Vec::new(),

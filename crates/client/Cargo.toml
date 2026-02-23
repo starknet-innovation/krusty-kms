@@ -19,6 +19,15 @@ serde_json.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 url = "2.5"
+async-trait.workspace = true
+
+# Optional: Cartridge Controller SDK
+account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.9.4", optional = true }
+starknet = { version = "0.17.0", optional = true }
+
+[features]
+default = []
+controller = ["dep:account_sdk", "dep:starknet"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

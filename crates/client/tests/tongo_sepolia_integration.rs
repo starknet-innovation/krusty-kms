@@ -242,7 +242,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         use krusty_kms_crypto::StarkCurve;
         const FUND_CAIRO_STRING: u64 = 1718972004;
         let fund_r = Felt::from(FUND_CAIRO_STRING);
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let fund_cipher_l = {
             let g_amount = StarkCurve::mul(&Felt::from(fund_amount), Some(&g));
             let y_r = StarkCurve::mul(&fund_r, Some(&tongo_keypair_0.public_key));

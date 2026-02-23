@@ -50,7 +50,7 @@ fn bench_fund(c: &mut Criterion) {
     let tongo_address = Felt::from(123456u64);
 
     // Mock current balance cipher (empty for fund)
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let current_balance = ElGamalCiphertext {
         l: g.clone(),
         r: g.clone(),
@@ -102,7 +102,7 @@ fn bench_transfer(c: &mut Criterion) {
     let tongo_address = Felt::from(123456u64);
 
     // Mock current balance cipher
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let current_balance = ElGamalCiphertext {
         l: StarkCurve::mul(&Felt::from(u128::MAX), Some(&g)),
         r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -189,7 +189,7 @@ fn bench_withdraw(c: &mut Criterion) {
     // cipher = encrypt(balance, randomness, public_key)
     // L = g^balance + y^randomness
     // R = g^randomness
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let y = &account.keypair.public_key;
     let randomness = Felt::from(42u64);
     let current_balance = ElGamalCiphertext {
@@ -239,7 +239,7 @@ fn bench_ragequit(c: &mut Criterion) {
     let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap();
     let tongo_address = Felt::from(123456u64);
 
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
 
     for bits in bit_sizes {
         let amount = amount_for_bits(bits);
@@ -296,7 +296,7 @@ fn bench_complete_flow(c: &mut Criterion) {
                     let mut account = TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
 
                     let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap();
-                    let g = StarkCurve::GENERATOR;
+                    let g = StarkCurve::generator();
                     let current_balance = ElGamalCiphertext {
                         l: g.clone(),
                         r: g.clone(),

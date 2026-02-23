@@ -112,7 +112,7 @@ impl MentalPokerProtocol {
         aggregate_pk: &PublicKey,
         r: Option<&Felt>,
     ) -> Result<(MaskedCard, DLEqualityProof)> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let r_val = r.cloned().unwrap_or_else(scalar::random_felt);
 
         // Compute ciphertext: c0 = g^r, c1 = card + pk^r
@@ -150,7 +150,7 @@ impl MentalPokerProtocol {
         aggregate_pk: &PublicKey,
         proof: &DLEqualityProof,
     ) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute c1 - card
         let neg_card = crate::utils::negate_point(&card.point)?;
@@ -174,7 +174,7 @@ impl MentalPokerProtocol {
         aggregate_pk: &PublicKey,
         alpha: Option<&Felt>,
     ) -> Result<(MaskedCard, DLEqualityProof)> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let alpha_val = alpha.cloned().unwrap_or_else(scalar::random_felt);
 
         // Encrypt zero: (g^alpha, pk^alpha)
@@ -213,7 +213,7 @@ impl MentalPokerProtocol {
         aggregate_pk: &PublicKey,
         proof: &DLEqualityProof,
     ) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute difference
         let diff = remasked.add(&original.negate()?);
@@ -236,7 +236,7 @@ impl MentalPokerProtocol {
         sk: &SecretKey,
         pk: &PublicKey,
     ) -> Result<(RevealToken, DLEqualityProof)> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute token = c0^sk
         let token_point = StarkCurve::mul(&sk.scalar, Some(&masked.c0));
@@ -267,7 +267,7 @@ impl MentalPokerProtocol {
         pk: &PublicKey,
         proof: &DLEqualityProof,
     ) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         ChaumPedersenProtocol::verify(
             &masked.c0,

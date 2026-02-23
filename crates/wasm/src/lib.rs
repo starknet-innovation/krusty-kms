@@ -202,7 +202,7 @@ pub fn scalar_mul_generator(scalar: &str) -> Result<types::WasmPoint, JsValue> {
 pub fn get_generator() -> types::WasmPoint {
     use krusty_kms_crypto::StarkCurve;
 
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let affine = g.to_affine().expect("Generator is never at infinity");
 
     types::WasmPoint {

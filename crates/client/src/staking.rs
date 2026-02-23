@@ -3,7 +3,7 @@
 use crate::abi;
 use crate::tx::Tx;
 use crate::wallet::utils::{self, core_felt_to_rs, rs_felt_to_core};
-use crate::wallet::Wallet;
+use crate::wallet::WalletExecutor;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::amount::Amount;
 use krusty_kms_common::chain::ChainId;
@@ -207,7 +207,7 @@ impl Staking {
     /// Stake: if already a member, adds to pool; otherwise enters as new member.
     pub async fn stake(
         &self,
-        wallet: &Wallet,
+        wallet: &dyn WalletExecutor,
         amount: &Amount,
         reward_address: &Address,
     ) -> Result<Tx> {

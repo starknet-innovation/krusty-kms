@@ -36,7 +36,7 @@ impl ElGamal {
         random: &Felt,
         prefix: &Felt,
     ) -> Result<ElGamalEncryption> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute ciphertext: L = g^m + pk^r, R = g^r (TONGO standard format)
         let g_m = StarkCurve::mul(message, Some(&g));
@@ -65,7 +65,7 @@ impl ElGamal {
         r: &ProjectivePoint,
         prefix: &Felt,
     ) -> Result<ElGamalProof> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Generate random blinding factors (wrapped in SecretFelt for zeroization on drop)
         let r_b = SecretFelt::new(crate::scalar::random_felt());
@@ -107,7 +107,7 @@ impl ElGamal {
         proof: &ElGamalProof,
         prefix: &Felt,
     ) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Parse proof components
         let a_l = proof.al.to_affine()?;
@@ -285,7 +285,7 @@ mod tests {
         let sk = Felt::from(42u64);
         let pk = StarkCurve::mul_generator(&sk);
         let prefix = Felt::from(42u64);
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         let invalid_proof = ElGamalProof {
             al: krusty_kms_common::SerializablePoint::try_from_projective(&g).unwrap(),

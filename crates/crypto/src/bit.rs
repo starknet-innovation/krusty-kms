@@ -237,8 +237,8 @@ mod tests {
 
     #[test]
     fn test_prove_bit_0() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -257,8 +257,8 @@ mod tests {
 
     #[test]
     fn test_prove_bit_1() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -278,8 +278,8 @@ mod tests {
 
     #[test]
     fn test_prove_invalid_bit() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -292,8 +292,8 @@ mod tests {
 
     #[test]
     fn test_verify_tampered_c0() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -308,8 +308,8 @@ mod tests {
 
     #[test]
     fn test_verify_tampered_s0() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -324,8 +324,8 @@ mod tests {
 
     #[test]
     fn test_verify_tampered_s1() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -340,8 +340,8 @@ mod tests {
 
     #[test]
     fn test_verify_invalid_c0_hex() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -356,8 +356,8 @@ mod tests {
 
     #[test]
     fn test_verify_invalid_s0_hex() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -372,8 +372,8 @@ mod tests {
 
     #[test]
     fn test_verify_invalid_s1_hex() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
 
@@ -388,8 +388,8 @@ mod tests {
 
     #[test]
     fn test_verify_wrong_prefix() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::from(12345u64);
         let prefix = Felt::from(42u64);
         let wrong_prefix = Felt::from(43u64);
@@ -403,8 +403,8 @@ mod tests {
 
     #[test]
     fn test_bit_proof_zero_random() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random = Felt::ZERO;
         let prefix = Felt::from(42u64);
 
@@ -415,8 +415,8 @@ mod tests {
 
     #[test]
     fn test_bit_proof_large_random() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let random =
             Felt::from_hex("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
                 .unwrap();

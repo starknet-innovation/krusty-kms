@@ -115,7 +115,7 @@ fn kms_to_proj(k: &KmsProjectivePoint) -> ProjectivePoint {
     let x = kms_to_felt(&k.x);
     let y = kms_to_felt(&k.y);
     let z = kms_to_felt(&k.z);
-    ProjectivePoint::new_unchecked(x, y, z)
+    ProjectivePoint::new(x, y, z)
 }
 
 fn affine_to_kms(a: &AffinePoint) -> KmsAffinePoint {
@@ -887,7 +887,7 @@ mod tests {
 
     #[test]
     fn test_projective_conversion_roundtrip() {
-        let point = krusty_kms_crypto::StarkCurve::GENERATOR;
+        let point = krusty_kms_crypto::StarkCurve::generator();
         let kms = proj_to_kms(&point);
         let back = kms_to_proj(&kms);
 

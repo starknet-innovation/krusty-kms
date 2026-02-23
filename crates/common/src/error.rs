@@ -68,4 +68,7 @@ pub enum KmsError {
 
     #[error("Staking error: {0}")]
     StakingError(String),
+
+    #[error("Controller error: {0}")]
+    ControllerError(String),
 }

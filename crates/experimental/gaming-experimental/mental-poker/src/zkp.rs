@@ -31,7 +31,7 @@ impl SchnorrProtocol {
     ///
     /// Proves: I know sk such that pk = g^sk
     pub fn prove(pk: &PublicKey, sk: &SecretKey, context: &[u8]) -> Result<KeyOwnershipProof> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Generate random nonce
         let r = scalar::random_felt();
@@ -68,7 +68,7 @@ impl SchnorrProtocol {
 
     /// Verify a Schnorr proof of key ownership.
     pub fn verify(pk: &PublicKey, proof: &KeyOwnershipProof, context: &[u8]) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Parse proof components
         let a = proof.commitment.to_projective()?;
@@ -275,8 +275,8 @@ type BatchVerificationInput = (
 /// use mental_poker::zkp::{batch_verify_chaum_pedersen, ChaumPedersenProtocol};
 /// use krusty_kms_crypto::{scalar, StarkCurve};
 ///
-/// let g = StarkCurve::GENERATOR;
-/// let h = StarkCurve::GENERATOR_H;
+/// let g = StarkCurve::generator();
+/// let h = StarkCurve::generator_h();
 /// let x = scalar::random_felt();
 /// let y1 = StarkCurve::mul(&x, Some(&g));
 /// let y2 = StarkCurve::mul(&x, Some(&h));
@@ -365,7 +365,7 @@ impl BatchVerifier {
             })
             .collect();
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute weighted sums for batch verification
         // Check: sum(w_i * g^s_i) = sum(w_i * (a_i + pk_i^c_i))
@@ -641,7 +641,7 @@ impl BatchVerifier {
             return Ok(true);
         }
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let context = crate::protocol::REVEAL_CONTEXT;
 
         // Convert to format for batch Chaum-Pedersen verification
@@ -703,8 +703,8 @@ mod tests {
 
     #[test]
     fn test_chaum_pedersen_proof() {
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let x = scalar::random_felt();
 
         let y1 = StarkCurve::mul(&x, Some(&g));
@@ -718,8 +718,8 @@ mod tests {
 
     #[test]
     fn test_chaum_pedersen_different_exponents() {
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let x1 = scalar::random_felt();
         let x2 = scalar::random_felt();
 
@@ -752,8 +752,8 @@ mod tests {
 
     #[test]
     fn test_batch_verify_chaum_pedersen_single() {
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let x = scalar::random_felt();
 
         let y1 = StarkCurve::mul(&x, Some(&g));
@@ -769,8 +769,8 @@ mod tests {
 
     #[test]
     fn test_batch_verify_chaum_pedersen_multiple_valid() {
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"batch-multi-test";
 
         let mut proofs = Vec::new();
@@ -790,8 +790,8 @@ mod tests {
 
     #[test]
     fn test_batch_verify_chaum_pedersen_one_invalid() {
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"batch-invalid-test";
 
         let mut proofs = Vec::new();
@@ -826,8 +826,8 @@ mod tests {
 
     #[test]
     fn test_batch_verify_chaum_pedersen_wrong_context() {
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let x = scalar::random_felt();
 
         let y1 = StarkCurve::mul(&x, Some(&g));
@@ -845,8 +845,8 @@ mod tests {
     #[test]
     fn test_batch_verify_matches_individual_verification() {
         // Test that batch verification gives the same result as individual verification
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"batch-vs-individual";
 
         let mut proofs = Vec::new();
@@ -907,8 +907,8 @@ mod tests {
     #[test]
     fn test_batch_verify_deterministic_weights() {
         // Test that the same proofs always generate the same weights
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"deterministic-test";
 
         let mut proofs = Vec::new();
@@ -936,8 +936,8 @@ mod tests {
     fn test_batch_verify_convenience_api() {
         use super::batch_verify_chaum_pedersen;
 
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"convenience-api-test";
 
         let mut proofs_list = Vec::new();
@@ -962,8 +962,8 @@ mod tests {
     fn test_batch_verify_convenience_api_mismatched_lengths() {
         use super::batch_verify_chaum_pedersen;
 
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"mismatch-test";
         let x = scalar::random_felt();
 
@@ -1000,8 +1000,8 @@ mod tests {
     fn test_batch_verify_convenience_api_invalid_proof() {
         use super::batch_verify_chaum_pedersen;
 
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
         let context = b"invalid-proof-test";
 
         let mut proofs_list = Vec::new();

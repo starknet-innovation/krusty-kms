@@ -64,7 +64,7 @@ impl AuditProver {
         auditor_pub_key: &ProjectivePoint,
         validate: bool,
     ) -> Result<(AuditProof, ElGamalCiphertext)> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Validate input points
         if StarkCurve::is_infinity(&cipher0.l) {
@@ -229,7 +229,7 @@ impl AuditProver {
         cipher1: &ElGamalCiphertext,
         auditor_pub_key: &ProjectivePoint,
     ) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Deserialize proof points
         let ax = StarkCurve::affine_to_projective(&proof.ax.to_affine()?);
@@ -305,7 +305,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         // Create cipher0 (stored balance encrypted under user's key)
@@ -339,7 +339,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         // Create cipher0 with WRONG balance
@@ -374,7 +374,7 @@ mod tests {
         let initial_balance = 300u128;
         let r = Felt::from(89327498324u64);
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute public keys
         let public_key = StarkCurve::mul_generator(&private_key);
@@ -471,7 +471,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 0u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         // Create cipher0 with zero balance
@@ -511,7 +511,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Create cipher0 with L at infinity
         let cipher0 = ElGamalCiphertext {
@@ -533,7 +533,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Create cipher0 with R at infinity
         let cipher0 = ElGamalCiphertext {
@@ -555,7 +555,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         // Create valid cipher0
@@ -584,7 +584,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         // Create a cipher0 that doesn't match the balance (would fail validation)
@@ -627,7 +627,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         // Create valid cipher0
@@ -659,7 +659,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         let r0 = Felt::from(98765u64);
@@ -690,7 +690,7 @@ mod tests {
         let private_key = Felt::from(12345u64);
         let balance = 1000u128;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
 
         let r0 = Felt::from(98765u64);

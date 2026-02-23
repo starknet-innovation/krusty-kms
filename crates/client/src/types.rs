@@ -104,7 +104,7 @@ fn subtract_points(a: &ProjectivePoint, b: &ProjectivePoint) -> Result<Projectiv
 /// # Cyclomatic Complexity: 3
 fn discrete_log_brute_force(g_m: &ProjectivePoint) -> Result<u128> {
     // Use the standard Stark curve generator from krusty-kms-crypto
-    let generator = krusty_kms_crypto::StarkCurve::GENERATOR;
+    let generator = krusty_kms_crypto::StarkCurve::generator();
 
     // Try to convert to affine - if it fails, it's the identity (balance = 0)
     if g_m.to_affine().is_err() {

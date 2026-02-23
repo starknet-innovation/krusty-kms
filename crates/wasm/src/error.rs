@@ -101,6 +101,7 @@ impl From<krusty_kms_common::KmsError> for WasmError {
             krusty_kms_common::KmsError::FeeEstimationFailed(s) => Self::InternalError(s),
             krusty_kms_common::KmsError::Timeout(s) => Self::InternalError(s),
             krusty_kms_common::KmsError::StakingError(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::ControllerError(s) => Self::InternalError(s),
         }
     }
 }
