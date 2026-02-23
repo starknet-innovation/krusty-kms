@@ -4,13 +4,19 @@
 //! batch generation to amortize the overhead of creating thread-local RNGs.
 
 use rand::RngCore;
-use sha2::{Digest, Sha256};
 use starknet_types_core::felt::Felt;
+#[cfg(feature = "test-utils")]
 use std::sync::{LazyLock, Mutex};
+
+#[cfg(feature = "test-utils")]
+use sha2::{Digest, Sha256};
+#[cfg(feature = "test-utils")]
 use zeroize::Zeroize;
 
+#[cfg(feature = "test-utils")]
 const PARITY_DOMAIN: &[u8] = b"kms-parity-v1";
 
+#[cfg(feature = "test-utils")]
 #[derive(Debug, Clone)]
 struct DeterministicRngState {
     seed: [u8; 32],
@@ -20,6 +26,7 @@ struct DeterministicRngState {
     block_offset: usize,
 }
 
+#[cfg(feature = "test-utils")]
 impl Zeroize for DeterministicRngState {
     fn zeroize(&mut self) {
         self.seed.zeroize();
@@ -30,12 +37,14 @@ impl Zeroize for DeterministicRngState {
     }
 }
 
+#[cfg(feature = "test-utils")]
 impl Drop for DeterministicRngState {
     fn drop(&mut self) {
         self.zeroize();
     }
 }
 
+#[cfg(feature = "test-utils")]
 impl DeterministicRngState {
     fn new(seed: [u8; 32], stream: &[u8]) -> Self {
         Self {
@@ -77,6 +86,7 @@ impl DeterministicRngState {
     }
 }
 
+#[cfg(feature = "test-utils")]
 static DETERMINISTIC_RNG: LazyLock<Mutex<Option<DeterministicRngState>>> =
     LazyLock::new(|| Mutex::new(None));
 
@@ -84,12 +94,14 @@ static DETERMINISTIC_RNG: LazyLock<Mutex<Option<DeterministicRngState>>> =
 ///
 /// The RNG sequence is:
 /// `SHA256("kms-parity-v1" || stream || seed || counter_be_u64)`.
+#[cfg(feature = "test-utils")]
 pub fn set_deterministic_rng(seed: [u8; 32], stream: &[u8]) {
     let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
     *guard = Some(DeterministicRngState::new(seed, stream));
 }
 
 /// Clears deterministic parity RNG and restores system randomness.
+#[cfg(feature = "test-utils")]
 pub fn clear_deterministic_rng() {
     let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
     *guard = None;
@@ -98,13 +110,16 @@ pub fn clear_deterministic_rng() {
 /// Fills a byte slice from either deterministic parity RNG (if enabled)
 /// or cryptographic system randomness.
 pub fn fill_random_bytes(out: &mut [u8]) {
-    let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
-    if let Some(state) = guard.as_mut() {
-        state.fill(out);
-        return;
+    #[cfg(feature = "test-utils")]
+    {
+        let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
+        if let Some(state) = guard.as_mut() {
+            state.fill(out);
+            return;
+        }
+        drop(guard);
     }
 
-    drop(guard);
     let mut rng = rand::thread_rng();
     rng.fill_bytes(out);
 }

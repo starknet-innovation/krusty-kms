@@ -648,7 +648,7 @@ mod tests {
         let tongo = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
 
         // Convert Felt to bytes for comparison
-        let tongo_bytes = tongo.private_key.to_bytes_be();
+        let tongo_bytes = tongo.private_key.expose_secret().to_bytes_be();
         assert_ne!(nostr.private_key.as_slice(), tongo_bytes.as_slice());
     }
 

@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 kms = { path = "../../crates/core/kms", default-features = false }
-she-core = { path = "../../crates/core/she-core", default-features = false }
+she-core = { path = "../../crates/core/she-core", default-features = false, features = ["test-utils"] }
 tongo-sdk = { path = "../../crates/core/tongo-sdk", default-features = false }
-nostr-messaging = { path = "../../crates/core/nostr-messaging" }
+nostr-messaging = { path = "../../crates/core/nostr-messaging", features = ["test-utils"] }
 starknet-client = { path = "../../crates/core/starknet-client" }
 ghoul-common = { path = "../../crates/core/common" }
 starknet-types-core.workspace = true

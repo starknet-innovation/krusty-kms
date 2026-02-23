@@ -91,7 +91,7 @@ fn main() {
                     passphrase,
                 )
                 .expect("derive-private");
-                println!("{}", felt_hex(&kp.private_key));
+                println!("{}", felt_hex(kp.private_key.expose_secret()));
                 return;
             }
             "derive-nostr" => {
@@ -320,10 +320,10 @@ fn handle_op(op: &str, inputs: &Value) -> Result<(Value, Vec<u8>), String> {
             )
             .map_err(err_to_string)?;
             let out = json!({
-                "private_key": felt_hex(&kp.private_key),
+                "private_key": felt_hex(kp.private_key.expose_secret()),
                 "public_key": point_json(&kp.public_key)?,
             });
-            Ok((out, concat_bytes(&[&kp.private_key.to_bytes_be(), &projective_bytes(&kp.public_key)?])))
+            Ok((out, concat_bytes(&[&kp.private_key.expose_secret().to_bytes_be(), &projective_bytes(&kp.public_key)?])))
         }
         "kms.derive_view_private_key" => {
             let mnemonic = req_str(inputs, "mnemonic")?;
@@ -343,10 +343,10 @@ fn handle_op(op: &str, inputs: &Value) -> Result<(Value, Vec<u8>), String> {
             let kp = derive_view_keypair(mnemonic, index, account_index, passphrase)
                 .map_err(err_to_string)?;
             let out = json!({
-                "private_key": felt_hex(&kp.private_key),
+                "private_key": felt_hex(kp.private_key.expose_secret()),
                 "public_key": point_json(&kp.public_key)?,
             });
-            Ok((out, concat_bytes(&[&kp.private_key.to_bytes_be(), &projective_bytes(&kp.public_key)?])))
+            Ok((out, concat_bytes(&[&kp.private_key.expose_secret().to_bytes_be(), &projective_bytes(&kp.public_key)?])))
         }
         "kms.derive_nostr_private_key" => {
             let mnemonic = req_str(inputs, "mnemonic")?;

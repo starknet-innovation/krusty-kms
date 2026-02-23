@@ -6,7 +6,7 @@
 use crate::curve::StarkCurve;
 use crate::hash::compute_poseidon_challenge;
 use crate::scalar;
-use ghoul_common::{PoeProof, Result, SerializablePoint};
+use ghoul_common::{PoeProof, Result, SecretFelt, SerializablePoint};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -30,18 +30,18 @@ impl ProofOfExponentiation {
         // Compute y = g^x
         let y = StarkCurve::mul(x, Some(&g));
 
-        // Generate random r
-        let r = Self::random_felt();
+        // Generate random r (wrapped in SecretFelt for zeroization on drop)
+        let r = SecretFelt::new(Self::random_felt());
 
         // Compute commitment A = g^r
-        let a = StarkCurve::mul(&r, Some(&g));
+        let a = StarkCurve::mul(r.expose_secret(), Some(&g));
 
         // Compute Fiat-Shamir challenge c = Poseidon(prefix, A)
         let c = compute_poseidon_challenge(prefix, &[&a])?;
 
         // Compute response s = r + c*x (mod curve order)
         let c_x = scalar::scalar_mul(&c, x)?;
-        let s = scalar::scalar_add(&r, &c_x)?;
+        let s = scalar::scalar_add(r.expose_secret(), &c_x)?;
 
         let proof = PoeProof {
             a: SerializablePoint::from_projective(&a),

@@ -199,7 +199,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
 
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this fund operation
-    let (_, proof) = ProofOfExponentiation::prove(&account.keypair.private_key, &prefix)?;
+    let (_, proof) = ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
 
     // Generate audit if auditor is configured
     let audit = if let Some(ref auditor_key) = params.auditor_pub_key {
@@ -226,7 +226,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
 
         // Generate audit proof using the NEW balance (after funding)
         let (audit_proof, audited_balance) = AuditProver::prove(
-            &account.keypair.private_key,
+            account.keypair.private_key.expose_secret(),
             new_balance,
             &new_cipher_balance,
             auditor_key,
@@ -235,7 +235,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
         // Generate audit hint (XChaCha20-Poly1305 encryption of the plaintext balance)
         // The auditor can decrypt this using ECDH with user's public key
         let (audit_hint_ct, audit_hint_nonce) =
-            encrypt_for_auditor(new_balance, &account.keypair.private_key, auditor_key)?;
+            encrypt_for_auditor(new_balance, account.keypair.private_key.expose_secret(), auditor_key)?;
 
         Some(Audit {
             audited_balance,
@@ -293,7 +293,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     }
 
     // Setup variables matching TypeScript implementation
-    let x = &account.keypair.private_key;
+    let x = account.keypair.private_key.expose_secret();
     let y = account.keypair.public_key.clone();
     let to = &params.recipient_public_key;
     let b = params.amount;
@@ -481,7 +481,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         // Use prove_with_validation(false) because new_balance_cipher is computed by subtraction
         // and won't pass standard validation but will verify correctly on-chain
         let (audit_balance_proof, audited_balance) = AuditProver::prove_with_validation(
-            &account.keypair.private_key,
+            account.keypair.private_key.expose_secret(),
             b_left,
             &new_balance_cipher,
             auditor_key,
@@ -490,7 +490,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
         // Encrypt sender's new balance for auditor
         let (audit_balance_hint_ct, audit_balance_hint_nonce) =
-            encrypt_for_auditor(b_left, &account.keypair.private_key, auditor_key)?;
+            encrypt_for_auditor(b_left, account.keypair.private_key.expose_secret(), auditor_key)?;
 
         // AUDIT 2: Transfer amount
         // transfer_cipher_self is a proper ElGamal encryption (L = g^b * y^r, R = g^r)
@@ -501,7 +501,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         };
 
         let (audit_transfer_proof, audited_transfer) = AuditProver::prove(
-            &account.keypair.private_key,
+            account.keypair.private_key.expose_secret(),
             b,
             &transfer_cipher_self,
             auditor_key,
@@ -509,7 +509,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
         // Encrypt transfer amount for auditor
         let (audit_transfer_hint_ct, audit_transfer_hint_nonce) =
-            encrypt_for_auditor(b, &account.keypair.private_key, auditor_key)?;
+            encrypt_for_auditor(b, account.keypair.private_key.expose_secret(), auditor_key)?;
 
         (
             Some(Audit {
@@ -577,7 +577,7 @@ pub fn rollover(account: &TongoAccount, params: RolloverParams) -> Result<Rollov
 
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this rollover operation
-    let (_, proof) = ProofOfExponentiation::prove(&account.keypair.private_key, &prefix)?;
+    let (_, proof) = ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
 
     Ok(RolloverProof {
         y,
@@ -622,7 +622,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         });
     }
 
-    let x: &Felt = &account.keypair.private_key;
+    let x: &Felt = account.keypair.private_key.expose_secret();
     let g = StarkCurve::GENERATOR;
     let h = StarkCurve::GENERATOR_H;
 
@@ -635,7 +635,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let r0 = &params.current_balance.r;
 
     // Verify storedBalance is an encryption of the balance: g^b = L0 - R0^x
-    let r0_x = StarkCurve::mul(&x, Some(r0));
+    let r0_x = StarkCurve::mul(x, Some(r0));
     let r0_x_affine = StarkCurve::projective_to_affine(&r0_x)?;
     let neg_r0_x =
         StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
@@ -781,7 +781,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         // Use prove_with_validation(false) because leftover_cipher is computed by subtraction
         // and won't pass standard validation but will verify correctly on-chain
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
-            &account.keypair.private_key,
+            account.keypair.private_key.expose_secret(),
             left,
             &leftover_cipher,
             &auditor_key,
@@ -790,7 +790,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 
         // Encrypt leftover balance for auditor using XChaCha20-Poly1305
         let (audit_hint_ct, audit_hint_nonce) =
-            encrypt_for_auditor(left, &account.keypair.private_key, &auditor_key)?;
+            encrypt_for_auditor(left, account.keypair.private_key.expose_secret(), &auditor_key)?;
 
         Some(Audit {
             audited_balance,
@@ -840,7 +840,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 ///
 /// # Cyclomatic Complexity: 2
 pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<RagequitProof> {
-    let x: &Felt = &account.keypair.private_key;
+    let x: &Felt = account.keypair.private_key.expose_secret();
     let g = StarkCurve::GENERATOR;
 
     // Compute y = g^x
@@ -922,7 +922,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
         // - Rust: 0 * g = g (bug in scalar_mul), so validation fails locally
         // The cipher is mathematically correct and will verify on-chain with Cairo's implementation
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
-            &account.keypair.private_key,
+            account.keypair.private_key.expose_secret(),
             0, // Balance after ragequit is 0
             &new_balance_cipher,
             &auditor_key,
@@ -932,7 +932,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
         // Encrypt zero balance for auditor (after ragequit balance is 0)
         let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
             0, // Balance after ragequit is 0
-            &account.keypair.private_key,
+            account.keypair.private_key.expose_secret(),
             &auditor_key,
         )?;
 

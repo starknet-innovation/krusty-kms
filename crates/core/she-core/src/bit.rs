@@ -8,7 +8,7 @@ use crate::hash::compute_poseidon_challenge;
 use crate::poe::ProofOfExponentiation;
 use crate::random::random_felt;
 use crate::scalar;
-use ghoul_common::{ProofOfBit, Result, SerializablePoint};
+use ghoul_common::{ProofOfBit, Result, SecretFelt, SerializablePoint};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -71,8 +71,8 @@ fn prove_bit_0(
     let (a1, c1, s1) = simulate_poe(&v1, g2)?;
 
     // Real proof for bit=0: POE for V = g2^random
-    let k = random_felt();
-    let a0 = StarkCurve::mul(&k, Some(g2));
+    let k = SecretFelt::new(random_felt());
+    let a0 = StarkCurve::mul(k.expose_secret(), Some(g2));
 
     // Compute challenge from commitments
     let c = compute_poseidon_challenge(prefix, &[&a0, &a1])?;
@@ -87,7 +87,7 @@ fn prove_bit_0(
     let c0 = Felt::from_bytes_be(&c0_bytes);
 
     // s0 = k + c0 * random
-    let s0 = scalar::scalar_add(&k, &scalar::scalar_mul(&c0, random)?)?;
+    let s0 = scalar::scalar_add(k.expose_secret(), &scalar::scalar_mul(&c0, random)?)?;
 
     let proof = ProofOfBit {
         a0: SerializablePoint::from_projective(&a0),
@@ -118,8 +118,8 @@ fn prove_bit_1(
     let (a0, c0, s0) = simulate_poe(&v, g2)?;
 
     // Real proof for bit=1: POE for V-g1 = g2^random
-    let k = random_felt();
-    let a1 = StarkCurve::mul(&k, Some(g2));
+    let k = SecretFelt::new(random_felt());
+    let a1 = StarkCurve::mul(k.expose_secret(), Some(g2));
 
     // Compute challenge from commitments
     let c = compute_poseidon_challenge(prefix, &[&a0, &a1])?;
@@ -134,7 +134,7 @@ fn prove_bit_1(
     let c1 = Felt::from_bytes_be(&c1_bytes);
 
     // s1 = k + c1 * random
-    let s1 = scalar::scalar_add(&k, &scalar::scalar_mul(&c1, random)?)?;
+    let s1 = scalar::scalar_add(k.expose_secret(), &scalar::scalar_mul(&c1, random)?)?;
 
     let proof = ProofOfBit {
         a0: SerializablePoint::from_projective(&a0),

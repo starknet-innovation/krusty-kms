@@ -179,7 +179,7 @@ impl TongoAccount {
             .as_ref()
             .map(|k| &k.private_key)
             .unwrap_or(&self.keypair.private_key);
-        ElGamal::decrypt(ciphertext, &**secret)
+        ElGamal::decrypt(ciphertext, secret.expose_secret())
     }
 }
 

@@ -7,7 +7,7 @@
 use crate::curve::StarkCurve;
 use crate::hash::compute_poseidon_challenge;
 use crate::scalar;
-use ghoul_common::{AuditProof, ElGamalCiphertext, Result, SerializablePoint};
+use ghoul_common::{AuditProof, ElGamalCiphertext, Result, SecretFelt, SerializablePoint};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -97,8 +97,8 @@ impl AuditProver {
             }
         }
 
-        // Generate random value for audit encryption
-        let r1 = Self::random_felt();
+        // Generate random value for audit encryption (wrapped in SecretFelt for zeroization on drop)
+        let r1 = SecretFelt::new(Self::random_felt());
 
         // Create cipher1 (audit balance encrypted under auditor's key)
         // L1 = g^balance * auditor^r1
@@ -107,7 +107,7 @@ impl AuditProver {
         // Special case for balance=0 due to Rust curve implementation:
         // - Cairo: g^0 = O (point at infinity), so L1 = O + auditor^r1 = auditor^r1
         // - Rust: g^0 = g (bug), so we manually set L1 = auditor^r1 when balance=0
-        let auditor_r1 = StarkCurve::mul(&r1, Some(auditor_pub_key));
+        let auditor_r1 = StarkCurve::mul(r1.expose_secret(), Some(auditor_pub_key));
         let l1 = if balance == 0 {
             // For balance=0: L1 = auditor^r1 (skip g^0 to avoid Rust curve bug)
             auditor_r1.clone()
@@ -116,7 +116,7 @@ impl AuditProver {
             let g_b = StarkCurve::mul(&Felt::from(balance), Some(&g));
             StarkCurve::add(&g_b, &auditor_r1)
         };
-        let r1_point = StarkCurve::mul(&r1, Some(&g));
+        let r1_point = StarkCurve::mul(r1.expose_secret(), Some(&g));
 
         // Validate cipher1 points
         if StarkCurve::is_infinity(&l1) {
@@ -135,14 +135,14 @@ impl AuditProver {
             r: r1_point,
         };
 
-        // Generate random blinding factors
-        let kx = Self::random_felt();
-        let kb = Self::random_felt();
-        let kr = Self::random_felt();
+        // Generate random blinding factors (wrapped in SecretFelt for zeroization on drop)
+        let kx = SecretFelt::new(Self::random_felt());
+        let kb = SecretFelt::new(Self::random_felt());
+        let kr = SecretFelt::new(Self::random_felt());
 
         // Compute commitments
         // Ax = g^kx
-        let ax = StarkCurve::mul(&kx, Some(&g));
+        let ax = StarkCurve::mul(kx.expose_secret(), Some(&g));
         if StarkCurve::is_infinity(&ax) {
             return Err(ghoul_common::GhoulError::CryptoError(
                 "Ax is point at infinity".to_string(),
@@ -150,8 +150,8 @@ impl AuditProver {
         }
 
         // AL0 = g^kb + R0^kx
-        let g_kb = StarkCurve::mul(&kb, Some(&g));
-        let r0_kx = StarkCurve::mul(&kx, Some(&cipher0.r));
+        let g_kb = StarkCurve::mul(kb.expose_secret(), Some(&g));
+        let r0_kx = StarkCurve::mul(kx.expose_secret(), Some(&cipher0.r));
         let al0 = StarkCurve::add(&g_kb, &r0_kx);
         if StarkCurve::is_infinity(&al0) {
             return Err(ghoul_common::GhoulError::CryptoError(
@@ -160,7 +160,7 @@ impl AuditProver {
         }
 
         // AR1 = g^kr
-        let ar1 = StarkCurve::mul(&kr, Some(&g));
+        let ar1 = StarkCurve::mul(kr.expose_secret(), Some(&g));
         if StarkCurve::is_infinity(&ar1) {
             return Err(ghoul_common::GhoulError::CryptoError(
                 "AR1 is point at infinity".to_string(),
@@ -168,7 +168,7 @@ impl AuditProver {
         }
 
         // AL1 = g^kb + auditor^kr
-        let auditor_kr = StarkCurve::mul(&kr, Some(auditor_pub_key));
+        let auditor_kr = StarkCurve::mul(kr.expose_secret(), Some(auditor_pub_key));
         let al1 = StarkCurve::add(&g_kb, &auditor_kr);
         if StarkCurve::is_infinity(&al1) {
             return Err(ghoul_common::GhoulError::CryptoError(
@@ -184,16 +184,16 @@ impl AuditProver {
         // Compute responses
         // sx = kx + c*x
         let c_x = scalar::scalar_mul(&c, private_key)?;
-        let sx = scalar::scalar_add(&kx, &c_x)?;
+        let sx = scalar::scalar_add(kx.expose_secret(), &c_x)?;
 
         // sb = kb + c*balance
         let balance_felt = Felt::from(balance);
         let c_b = scalar::scalar_mul(&c, &balance_felt)?;
-        let sb = scalar::scalar_add(&kb, &c_b)?;
+        let sb = scalar::scalar_add(kb.expose_secret(), &c_b)?;
 
         // sr = kr + c*r1
-        let c_r1 = scalar::scalar_mul(&c, &r1)?;
-        let sr = scalar::scalar_add(&kr, &c_r1)?;
+        let c_r1 = scalar::scalar_mul(&c, r1.expose_secret())?;
+        let sr = scalar::scalar_add(kr.expose_secret(), &c_r1)?;
 
         // Serialize the proof
         let proof = AuditProof {

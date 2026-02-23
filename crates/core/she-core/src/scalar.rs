@@ -9,6 +9,7 @@ use num_bigint::BigUint;
 use num_traits::Num;
 use starknet_types_core::felt::Felt;
 use std::sync::LazyLock;
+use zeroize::Zeroize;
 
 /// Stark curve order (the order of the generator point).
 /// This is the modulus for all scalar arithmetic in elliptic curve operations.
@@ -27,15 +28,19 @@ pub fn scalar_add(a: &Felt, b: &Felt) -> Result<Felt> {
 
     let result = (a_big + b_big) % &*CURVE_ORDER_BIGUINT;
 
-    let bytes = result.to_bytes_be();
+    let mut bytes = result.to_bytes_be();
     // Pad to 32 bytes if needed
-    Ok(if bytes.len() < 32 {
+    let result_felt = if bytes.len() < 32 {
         let mut padded = [0u8; 32];
         padded[32 - bytes.len()..].copy_from_slice(&bytes);
-        Felt::from_bytes_be(&padded)
+        let felt = Felt::from_bytes_be(&padded);
+        padded.zeroize();
+        felt
     } else {
         Felt::from_bytes_be_slice(&bytes)
-    })
+    };
+    bytes.zeroize();
+    Ok(result_felt)
 }
 
 /// Perform scalar multiplication modulo curve order.
@@ -47,15 +52,19 @@ pub fn scalar_mul(a: &Felt, b: &Felt) -> Result<Felt> {
 
     let result = (a_big * b_big) % &*CURVE_ORDER_BIGUINT;
 
-    let bytes = result.to_bytes_be();
+    let mut bytes = result.to_bytes_be();
     // Pad to 32 bytes if needed
-    Ok(if bytes.len() < 32 {
+    let result_felt = if bytes.len() < 32 {
         let mut padded = [0u8; 32];
         padded[32 - bytes.len()..].copy_from_slice(&bytes);
-        Felt::from_bytes_be(&padded)
+        let felt = Felt::from_bytes_be(&padded);
+        padded.zeroize();
+        felt
     } else {
         Felt::from_bytes_be_slice(&bytes)
-    })
+    };
+    bytes.zeroize();
+    Ok(result_felt)
 }
 
 /// Reduce a Felt modulo the curve order.
@@ -65,15 +74,19 @@ pub fn reduce_scalar(a: &Felt) -> Result<Felt> {
     let a_big = BigUint::from_bytes_be(&a.to_bytes_be());
     let result = a_big % &*CURVE_ORDER_BIGUINT;
 
-    let bytes = result.to_bytes_be();
+    let mut bytes = result.to_bytes_be();
     // Pad to 32 bytes if needed
-    Ok(if bytes.len() < 32 {
+    let result_felt = if bytes.len() < 32 {
         let mut padded = [0u8; 32];
         padded[32 - bytes.len()..].copy_from_slice(&bytes);
-        Felt::from_bytes_be(&padded)
+        let felt = Felt::from_bytes_be(&padded);
+        padded.zeroize();
+        felt
     } else {
         Felt::from_bytes_be_slice(&bytes)
-    })
+    };
+    bytes.zeroize();
+    Ok(result_felt)
 }
 
 /// Generate a cryptographically secure random scalar.

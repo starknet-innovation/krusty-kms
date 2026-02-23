@@ -8,7 +8,7 @@
 use crate::curve::StarkCurve;
 use crate::hash::compute_challenge_single;
 use crate::scalar;
-use ghoul_common::{Poe2Proof, Result, SerializablePoint};
+use ghoul_common::{Poe2Proof, Result, SecretFelt, SerializablePoint};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -51,13 +51,13 @@ impl ProofOfExponentiation2 {
         let g2_x2 = StarkCurve::mul(x2, Some(g2));
         let y = StarkCurve::add(&g1_x1, &g2_x2);
 
-        // Generate random k1, k2
-        let k1 = Self::random_felt();
-        let k2 = Self::random_felt();
+        // Generate random k1, k2 (wrapped in SecretFelt for zeroization on drop)
+        let k1 = SecretFelt::new(Self::random_felt());
+        let k2 = SecretFelt::new(Self::random_felt());
 
         // Compute commitment A = g1^k1 * g2^k2
-        let g1_k1 = StarkCurve::mul(&k1, Some(g1));
-        let g2_k2 = StarkCurve::mul(&k2, Some(g2));
+        let g1_k1 = StarkCurve::mul(k1.expose_secret(), Some(g1));
+        let g2_k2 = StarkCurve::mul(k2.expose_secret(), Some(g2));
         let a = StarkCurve::add(&g1_k1, &g2_k2);
 
         // Compute Fiat-Shamir challenge c = H(prefix, A)
@@ -65,10 +65,10 @@ impl ProofOfExponentiation2 {
 
         // Compute responses s1 = k1 + c*x1, s2 = k2 + c*x2 (mod curve order)
         let c_x1 = scalar::scalar_mul(&c, x1)?;
-        let s1 = scalar::scalar_add(&k1, &c_x1)?;
+        let s1 = scalar::scalar_add(k1.expose_secret(), &c_x1)?;
 
         let c_x2 = scalar::scalar_mul(&c, x2)?;
-        let s2 = scalar::scalar_add(&k2, &c_x2)?;
+        let s2 = scalar::scalar_add(k2.expose_secret(), &c_x2)?;
 
         let proof = Poe2Proof {
             a: SerializablePoint::from_projective(&a),

@@ -9,6 +9,7 @@ description = "Somewhat Homomorphic Encryption (SHE) implementation for Starknet
 [features]
 default = ["parallel"]
 parallel = ["rayon"]
+test-utils = []
 
 [dependencies]
 ghoul-common = { path = "../common" }
