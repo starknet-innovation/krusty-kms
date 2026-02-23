@@ -27,6 +27,7 @@ pub use derivation::{
     derive_nostr_keypair, derive_nostr_private_key, NostrKeyPair, TongoKeyPair,
     NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE, TONGO_VIEW_COIN_TYPE,
 };
+pub use ghoul_common::SecretFelt;
 pub use mnemonic::{generate_mnemonic, validate_mnemonic};
 
 /// Re-export common types

@@ -5,7 +5,7 @@
 //! 2. At the end, grind the secp256k1 private key to make it valid for Stark curve
 
 use crate::mnemonic::mnemonic_to_seed;
-use ghoul_common::{GhoulError, Result};
+use ghoul_common::{GhoulError, Result, SecretFelt};
 use hmac::{Hmac, Mac};
 use k256::ecdsa::SigningKey;
 use num_bigint::BigUint;
@@ -13,6 +13,7 @@ use num_traits::Num;
 use sha2::{Digest, Sha256, Sha512};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -42,9 +43,12 @@ pub const NOSTR_COIN_TYPE: u32 = 1237;
 const CURVE_ORDER: &str = "0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
 
 /// A TONGO keypair (private key + public key).
+///
+/// The private key is wrapped in `SecretFelt` which ensures it is
+/// zeroized when the keypair is dropped.
 #[derive(Debug, Clone)]
 pub struct TongoKeyPair {
-    pub private_key: Felt,
+    pub private_key: SecretFelt,
     pub public_key: ProjectivePoint,
 }
 
@@ -75,10 +79,10 @@ pub fn derive_private_key_with_coin_type(
     coin_type: u32,
     passphrase: Option<&str>,
 ) -> Result<Felt> {
-    let seed = mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?;
+    let seed = Zeroizing::new(mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?);
 
     // Derive master key from seed
-    let master = derive_master_key(&seed)?;
+    let master = derive_master_key(seed.as_ref())?;
 
     // BIP-44 path: m/44'/{coin_type}'/account_index'/0/index
     let path = [
@@ -171,7 +175,7 @@ pub fn derive_keypair_with_coin_type(
     let public_key = compute_public_key(&private_key)?;
 
     Ok(TongoKeyPair {
-        private_key,
+        private_key: SecretFelt::new(private_key),
         public_key,
     })
 }
@@ -221,11 +225,14 @@ pub fn derive_view_keypair(
 }
 
 /// A Nostr keypair (raw secp256k1 private key as bytes).
-#[derive(Debug, Clone)]
+///
+/// The private key is zeroized when the keypair is dropped.
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct NostrKeyPair {
     /// 32-byte secp256k1 private key
     pub private_key: [u8; 32],
     /// 32-byte x-only public key (BIP-340 format)
+    #[zeroize(skip)]
     pub public_key: [u8; 32],
 }
 
@@ -254,10 +261,10 @@ pub fn derive_nostr_private_key(
     account_index: u32,
     passphrase: Option<&str>,
 ) -> Result<[u8; 32]> {
-    let seed = mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?;
+    let seed = Zeroizing::new(mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?);
 
     // Derive master key from seed
-    let master = derive_master_key(&seed)?;
+    let master = derive_master_key(seed.as_ref())?;
 
     // BIP-44 path: m/44'/1237'/account_index'/0/index
     let path = [
@@ -272,7 +279,7 @@ pub fn derive_nostr_private_key(
 
     // Return raw secp256k1 key without grinding
     // Nostr uses secp256k1 directly, no conversion needed
-    Ok(derived.0)
+    Ok(*derived.0)
 }
 
 /// Derive a Nostr keypair from a mnemonic.
@@ -321,14 +328,14 @@ pub fn derive_nostr_keypair(
 /// This matches the Swift implementation which uses "Bitcoin seed" for BIP-32.
 ///
 /// # Cyclomatic Complexity: 1
-fn derive_master_key(seed: &[u8]) -> Result<([u8; 32], [u8; 32])> {
+fn derive_master_key(seed: &[u8]) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
     let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
         .map_err(|e| GhoulError::CryptoError(e.to_string()))?;
     mac.update(seed);
     let result = mac.finalize().into_bytes();
 
-    let mut key = [0u8; 32];
-    let mut chain_code = [0u8; 32];
+    let mut key = Zeroizing::new([0u8; 32]);
+    let mut chain_code = Zeroizing::new([0u8; 32]);
     key.copy_from_slice(&result[..32]);
     chain_code.copy_from_slice(&result[32..64]);
 
@@ -343,7 +350,7 @@ fn derive_master_key(seed: &[u8]) -> Result<([u8; 32], [u8; 32])> {
 /// - child_key = (IL + parent_key) mod secp256k1_n
 ///
 /// # Cyclomatic Complexity: 3
-fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<([u8; 32], [u8; 32])> {
+fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
     let mut mac = HmacSha512::new_from_slice(chain_code)
         .map_err(|e| GhoulError::CryptoError(e.to_string()))?;
 
@@ -384,11 +391,11 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<([u
 
     // Convert back to bytes (big-endian, padded to 32 bytes)
     let child_bytes = child_num.to_bytes_be();
-    let mut derived_key = [0u8; 32];
+    let mut derived_key = Zeroizing::new([0u8; 32]);
     let start = 32 - child_bytes.len().min(32);
     derived_key[start..].copy_from_slice(&child_bytes[..child_bytes.len().min(32)]);
 
-    let mut derived_chain = [0u8; 32];
+    let mut derived_chain = Zeroizing::new([0u8; 32]);
     derived_chain.copy_from_slice(ir);
 
     Ok((derived_key, derived_chain))
@@ -401,9 +408,9 @@ fn derive_path(
     master_key: &[u8; 32],
     master_chain: &[u8; 32],
     path: &[u32],
-) -> Result<([u8; 32], [u8; 32])> {
-    let mut key = *master_key;
-    let mut chain = *master_chain;
+) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+    let mut key = Zeroizing::new(*master_key);
+    let mut chain = Zeroizing::new(*master_chain);
 
     for &index in path {
         let (derived_key, derived_chain) = derive_child(&key, &chain, index)?;

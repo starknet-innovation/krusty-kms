@@ -16,6 +16,7 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::sync::{LazyLock, Mutex};
 use thiserror::Error;
+use zeroize::Zeroize;
 
 /// Protocol version (matches NIP-44 v2 layout expectations).
 pub const VERSION: u8 = 2;
@@ -30,6 +31,22 @@ struct DeterministicRngState {
     counter: u64,
     block: [u8; 32],
     block_offset: usize,
+}
+
+impl Zeroize for DeterministicRngState {
+    fn zeroize(&mut self) {
+        self.seed.zeroize();
+        self.stream.zeroize();
+        self.block.zeroize();
+        self.counter = 0;
+        self.block_offset = 0;
+    }
+}
+
+impl Drop for DeterministicRngState {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
 }
 
 impl DeterministicRngState {

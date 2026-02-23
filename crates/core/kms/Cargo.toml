@@ -25,6 +25,7 @@ hex.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 k256 = { version = "0.13", features = ["ecdsa"] }
+zeroize.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
