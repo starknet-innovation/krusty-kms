@@ -751,18 +751,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "equivalence-harness"
-version = "0.1.0"
-dependencies = [
- "hex",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1580,6 +1568,19 @@ dependencies = [
  "she-core",
  "starknet-types-core",
  "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
+name = "kms-cabi"
+version = "0.1.0"
+dependencies = [
+ "bip39",
+ "ghoul-common",
+ "hex",
+ "kms",
+ "she-core",
+ "starknet-types-core",
  "zeroize",
 ]
 
