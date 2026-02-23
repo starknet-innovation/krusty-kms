@@ -50,4 +50,22 @@ pub enum KmsError {
 
     #[error("RPC error: {0}")]
     RpcError(String),
+
+    #[error("Account not deployed at {0}")]
+    AccountNotDeployed(String),
+
+    #[error("Transaction error: {0}")]
+    TransactionError(String),
+
+    #[error("Transaction reverted: {0}")]
+    TransactionReverted(String),
+
+    #[error("Fee estimation failed: {0}")]
+    FeeEstimationFailed(String),
+
+    #[error("Timeout: {0}")]
+    Timeout(String),
+
+    #[error("Staking error: {0}")]
+    StakingError(String),
 }

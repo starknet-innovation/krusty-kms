@@ -13,7 +13,7 @@ krusty-kms-sdk = { path = "../sdk" }
 krusty-kms-crypto = { path = "../crypto" }
 starknet-types-core.workspace = true
 starknet-rust = "0.18.0"
-tokio.workspace = true
+tokio = { workspace = true, features = ["time", "sync"] }
 serde.workspace = true
 serde_json.workspace = true
 hex.workspace = true

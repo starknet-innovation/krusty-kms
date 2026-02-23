@@ -17,10 +17,14 @@
 //! - `{index}` - Address index
 
 pub mod account;
+pub mod account_class;
 pub mod derivation;
 pub mod mnemonic;
 
 pub use account::{calculate_contract_address, derive_oz_account_address};
+pub use account_class::{
+    AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount,
+};
 pub use derivation::{
     derive_keypair, derive_keypair_with_coin_type, derive_private_key,
     derive_private_key_with_coin_type, derive_view_keypair, derive_view_private_key,
