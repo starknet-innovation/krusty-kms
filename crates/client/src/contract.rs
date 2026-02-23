@@ -6,13 +6,14 @@
 use crate::types::{AccountState, CipherBalance};
 use krusty_kms_common::Result;
 use std::sync::Arc;
-use starknet::core::types::{BlockId, BlockTag, FunctionCall};
-use starknet::core::utils::get_selector_from_name;
-use starknet::providers::{jsonrpc::HttpTransport, JsonRpcClient, Provider};
+use starknet_rust::core::types::{BlockId, BlockTag, FunctionCall};
+use starknet_rust::core::utils::get_selector_from_name;
+use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust::providers::Provider;
 use starknet_types_core::curve::ProjectivePoint;
 
 // Type aliases to distinguish between starknet-rs and starknet-types-core Felt types
-type StarknetRsFelt = starknet::core::types::Felt;
+type StarknetRsFelt = starknet_rust::core::types::Felt;
 type CoreFelt = starknet_types_core::felt::Felt;
 
 /// Convert from starknet-types-core Felt to starknet-rs Felt.

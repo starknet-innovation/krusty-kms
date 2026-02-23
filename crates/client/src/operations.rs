@@ -6,13 +6,13 @@
 
 use crate::serialization;
 use krusty_kms_common::Result;
-use starknet::core::types::Call;
-use starknet::core::utils::get_selector_from_name;
+use starknet_rust::core::types::Call;
+use starknet_rust::core::utils::get_selector_from_name;
 use starknet_types_core::felt::Felt as CoreFelt;
 use krusty_kms_sdk::operations::{FundProof, RolloverProof, TransferProof, WithdrawProof, RagequitProof};
 
 // Type aliases for clarity
-type StarknetRsFelt = starknet::core::types::Felt;
+type StarknetRsFelt = starknet_rust::core::types::Felt;
 
 /// Convert from starknet-types-core Felt to starknet-rs Felt.
 #[must_use]

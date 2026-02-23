@@ -16,9 +16,9 @@ use krusty_kms::{
     derive_keypair_with_coin_type, derive_view_keypair, derive_oz_account_address,
     STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
 };
-use starknet::accounts::{Account, ExecutionEncoding, SingleOwnerAccount};
-use starknet::core::types::{BlockId, BlockTag};
-use starknet::signers::{LocalWallet, SigningKey};
+use starknet_rust::accounts::{Account, ExecutionEncoding, SingleOwnerAccount};
+use starknet_rust::core::types::{BlockId, BlockTag};
+use starknet_rust::signers::{LocalWallet, SigningKey};
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_client::{
     build_fund_calls, build_transfer_call, build_rollover_call, build_withdraw_call, build_ragequit_call,
@@ -328,7 +328,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("     - proof: {} felts (indices 9-11)", 3);
     if fund_call.calldata.len() > 12 {
         println!("     - audit variant: {} (0=Some, 1=None)", fund_call.calldata[12]);
-        if fund_call.calldata[12] == starknet::core::types::Felt::ZERO {
+        if fund_call.calldata[12] == starknet_rust::core::types::Felt::ZERO {
             println!("     - audit: {} felts total (4 balance + 6 hint + 11 proof)", 21);
         }
     }
@@ -347,15 +347,15 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         // Create signer from the derived private key
         // Convert from starknet-types-core 1.0 Felt to 0.1.9 for starknet-rs compatibility
         let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
-        let private_key_rs = starknet::core::types::Felt::from_bytes_be(&private_key_bytes);
+        let private_key_rs = starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
         let signing_key = SigningKey::from_secret_scalar(private_key_rs);
         let signer = LocalWallet::from(signing_key);
 
         // Create SingleOwnerAccount
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
-        let chain_id_rs = starknet::core::types::Felt::from_bytes_be(&chain_id_bytes);
+        let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -496,14 +496,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
         // Recreate account for transfer (same as fund operation)
         let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
-        let private_key_rs = starknet::core::types::Felt::from_bytes_be(&private_key_bytes);
+        let private_key_rs = starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
         let signing_key = SigningKey::from_secret_scalar(private_key_rs);
         let signer = LocalWallet::from(signing_key);
 
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
-        let chain_id_rs = starknet::core::types::Felt::from_bytes_be(&chain_id_bytes);
+        let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -609,14 +609,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
         // Create account for rollover
         let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
-        let private_key_rs = starknet::core::types::Felt::from_bytes_be(&private_key_bytes);
+        let private_key_rs = starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
         let signing_key = SigningKey::from_secret_scalar(private_key_rs);
         let signer = LocalWallet::from(signing_key);
 
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
-        let chain_id_rs = starknet::core::types::Felt::from_bytes_be(&chain_id_bytes);
+        let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -720,14 +720,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
         // Create account for withdraw
         let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
-        let private_key_rs = starknet::core::types::Felt::from_bytes_be(&private_key_bytes);
+        let private_key_rs = starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
         let signing_key = SigningKey::from_secret_scalar(private_key_rs);
         let signer = LocalWallet::from(signing_key);
 
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
-        let chain_id_rs = starknet::core::types::Felt::from_bytes_be(&chain_id_bytes);
+        let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -829,14 +829,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
         // Create account for ragequit (same pattern as withdraw)
         let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
-        let private_key_rs = starknet::core::types::Felt::from_bytes_be(&private_key_bytes);
+        let private_key_rs = starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
         let signing_key = SigningKey::from_secret_scalar(private_key_rs);
         let signer = LocalWallet::from(signing_key);
 
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
-        let chain_id_rs = starknet::core::types::Felt::from_bytes_be(&chain_id_bytes);
+        let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
