@@ -45,12 +45,7 @@ class KmsLib:
         else:
             name = "libkms.so"
 
-        root = Path(__file__).resolve().parents[4]
-        candidate = root / "zig" / "zig-out" / "lib" / name
-        if candidate.exists():
-            return ctypes.CDLL(str(candidate))
-
-        raise OSError("could not locate libkms; build zig library or set KMS_LIB_PATH")
+        raise OSError("could not locate libkms; set KMS_LIB_PATH")
 
     def _bind(self) -> None:
         self.lib.kms_get_abi_version.argtypes = [POINTER(c_uint32), POINTER(c_uint32)]

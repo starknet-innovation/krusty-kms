@@ -4,22 +4,13 @@ on:
   push:
     paths:
       - "packages/**"
-      - "zig/include/kms.h"
       - ".github/workflows/wrapper-smoke.yml"
   pull_request:
     paths:
       - "packages/**"
-      - "zig/include/kms.h"
       - ".github/workflows/wrapper-smoke.yml"
 
 jobs:
-  header-sync:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: ./tools/sync_kms_header.sh
-      - run: git diff --exit-code
-
   ts:
     runs-on: ubuntu-latest
     defaults:
@@ -53,10 +44,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
-      - run: zig build --build-file ../../zig/build.zig
       - run: cargo test
 
   go:
@@ -69,10 +56,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
-      - run: zig build --build-file ../../zig/build.zig
       - run: go test ./...
 
   swift:
@@ -82,11 +65,6 @@ jobs:
         working-directory: packages/kms-swift
     steps:
       - uses: actions/checkout@v4
-      - uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
-      - name: Build Zig library dependency
-        run: zig build --build-file ../../zig/build.zig
       - run: swift build
 
   jvm:

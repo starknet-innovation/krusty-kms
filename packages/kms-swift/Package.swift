@@ -17,8 +17,7 @@ let package = Package(
             sources: ["empty.c"],
             publicHeadersPath: "include",
             linkerSettings: [
-                .unsafeFlags(["-L../../../zig/zig-out/lib", "-lkms"]),
-                .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "../../../zig/zig-out/lib"])
+                .unsafeFlags(["-lkms"])
             ]
         ),
         .target(

@@ -1,7 +1,7 @@
 [project]
 name = "ghoul-kms"
 version = "0.1.0"
-description = "Python ctypes wrapper for Ghoul Zig KMS"
+description = "Python ctypes wrapper for Ghoul KMS"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Ghoul Contributors" }]

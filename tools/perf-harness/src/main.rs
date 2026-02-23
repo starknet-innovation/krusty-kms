@@ -34,8 +34,7 @@ struct PerfReport {
 struct ReportConfig {
     samples: usize,
     warmup: usize,
-    rust_bin: String,
-    zig_bin: String,
+    oracle_bin: String,
     vectors: String,
 }
 
@@ -43,9 +42,7 @@ struct ReportConfig {
 struct CaseReport {
     name: String,
     op: String,
-    rust: RunnerStats,
-    zig: RunnerStats,
-    ratio_zig_over_rust: Option<f64>,
+    stats: RunnerStats,
 }
 
 #[derive(Debug, Serialize)]
@@ -60,8 +57,7 @@ struct RunnerStats {
 
 #[derive(Debug)]
 struct Config {
-    rust_bin: PathBuf,
-    zig_bin: PathBuf,
+    oracle_bin: PathBuf,
     vectors: PathBuf,
     out_dir: PathBuf,
     samples: usize,
@@ -105,20 +101,12 @@ fn run(cfg: Config) -> Result<(), String> {
 
     let mut reports = Vec::with_capacity(defs.len());
     for def in defs {
-        let rust = benchmark_runner(&cfg.rust_bin, &def.req, cfg.samples, cfg.warmup);
-        let zig = benchmark_runner(&cfg.zig_bin, &def.req, cfg.samples, cfg.warmup);
-
-        let ratio = match (rust.median_ms, zig.median_ms) {
-            (Some(r), Some(z)) if r > 0.0 => Some(z / r),
-            _ => None,
-        };
+        let stats = benchmark_runner(&cfg.oracle_bin, &def.req, cfg.samples, cfg.warmup);
 
         reports.push(CaseReport {
             name: def.name.to_string(),
             op: def.req.get("op").and_then(Value::as_str).unwrap_or("unknown").to_string(),
-            rust,
-            zig,
-            ratio_zig_over_rust: ratio,
+            stats,
         });
     }
 
@@ -133,8 +121,7 @@ fn run(cfg: Config) -> Result<(), String> {
         config: ReportConfig {
             samples: cfg.samples,
             warmup: cfg.warmup,
-            rust_bin: cfg.rust_bin.display().to_string(),
-            zig_bin: cfg.zig_bin.display().to_string(),
+            oracle_bin: cfg.oracle_bin.display().to_string(),
             vectors: cfg.vectors.display().to_string(),
         },
         cases: reports,
@@ -377,38 +364,21 @@ fn render_markdown(report: &PerfReport) -> String {
     md.push_str(&format!("- samples: {}\n", report.config.samples));
     md.push_str(&format!("- warmup: {}\n\n", report.config.warmup));
 
-    md.push_str("| Case | Rust median (ms) | Zig median (ms) | Zig/Rust | Rust p95 | Zig p95 | Status |\n");
-    md.push_str("|---|---:|---:|---:|---:|---:|---|\n");
+    md.push_str("| Case | Median (ms) | p95 (ms) | Stddev (ms) | Status |\n");
+    md.push_str("|---|---:|---:|---:|---|\n");
 
     for case in &report.cases {
-        let rust_med = fmt_opt(case.rust.median_ms);
-        let zig_med = fmt_opt(case.zig.median_ms);
-        let ratio = fmt_opt(case.ratio_zig_over_rust);
-        let rust_p95 = fmt_opt(case.rust.p95_ms);
-        let zig_p95 = fmt_opt(case.zig.p95_ms);
-        let status = if case.rust.status == "ok" && case.zig.status == "ok" {
-            "ok".to_string()
-        } else {
-            format!(
-                "rust={}, zig={}{}{}",
-                case.rust.status,
-                case.zig.status,
-                case.rust
-                    .error
-                    .as_ref()
-                    .map(|e| format!(", rust_err={e}"))
-                    .unwrap_or_default(),
-                case.zig
-                    .error
-                    .as_ref()
-                    .map(|e| format!(", zig_err={e}"))
-                    .unwrap_or_default()
-            )
+        let median = fmt_opt(case.stats.median_ms);
+        let p95 = fmt_opt(case.stats.p95_ms);
+        let stddev = fmt_opt(case.stats.stddev_ms);
+        let status = match &case.stats.error {
+            Some(e) => format!("error: {e}"),
+            None => case.stats.status.clone(),
         };
 
         md.push_str(&format!(
-            "| {} | {} | {} | {} | {} | {} | {} |\n",
-            case.name, rust_med, zig_med, ratio, rust_p95, zig_p95, status
+            "| {} | {} | {} | {} | {} |\n",
+            case.name, median, p95, stddev, status
         ));
     }
 
@@ -435,15 +405,11 @@ fn parse_args(args: Vec<String>) -> Result<Config, String> {
         i += 2;
     }
 
-    let rust_bin = PathBuf::from(
-        map.get("--rust-bin")
+    let oracle_bin = PathBuf::from(
+        map.get("--oracle-bin")
+            .or_else(|| map.get("--rust-bin"))
             .cloned()
             .unwrap_or_else(|| "target/release/rust-oracle".to_string()),
-    );
-    let zig_bin = PathBuf::from(
-        map.get("--zig-bin")
-            .cloned()
-            .unwrap_or_else(|| "tools/zig-oracle/zig-oracle-release".to_string()),
     );
     let vectors = PathBuf::from(
         map.get("--vectors")
@@ -467,8 +433,7 @@ fn parse_args(args: Vec<String>) -> Result<Config, String> {
         .unwrap_or(1);
 
     Ok(Config {
-        rust_bin,
-        zig_bin,
+        oracle_bin,
         vectors,
         out_dir,
         samples,
@@ -478,7 +443,7 @@ fn parse_args(args: Vec<String>) -> Result<Config, String> {
 
 fn print_usage() {
     eprintln!(
-        "usage: perf-harness [--rust-bin path] [--zig-bin path] [--vectors path] [--out-dir path] [--samples n] [--warmup n]"
+        "usage: perf-harness [--oracle-bin path] [--vectors path] [--out-dir path] [--samples n] [--warmup n]"
     );
 }
 

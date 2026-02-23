@@ -2,7 +2,7 @@ package ffi
 
 /*
 #cgo CFLAGS: -I${SRCDIR}
-#cgo LDFLAGS: -L${SRCDIR}/../../../../zig/zig-out/lib -Wl,-rpath,${SRCDIR}/../../../../zig/zig-out/lib -lkms
+#cgo LDFLAGS: -lkms
 
 #include "kms.h"
 #include <stdlib.h>

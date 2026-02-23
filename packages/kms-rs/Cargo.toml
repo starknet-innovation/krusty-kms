@@ -3,7 +3,7 @@ name = "ghoul-kms"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "Rust FFI wrapper for Ghoul Zig KMS"
+description = "Rust FFI wrapper for Ghoul KMS"
 repository = "https://github.com/theodorepender/kms"
 
 [lib]

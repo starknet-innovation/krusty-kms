@@ -67,7 +67,7 @@ pub fn validate_mnemonic(phrase: &str) -> Result<()> {
 /// * `passphrase` - Optional passphrase (empty string for no passphrase)
 ///
 /// # Cyclomatic Complexity: 1
-pub(crate) fn mnemonic_to_seed(mnemonic: &str, passphrase: &str) -> Result<[u8; 64]> {
+pub fn mnemonic_to_seed(mnemonic: &str, passphrase: &str) -> Result<[u8; 64]> {
     let mnemonic_parsed: Mnemonic = mnemonic
         .parse()
         .map_err(|e| GhoulError::InvalidMnemonic(format!("{e:?}")))?;

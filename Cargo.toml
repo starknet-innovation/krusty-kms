@@ -14,9 +14,9 @@ members = [
     "crates/experimental/gaming-experimental/mental-poker",
     "crates/experimental/gaming-experimental/mental-poker-wasm",
     "crates/experimental/gaming-experimental/qb-game",
+    "crates/ffi/kms-cabi",
     "packages/kms-rs",
     "tools/rust-oracle",
-    "tools/equivalence-harness",
     "tools/perf-harness",
 ]
 default-members = [

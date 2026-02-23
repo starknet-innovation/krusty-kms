@@ -1,6 +1,6 @@
 # Perf Harness
 
-Performance harness for Rust vs Zig KMS/SHE/Tongo operations.
+Performance harness for Rust KMS/SHE/Tongo operations.
 
 ## What it does
 - Runs a curated benchmark corpus covering:
@@ -19,13 +19,7 @@ Performance harness for Rust vs Zig KMS/SHE/Tongo operations.
 ## Usage
 
 ```bash
-cargo run -p perf-harness --manifest-path /Users/theodorepender/Coding/kms/Cargo.toml -- \
-  --rust-bin /Users/theodorepender/Coding/kms/target/release/rust-oracle \
-  --zig-bin /Users/theodorepender/Coding/kms/tools/zig-oracle/zig-oracle-release \
-  --vectors /Users/theodorepender/Coding/kms/fixtures/vectors/parity/core-vectors.json \
-  --out-dir /Users/theodorepender/Coding/kms/tools/perf-harness/results \
-  --samples 5 \
-  --warmup 1
+./tools/perf-harness/run.sh
 ```
 
 Outputs:
@@ -41,6 +35,5 @@ Outputs:
 
 ## Profiling Scripts
 - `scripts/profile-rust.sh`
-- `scripts/profile-zig.sh`
 
 These scripts provide starting points for flamegraph/profile capture on Linux/macOS.
