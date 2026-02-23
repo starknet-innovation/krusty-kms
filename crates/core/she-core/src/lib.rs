@@ -37,9 +37,9 @@ pub use elgamal::{ElGamal, ElGamalEncryption};
 pub use hash::poseidon_hash_many;
 pub use poe::ProofOfExponentiation;
 pub use poe2::ProofOfExponentiation2;
-pub use random::{
-    clear_deterministic_rng, fill_random_bytes, random_felt, random_felts, set_deterministic_rng,
-};
+pub use random::{fill_random_bytes, random_felt, random_felts};
+#[cfg(feature = "test-utils")]
+pub use random::{clear_deterministic_rng, set_deterministic_rng};
 
 /// Re-export common types
 pub use ghoul_common::*;

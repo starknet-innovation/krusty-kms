@@ -10,6 +10,7 @@ description = "Nostr private messaging primitives (NIP-17/44 inspired) for Ghoul
 default = ["crypto"]
 crypto = []
 relay = ["nostr-sdk"]
+test-utils = []
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }

@@ -4,7 +4,6 @@
 //! overwritten with zeros when the value is dropped, preventing private
 //! key material from lingering in memory.
 
-use core::ops::Deref;
 use starknet_types_core::felt::Felt;
 use zeroize::Zeroize;
 
@@ -16,11 +15,14 @@ use zeroize::Zeroize;
 ///
 /// # Security
 ///
+/// - All access to the inner `Felt` must go through [`expose_secret()`], making
+///   every secret-access point explicit and greppable.
 /// - `Debug` output is redacted to prevent accidental logging of secrets.
 /// - `LowerHex` is delegated to `Felt` for intentional serialization (e.g.,
 ///   `private_key_hex()` methods).
 /// - `Drop` uses a volatile write to prevent the compiler from optimizing
 ///   away the zeroing.
+// Clone is needed by TongoKeyPair; note that cloning duplicates the secret.
 #[derive(Clone)]
 pub struct SecretFelt(Felt);
 
@@ -29,12 +31,9 @@ impl SecretFelt {
     pub fn new(felt: Felt) -> Self {
         Self(felt)
     }
-}
 
-impl Deref for SecretFelt {
-    type Target = Felt;
-
-    fn deref(&self) -> &Felt {
+    /// Access the secret value. Every call site is explicit and greppable.
+    pub fn expose_secret(&self) -> &Felt {
         &self.0
     }
 }
@@ -94,9 +93,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_secret_felt_deref() {
+    fn test_secret_felt_expose_secret() {
         let secret = SecretFelt::new(Felt::from(42u64));
-        assert_eq!(*secret, Felt::from(42u64));
+        assert_eq!(*secret.expose_secret(), Felt::from(42u64));
     }
 
     #[test]
@@ -132,13 +131,13 @@ mod tests {
     #[test]
     fn test_secret_felt_from() {
         let secret: SecretFelt = Felt::from(99u64).into();
-        assert_eq!(*secret, Felt::from(99u64));
+        assert_eq!(*secret.expose_secret(), Felt::from(99u64));
     }
 
     #[test]
     fn test_secret_felt_zeroize() {
         let mut secret = SecretFelt::new(Felt::from(42u64));
         secret.zeroize();
-        assert_eq!(*secret, Felt::ZERO);
+        assert_eq!(*secret.expose_secret(), Felt::ZERO);
     }
 }

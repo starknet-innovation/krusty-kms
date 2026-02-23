@@ -3,7 +3,7 @@
 use crate::curve::StarkCurve;
 use crate::hash::compute_challenge_triple;
 use crate::scalar;
-use ghoul_common::{ElGamalCiphertext, ElGamalProof, Result, SerializablePoint};
+use ghoul_common::{ElGamalCiphertext, ElGamalProof, Result, SecretFelt, SerializablePoint};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -67,26 +67,26 @@ impl ElGamal {
     ) -> Result<ElGamalProof> {
         let g = StarkCurve::GENERATOR;
 
-        // Generate random blinding factors
-        let r_b = crate::scalar::random_felt();  // Blinding for message
-        let r_r = crate::scalar::random_felt();  // Blinding for randomness
+        // Generate random blinding factors (wrapped in SecretFelt for zeroization on drop)
+        let r_b = SecretFelt::new(crate::scalar::random_felt());
+        let r_r = SecretFelt::new(crate::scalar::random_felt());
 
         // Compute commitments (matching corrected L/R format)
         // AL = g^r_b + pk^r_r (commitment for L = g^m + pk^r)
         // AR = g^r_r (commitment for R = g^r)
-        let g_rb = StarkCurve::mul(&r_b, Some(&g));
-        let pk_rr = StarkCurve::mul(&r_r, Some(public_key));
+        let g_rb = StarkCurve::mul(r_b.expose_secret(), Some(&g));
+        let pk_rr = StarkCurve::mul(r_r.expose_secret(), Some(public_key));
         let a_l = StarkCurve::add(&g_rb, &pk_rr);
-        let a_r = StarkCurve::mul(&r_r, Some(&g));
+        let a_r = StarkCurve::mul(r_r.expose_secret(), Some(&g));
 
         // Compute Fiat-Shamir challenge
         let c = compute_challenge_triple(prefix, l, r, &a_l)?;
 
         // Compute responses (mod curve order)
         let c_message = scalar::scalar_mul(&c, message)?;
-        let s_b = scalar::scalar_add(&r_b, &c_message)?;
+        let s_b = scalar::scalar_add(r_b.expose_secret(), &c_message)?;
         let c_random = scalar::scalar_mul(&c, random)?;
-        let s_r = scalar::scalar_add(&r_r, &c_random)?;
+        let s_r = scalar::scalar_add(r_r.expose_secret(), &c_random)?;
 
         Ok(ElGamalProof {
             al: SerializablePoint::from_projective(&a_l),
