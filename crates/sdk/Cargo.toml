@@ -1,0 +1,37 @@
+[package]
+name = "krusty-kms-sdk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "TONGO confidential transaction SDK for Starknet"
+
+[features]
+default = ["parallel"]
+parallel = ["rayon", "krusty-kms-crypto/parallel", "krusty-kms/parallel"]
+
+[dependencies]
+krusty-kms-common = { path = "../common" }
+krusty-kms-crypto = { path = "../crypto", default-features = false }
+krusty-kms = { path = "../kms", default-features = false }
+starknet-types-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+rand.workspace = true
+rayon = { workspace = true, optional = true }
+chacha20poly1305 = "0.10"
+sha2.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "operations"
+harness = false
+
+[[bench]]
+name = "transfer_throughput"
+harness = false

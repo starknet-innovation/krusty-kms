@@ -1,0 +1,24 @@
+[package]
+name = "krusty-kms-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Starknet RPC client for interacting with TONGO contracts"
+
+[dependencies]
+krusty-kms-common = { path = "../common" }
+krusty-kms = { path = "../kms" }
+krusty-kms-sdk = { path = "../sdk" }
+krusty-kms-crypto = { path = "../crypto" }
+starknet-types-core.workspace = true
+starknet = "0.17.0"
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+url = "2.5"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

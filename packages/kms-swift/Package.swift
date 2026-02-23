@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "GhoulKms",
+    name: "KrustyKms",
     platforms: [
         .macOS(.v13),
         .iOS(.v16),
     ],
     products: [
-        .library(name: "GhoulKms", targets: ["GhoulKms"]),
+        .library(name: "KrustyKms", targets: ["KrustyKms"]),
     ],
     targets: [
         .target(
@@ -21,9 +21,9 @@ let package = Package(
             ]
         ),
         .target(
-            name: "GhoulKms",
+            name: "KrustyKms",
             dependencies: ["CKms"],
-            path: "Sources/GhoulKms"
+            path: "Sources/KrustyKms"
         )
     ]
 )

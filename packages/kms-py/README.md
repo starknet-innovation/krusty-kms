@@ -1,6 +1,6 @@
-# ghoul-kms (Python)
+# krusty-kms (Python)
 
-Python wrapper for the Ghoul KMS C ABI.
+Python wrapper for the Krusty KMS C ABI.
 
 This package loads `libkms` from:
 - `KMS_LIB_PATH` env var (preferred), or

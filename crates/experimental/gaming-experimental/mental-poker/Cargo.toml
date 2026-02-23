@@ -11,12 +11,12 @@ categories = ["cryptography", "games"]
 
 [features]
 default = ["parallel"]
-parallel = ["rayon", "she-core/parallel"]
+parallel = ["rayon", "krusty-kms-crypto/parallel"]
 
 [dependencies]
 # Internal crates
-ghoul-common = { path = "../../../core/common" }
-she-core = { path = "../../../core/she-core", default-features = false }
+krusty-kms-common = { path = "../../../common" }
+krusty-kms-crypto = { path = "../../../crypto", default-features = false }
 
 # Starknet types
 starknet-types-core.workspace = true

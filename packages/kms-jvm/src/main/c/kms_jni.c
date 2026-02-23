@@ -12,7 +12,7 @@ static void throw_kms_error(JNIEnv *env, int32_t code) {
   }
 }
 
-JNIEXPORT jint JNICALL Java_io_ghoul_kms_KmsNative_validateMnemonic(
+JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_validateMnemonic(
     JNIEnv *env,
     jclass cls,
     jstring phrase) {
@@ -23,7 +23,7 @@ JNIEXPORT jint JNICALL Java_io_ghoul_kms_KmsNative_validateMnemonic(
   return rc;
 }
 
-JNIEXPORT jbyteArray JNICALL Java_io_ghoul_kms_KmsNative_mnemonicToSeed(
+JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_mnemonicToSeed(
     JNIEnv *env,
     jclass cls,
     jstring phrase,
@@ -52,7 +52,7 @@ JNIEXPORT jbyteArray JNICALL Java_io_ghoul_kms_KmsNative_mnemonicToSeed(
   return arr;
 }
 
-JNIEXPORT jbyteArray JNICALL Java_io_ghoul_kms_KmsNative_derivePrivateKey(
+JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_derivePrivateKey(
     JNIEnv *env,
     jclass cls,
     jstring mnemonic,
@@ -89,31 +89,31 @@ JNIEXPORT jbyteArray JNICALL Java_io_ghoul_kms_KmsNative_derivePrivateKey(
   return arr;
 }
 
-JNIEXPORT jint JNICALL Java_io_ghoul_kms_KmsNative_coinTypeTongo(JNIEnv *env, jclass cls) {
+JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeTongo(JNIEnv *env, jclass cls) {
   (void)env;
   (void)cls;
   return (jint)kms_get_coin_type_tongo();
 }
 
-JNIEXPORT jint JNICALL Java_io_ghoul_kms_KmsNative_coinTypeStarknet(JNIEnv *env, jclass cls) {
+JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeStarknet(JNIEnv *env, jclass cls) {
   (void)env;
   (void)cls;
   return (jint)kms_get_coin_type_starknet();
 }
 
-JNIEXPORT jint JNICALL Java_io_ghoul_kms_KmsNative_coinTypeTongoView(JNIEnv *env, jclass cls) {
+JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeTongoView(JNIEnv *env, jclass cls) {
   (void)env;
   (void)cls;
   return (jint)kms_get_coin_type_tongo_view();
 }
 
-JNIEXPORT jint JNICALL Java_io_ghoul_kms_KmsNative_coinTypeNostr(JNIEnv *env, jclass cls) {
+JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeNostr(JNIEnv *env, jclass cls) {
   (void)env;
   (void)cls;
   return (jint)kms_get_coin_type_nostr();
 }
 
-JNIEXPORT jstring JNICALL Java_io_ghoul_kms_KmsNative_errorMessage(JNIEnv *env, jclass cls, jint code) {
+JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_errorMessage(JNIEnv *env, jclass cls, jint code) {
   (void)cls;
   const char *msg = kms_error_message((int32_t)code);
   return (*env)->NewStringUTF(env, msg ? msg : "unknown error");

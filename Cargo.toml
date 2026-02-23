@@ -1,41 +1,31 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/core/common",
-    "crates/core/kms",
-    "crates/core/nostr-messaging",
-    "crates/core/she-core",
-    "crates/core/starknet-client",
-    "crates/core/tongo-sdk",
-    "crates/wasm/kms-wasm",
-    "crates/wasm/nostr-wasm",
-    "crates/wasm/she-core-wasm",
-    "crates/wasm/tongo-wasm",
+    "crates/common",
+    "crates/kms",
+    "crates/crypto",
+    "crates/client",
+    "crates/sdk",
+    "crates/wasm",
     "crates/experimental/gaming-experimental/mental-poker",
     "crates/experimental/gaming-experimental/mental-poker-wasm",
     "crates/experimental/gaming-experimental/qb-game",
-    "crates/ffi/kms-cabi",
+    "crates/ffi",
     "packages/kms-rs",
-    "tools/rust-oracle",
-    "tools/perf-harness",
 ]
 default-members = [
-    "crates/core/common",
-    "crates/core/kms",
-    "crates/core/nostr-messaging",
-    "crates/core/she-core",
-    "crates/core/starknet-client",
-    "crates/core/tongo-sdk",
-    "crates/wasm/kms-wasm",
-    "crates/wasm/nostr-wasm",
-    "crates/wasm/she-core-wasm",
-    "crates/wasm/tongo-wasm",
+    "crates/common",
+    "crates/kms",
+    "crates/crypto",
+    "crates/client",
+    "crates/sdk",
+    "crates/wasm",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["GHOUL Contributors"]
+authors = ["Krusty KMS Contributors"]
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]

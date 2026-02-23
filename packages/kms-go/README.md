@@ -1,4 +1,4 @@
-# ghoul-kms-go
+# krusty-kms-go
 
 Go wrapper for `libkms` via cgo.
 

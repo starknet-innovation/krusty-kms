@@ -7,7 +7,7 @@
 //! - Protocol parameters
 
 use serde::{Deserialize, Serialize};
-use she_core::StarkCurve;
+use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -70,7 +70,7 @@ impl Card {
 
     /// Create a random card (for testing/setup).
     pub fn random() -> Self {
-        let scalar = she_core::scalar::random_felt();
+        let scalar = krusty_kms_crypto::scalar::random_felt();
         let point = StarkCurve::mul_generator(&scalar);
         Self { point }
     }
@@ -199,7 +199,7 @@ impl SecretKey {
     /// Generate a random secret key.
     pub fn random() -> Self {
         Self {
-            scalar: she_core::scalar::random_felt(),
+            scalar: krusty_kms_crypto::scalar::random_felt(),
         }
     }
 
@@ -651,7 +651,7 @@ mod tests {
     #[test]
     fn test_masked_card_operations() {
         let card = Card::from_index(1);
-        let r = she_core::scalar::random_felt();
+        let r = krusty_kms_crypto::scalar::random_felt();
         let pk = SecretKey::random().public_key();
 
         // Create a masked card manually
@@ -705,7 +705,7 @@ mod tests {
     #[test]
     fn test_compact_masked_card_roundtrip() {
         let card = Card::from_index(1);
-        let r = she_core::scalar::random_felt();
+        let r = krusty_kms_crypto::scalar::random_felt();
         let pk = SecretKey::random().public_key();
 
         let c0 = StarkCurve::mul_generator(&r);
@@ -721,7 +721,7 @@ mod tests {
 
     #[test]
     fn test_compact_reveal_token_roundtrip() {
-        let point = StarkCurve::mul_generator(&she_core::scalar::random_felt());
+        let point = StarkCurve::mul_generator(&krusty_kms_crypto::scalar::random_felt());
         let token = RevealToken::new(point);
 
         let compact = CompactRevealToken::from_reveal_token(&token).unwrap();

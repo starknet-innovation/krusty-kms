@@ -40,8 +40,8 @@ impl From<mental_poker::MentalPokerError> for WasmMentalPokerError {
     }
 }
 
-impl From<ghoul_common::GhoulError> for WasmMentalPokerError {
-    fn from(err: ghoul_common::GhoulError) -> Self {
+impl From<krusty_kms_common::KmsError> for WasmMentalPokerError {
+    fn from(err: krusty_kms_common::KmsError) -> Self {
         WasmMentalPokerError::InternalError(err.to_string())
     }
 }

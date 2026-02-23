@@ -13,8 +13,8 @@ default = []
 
 [dependencies]
 # Internal crates
-ghoul-common = { path = "../../../core/common" }
-she-core = { path = "../../../core/she-core", default-features = false }
+krusty-kms-common = { path = "../../../common" }
+krusty-kms-crypto = { path = "../../../crypto", default-features = false }
 
 # Starknet types
 starknet-types-core.workspace = true

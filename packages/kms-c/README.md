@@ -1,4 +1,4 @@
-# @ghoul/kms-c
+# @krusty-kms/kms-c
 
 C ABI distribution package for the KMS core.
 

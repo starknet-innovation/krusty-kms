@@ -12,7 +12,7 @@ use mental_poker::{
     protocol::MentalPokerProtocol,
     types::{Card, MaskedCard, Permutation, PublicKey},
 };
-use she_core::StarkCurve;
+use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::felt::Felt;
 
 // ====================
@@ -230,7 +230,7 @@ fn test_shuffle_permutation() {
 
     // Known permutation: [3, 1, 4, 0, 2] (indices)
     let perm = Permutation::new(vec![3, 1, 4, 0, 2]);
-    let factors: Vec<Felt> = (0..5).map(|_| she_core::scalar::random_felt()).collect();
+    let factors: Vec<Felt> = (0..5).map(|_| krusty_kms_crypto::scalar::random_felt()).collect();
 
     let shuffled =
         MentalPokerProtocol::shuffle_and_remask(&masked_deck, &pk, &perm, &factors).unwrap();
@@ -472,7 +472,7 @@ fn test_shuffle_with_proof() {
     use mental_poker::shuffle::{
         ShuffleArgument, ShuffleParameters, ShuffleStatement, ShuffleWitness,
     };
-    use she_core::scalar;
+    use krusty_kms_crypto::scalar;
 
     let (pk, _sk) = MentalPokerProtocol::player_keygen();
 
@@ -508,7 +508,7 @@ fn test_shuffle_with_proof() {
 /// Test that shuffle proof fails for tampered output
 #[test]
 fn test_shuffle_proof_detects_tampering() {
-    use she_core::scalar;
+    use krusty_kms_crypto::scalar;
 
     let (pk, _sk) = MentalPokerProtocol::player_keygen();
 
@@ -544,7 +544,7 @@ fn test_shuffle_proof_detects_tampering() {
 /// Test multi-player shuffle sequence with proofs
 #[test]
 fn test_multiplayer_shuffle_with_proofs() {
-    use she_core::scalar;
+    use krusty_kms_crypto::scalar;
 
     // Setup 3 players
     let (pk1, sk1) = MentalPokerProtocol::player_keygen();

@@ -1,0 +1,31 @@
+[package]
+name = "krusty-kms"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Key Management System with BIP-44 derivation"
+
+[features]
+default = ["parallel"]
+parallel = ["krusty-kms-crypto/parallel"]
+
+[dependencies]
+krusty-kms-common = { path = "../common" }
+krusty-kms-crypto = { path = "../crypto", default-features = false }
+starknet-types-core.workspace = true
+bip39.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+sha3 = "0.10"
+num-bigint.workspace = true
+num-traits.workspace = true
+serde.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+rand.workspace = true
+k256 = { version = "0.13", features = ["ecdsa"] }
+zeroize.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

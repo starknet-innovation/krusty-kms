@@ -6,7 +6,7 @@
 use crate::error::{MentalPokerError, Result};
 use crate::types::*;
 use crate::zkp::{ChaumPedersenProtocol, SchnorrProtocol};
-use she_core::{scalar, StarkCurve};
+use krusty_kms_crypto::{scalar, StarkCurve};
 use starknet_types_core::felt::Felt;
 
 /// Context bytes for different proof types

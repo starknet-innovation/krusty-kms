@@ -73,5 +73,5 @@ pub use parallel::ParallelOps;
 pub use protocol::MentalPokerProtocol;
 pub use types::*;
 
-/// Re-export common types from ghoul-common
-pub use ghoul_common::Result;
+/// Re-export common types from krusty-kms-common
+pub use krusty_kms_common::Result;

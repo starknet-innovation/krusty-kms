@@ -3,7 +3,7 @@ plugins {
     kotlin("jvm") version "1.9.24"
 }
 
-group = "io.ghoul.kms"
+group = "io.krustykms"
 version = "0.1.0"
 
 repositories {

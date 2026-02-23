@@ -1,0 +1,55 @@
+[package]
+name = "krusty-kms-wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "WASM bindings for TONGO confidential transaction SDK"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["console_error_panic_hook"]
+
+[dependencies]
+# Internal crates
+krusty-kms-sdk = { path = "../sdk", default-features = false }
+krusty-kms-common = { path = "../common" }
+krusty-kms-crypto = { path = "../crypto", default-features = false }
+krusty-kms = { path = "../kms", default-features = false }
+
+# WASM bindings
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Performance",
+] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde-wasm-bindgen = "0.6"
+hex.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Better panic messages in WASM
+console_error_panic_hook = { version = "0.1", optional = true }
+
+# Starknet types (need for Felt operations)
+starknet-types-core.workspace = true
+
+# Crypto
+rand.workspace = true
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"

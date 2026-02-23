@@ -4,7 +4,7 @@
 //! the mental poker protocol implementation.
 
 use crate::error::{MentalPokerError, Result};
-use she_core::StarkCurve;
+use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::curve::ProjectivePoint;
 
 /// Negate a curve point.
@@ -18,7 +18,7 @@ use starknet_types_core::curve::ProjectivePoint;
 /// # Example
 /// ```
 /// use mental_poker::utils::negate_point;
-/// use she_core::StarkCurve;
+/// use krusty_kms_crypto::StarkCurve;
 /// use starknet_types_core::felt::Felt;
 ///
 /// let point = StarkCurve::mul_generator(&Felt::from(42u64));

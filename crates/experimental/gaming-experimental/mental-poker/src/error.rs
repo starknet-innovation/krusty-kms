@@ -66,8 +66,8 @@ pub enum MentalPokerError {
     InvalidDeckConfig(String),
 }
 
-impl From<ghoul_common::GhoulError> for MentalPokerError {
-    fn from(err: ghoul_common::GhoulError) -> Self {
+impl From<krusty_kms_common::KmsError> for MentalPokerError {
+    fn from(err: krusty_kms_common::KmsError) -> Self {
         MentalPokerError::CryptoError(err.to_string())
     }
 }
