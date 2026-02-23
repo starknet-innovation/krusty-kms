@@ -1,1 +1,1 @@
-rootProject.name = "ghoul-kms-jvm"
+rootProject.name = "krusty-kms-jvm"

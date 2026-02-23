@@ -1,6 +1,6 @@
-# @ghoul/kms (TypeScript)
+# @krusty-kms/kms (TypeScript)
 
-TypeScript API facade for Ghoul KMS.
+TypeScript API facade for Krusty KMS.
 
 - `src/index.ts`: backend-agnostic API.
 - `src/native.ts`: native backend loader surface.

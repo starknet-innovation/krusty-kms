@@ -38,16 +38,20 @@ If you want a mental model: changes should read like a "functional pearl" even i
 
 ```
 crates/
-  core/                    # Production Rust crates
-  wasm/                    # Production WASM bindings
+  common/                  # Shared types, errors, utilities (krusty-kms-common)
+  crypto/                  # Cryptographic primitives and proofs (krusty-kms-crypto)
+  kms/                     # Key management and derivation (krusty-kms)
+  sdk/                     # Confidential transaction SDK (krusty-kms-sdk)
+  client/                  # Starknet RPC client (krusty-kms-client)
+  wasm/                    # WASM bindings (krusty-kms-wasm)
+  ffi/                     # C ABI shared library (krusty-kms-cabi)
   experimental/            # Non-default crates/packages
-    post-quantum/
     gaming-experimental/
 ```
 
 Rules:
-- `crates/core/*` is the stable production dependency chain.
-- `crates/wasm/*` contains bindings for production crates only.
+- `crates/{common,crypto,kms,sdk,client}` is the stable production dependency chain.
+- `crates/wasm` contains WASM bindings; `crates/ffi` provides the C ABI.
 - `crates/experimental/*` is intentionally non-default and can evolve faster.
 
 ### Conventions

@@ -15,7 +15,7 @@ This audit compares our `mental-poker` crate against the reference geometry/ment
 **Current State:**
 - Uses `thiserror` for ergonomic error definitions
 - Proper `Result<T>` type alias
-- Implements `From<GhoulError>` for error conversion
+- Implements `From<KmsError>` for error conversion
 
 **Issues Found:**
 - Minor: Typo in error message `InvalidRemaskingProof` → "remaskingProof" (line 22 in error.rs)
@@ -295,7 +295,7 @@ verifier of an invalid shuffle except with negligible probability.
 The current implementation does not use constant-time operations for scalar arithmetic. This is inherited from `starknet-types-core`. For production use in adversarial environments, consider timing-safe implementations.
 
 ### Random Number Generation
-Uses `rand::thread_rng()` via `she_core::scalar::random_felt()`. Ensure this is cryptographically secure in the deployment environment.
+Uses `rand::thread_rng()` via `krusty_kms_crypto::scalar::random_felt()`. Ensure this is cryptographically secure in the deployment environment.
 
 ### Side Channels
 Point operations may leak information through memory access patterns. Consider this for high-security applications.

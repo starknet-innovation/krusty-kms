@@ -1,5 +1,5 @@
-#ifndef GHOUL_KMS_H
-#define GHOUL_KMS_H
+#ifndef KRUSTY_KMS_H
+#define KRUSTY_KMS_H
 
 #include <stddef.h>
 #include <stdint.h>

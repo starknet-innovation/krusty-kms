@@ -1,0 +1,45 @@
+[package]
+name = "krusty-kms-crypto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Somewhat Homomorphic Encryption (SHE) implementation for Starknet"
+
+[features]
+default = ["parallel"]
+parallel = ["rayon"]
+test-utils = []
+
+[dependencies]
+krusty-kms-common = { path = "../common" }
+starknet-types-core.workspace = true
+num-bigint.workspace = true
+num-traits.workspace = true
+num-integer.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+rayon = { workspace = true, optional = true }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+zeroize.workspace = true
+
+# WASM support - ensure proper random number generation in browsers
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+proptest.workspace = true
+criterion.workspace = true
+
+[[bench]]
+name = "provers"
+harness = false
+
+[[bench]]
+name = "crypto_primitives"
+harness = false

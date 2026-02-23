@@ -132,7 +132,7 @@ pub fn random_felt() -> String {
 /// Get the Stark curve generator point.
 #[wasm_bindgen(js_name = "getGenerator")]
 pub fn get_generator() -> types::WasmPoint {
-    use she_core::StarkCurve;
+    use krusty_kms_crypto::StarkCurve;
 
     let g = StarkCurve::GENERATOR;
     let affine = g.to_affine().expect("Generator is never at infinity");

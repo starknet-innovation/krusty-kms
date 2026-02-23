@@ -6,10 +6,14 @@ Rust crates for Starknet-curve key management, cryptography, protocol operations
 
 ```
 crates/
-├── core/                             # Production Rust crates
-├── wasm/                             # Production WASM bindings
+├── common/                           # Shared types, errors, utilities (krusty-kms-common)
+├── crypto/                           # Cryptographic primitives and proofs (krusty-kms-crypto)
+├── kms/                              # Key management and derivation (krusty-kms)
+├── sdk/                              # Confidential transaction SDK (krusty-kms-sdk)
+├── client/                           # Starknet RPC client (krusty-kms-client)
+├── wasm/                             # WASM bindings (krusty-kms-wasm)
+├── ffi/                              # C ABI shared library (krusty-kms-cabi)
 └── experimental/                     # Non-default and in-progress work
-    ├── post-quantum/
     └── gaming-experimental/
 
 packages/
@@ -22,25 +26,20 @@ packages/
 └── kms-jvm/                          # Shared JNI package (Java + Kotlin)
 
 fixtures/vectors/                     # Shared cross-language conformance vectors
-tools/                                # Rust oracle + build/release helpers
+tools/                                # Build/release helpers
 ```
 
 ## Active (Default) Crates
 
-- `crates/core/common`
-- `crates/core/she-core`
-- `crates/core/kms`
-- `crates/core/tongo-sdk`
-- `crates/core/nostr-messaging`
-- `crates/core/starknet-client`
-- `crates/wasm/she-core-wasm`
-- `crates/wasm/kms-wasm`
-- `crates/wasm/tongo-wasm`
-- `crates/wasm/nostr-wasm`
+- `crates/common` (krusty-kms-common)
+- `crates/crypto` (krusty-kms-crypto)
+- `crates/kms` (krusty-kms)
+- `crates/sdk` (krusty-kms-sdk)
+- `crates/client` (krusty-kms-client)
+- `crates/wasm` (krusty-kms-wasm)
 
 ## Experimental (Non-default) Crates
 
-- `crates/experimental/post-quantum/candyland-wasm` (WASM package artifacts)
 - `crates/experimental/gaming-experimental/mental-poker`
 - `crates/experimental/gaming-experimental/mental-poker-wasm`
 - `crates/experimental/gaming-experimental/qb-game`
@@ -50,5 +49,5 @@ tools/                                # Rust oracle + build/release helpers
 - TypeScript: `npm --prefix packages/kms-ts run typecheck`
 - Swift: `cd packages/kms-swift && swift build`
 - Go: `cd packages/kms-go && go test ./...`
-- Rust: `cargo check -p ghoul-kms`
+- Rust: `cargo check -p krusty-kms-ffi`
 - Python: `python3 -m compileall -q packages/kms-py/src`

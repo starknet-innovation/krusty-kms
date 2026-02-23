@@ -1,9 +1,9 @@
 {
-  "name": "@ghoul/kms",
+  "name": "@krusty-kms/kms",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "TypeScript wrapper for the Ghoul KMS C ABI (native + wasm entrypoints)",
+  "description": "TypeScript wrapper for the Krusty KMS C ABI (native + wasm entrypoints)",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

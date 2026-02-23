@@ -20,7 +20,7 @@ use crate::types::{DLEqualityProof, MaskedCard, Permutation, PublicKey, Serializ
 use crate::zkp::ChaumPedersenProtocol;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use she_core::{scalar, StarkCurve};
+use krusty_kms_crypto::{scalar, StarkCurve};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 use std::collections::HashSet;

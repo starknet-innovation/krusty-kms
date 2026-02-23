@@ -11,7 +11,7 @@ use mental_poker::{
     MentalPokerProtocol,
 };
 use proptest::prelude::*;
-use she_core::StarkCurve;
+use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::felt::Felt;
 
 // Strategy for generating random scalars (non-zero)

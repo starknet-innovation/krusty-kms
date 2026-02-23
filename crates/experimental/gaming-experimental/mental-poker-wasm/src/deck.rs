@@ -205,7 +205,7 @@ impl WasmMaskedDeck {
 
         // Generate random masking factors
         let masking_factors: Vec<Felt> = (0..n)
-            .map(|_| she_core::scalar::random_felt())
+            .map(|_| krusty_kms_crypto::scalar::random_felt())
             .collect();
 
         // Shuffle with proof
@@ -495,7 +495,7 @@ pub fn resolve_card_index(
     card_point_y: &str,
     deck_size: u32,
 ) -> Result<u32, JsValue> {
-    use she_core::StarkCurve;
+    use krusty_kms_crypto::StarkCurve;
 
     // Parse the input point - we already have affine coordinates (x, y)
     let target_x = Felt::from_hex(card_point_x)
@@ -538,7 +538,7 @@ pub fn resolve_card_index(
 /// The card index (1-based) if found, or an error if the point doesn't match any card.
 #[wasm_bindgen(js_name = "resolveCardIndexFromBytes")]
 pub fn resolve_card_index_from_bytes(card_point_bytes: &[u8], deck_size: u32) -> Result<u32, JsValue> {
-    use she_core::StarkCurve;
+    use krusty_kms_crypto::StarkCurve;
 
     if card_point_bytes.len() != 64 {
         return Err(JsValue::from_str(&format!(

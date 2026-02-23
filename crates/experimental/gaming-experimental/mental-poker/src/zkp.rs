@@ -7,7 +7,7 @@
 use crate::error::{MentalPokerError, Result};
 use crate::types::{DLEqualityProof, KeyOwnershipProof, PublicKey, SecretKey, SerializablePoint};
 use sha2::{Digest, Sha256};
-use she_core::{scalar, StarkCurve};
+use krusty_kms_crypto::{scalar, StarkCurve};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
@@ -273,7 +273,7 @@ type BatchVerificationInput = (
 /// # Example
 /// ```rust
 /// use mental_poker::zkp::{batch_verify_chaum_pedersen, ChaumPedersenProtocol};
-/// use she_core::{scalar, StarkCurve};
+/// use krusty_kms_crypto::{scalar, StarkCurve};
 ///
 /// let g = StarkCurve::GENERATOR;
 /// let h = StarkCurve::GENERATOR_H;
