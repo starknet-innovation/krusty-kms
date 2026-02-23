@@ -12,10 +12,6 @@ crates/
     ├── post-quantum/
     └── gaming-experimental/
 
-zig/
-├── src/                              # Zig-first replatform modules
-└── build.zig                         # Zig build entrypoint
-
 packages/
 ├── kms-c/                            # C ABI header distribution
 ├── kms-ts/                           # TypeScript wrapper (native + wasm entrypoints)
@@ -48,16 +44,6 @@ tools/                                # Rust oracle + build/release helpers
 - `crates/experimental/gaming-experimental/mental-poker`
 - `crates/experimental/gaming-experimental/mental-poker-wasm`
 - `crates/experimental/gaming-experimental/qb-game`
-
-## Zig Replatform
-
-- Foundation workspace: `zig/`
-- Design note: `docs/design/2026-02-13-zig-replatform-foundation.md`
-- v1 status tracker: `docs/zig-kms-v1-status.md`
-- Commands:
-  - `zig build --build-file zig/build.zig`
-  - `zig build --build-file zig/build.zig test`
-  - `./tools/sync_kms_header.sh`
 
 ## Wrapper Verification
 

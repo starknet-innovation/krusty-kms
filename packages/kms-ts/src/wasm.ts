@@ -9,6 +9,6 @@ export class KmsWasmUnavailableError extends Error {
 
 export async function loadWasmBackend(): Promise<KmsApi> {
   throw new KmsWasmUnavailableError(
-    "wasm loader is not wired yet; compile zig wasm artifact and bind exports",
+    "wasm loader is not wired yet",
   );
 }

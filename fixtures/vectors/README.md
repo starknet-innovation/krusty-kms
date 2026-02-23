@@ -1,6 +1,6 @@
 # Shared KMS Vectors
 
-These vectors are shared by Zig core tests and all language wrappers.
+These vectors are shared by core tests and all language wrappers.
 
 Sources:
 - Rust reference crate: `crates/core/kms`
