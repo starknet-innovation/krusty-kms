@@ -103,6 +103,7 @@ pub struct FundParams {
     pub nonce: Felt,
     pub chain_id: Felt,
     pub tongo_address: Felt,
+    pub sender_address: Felt,
     pub auditor_pub_key: Option<ProjectivePoint>,
     pub current_balance: ElGamalCiphertext,
 }
@@ -118,8 +119,10 @@ pub struct TransferParams {
     pub nonce: Felt,
     pub chain_id: Felt,
     pub tongo_address: Felt,
+    pub sender_address: Felt,
     pub current_balance: ElGamalCiphertext,
     pub bit_size: usize,
+    pub fee_to_sender: u128,
     pub auditor_pub_key: Option<ProjectivePoint>,
 }
 
@@ -129,6 +132,7 @@ pub struct RolloverParams {
     pub nonce: Felt,
     pub chain_id: Felt,
     pub tongo_address: Felt,
+    pub sender_address: Felt,
 }
 
 /// Withdraw operation parameters.
@@ -139,8 +143,10 @@ pub struct WithdrawParams {
     pub nonce: Felt,
     pub chain_id: Felt,
     pub tongo_address: Felt,
+    pub sender_address: Felt,
     pub current_balance: ElGamalCiphertext,
     pub bit_size: usize,
+    pub fee_to_sender: u128,
     pub auditor_key: Option<ProjectivePoint>, // Optional auditor public key
 }
 
@@ -151,7 +157,9 @@ pub struct RagequitParams {
     pub nonce: Felt,
     pub chain_id: Felt,
     pub tongo_address: Felt,
+    pub sender_address: Felt,
     pub current_balance: ElGamalCiphertext,
+    pub fee_to_sender: u128,
     pub auditor_key: Option<ProjectivePoint>, // Optional auditor public key
 }
 
@@ -185,10 +193,11 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
     // Compute prefix using Poseidon hash
-    // prefix = poseidon([chain_id, tongo_address, FUND_CAIRO_STRING, y.x, y.y, amount, nonce])
+    // prefix = poseidon([chain_id, tongo_address, sender_address, FUND_CAIRO_STRING, y.x, y.y, amount, nonce])
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
+        params.sender_address,
         FUND_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -292,7 +301,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         });
     }
 
-    // Setup variables matching TypeScript implementation
+    // Setup variables
     let x = account.keypair.private_key.expose_secret();
     let y = account.keypair.public_key.clone();
     let to = &params.recipient_public_key;
@@ -305,42 +314,18 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let to_affine = to.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: poseidon([chain_id, tongo_address, TRANSFER_CAIRO_STRING, y.x, y.y, to.x, to.y, nonce])
-    // Reference: transfer.ts:46-63
-    let prefix_inputs = vec![
-        params.chain_id,
-        params.tongo_address,
-        TRANSFER_CAIRO_STRING,
-        y_affine.x(),
-        y_affine.y(),
-        to_affine.x(),
-        to_affine.y(),
-        params.nonce,
-    ];
-    let prefix = poseidon_hash_many(&prefix_inputs);
-
     // Compute leftover balance
     let b_left = b0 - b;
 
-    // OPTIMIZATION: Generate both range proofs in parallel (2x speedup expected)
-    // Reference: transfer.ts:108 and transfer.ts:113-115
-    // CRITICAL: We get randomness r FROM the range proof generation!
-    #[cfg(feature = "parallel")]
-    let (result1, result2) = rayon::join(
-        || range::prove(b, params.bit_size, &g, &h, &prefix),
-        || range::prove(b_left, params.bit_size, &g, &h, &prefix),
-    );
-    #[cfg(not(feature = "parallel"))]
-    let (result1, result2) = join(
-        || range::prove(b, params.bit_size, &g, &h, &prefix),
-        || range::prove(b_left, params.bit_size, &g, &h, &prefix),
-    );
-    let (range, r) = result1?;
-    let (range2, r2) = result2?;
+    // Pre-generate random values for both range proofs to break circular dependency
+    use krusty_kms_crypto::random::random_felts;
+    let random_values_1 = random_felts(params.bit_size);
+    let random_values_2 = random_felts(params.bit_size);
+    let r = range::compute_total_randomness(&random_values_1)?;
+    let r2 = range::compute_total_randomness(&random_values_2)?;
 
-    // Create cipher balances using r from range proof
-    // transferBalanceSelf: encryption for sender (transfer.ts:109)
-    // transferBalance: encryption for recipient (transfer.ts:110)
+    // Create cipher balances using pre-computed r and r2
+    // transferBalanceSelf: encryption for sender
     let transfer_balance_self_l = {
         let g_b = StarkCurve::mul(&Felt::from(b), Some(&g));
         let y_r = StarkCurve::mul(&r, Some(&y));
@@ -348,6 +333,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     };
     let transfer_balance_self_r = StarkCurve::mul(&r, Some(&g));
 
+    // transferBalance: encryption for recipient
     let transfer_balance_l = {
         let g_b = StarkCurve::mul(&Felt::from(b), Some(&g));
         let to_r = StarkCurve::mul(&r, Some(to));
@@ -355,11 +341,84 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     };
     let transfer_balance_r = StarkCurve::mul(&r, Some(&g));
 
-    // R_aux = g^r (transfer.ts:111)
+    // auxiliarCipher: V = g^b * h^r, R_aux = g^r
     let r_aux = StarkCurve::mul(&r, Some(&g));
-    let r_aux2 = StarkCurve::mul(&r2, Some(&g));
+    let v = {
+        let g_b = StarkCurve::mul(&Felt::from(b), Some(&g));
+        let h_r = StarkCurve::mul(&r, Some(&h));
+        StarkCurve::add(&g_b, &h_r)
+    };
 
-    // Compute G = R0 - transferBalanceSelf.R (transfer.ts:128)
+    // auxiliarCipher2: V2 = g^b_left * h^r2, R_aux2 = g^r2
+    let r_aux2 = StarkCurve::mul(&r2, Some(&g));
+    let v2 = {
+        let g_b_left = StarkCurve::mul(&Felt::from(b_left), Some(&g));
+        let h_r2 = StarkCurve::mul(&r2, Some(&h));
+        StarkCurve::add(&g_b_left, &h_r2)
+    };
+
+    // Convert all cipher balance points to affine for prefix
+    let current_l_affine = params.current_balance.l.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let current_r_affine = params.current_balance.r.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let tbs_l_affine = transfer_balance_self_l.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let tbs_r_affine = transfer_balance_self_r.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let tb_l_affine = transfer_balance_l.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let tb_r_affine = transfer_balance_r.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let v_affine = v.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let r_aux_affine = r_aux.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let v2_affine = v2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let r_aux2_affine = r_aux2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+
+    // Build 30-element prefix matching contract exactly
+    let prefix_inputs = vec![
+        params.chain_id,
+        params.tongo_address,
+        params.sender_address,
+        Felt::from(params.fee_to_sender),
+        TRANSFER_CAIRO_STRING,
+        y_affine.x(),
+        y_affine.y(),
+        to_affine.x(),
+        to_affine.y(),
+        params.nonce,
+        current_l_affine.x(),
+        current_l_affine.y(),
+        current_r_affine.x(),
+        current_r_affine.y(),
+        tbs_l_affine.x(),
+        tbs_l_affine.y(),
+        tbs_r_affine.x(),
+        tbs_r_affine.y(),
+        tb_l_affine.x(),
+        tb_l_affine.y(),
+        tb_r_affine.x(),
+        tb_r_affine.y(),
+        v_affine.x(),
+        v_affine.y(),
+        r_aux_affine.x(),
+        r_aux_affine.y(),
+        v2_affine.x(),
+        v2_affine.y(),
+        r_aux2_affine.x(),
+        r_aux2_affine.y(),
+    ];
+    let prefix = poseidon_hash_many(&prefix_inputs);
+
+    // Generate both range proofs using pre-generated randomness
+    #[cfg(feature = "parallel")]
+    let (result1, result2) = rayon::join(
+        || range::prove_with_randomness(b, params.bit_size, &g, &h, &prefix, &random_values_1),
+        || range::prove_with_randomness(b_left, params.bit_size, &g, &h, &prefix, &random_values_2),
+    );
+    #[cfg(not(feature = "parallel"))]
+    let (result1, result2) = join(
+        || range::prove_with_randomness(b, params.bit_size, &g, &h, &prefix, &random_values_1),
+        || range::prove_with_randomness(b_left, params.bit_size, &g, &h, &prefix, &random_values_2),
+    );
+    let (range, _r) = result1?;
+    let (range2, _r2) = result2?;
+
+    // Compute G = R0 - transferBalanceSelf.R
     let g_point = {
         let r_transfer_affine = StarkCurve::projective_to_affine(&transfer_balance_self_r)?;
         let neg_r_transfer = StarkCurve::affine_to_projective(&create_affine_point(
@@ -369,17 +428,17 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         StarkCurve::add(&params.current_balance.r, &neg_r_transfer)
     };
 
-    // Generate 5 random k values for commitments (transfer.ts:130-134)
+    // Generate 5 random k values for commitments
     let kx = krusty_kms_crypto::scalar::random_felt();
     let kb = krusty_kms_crypto::scalar::random_felt();
     let kr = krusty_kms_crypto::scalar::random_felt();
     let kb2 = krusty_kms_crypto::scalar::random_felt();
-    let kr2 = krusty_kms_crypto::scalar::random_felt();
+    let kr2_k = krusty_kms_crypto::scalar::random_felt();
 
-    // Compute 8 commitments (transfer.ts:136-143)
+    // Compute 8 commitments
     let a_x = StarkCurve::mul(&kx, Some(&g));
     let a_r = StarkCurve::mul(&kr, Some(&g));
-    let a_r2 = StarkCurve::mul(&kr2, Some(&g));
+    let a_r2 = StarkCurve::mul(&kr2_k, Some(&g));
 
     let a_b = {
         let g_kb = StarkCurve::mul(&kb, Some(&g));
@@ -407,17 +466,17 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
     let a_v2 = {
         let g_kb2 = StarkCurve::mul(&kb2, Some(&g));
-        let h_kr2 = StarkCurve::mul(&kr2, Some(&h));
+        let h_kr2 = StarkCurve::mul(&kr2_k, Some(&h));
         StarkCurve::add(&g_kb2, &h_kr2)
     };
 
-    // Compute challenge from prefix and all 8 commitments (transfer.ts:156)
+    // Compute challenge from prefix and all 8 commitments
     let challenge = krusty_kms_crypto::hash::compute_poseidon_challenge(
         &prefix,
         &[&a_x, &a_r, &a_r2, &a_b, &a_b2, &a_v, &a_v2, &a_bar],
     )?;
 
-    // Compute 5 scalar responses s = k + value * c (transfer.ts:158-162)
+    // Compute 5 scalar responses s = k + value * c
     let s_x = krusty_kms_crypto::scalar::scalar_add(&kx, &krusty_kms_crypto::scalar::scalar_mul(&challenge, x)?)?;
     let s_b = krusty_kms_crypto::scalar::scalar_add(
         &kb,
@@ -428,9 +487,9 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         &kb2,
         &krusty_kms_crypto::scalar::scalar_mul(&challenge, &Felt::from(b_left))?,
     )?;
-    let s_r2 = krusty_kms_crypto::scalar::scalar_add(&kr2, &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r2)?)?;
+    let s_r2 = krusty_kms_crypto::scalar::scalar_add(&kr2_k, &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r2)?)?;
 
-    // Assemble ProofOfTransfer (transfer.ts:164-182)
+    // Assemble ProofOfTransfer (without r_aux/r_aux2 — now in auxiliar ciphers)
     let proof = ProofOfTransfer {
         a_x: krusty_kms_common::SerializablePoint::try_from_projective(&a_x)?,
         a_r: krusty_kms_common::SerializablePoint::try_from_projective(&a_r)?,
@@ -445,13 +504,15 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         s_b: format!("{s_b:#x}"),
         s_b2: format!("{s_b2:#x}"),
         s_r2: format!("{s_r2:#x}"),
-        r_aux: krusty_kms_common::SerializablePoint::try_from_projective(&r_aux)?,
         range,
-        r_aux2: krusty_kms_common::SerializablePoint::try_from_projective(&r_aux2)?,
         range2,
     };
 
-    // Compute new cipher balance (transfer.ts:184)
+    // Package auxiliar ciphers
+    let auxiliar_cipher = ElGamalCiphertext { l: v, r: r_aux };
+    let auxiliar_cipher2 = ElGamalCiphertext { l: v2, r: r_aux2 };
+
+    // Compute new cipher balance
     let new_balance_cipher_l = {
         let l_transfer_affine = StarkCurve::projective_to_affine(&transfer_balance_self_l)?;
         let neg_l_transfer = StarkCurve::affine_to_projective(&create_affine_point(
@@ -477,24 +538,17 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
     // Generate audits if auditor is configured
     let (audit_balance, audit_transfer) = if let Some(ref auditor_key) = params.auditor_pub_key {
-        // AUDIT 1: Sender's new balance after transfer
-        // Use prove_with_validation(false) because new_balance_cipher is computed by subtraction
-        // and won't pass standard validation but will verify correctly on-chain
         let (audit_balance_proof, audited_balance) = AuditProver::prove_with_validation(
             account.keypair.private_key.expose_secret(),
             b_left,
             &new_balance_cipher,
             auditor_key,
-            false, // Skip validation for subtracted cipher
+            false,
         )?;
 
-        // Encrypt sender's new balance for auditor
         let (audit_balance_hint_ct, audit_balance_hint_nonce) =
             encrypt_for_auditor(b_left, account.keypair.private_key.expose_secret(), auditor_key)?;
 
-        // AUDIT 2: Transfer amount
-        // transfer_cipher_self is a proper ElGamal encryption (L = g^b * y^r, R = g^r)
-        // using randomness from range proof, so it should pass validation
         let transfer_cipher_self = ElGamalCiphertext {
             l: transfer_balance_self_l.clone(),
             r: transfer_balance_self_r.clone(),
@@ -507,7 +561,6 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
             auditor_key,
         )?;
 
-        // Encrypt transfer amount for auditor
         let (audit_transfer_hint_ct, audit_transfer_hint_nonce) =
             encrypt_for_auditor(b, account.keypair.private_key.expose_secret(), auditor_key)?;
 
@@ -535,6 +588,8 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         transfer_balance_self_l,
         transfer_balance_self_r,
         proof,
+        auxiliar_cipher,
+        auxiliar_cipher2,
         new_balance_cipher,
         audit_balance,
         audit_transfer,
@@ -563,11 +618,12 @@ pub fn rollover(account: &TongoAccount, params: RolloverParams) -> Result<Rollov
     // Get affine coordinates for prefix computation
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix using Poseidon hash (MUST match TypeScript exactly!)
-    // prefix = poseidon([chain_id, tongo_address, 'rollover', y.x, y.y, nonce])
+    // Compute prefix using Poseidon hash (MUST match contract exactly!)
+    // prefix = poseidon([chain_id, tongo_address, sender_address, 'rollover', y.x, y.y, nonce])
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
+        params.sender_address,
         ROLLOVER_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -651,113 +707,100 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         ));
     }
 
-    // Compute prefix: [chain_id, tongo_address, WITHDRAW_CAIRO_STRING, y.x, y.y, nonce, amount, to]
+    // Compute leftover balance
+    let left = account.state.balance - params.amount;
+
+    // Pre-generate random values for range proof to break circular dependency:
+    // prefix needs cipher coords -> coords need r -> r comes from range proof -> range proof needs prefix
+    use krusty_kms_crypto::random::random_felts;
+    let random_values = random_felts(params.bit_size);
+    let r = range::compute_total_randomness(&random_values)?;
+
+    // Compute auxiliar cipher: V = g^b_left * h^r, R_aux = g^r
+    let r_aux = StarkCurve::mul(&r, Some(&g));
+    let v = {
+        let g_left = StarkCurve::mul(&Felt::from(left), Some(&g));
+        let h_r = StarkCurve::mul(&r, Some(&h));
+        StarkCurve::add(&g_left, &h_r)
+    };
+
+    // Convert points to affine for prefix computation
+    let l0_affine = l0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let r0_affine = r0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let v_affine = v.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let r_aux_affine = r_aux.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+
+    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, WITHDRAW, y.x, y.y, nonce, amount, to,
+    //                   L0.x, L0.y, R0.x, R0.y, V.x, V.y, R_aux.x, R_aux.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
+        params.sender_address,
+        Felt::from(params.fee_to_sender),
         WITHDRAW_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
         params.nonce,
         Felt::from(params.amount),
         params.recipient_address,
+        l0_affine.x(),
+        l0_affine.y(),
+        r0_affine.x(),
+        r0_affine.y(),
+        v_affine.x(),
+        v_affine.y(),
+        r_aux_affine.x(),
+        r_aux_affine.y(),
     ];
     let prefix = poseidon_hash_many(&prefix_inputs);
 
-    // Compute leftover balance
-    let left = account.state.balance - params.amount;
+    // Generate range proof for leftover balance using pre-generated randomness
+    let (range, _r) = range::prove_with_randomness(left, params.bit_size, &g, &h, &prefix, &random_values)?;
 
-    // Generate range proof for leftover balance
-    let (range, r) = range::prove(left, params.bit_size, &g, &h, &prefix)?;
+    // Generate random values for commitments
+    let commitment_randoms = random_felts(3);
+    let (kb, kx, kr) = (&commitment_randoms[0], &commitment_randoms[1], &commitment_randoms[2]);
 
-    // OPTIMIZATION: Generate random values and scalar multiplications in parallel
-    // These operations are independent and can run concurrently
-    #[cfg(feature = "parallel")]
-    let (r_aux_result, random_and_commitments) = rayon::join(
-        || StarkCurve::mul(&r, Some(&g)),
-        || {
-            // Generate all 3 random values at once (amortize RNG overhead)
-            use krusty_kms_crypto::random::random_felts;
-            let randoms = random_felts(3);
-            let (kb, kx, kr) = (&randoms[0], &randoms[1], &randoms[2]);
+    // Compute commitments
+    let a_x = StarkCurve::mul(kx, Some(&g));
+    let a_r = StarkCurve::mul(kr, Some(&g));
+    let g_kb = StarkCurve::mul(kb, Some(&g));
+    let r0_kx = StarkCurve::mul(kx, Some(r0));
+    let h_kr = StarkCurve::mul(kr, Some(&h));
 
-            // Compute all commitments in parallel
-            let ((a_x, a_r), (g_kb, r0_kx, h_kr)) = rayon::join(
-                || {
-                    let ax = StarkCurve::mul(kx, Some(&g));
-                    let ar = StarkCurve::mul(kr, Some(&g));
-                    (ax, ar)
-                },
-                || {
-                    let gkb = StarkCurve::mul(kb, Some(&g));
-                    let r0kx = StarkCurve::mul(kx, Some(r0));
-                    let hkr = StarkCurve::mul(kr, Some(&h));
-                    (gkb, r0kx, hkr)
-                },
-            );
-
-            (*kb, *kx, *kr, a_x, a_r, g_kb, r0_kx, h_kr)
-        },
-    );
-    #[cfg(not(feature = "parallel"))]
-    let (r_aux_result, random_and_commitments) = {
-        let r_aux_result = StarkCurve::mul(&r, Some(&g));
-        let random_and_commitments = {
-            // Generate all 3 random values at once (amortize RNG overhead)
-            use krusty_kms_crypto::random::random_felts;
-            let randoms = random_felts(3);
-            let (kb, kx, kr) = (&randoms[0], &randoms[1], &randoms[2]);
-
-            // Compute all commitments sequentially
-            let ax = StarkCurve::mul(kx, Some(&g));
-            let ar = StarkCurve::mul(kr, Some(&g));
-            let gkb = StarkCurve::mul(kb, Some(&g));
-            let r0kx = StarkCurve::mul(kx, Some(r0));
-            let hkr = StarkCurve::mul(kr, Some(&h));
-
-            (kb.clone(), kx.clone(), kr.clone(), ax, ar, gkb, r0kx, hkr)
-        };
-        (r_aux_result, random_and_commitments)
-    };
-
-    let r_aux = r_aux_result;
-    let (kb, kx, kr, a_x, a_r, g_kb, r0_kx, h_kr) = random_and_commitments;
-
-    // Combine results (must be sequential)
     let a = StarkCurve::add(&g_kb, &r0_kx);
     let a_v = StarkCurve::add(&g_kb, &h_kr);
 
     // Compute challenge c = H(prefix, [A_x, A_r, A, A_v])
-    // CRITICAL: Use Poseidon hash (not Pedersen) to match Cairo implementation
     let c = hash::compute_poseidon_challenge(&prefix, &[&a_x, &a_r, &a, &a_v])?;
 
     // Compute responses: s = k + c*value
     let c_left = scalar::scalar_mul(&c, &Felt::from(left))?;
-    let sb = scalar::scalar_add(&kb, &c_left)?;
+    let sb = scalar::scalar_add(kb, &c_left)?;
 
     let c_x = scalar::scalar_mul(&c, &x)?;
-    let sx = scalar::scalar_add(&kx, &c_x)?;
+    let sx = scalar::scalar_add(kx, &c_x)?;
 
     let c_r = scalar::scalar_mul(&c, &r)?;
-    let sr = scalar::scalar_add(&kr, &c_r)?;
+    let sr = scalar::scalar_add(kr, &c_r)?;
+
+    // Package auxiliar cipher
+    let auxiliar_cipher = ElGamalCiphertext {
+        l: v,
+        r: r_aux,
+    };
 
     // Generate audit proof if auditor key is provided
     let audit = if let Some(auditor_key) = params.auditor_key {
         // Create cipher for withdraw amount using fixed randomness "withdraw"
-        // Reference: typescript-reference/tongo-sdk/src/provers/withdraw.ts:157
-        // cipher = createCipherBalance(y, amount, WITHDRAW_CAIRO_STRING)
-
-        // cipher.L = g^amount + y^r_withdraw
         let cipher_l = {
             let g_amount = StarkCurve::mul(&Felt::from(params.amount), Some(&g));
             let y_r = StarkCurve::mul(&WITHDRAW_CAIRO_STRING, Some(&y));
             StarkCurve::add(&g_amount, &y_r)
         };
-        // cipher.R = g^r_withdraw
         let cipher_r = StarkCurve::mul(&WITHDRAW_CAIRO_STRING, Some(&g));
 
         // Compute leftover cipher = current_cipher - withdraw_cipher
-        // newBalance.L = L0 - cipher.L
         let cipher_l_affine = StarkCurve::projective_to_affine(&cipher_l)?;
         let neg_cipher_l = StarkCurve::affine_to_projective(&create_affine_point(
             cipher_l_affine.x(),
@@ -765,7 +808,6 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         )?);
         let l_left = StarkCurve::add(l0, &neg_cipher_l);
 
-        // newBalance.R = R0 - cipher.R
         let cipher_r_affine = StarkCurve::projective_to_affine(&cipher_r)?;
         let neg_cipher_r = StarkCurve::affine_to_projective(&create_affine_point(
             cipher_r_affine.x(),
@@ -778,17 +820,14 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
             r: r_left,
         };
 
-        // Use prove_with_validation(false) because leftover_cipher is computed by subtraction
-        // and won't pass standard validation but will verify correctly on-chain
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
             account.keypair.private_key.expose_secret(),
             left,
             &leftover_cipher,
             &auditor_key,
-            false, // Skip validation for subtracted cipher
+            false,
         )?;
 
-        // Encrypt leftover balance for auditor using XChaCha20-Poly1305
         let (audit_hint_ct, audit_hint_nonce) =
             encrypt_for_auditor(left, account.keypair.private_key.expose_secret(), &auditor_key)?;
 
@@ -811,7 +850,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         sx,
         sb,
         sr,
-        r_aux,
+        auxiliar_cipher,
         range,
         amount: params.amount,
         recipient: params.recipient_address,
@@ -872,17 +911,27 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
     // Full amount is the entire account balance
     let full_amount = account.state.balance;
 
-    // Compute prefix: [chain_id, tongo_address, RAGEQUIT_CAIRO_STRING, y.x, y.y, nonce, amount, to]
-    // Reference: ragequit.ts:36-48
+    // Convert current balance cipher points to affine for prefix
+    let l0_affine = l0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let r0_affine = r0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+
+    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, RAGEQUIT, y.x, y.y, nonce, amount, to,
+    //                   L0.x, L0.y, R0.x, R0.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
+        params.sender_address,
+        Felt::from(params.fee_to_sender),
         RAGEQUIT_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
         params.nonce,
         Felt::from(full_amount),
         params.recipient_address,
+        l0_affine.x(),
+        l0_affine.y(),
+        r0_affine.x(),
+        r0_affine.y(),
     ];
     let prefix = poseidon_hash_many(&prefix_inputs);
 
@@ -989,6 +1038,8 @@ pub struct TransferProof {
     pub transfer_balance_self_l: ProjectivePoint, // transferBalanceSelf.L (for sender)
     pub transfer_balance_self_r: ProjectivePoint, // transferBalanceSelf.R (for sender)
     pub proof: ProofOfTransfer, // Complete transfer proof with 8 commitments, 5 scalars, 2 range proofs
+    pub auxiliar_cipher: ElGamalCiphertext, // (V = g^b*h^r, R_aux = g^r)
+    pub auxiliar_cipher2: ElGamalCiphertext, // (V2 = g^b_left*h^r2, R_aux2 = g^r2)
     pub new_balance_cipher: ElGamalCiphertext, // Updated balance cipher after transfer
     pub audit_balance: Option<Audit>, // Sender's balance after transfer (optional)
     pub audit_transfer: Option<Audit>, // Transfer cipher audit (optional)
@@ -1009,7 +1060,7 @@ pub struct WithdrawProof {
     pub sx: Felt,                   // Response for private key
     pub sb: Felt,                   // Response for leftover balance
     pub sr: Felt,                   // Response for range proof randomness
-    pub r_aux: ProjectivePoint,     // R auxiliary point (g^r)
+    pub auxiliar_cipher: ElGamalCiphertext, // (V = g^b_left*h^r, R_aux = g^r)
     pub range: krusty_kms_common::Range, // Range proof for leftover balance
     pub amount: u128,
     pub recipient: Felt,
@@ -1057,6 +1108,7 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(), // SN_SEPOLIA
             tongo_address: contract_address,
+            sender_address: Felt::from(0xCAFEu64),
             auditor_pub_key: None,
             current_balance,
         };
@@ -1083,6 +1135,7 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: contract_address,
+            sender_address: Felt::from(0xCAFEu64),
             auditor_pub_key: None,
             current_balance,
         };
@@ -1108,8 +1161,10 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: Felt::from(123456u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
+            fee_to_sender: 0,
             auditor_pub_key: None,
         };
 
@@ -1134,8 +1189,10 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: Felt::from(123456u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
+            fee_to_sender: 0,
             auditor_pub_key: None,
         };
 
@@ -1152,6 +1209,7 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
+            sender_address: Felt::from(0xCAFEu64),
         };
 
         let result = rollover(&account, params);
@@ -1179,8 +1237,10 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 32,
+            fee_to_sender: 0,
             auditor_key: None,
         };
 
@@ -1204,8 +1264,10 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 32,
+            fee_to_sender: 0,
             auditor_key: None,
         };
 
@@ -1244,6 +1306,7 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: contract_address,
+            sender_address: Felt::from(0xCAFEu64),
             auditor_pub_key: Some(auditor_pub_key),
             current_balance,
         };
@@ -1265,6 +1328,7 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
+            sender_address: Felt::from(0xCAFEu64),
         };
 
         let result = rollover(&account, params);
@@ -1296,7 +1360,9 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
+            fee_to_sender: 0,
             auditor_key: None,
         };
 
@@ -1324,8 +1390,10 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: Felt::from(123456u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
+            fee_to_sender: 0,
             auditor_pub_key: Some(auditor_key),
         };
 
@@ -1354,8 +1422,10 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: Felt::from(123456u64),
+            sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
+            fee_to_sender: 0,
             auditor_pub_key: None,
         };
 
@@ -1379,6 +1449,8 @@ mod tests {
             nonce: Felt::from(1u64),
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
+            sender_address: Felt::from(0xCAFEu64),
+            fee_to_sender: 0,
             current_balance,
             bit_size: 32,
             auditor_key: None,
