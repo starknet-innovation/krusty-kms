@@ -37,6 +37,7 @@ krusty-kms-cabi       C ABI shared library (libkms)
 | `packages/kms-py` | Python | ctypes |
 | `packages/kms-jvm` | Java/Kotlin | JNI |
 | `packages/kms-rs` | Rust | FFI wrapper |
+| `packages/kms-dart` | Dart | dart:ffi |
 | `packages/kms-c` | C | Header distribution |
 
 ## Quick Start
