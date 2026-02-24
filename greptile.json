@@ -1,0 +1,88 @@
+{
+  "skipReview": "AUTOMATIC",
+  "strictness": 1,
+  "commentTypes": ["logic", "syntax", "style"],
+  "triggerOnUpdates": false,
+  "fixWithAI": false,
+  "statusCheck": true,
+  "comment": "Greptile review triggered via @greptile mention.",
+
+  "instructions": "You are reviewing a cryptographic key-management SDK (Krusty KMS). Focus exclusively on the Rust crates (crates/) and the C ABI boundary (crates/ffi/ + packages/kms-c/). Apply the CONTRIBUTING.md constraints strictly: information hiding, minimal public surface, compositional design, local reasoning, no incidental complexity, and correctness by construction. Reject cleverness that cannot be explained in one sentence. Treat every new pub symbol as a long-term commitment requiring explicit motivation.",
+
+  "ignorePatterns": "greptile.json\npackages/kms-ts/**\npackages/kms-py/**\npackages/kms-rs/**\npackages/kms-go/**\npackages/kms-swift/**\npackages/kms-jvm/**\npackages/kms-dart/**\n*.md\n*.txt\n*.lock\ntarget/**\nnode_modules/**\n.git/**",
+
+  "summarySection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": true
+  },
+  "issuesTableSection": {
+    "included": true,
+    "collapsible": false,
+    "defaultOpen": true
+  },
+  "confidenceScoreSection": {
+    "included": true,
+    "collapsible": true,
+    "defaultOpen": false
+  },
+  "sequenceDiagramSection": {
+    "included": false
+  },
+
+  "customContext": {
+    "rules": [
+      {
+        "scope": ["crates/crypto/**/*.rs"],
+        "rule": "Cryptographic primitives: flag non-constant-time comparisons on secret data, uses of standard HashMap/HashSet on secret-derived keys (timing side-channel), unwrap/expect on fallible crypto operations, and any path where secret material could be logged, serialized to user-facing errors, or returned in Debug output."
+      },
+      {
+        "scope": ["crates/kms/**/*.rs"],
+        "rule": "Key management: flag code that stores private keys or seed material in heap-allocated Strings (use zeroizing types), logs derivation paths together with key material, or exposes private keys through Debug/Display. Verify derivation index arithmetic cannot overflow and mnemonic validation rejects malformed input before processing."
+      },
+      {
+        "scope": ["crates/sdk/**/*.rs"],
+        "rule": "Confidential transaction SDK: flag state transitions that are not idempotent, balance computations that could overflow or underflow, missing validation of proof inputs before ZK circuit execution, and any path where view-key material could leak into owner-key operations or vice versa."
+      },
+      {
+        "scope": ["crates/client/**/*.rs"],
+        "rule": "Starknet RPC client: flag private keys or signatures in log output, RPC request/response bodies, or error messages. Flag unbounded retries, missing timeouts on network calls, and assumptions about transaction ordering that break under reorgs. Verify chain ID and network parameters are validated before signing."
+      },
+      {
+        "scope": ["crates/common/**/*.rs"],
+        "rule": "Shared types: treat every public type and trait as a long-term commitment. Flag additions to the public surface that lack clear motivation, breaking changes to existing types, and representation leaks (exposing internal field layout through public fields instead of accessor methods)."
+      },
+      {
+        "scope": ["crates/ffi/**/*.rs"],
+        "rule": "C ABI boundary: flag any unsafe block without a SAFETY comment, null pointer dereferences on caller-provided pointers, buffer overflows in output parameters, panics that could unwind across the FFI boundary (must catch_unwind), ABI-breaking changes to existing exported functions or struct layouts, and missing error code propagation. Every new exported symbol must have a corresponding entry in packages/kms-c/include/kms.h."
+      },
+      {
+        "scope": ["packages/kms-c/include/**"],
+        "rule": "Stable C ABI header: flag any change to existing struct layouts, function signatures, or error code values as a breaking change. New additions must match the naming convention (kms_ prefix, snake_case) and include documentation comments."
+      },
+      {
+        "scope": ["crates/wasm/**/*.rs"],
+        "rule": "WASM bindings: flag panics that could reach the WASM boundary (use Result), allocations that could cause OOM in constrained browser environments, and synchronous blocking calls. Verify no private key material is exposed through JsValue serialization or console logging."
+      },
+      {
+        "scope": ["crates/experimental/**/*.rs"],
+        "rule": "Experimental code has more latitude for iteration but must still uphold memory safety, secret hygiene, and basic error handling. Flag any path where experimental code could affect stable crates through shared state or public re-exports."
+      },
+      {
+        "scope": ["crates/**/*.rs"],
+        "rule": "Secret material hygiene: fail if any changed file contains patterns that risk leaking secret material — Debug/Display implementations on types holding private keys, seeds, or mnemonics; log/tracing macros that interpolate key material; error messages that include raw key bytes or mnemonic words. Private keys, seeds, mnemonics, and entropy buffers must never appear in logs, error messages, Debug output, or serialized forms."
+      },
+      {
+        "scope": ["crates/**/*.rs"],
+        "rule": "Size limits and focused diffs: flag source files exceeding 350 lines (hard-stop at 500) and functions exceeding 40 lines. Flag PRs changing more than 400 lines or touching more than 10 files without justification. Flag PRs that mix unrelated formatting changes, import reordering, or drive-by refactors with behavioral changes."
+      }
+    ],
+    "files": [
+      {
+        "scope": ["crates/**"],
+        "path": "CONTRIBUTING.md",
+        "description": "Project contribution guidelines, design rules, and quality bar. All reviews must enforce these constraints."
+      }
+    ]
+  }
+}
