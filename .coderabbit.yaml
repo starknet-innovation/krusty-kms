@@ -12,10 +12,11 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+    labels:
+      - "coderabbit"
     auto_incremental_review: true
     auto_pause_after_reviewed_commits: 0
   path_instructions:
-    # ── Cryptographic primitives ──────────────────────────────────────────
     - path: "crates/crypto/**/*.rs"
       instructions: >
         This crate implements ElGamal encryption, Pedersen commitments, range proofs,
@@ -26,7 +27,6 @@ reviews:
         user-facing errors, or returned in Debug output. Reject new public API surface
         that exposes internal proof structure or intermediate cryptographic state.
 
-    # ── Key management and derivation ─────────────────────────────────────
     - path: "crates/kms/**/*.rs"
       instructions: >
         This crate handles BIP-39 mnemonics, BIP-44 HD derivation for Stark and secp256k1
@@ -36,7 +36,6 @@ reviews:
         implementations. Verify that derivation index arithmetic cannot overflow and that
         mnemonic validation rejects malformed input before further processing.
 
-    # ── Confidential transaction SDK ──────────────────────────────────────
     - path: "crates/sdk/**/*.rs"
       instructions: >
         This crate implements TONGO protocol operations (fund, transfer, withdraw,
@@ -45,7 +44,6 @@ reviews:
         missing validation of proof inputs before ZK circuit execution, and any path
         where view-key material could leak into owner-key operations or vice versa.
 
-    # ── Starknet RPC client ───────────────────────────────────────────────
     - path: "crates/client/**/*.rs"
       instructions: >
         This crate provides async Starknet RPC interactions: wallet execution, ERC-20
@@ -55,7 +53,6 @@ reviews:
         assumption about transaction ordering that breaks under reorgs. Verify that chain
         ID and network parameters are validated before signing.
 
-    # ── Shared types (common) ─────────────────────────────────────────────
     - path: "crates/common/**/*.rs"
       instructions: >
         This crate defines Address, Amount, ChainId, Token, and shared error types used
@@ -64,7 +61,6 @@ reviews:
         breaking changes to existing types, and representation leaks (e.g., exposing
         internal field layout through public fields instead of accessor methods).
 
-    # ── C ABI (FFI boundary) ──────────────────────────────────────────────
     - path: "crates/ffi/**/*.rs"
       instructions: >
         This crate exports the C ABI shared library (libkms). Flag any unsafe block
@@ -74,7 +70,6 @@ reviews:
         or struct layouts, and missing error code propagation. Every new exported symbol
         must have a corresponding entry in packages/kms-c/include/kms.h.
 
-    # ── C header distribution ─────────────────────────────────────────────
     - path: "packages/kms-c/include/**"
       instructions: >
         This header defines the stable C ABI contract consumed by all language bindings.
@@ -83,7 +78,6 @@ reviews:
         match the naming convention (kms_ prefix, snake_case) and include documentation
         comments.
 
-    # ── WASM bindings ─────────────────────────────────────────────────────
     - path: "crates/wasm/**/*.rs"
       instructions: >
         Flag panics that could reach the WASM boundary (use Result), allocations that
@@ -91,49 +85,6 @@ reviews:
         calls. Verify that no private key material is exposed through JsValue serialization
         or console logging.
 
-    # ── Language binding packages ─────────────────────────────────────────
-    - path: "packages/kms-py/**"
-      instructions: >
-        Python FFI wrapper using ctypes. Flag missing error code checks after C calls,
-        memory leaks from unfreed ctypes buffers, and mismatched argtypes/restype
-        declarations that could cause segfaults. Verify type signatures match kms.h.
-
-    - path: "packages/kms-ts/**"
-      instructions: >
-        TypeScript binding with native addon and WASM fallback. Flag type mismatches
-        between the TS declarations and the native/WASM interface, missing error
-        propagation, and any path where key material could be retained in JS heap
-        after use.
-
-    - path: "packages/kms-swift/**"
-      instructions: >
-        Swift binding via C FFI. Flag unsafe pointer usage without proper lifetime
-        management, missing error code checks, and memory leaks from unfreed C
-        allocations.
-
-    - path: "packages/kms-go/**"
-      instructions: >
-        Go binding via cgo. Flag missing C.free calls, improper cgo pointer passing
-        rules violations, and missing error code checks after C function calls.
-
-    - path: "packages/kms-jvm/**"
-      instructions: >
-        Java/Kotlin binding via JNI. Flag missing JNI exception checks, native memory
-        leaks, and improper JNI reference management (local vs global refs).
-
-    - path: "packages/kms-dart/**"
-      instructions: >
-        Dart binding via dart:ffi. Flag missing calloc.free calls in finally blocks,
-        mismatched native type signatures versus kms.h, and Pointer use-after-free.
-        Verify struct layouts match C ABI sizes (KmsFelt=32, KmsProjectivePoint=96,
-        KmsAffinePoint=64, KmsTongoKeyPair=128, KmsNostrKeyPair=64).
-
-    - path: "packages/kms-rs/**"
-      instructions: >
-        Rust FFI wrapper crate. Flag unsafe blocks without SAFETY comments, missing
-        error propagation, and ABI mismatches with the C header.
-
-    # ── Experimental crates ───────────────────────────────────────────────
     - path: "crates/experimental/**/*.rs"
       instructions: >
         Experimental code has more latitude for iteration but must still uphold
@@ -154,7 +105,6 @@ reviews:
     issue_assessment:
       mode: "warning"
     custom_checks:
-      # ── Secret hygiene ────────────────────────────────────────────────
       - name: "Secret Material Hygiene"
         mode: "error"
         instructions: >
@@ -166,25 +116,18 @@ reviews:
           in logs, error messages, Debug output, or serialized forms. Pass only when all
           secret-bearing types use opaque formatting and zeroizing storage where available.
 
-      # ── C ABI stability ───────────────────────────────────────────────
-      - name: "C ABI Stability"
+      - name: "FFI & ABI Safety"
         mode: "error"
         instructions: >
-          If files under crates/ffi/src or packages/kms-c/include are changed, fail when
-          any existing exported function signature, struct layout, or error code value is
+          For changes under crates/ffi or packages/kms-c/include: (1) Fail if any
+          existing exported function signature, struct layout, or error code value is
           modified without a corresponding ABI version bump in kms.h
-          (KMS_ABI_VERSION_MAJOR or KMS_ABI_VERSION_MINOR). New additions that do not
-          alter existing symbols are permitted without a version bump.
+          (KMS_ABI_VERSION_MAJOR or KMS_ABI_VERSION_MINOR); new additions that do not
+          alter existing symbols are permitted without a version bump. (2) Fail if any
+          extern "C" function can panic across the FFI boundary without catch_unwind,
+          if any unsafe block lacks a SAFETY comment, or if caller-provided pointers
+          are dereferenced without null checks.
 
-      # ── FFI boundary safety ───────────────────────────────────────────
-      - name: "FFI Boundary Safety"
-        mode: "error"
-        instructions: >
-          For changes under crates/ffi, fail if any extern "C" function can panic across
-          the FFI boundary without catch_unwind, if any unsafe block lacks a SAFETY
-          comment, or if caller-provided pointers are dereferenced without null checks.
-
-      # ── Module boundary enforcement ───────────────────────────────────
       - name: "Information Hiding"
         mode: "warning"
         instructions: >
@@ -194,16 +137,6 @@ reviews:
           not become user-facing. Every new pub item in a crate's lib.rs is a long-term
           commitment and requires explicit motivation.
 
-      # ── File and function size ────────────────────────────────────────
-      - name: "Size Limits"
-        mode: "warning"
-        instructions: >
-          Flag source files exceeding 350 lines (hard-stop concern at 500 lines) and
-          functions exceeding 40 lines, unless the PR description contains an explicit
-          justification section. Flag PRs changing more than 400 lines or touching more
-          than 10 files without a stated reason for the larger scope.
-
-      # ── Test coverage ─────────────────────────────────────────────────
       - name: "Test Requirements"
         mode: "warning"
         instructions: >
@@ -213,14 +146,16 @@ reviews:
           have laws or property-based tests where feasible. Pure reformatting and
           documentation PRs are exempt.
 
-      # ── No drive-by changes ───────────────────────────────────────────
-      - name: "Focused Diffs"
+      - name: "PR Discipline"
         mode: "warning"
         instructions: >
-          Flag PRs that mix unrelated formatting changes, import reordering, or
-          drive-by refactors with behavioral changes. Formatting-only changes must
-          be isolated in their own commit or PR. The diff should be reviewable in
-          a single conceptual pass.
+          Flag source files exceeding 350 lines (hard-stop concern at 500 lines) and
+          functions exceeding 40 lines, unless the PR description contains an explicit
+          justification. Flag PRs changing more than 400 lines or touching more than
+          10 files without a stated reason for the larger scope. Flag PRs that mix
+          unrelated formatting changes, import reordering, or drive-by refactors with
+          behavioral changes. Formatting-only changes must be isolated in their own
+          commit or PR. The diff should be reviewable in a single conceptual pass.
 
   tools:
     opengrep:
