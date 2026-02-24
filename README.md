@@ -1,53 +1,59 @@
-# KMS Crates Monorepo
+<p align="center">
+  <img src="assets/krusty-crab.png" width="400" alt="Krusty" />
+</p>
 
-Rust crates for Starknet-curve key management, cryptography, protocol operations, and WASM bindings.
+<h1 align="center">Krusty</h1>
 
-## Directory Structure
+<p align="center">
+  Starknet key management, confidential transactions, and protocol client libraries in Rust.
+</p>
+
+Krusty provides BIP-39/44 key derivation for Stark and Ethereum curves, zero-knowledge proof generation for the TONGO confidential transaction protocol, and a typed async client for interacting with Starknet contracts — wallets, tokens, staking, and DeFi.
+
+## Crates
 
 ```
-crates/
-├── common/                           # Shared types, errors, utilities (krusty-kms-common)
-├── crypto/                           # Cryptographic primitives and proofs (krusty-kms-crypto)
-├── kms/                              # Key management and derivation (krusty-kms)
-├── sdk/                              # Confidential transaction SDK (krusty-kms-sdk)
-├── client/                           # Starknet RPC client (krusty-kms-client)
-├── wasm/                             # WASM bindings (krusty-kms-wasm)
-├── ffi/                              # C ABI shared library (krusty-kms-cabi)
-└── experimental/                     # Non-default and in-progress work
-    └── gaming-experimental/
-
-packages/
-├── kms-c/                            # C ABI header distribution
-├── kms-ts/                           # TypeScript wrapper (native + wasm entrypoints)
-├── kms-swift/                        # SwiftPM wrapper
-├── kms-go/                           # Go cgo wrapper
-├── kms-rs/                           # Rust FFI wrapper
-├── kms-py/                           # Python ctypes wrapper
-└── kms-jvm/                          # Shared JNI package (Java + Kotlin)
-
-fixtures/vectors/                     # Shared cross-language conformance vectors
-tools/                                # Build/release helpers
+krusty-kms-common     Shared types: Address, Amount, ChainId, Token, error definitions
+krusty-kms-crypto     Cryptographic primitives: ElGamal encryption, Pedersen commitments,
+                      range proofs, ZK proof generation and verification
+krusty-kms            Key management: BIP-39 mnemonics, BIP-44 HD derivation (Stark +
+                      secp256k1), account class abstractions (OZ, Argent, Braavos, OZ Eth)
+krusty-kms-sdk        TONGO protocol operations: fund, transfer, withdraw, rollover,
+                      ragequit — with dual-key (owner + view) confidential balances
+krusty-kms-client     Starknet RPC client: Wallet and EthWallet execution, ERC-20 token
+                      interactions, STRK staking delegation, Vesu money market, transaction
+                      batching and tracking
+krusty-kms-wasm       WebAssembly bindings for browser environments
+krusty-kms-cabi       C ABI shared library (libkms)
 ```
 
-## Active (Default) Crates
+## Language Bindings
 
-- `crates/common` (krusty-kms-common)
-- `crates/crypto` (krusty-kms-crypto)
-- `crates/kms` (krusty-kms)
-- `crates/sdk` (krusty-kms-sdk)
-- `crates/client` (krusty-kms-client)
-- `crates/wasm` (krusty-kms-wasm)
+| Package | Language | Method |
+|---------|----------|--------|
+| `packages/kms-ts` | TypeScript | Native addon + WASM fallback |
+| `packages/kms-swift` | Swift | SwiftPM via C FFI |
+| `packages/kms-go` | Go | cgo |
+| `packages/kms-py` | Python | ctypes |
+| `packages/kms-jvm` | Java/Kotlin | JNI |
+| `packages/kms-rs` | Rust | FFI wrapper |
+| `packages/kms-c` | C | Header distribution |
 
-## Experimental (Non-default) Crates
+## Quick Start
 
-- `crates/experimental/gaming-experimental/mental-poker`
-- `crates/experimental/gaming-experimental/mental-poker-wasm`
-- `crates/experimental/gaming-experimental/qb-game`
+```bash
+cargo test                          # Run default-member tests
+cargo test --workspace              # Run all tests including experimental
+cargo clippy --workspace --all-targets
+cargo fmt --all
+```
 
-## Wrapper Verification
+### WASM
 
-- TypeScript: `npm --prefix packages/kms-ts run typecheck`
-- Swift: `cd packages/kms-swift && swift build`
-- Go: `cd packages/kms-go && go test ./...`
-- Rust: `cargo check -p krusty-kms-ffi`
-- Python: `python3 -m compileall -q packages/kms-py/src`
+```bash
+cd crates/wasm && wasm-pack build --target web
+```
+
+## License
+
+MIT OR Apache-2.0
