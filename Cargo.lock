@@ -2267,6 +2267,11 @@ dependencies = [
  "krusty-kms",
  "krusty-kms-common",
  "krusty-kms-crypto",
+ "krusty-kms-sdk",
+ "serde",
+ "serde_json",
+ "sha3",
+ "starknet-crypto",
  "starknet-types-core",
  "zeroize",
 ]

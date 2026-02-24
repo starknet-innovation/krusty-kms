@@ -5,8 +5,8 @@
 
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_crypto::{
-    audit::AuditProver, hash::compute_poseidon_challenge, poseidon_hash_many,
-    poe::ProofOfExponentiation, StarkCurve,
+    audit::AuditProver, hash::compute_poseidon_challenge, poe::ProofOfExponentiation,
+    poseidon_hash_many, StarkCurve,
 };
 use starknet_types_core::felt::Felt;
 
@@ -116,9 +116,18 @@ fn test_fund_with_audit_typescript_vector() {
 
     println!("  Audit Proof:");
     println!("    Ax: (x: {}, y: {})", audit_proof.ax.x, audit_proof.ax.y);
-    println!("    AL0: (x: {}, y: {})", audit_proof.al0.x, audit_proof.al0.y);
-    println!("    AL1: (x: {}, y: {})", audit_proof.al1.x, audit_proof.al1.y);
-    println!("    AR1: (x: {}, y: {})", audit_proof.ar1.x, audit_proof.ar1.y);
+    println!(
+        "    AL0: (x: {}, y: {})",
+        audit_proof.al0.x, audit_proof.al0.y
+    );
+    println!(
+        "    AL1: (x: {}, y: {})",
+        audit_proof.al1.x, audit_proof.al1.y
+    );
+    println!(
+        "    AR1: (x: {}, y: {})",
+        audit_proof.ar1.x, audit_proof.ar1.y
+    );
     println!("    sx: {}", audit_proof.sx);
     println!("    sb: {}", audit_proof.sb);
     println!("    sr: {}", audit_proof.sr);
@@ -133,24 +142,49 @@ fn test_fund_with_audit_typescript_vector() {
     let ax_rec = krusty_kms_common::SerializablePoint {
         x: audit_proof.ax.x.clone(),
         y: audit_proof.ax.y.clone(),
-    }.to_affine().unwrap().try_into().unwrap();
-    let al0_rec: starknet_types_core::curve::ProjectivePoint = krusty_kms_common::SerializablePoint {
-        x: audit_proof.al0.x.clone(),
-        y: audit_proof.al0.y.clone(),
-    }.to_affine().unwrap().try_into().unwrap();
-    let al1_rec: starknet_types_core::curve::ProjectivePoint = krusty_kms_common::SerializablePoint {
-        x: audit_proof.al1.x.clone(),
-        y: audit_proof.al1.y.clone(),
-    }.to_affine().unwrap().try_into().unwrap();
-    let ar1_rec: starknet_types_core::curve::ProjectivePoint = krusty_kms_common::SerializablePoint {
-        x: audit_proof.ar1.x.clone(),
-        y: audit_proof.ar1.y.clone(),
-    }.to_affine().unwrap().try_into().unwrap();
+    }
+    .to_affine()
+    .unwrap()
+    .try_into()
+    .unwrap();
+    let al0_rec: starknet_types_core::curve::ProjectivePoint =
+        krusty_kms_common::SerializablePoint {
+            x: audit_proof.al0.x.clone(),
+            y: audit_proof.al0.y.clone(),
+        }
+        .to_affine()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let al1_rec: starknet_types_core::curve::ProjectivePoint =
+        krusty_kms_common::SerializablePoint {
+            x: audit_proof.al1.x.clone(),
+            y: audit_proof.al1.y.clone(),
+        }
+        .to_affine()
+        .unwrap()
+        .try_into()
+        .unwrap();
+    let ar1_rec: starknet_types_core::curve::ProjectivePoint =
+        krusty_kms_common::SerializablePoint {
+            x: audit_proof.ar1.x.clone(),
+            y: audit_proof.ar1.y.clone(),
+        }
+        .to_affine()
+        .unwrap()
+        .try_into()
+        .unwrap();
 
-    let c_recomputed = compute_poseidon_challenge(&audit_prefix, &[&ax_rec, &al0_rec, &al1_rec, &ar1_rec]).unwrap();
+    let c_recomputed =
+        compute_poseidon_challenge(&audit_prefix, &[&ax_rec, &al0_rec, &al1_rec, &ar1_rec])
+            .unwrap();
     println!("    recomputed c: {:#x}", c_recomputed);
     println!("    c from proof: {}", audit_proof.c);
-    assert_eq!(format!("{:#x}", c_recomputed), audit_proof.c, "Challenge mismatch!");
+    assert_eq!(
+        format!("{:#x}", c_recomputed),
+        audit_proof.c,
+        "Challenge mismatch!"
+    );
 
     println!("\n  Audited Balance:");
     let ab_l_affine = audited_balance.l.to_affine().unwrap();

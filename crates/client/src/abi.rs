@@ -19,8 +19,7 @@ pub mod erc20 {
     pub static SYMBOL: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("symbol"));
     pub static DECIMALS: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("decimals"));
     pub static BALANCE_OF: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("balance_of"));
-    pub static BALANCE_OF_CAMEL: LazyLock<StarknetRsFelt> =
-        LazyLock::new(|| selector("balanceOf"));
+    pub static BALANCE_OF_CAMEL: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("balanceOf"));
     pub static APPROVE: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("approve"));
     pub static TRANSFER: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("transfer"));
 }
@@ -44,7 +43,6 @@ pub mod pool {
     pub static CONTRACT_PARAMETERS: LazyLock<StarknetRsFelt> =
         LazyLock::new(|| selector("contract_parameters"));
 }
-
 
 #[cfg(test)]
 mod tests {

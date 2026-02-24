@@ -26,10 +26,10 @@ impl WasmPoint {
     pub fn to_bytes(&self) -> Result<Vec<u8>, JsValue> {
         use starknet_types_core::felt::Felt;
 
-        let x = Felt::from_hex(&self.x)
-            .map_err(|e| JsValue::from_str(&format!("Invalid x: {e}")))?;
-        let y = Felt::from_hex(&self.y)
-            .map_err(|e| JsValue::from_str(&format!("Invalid y: {e}")))?;
+        let x =
+            Felt::from_hex(&self.x).map_err(|e| JsValue::from_str(&format!("Invalid x: {e}")))?;
+        let y =
+            Felt::from_hex(&self.y).map_err(|e| JsValue::from_str(&format!("Invalid y: {e}")))?;
 
         let mut bytes = Vec::with_capacity(64);
         bytes.extend_from_slice(&x.to_bytes_be());

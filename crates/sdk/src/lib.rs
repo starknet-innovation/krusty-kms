@@ -22,12 +22,13 @@
 pub mod account;
 pub mod crypto;
 pub mod operations;
+pub mod serialization;
 
 pub use account::TongoAccount;
 pub use crypto::{decrypt_as_auditor, encrypt_for_auditor};
 pub use operations::{fund, ragequit, rollover, transfer, withdraw};
 
+pub use krusty_kms::*;
 /// Re-export common types
 pub use krusty_kms_common::*;
-pub use krusty_kms::*;
 pub use krusty_kms_crypto::*;

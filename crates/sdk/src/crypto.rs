@@ -9,8 +9,8 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use krusty_kms_common::{KmsError, Result};
-use sha2::{Digest, Sha256};
 use krusty_kms_crypto::StarkCurve;
+use sha2::{Digest, Sha256};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 

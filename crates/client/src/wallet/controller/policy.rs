@@ -72,8 +72,9 @@ mod tests {
 
     #[test]
     fn session_policy_to_sdk() {
-        let addr = Address::from_hex("0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7")
-            .unwrap();
+        let addr =
+            Address::from_hex("0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7")
+                .unwrap();
         let policy = SessionPolicy::new(addr, "transfer");
         let sdk = policy.to_sdk_policy();
 

@@ -4,8 +4,8 @@
 //! The randomness is derived from both parties' commitments to ensure fairness.
 
 use rand::Rng;
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::commitment::PlayCommitment;
 use crate::detection::{calculate_penalty, detection_probability};
@@ -245,7 +245,10 @@ mod tests {
         let r1 = generate_verifiable_randomness(&c1, &c2, 1);
         let r2 = generate_verifiable_randomness(&c1, &c2, 2);
 
-        assert_ne!(r1, r2, "Different play numbers should produce different randomness");
+        assert_ne!(
+            r1, r2,
+            "Different play numbers should produce different randomness"
+        );
     }
 
     #[test]
@@ -355,7 +358,10 @@ mod tests {
             if result.was_caught {
                 caught_count += 1;
                 assert!(result.penalty.is_some());
-                assert!(result.final_yards < 0, "Should have negative yards from penalty");
+                assert!(
+                    result.final_yards < 0,
+                    "Should have negative yards from penalty"
+                );
             } else {
                 not_caught_count += 1;
                 assert!(result.penalty.is_none());
@@ -364,9 +370,17 @@ mod tests {
         }
 
         // With 95% detection probability, we should catch most
-        assert!(caught_count > 80, "Should catch most big lies: caught {}/100", caught_count);
+        assert!(
+            caught_count > 80,
+            "Should catch most big lies: caught {}/100",
+            caught_count
+        );
         // But we should also miss some (5% get away)
-        assert!(not_caught_count > 0, "Should miss some big lies: not caught {}/100", not_caught_count);
+        assert!(
+            not_caught_count > 0,
+            "Should miss some big lies: not caught {}/100",
+            not_caught_count
+        );
     }
 
     #[test]
@@ -374,7 +388,7 @@ mod tests {
         let result = simulate_play(
             OffensivePlay::HailMary,
             DefensiveCoverage::ManUnder,
-            100, // Absurd claim
+            100,  // Absurd claim
             true, // 4th down
         );
 

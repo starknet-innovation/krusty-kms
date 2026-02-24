@@ -18,9 +18,9 @@
 use crate::error::{MentalPokerError, Result};
 use crate::types::{DLEqualityProof, MaskedCard, Permutation, PublicKey, SerializablePoint};
 use crate::zkp::ChaumPedersenProtocol;
+use krusty_kms_crypto::{scalar, StarkCurve};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use krusty_kms_crypto::{scalar, StarkCurve};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 use std::collections::HashSet;

@@ -5,12 +5,12 @@
 
 use crate::types::{AccountState, CipherBalance};
 use krusty_kms_common::Result;
-use std::sync::Arc;
 use starknet_rust::core::types::{BlockId, BlockTag, FunctionCall};
 use starknet_rust::core::utils::get_selector_from_name;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
 use starknet_types_core::curve::ProjectivePoint;
+use std::sync::Arc;
 
 // Type aliases to distinguish between starknet-rs and starknet-types-core Felt types
 type StarknetRsFelt = starknet_rust::core::types::Felt;
@@ -51,9 +51,9 @@ impl TongoContract {
     ///
     /// # Cyclomatic Complexity: 2
     pub async fn get_state(&self, public_key: &ProjectivePoint) -> Result<AccountState> {
-        let affine = public_key
-            .to_affine()
-            .map_err(|_| krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string()))?;
+        let affine = public_key.to_affine().map_err(|_| {
+            krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
+        })?;
 
         // Prepare calldata: [public_key_x, public_key_y]
         // Convert from CoreFelt to StarknetRsFelt
@@ -78,22 +78,43 @@ impl TongoContract {
         // CipherBalance is { L: StarkPoint, R: StarkPoint }
         // Expected response: [L.x, L.y, R.x, R.y, pending_L.x, pending_L.y, pending_R.x, pending_R.y, nonce]
         if result.len() < 9 {
-            return Err(krusty_kms_common::KmsError::DeserializationError(
-                format!("Expected 9 felts for AccountState, got {}", result.len()),
-            ));
+            return Err(krusty_kms_common::KmsError::DeserializationError(format!(
+                "Expected 9 felts for AccountState, got {}",
+                result.len()
+            )));
         }
 
         // Deserialize balance (convert from StarknetRsFelt to CoreFelt)
-        let balance_l = ProjectivePoint::from_affine(rs_felt_to_core(result[0]), rs_felt_to_core(result[1]))
-            .map_err(|_| krusty_kms_common::KmsError::DeserializationError("Invalid balance.L point".to_string()))?;
-        let balance_r = ProjectivePoint::from_affine(rs_felt_to_core(result[2]), rs_felt_to_core(result[3]))
-            .map_err(|_| krusty_kms_common::KmsError::DeserializationError("Invalid balance.R point".to_string()))?;
+        let balance_l =
+            ProjectivePoint::from_affine(rs_felt_to_core(result[0]), rs_felt_to_core(result[1]))
+                .map_err(|_| {
+                    krusty_kms_common::KmsError::DeserializationError(
+                        "Invalid balance.L point".to_string(),
+                    )
+                })?;
+        let balance_r =
+            ProjectivePoint::from_affine(rs_felt_to_core(result[2]), rs_felt_to_core(result[3]))
+                .map_err(|_| {
+                    krusty_kms_common::KmsError::DeserializationError(
+                        "Invalid balance.R point".to_string(),
+                    )
+                })?;
 
         // Deserialize pending
-        let pending_l = ProjectivePoint::from_affine(rs_felt_to_core(result[4]), rs_felt_to_core(result[5]))
-            .map_err(|_| krusty_kms_common::KmsError::DeserializationError("Invalid pending.L point".to_string()))?;
-        let pending_r = ProjectivePoint::from_affine(rs_felt_to_core(result[6]), rs_felt_to_core(result[7]))
-            .map_err(|_| krusty_kms_common::KmsError::DeserializationError("Invalid pending.R point".to_string()))?;
+        let pending_l =
+            ProjectivePoint::from_affine(rs_felt_to_core(result[4]), rs_felt_to_core(result[5]))
+                .map_err(|_| {
+                    krusty_kms_common::KmsError::DeserializationError(
+                        "Invalid pending.L point".to_string(),
+                    )
+                })?;
+        let pending_r =
+            ProjectivePoint::from_affine(rs_felt_to_core(result[6]), rs_felt_to_core(result[7]))
+                .map_err(|_| {
+                    krusty_kms_common::KmsError::DeserializationError(
+                        "Invalid pending.R point".to_string(),
+                    )
+                })?;
 
         // Deserialize nonce
         let nonce = rs_felt_to_core(result[8]);
@@ -242,8 +263,15 @@ impl TongoContract {
                 ));
             }
 
-            let point = ProjectivePoint::from_affine(rs_felt_to_core(result[1]), rs_felt_to_core(result[2]))
-                .map_err(|_| krusty_kms_common::KmsError::DeserializationError("Invalid auditor key point".to_string()))?;
+            let point = ProjectivePoint::from_affine(
+                rs_felt_to_core(result[1]),
+                rs_felt_to_core(result[2]),
+            )
+            .map_err(|_| {
+                krusty_kms_common::KmsError::DeserializationError(
+                    "Invalid auditor key point".to_string(),
+                )
+            })?;
 
             return Ok(Some(point));
         }

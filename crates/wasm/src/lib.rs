@@ -61,10 +61,10 @@ pub use account::{
 };
 pub use error::WasmError;
 pub use proof::{
-    generate_fund_proof, generate_ragequit_proof, generate_rollover_proof,
-    generate_transfer_proof, generate_withdraw_proof, WasmFundParams, WasmFundProofResult,
-    WasmRagequitParams, WasmRagequitProofResult, WasmRolloverParams, WasmRolloverProofResult,
-    WasmTransferParams, WasmTransferProofResult, WasmWithdrawParams, WasmWithdrawProofResult,
+    generate_fund_proof, generate_ragequit_proof, generate_rollover_proof, generate_transfer_proof,
+    generate_withdraw_proof, WasmFundParams, WasmFundProofResult, WasmRagequitParams,
+    WasmRagequitProofResult, WasmRolloverParams, WasmRolloverProofResult, WasmTransferParams,
+    WasmTransferProofResult, WasmWithdrawParams, WasmWithdrawProofResult,
 };
 pub use types::{
     WasmAccountState, WasmCiphertext, WasmKeypair, WasmNostrKeypair, WasmPoint, WasmTxType,
@@ -122,8 +122,7 @@ pub fn poseidon_hash(inputs: Vec<String>) -> Result<String, JsValue> {
     let felts: Vec<Felt> = inputs
         .iter()
         .map(|s| {
-            Felt::from_hex(s)
-                .map_err(|e| JsValue::from_str(&format!("Invalid hex input: {e}")))
+            Felt::from_hex(s).map_err(|e| JsValue::from_str(&format!("Invalid hex input: {e}")))
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -141,21 +140,17 @@ pub fn poseidon_hash(inputs: Vec<String>) -> Result<String, JsValue> {
 /// # Returns
 /// Resulting point as {x, y} object
 #[wasm_bindgen(js_name = "scalarMul")]
-pub fn scalar_mul(
-    scalar: &str,
-    point_x: &str,
-    point_y: &str,
-) -> Result<types::WasmPoint, JsValue> {
+pub fn scalar_mul(scalar: &str, point_x: &str, point_y: &str) -> Result<types::WasmPoint, JsValue> {
     use krusty_kms_crypto::StarkCurve;
     use starknet_types_core::curve::ProjectivePoint;
     use starknet_types_core::felt::Felt;
 
-    let s = Felt::from_hex(scalar)
-        .map_err(|e| JsValue::from_str(&format!("Invalid scalar: {e}")))?;
-    let px = Felt::from_hex(point_x)
-        .map_err(|e| JsValue::from_str(&format!("Invalid point X: {e}")))?;
-    let py = Felt::from_hex(point_y)
-        .map_err(|e| JsValue::from_str(&format!("Invalid point Y: {e}")))?;
+    let s =
+        Felt::from_hex(scalar).map_err(|e| JsValue::from_str(&format!("Invalid scalar: {e}")))?;
+    let px =
+        Felt::from_hex(point_x).map_err(|e| JsValue::from_str(&format!("Invalid point X: {e}")))?;
+    let py =
+        Felt::from_hex(point_y).map_err(|e| JsValue::from_str(&format!("Invalid point Y: {e}")))?;
 
     let point = ProjectivePoint::from_affine(px, py)
         .map_err(|e| JsValue::from_str(&format!("Invalid point: {e:?}")))?;
@@ -183,8 +178,8 @@ pub fn scalar_mul_generator(scalar: &str) -> Result<types::WasmPoint, JsValue> {
     use krusty_kms_crypto::StarkCurve;
     use starknet_types_core::felt::Felt;
 
-    let s = Felt::from_hex(scalar)
-        .map_err(|e| JsValue::from_str(&format!("Invalid scalar: {e}")))?;
+    let s =
+        Felt::from_hex(scalar).map_err(|e| JsValue::from_str(&format!("Invalid scalar: {e}")))?;
 
     let result = StarkCurve::mul_generator(&s);
     let affine = result
@@ -222,14 +217,10 @@ pub fn point_add(
     use starknet_types_core::curve::ProjectivePoint;
     use starknet_types_core::felt::Felt;
 
-    let p1x = Felt::from_hex(p1_x)
-        .map_err(|e| JsValue::from_str(&format!("Invalid P1 X: {e}")))?;
-    let p1y = Felt::from_hex(p1_y)
-        .map_err(|e| JsValue::from_str(&format!("Invalid P1 Y: {e}")))?;
-    let p2x = Felt::from_hex(p2_x)
-        .map_err(|e| JsValue::from_str(&format!("Invalid P2 X: {e}")))?;
-    let p2y = Felt::from_hex(p2_y)
-        .map_err(|e| JsValue::from_str(&format!("Invalid P2 Y: {e}")))?;
+    let p1x = Felt::from_hex(p1_x).map_err(|e| JsValue::from_str(&format!("Invalid P1 X: {e}")))?;
+    let p1y = Felt::from_hex(p1_y).map_err(|e| JsValue::from_str(&format!("Invalid P1 Y: {e}")))?;
+    let p2x = Felt::from_hex(p2_x).map_err(|e| JsValue::from_str(&format!("Invalid P2 X: {e}")))?;
+    let p2y = Felt::from_hex(p2_y).map_err(|e| JsValue::from_str(&format!("Invalid P2 Y: {e}")))?;
 
     let p1 = ProjectivePoint::from_affine(p1x, p1y)
         .map_err(|e| JsValue::from_str(&format!("Invalid P1: {e:?}")))?;

@@ -57,8 +57,14 @@ fn test_bip44_starknet_coin9004() {
     );
 
     // Verify format (matches Swift checks)
-    assert!(private_hex.starts_with("0x"), "Private key should start with 0x");
-    assert!(private_hex.len() > 2, "Private key should have hex digits after 0x");
+    assert!(
+        private_hex.starts_with("0x"),
+        "Private key should start with 0x"
+    );
+    assert!(
+        private_hex.len() > 2,
+        "Private key should have hex digits after 0x"
+    );
     assert!(
         private_hex.len() <= 66,
         "Private key should be at most 32 bytes (64 hex chars + 0x), got {}",
@@ -66,7 +72,10 @@ fn test_bip44_starknet_coin9004() {
     );
 
     // Verify public key is valid
-    assert!(public_hex.starts_with("0x"), "Public key should start with 0x");
+    assert!(
+        public_hex.starts_with("0x"),
+        "Public key should start with 0x"
+    );
     assert!(public_hex.len() > 2, "Public key should have hex digits");
 
     println!("✓ BIP-44 Starknet (coin 9004) derivation:");
@@ -147,8 +156,8 @@ fn test_tongo_derivation_coin5454() {
     let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
     // Derive using TONGO coin type
-    let keypair = derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None)
-        .expect("Should derive TONGO key");
+    let keypair =
+        derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None).expect("Should derive TONGO key");
 
     // Verify format
     let private_hex = format!("{:#x}", keypair.private_key);
@@ -209,8 +218,8 @@ fn test_tongo_spending_key_derivation() {
     let path = "m/44'/5454'/0'/0/0";
 
     // Derive Tongo account key (coin 5454, index 0)
-    let keypair = derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None)
-        .expect("Should derive Tongo key");
+    let keypair =
+        derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None).expect("Should derive Tongo key");
 
     // Expected value from Swift/TypeScript test vectors
     let expected = "0x181c51e06caf24a03c8757ad3af64660fc71e32f9ee0187ca153bd32867c04e";
@@ -239,8 +248,8 @@ fn test_different_coin_types_produce_different_keys() {
     let starknet_key = derive_keypair_with_coin_type(mnemonic, 0, 0, STARKNET_COIN_TYPE, None)
         .expect("Should derive Starknet key");
 
-    let tongo_key = derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None)
-        .expect("Should derive Tongo key");
+    let tongo_key =
+        derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None).expect("Should derive Tongo key");
 
     println!("✓ Different coin types produce different keys:");
     println!("  Starknet (9004): {:#x}", starknet_key.private_key);
@@ -272,8 +281,9 @@ fn test_starknet_account_address_derivation_with_test_vector() {
         .x();
 
     // OpenZeppelin account class hash from tongo-sepolia.test.ts
-    let oz_class_hash = Felt::from_hex("0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564")
-        .expect("Should parse class hash");
+    let oz_class_hash =
+        Felt::from_hex("0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564")
+            .expect("Should parse class hash");
 
     // Salt 0x0
     let salt = Felt::ZERO;

@@ -6,8 +6,8 @@
 //! - Proofs (various ZK proofs)
 //! - Protocol parameters
 
-use serde::{Deserialize, Serialize};
 use krusty_kms_crypto::StarkCurve;
+use serde::{Deserialize, Serialize};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 

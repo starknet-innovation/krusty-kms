@@ -9,10 +9,10 @@ use krusty_kms_common::amount::Amount;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::{KmsError, Result};
-use std::sync::Arc;
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
+use std::sync::Arc;
 
 /// Mainnet staking contract address.
 const MAINNET_STAKING_CONTRACT: &str =

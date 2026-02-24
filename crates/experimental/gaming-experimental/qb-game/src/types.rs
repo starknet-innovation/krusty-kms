@@ -91,7 +91,9 @@ impl OffensivePlay {
     pub fn category(&self) -> PlayCategory {
         match self {
             Self::QbSneak | Self::Dive | Self::Draw | Self::ScreenPass => PlayCategory::Short,
-            Self::Slant | Self::OutRoute | Self::InsideRun | Self::PlayAction => PlayCategory::Medium,
+            Self::Slant | Self::OutRoute | Self::InsideRun | Self::PlayAction => {
+                PlayCategory::Medium
+            }
             Self::PostRoute | Self::FlyRoute | Self::Sweep | Self::HailMary => PlayCategory::Deep,
         }
     }
@@ -482,10 +484,19 @@ mod tests {
 
     #[test]
     fn test_coverage_categories() {
-        assert_eq!(DefensiveCoverage::GoalLine.category(), CoverageCategory::RunDefense);
+        assert_eq!(
+            DefensiveCoverage::GoalLine.category(),
+            CoverageCategory::RunDefense
+        );
         assert_eq!(DefensiveCoverage::Cover2.category(), CoverageCategory::Zone);
-        assert_eq!(DefensiveCoverage::ManUnder.category(), CoverageCategory::Man);
-        assert_eq!(DefensiveCoverage::Prevent.category(), CoverageCategory::Special);
+        assert_eq!(
+            DefensiveCoverage::ManUnder.category(),
+            CoverageCategory::Man
+        );
+        assert_eq!(
+            DefensiveCoverage::Prevent.category(),
+            CoverageCategory::Special
+        );
     }
 
     #[test]

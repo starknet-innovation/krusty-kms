@@ -130,10 +130,7 @@ impl AuditProver {
             ));
         }
 
-        let cipher1 = ElGamalCiphertext {
-            l: l1,
-            r: r1_point,
-        };
+        let cipher1 = ElGamalCiphertext { l: l1, r: r1_point };
 
         // Generate random blinding factors (wrapped in SecretFelt for zeroization on drop)
         let kx = SecretFelt::new(Self::random_felt());
@@ -314,22 +311,21 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         // Create auditor key
         let auditor_private = Felt::from(99999u64);
         let auditor_pub_key = StarkCurve::mul(&auditor_private, Some(&g));
 
         // Generate proof (this also creates cipher1)
-        let (proof, cipher1) = AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
-            .expect("proof generation should succeed");
+        let (proof, cipher1) =
+            AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
+                .expect("proof generation should succeed");
 
         // Verify proof
-        let is_valid = AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
-            .expect("verification should succeed");
+        let is_valid =
+            AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
+                .expect("verification should succeed");
 
         assert!(is_valid, "proof should be valid");
     }
@@ -349,10 +345,7 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b_wrong, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         let auditor_private = Felt::from(99999u64);
         let auditor_pub_key = StarkCurve::mul(&auditor_private, Some(&g));
@@ -456,10 +449,19 @@ mod tests {
         println!("      y: {:#x}", ab_r_affine.y());
 
         // Verify proof
-        let is_valid = AuditProver::verify(&proof, &public_key, &initial_cipher_balance, &audited_balance, &auditor_public_key)
-            .expect("verification should succeed");
+        let is_valid = AuditProver::verify(
+            &proof,
+            &public_key,
+            &initial_cipher_balance,
+            &audited_balance,
+            &auditor_public_key,
+        )
+        .expect("verification should succeed");
 
-        println!("\n✅ Verification: {}", if is_valid { "PASSED" } else { "FAILED" });
+        println!(
+            "\n✅ Verification: {}",
+            if is_valid { "PASSED" } else { "FAILED" }
+        );
         assert!(is_valid, "proof should be valid");
 
         println!("\n=== End Test Vector ===\n");
@@ -480,10 +482,7 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = user_r0; // L = pk*r0 when balance is 0
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         let auditor_private = Felt::from(99999u64);
         let auditor_pub_key = StarkCurve::mul(&auditor_private, Some(&g));
@@ -496,13 +495,17 @@ mod tests {
             &auditor_pub_key,
             false,
         );
-        assert!(result.is_ok(), "proof should succeed for zero balance with validation disabled");
+        assert!(
+            result.is_ok(),
+            "proof should succeed for zero balance with validation disabled"
+        );
 
         let (proof, cipher1) = result.unwrap();
 
         // Verify proof
-        let is_valid = AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
-            .expect("verification should succeed");
+        let is_valid =
+            AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
+                .expect("verification should succeed");
         assert!(is_valid, "proof should be valid for zero balance");
     }
 
@@ -564,10 +567,7 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         // Use infinity as auditor public key
         let auditor_pub_key = ProjectivePoint::identity();
@@ -594,10 +594,7 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b_wrong, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         let auditor_pub_key = StarkCurve::mul_generator(&Felt::from(99999u64));
 
@@ -636,21 +633,20 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         let auditor_pub_key = StarkCurve::mul_generator(&Felt::from(99999u64));
 
-        let (mut proof, cipher1) = AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
-            .expect("proof generation should succeed");
+        let (mut proof, cipher1) =
+            AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
+                .expect("proof generation should succeed");
 
         // Tamper with challenge
         proof.c = format!("{:#x}", Felt::from(999999u64));
 
-        let is_valid = AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
-            .expect("verification should succeed");
+        let is_valid =
+            AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
+                .expect("verification should succeed");
         assert!(!is_valid, "proof with tampered challenge should be invalid");
     }
 
@@ -667,21 +663,20 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         let auditor_pub_key = StarkCurve::mul_generator(&Felt::from(99999u64));
 
-        let (mut proof, cipher1) = AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
-            .expect("proof generation should succeed");
+        let (mut proof, cipher1) =
+            AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
+                .expect("proof generation should succeed");
 
         // Tamper with sx (but keep challenge valid to test equation 1)
         proof.sx = format!("{:#x}", Felt::from(1u64));
 
-        let is_valid = AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
-            .expect("verification should succeed");
+        let is_valid =
+            AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key)
+                .expect("verification should succeed");
         assert!(!is_valid, "proof with tampered sx should be invalid");
     }
 
@@ -698,20 +693,19 @@ mod tests {
         let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
         let l0 = StarkCurve::add(&g_b, &user_r0);
         let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext {
-            l: l0,
-            r: r0_point,
-        };
+        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
 
         let auditor_pub_key = StarkCurve::mul_generator(&Felt::from(99999u64));
 
-        let (mut proof, cipher1) = AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
-            .expect("proof generation should succeed");
+        let (mut proof, cipher1) =
+            AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key)
+                .expect("proof generation should succeed");
 
         // Use invalid hex in sx
         proof.sx = "invalid_hex".to_string();
 
-        let result = AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key);
+        let result =
+            AuditProver::verify(&proof, &user_pub_key, &cipher0, &cipher1, &auditor_pub_key);
         assert!(result.is_err(), "verification should fail with invalid hex");
     }
 }

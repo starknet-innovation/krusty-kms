@@ -181,7 +181,13 @@ mod tests {
         let mut prev = 0.0;
         for lie in 0..=30 {
             let p = detection_probability(lie);
-            assert!(p >= prev, "Detection should increase: {} < {} at lie {}", p, prev, lie);
+            assert!(
+                p >= prev,
+                "Detection should increase: {} < {} at lie {}",
+                p,
+                prev,
+                lie
+            );
             prev = p;
         }
     }
@@ -256,6 +262,10 @@ mod tests {
     fn test_optimal_claim_not_max() {
         // Optimal claim should not be the maximum (too risky)
         let (optimal, _) = optimal_claim(5, 50);
-        assert!(optimal < 50, "Optimal {} should be less than max 50", optimal);
+        assert!(
+            optimal < 50,
+            "Optimal {} should be less than max 50",
+            optimal
+        );
     }
 }

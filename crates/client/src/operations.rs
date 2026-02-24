@@ -6,10 +6,12 @@
 
 use crate::serialization;
 use krusty_kms_common::Result;
+use krusty_kms_sdk::operations::{
+    FundProof, RagequitProof, RolloverProof, TransferProof, WithdrawProof,
+};
 use starknet_rust::core::types::Call;
 use starknet_rust::core::utils::get_selector_from_name;
 use starknet_types_core::felt::Felt as CoreFelt;
-use krusty_kms_sdk::operations::{FundProof, RolloverProof, TransferProof, WithdrawProof, RagequitProof};
 
 // Type aliases for clarity
 type StarknetRsFelt = starknet_rust::core::types::Felt;
@@ -80,7 +82,8 @@ pub fn build_fund_calls(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -265,7 +268,8 @@ pub fn build_withdraw_call(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -336,21 +340,25 @@ pub fn build_transfer_call(
     calldata.push(core_felt_to_rs(tb_r_y));
 
     // 4. Serialize transferBalanceSelf (encrypted for sender)
-    let (tbs_l_x, tbs_l_y) = serialization::serialize_projective_point(&proof.transfer_balance_self_l)?;
-    let (tbs_r_x, tbs_r_y) = serialization::serialize_projective_point(&proof.transfer_balance_self_r)?;
+    let (tbs_l_x, tbs_l_y) =
+        serialization::serialize_projective_point(&proof.transfer_balance_self_l)?;
+    let (tbs_r_x, tbs_r_y) =
+        serialization::serialize_projective_point(&proof.transfer_balance_self_r)?;
     calldata.push(core_felt_to_rs(tbs_l_x));
     calldata.push(core_felt_to_rs(tbs_l_y));
     calldata.push(core_felt_to_rs(tbs_r_x));
     calldata.push(core_felt_to_rs(tbs_r_y));
 
     // 5. Serialize hintTransfer
-    let hint_transfer = serialization::serialize_ae_balance(hint_transfer_ciphertext, hint_transfer_nonce)?;
+    let hint_transfer =
+        serialization::serialize_ae_balance(hint_transfer_ciphertext, hint_transfer_nonce)?;
     for felt in hint_transfer {
         calldata.push(core_felt_to_rs(felt));
     }
 
     // 6. Serialize hintLeftover
-    let hint_leftover = serialization::serialize_ae_balance(hint_leftover_ciphertext, hint_leftover_nonce)?;
+    let hint_leftover =
+        serialization::serialize_ae_balance(hint_leftover_ciphertext, hint_leftover_nonce)?;
     for felt in hint_leftover {
         calldata.push(core_felt_to_rs(felt));
     }
@@ -374,7 +382,8 @@ pub fn build_transfer_call(
         }
 
         // Serialize audit hint (6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -401,7 +410,8 @@ pub fn build_transfer_call(
         }
 
         // Serialize audit hint (6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -491,7 +501,8 @@ pub fn build_ragequit_call(
         }
 
         // Serialize audit hint (6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }

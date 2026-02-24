@@ -56,10 +56,9 @@ mod tests {
 
     #[test]
     fn test_from_hex() {
-        let addr = Address::from_hex(
-            "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7",
-        )
-        .unwrap();
+        let addr =
+            Address::from_hex("0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7")
+                .unwrap();
         assert_ne!(addr.as_felt(), Felt::ZERO);
     }
 

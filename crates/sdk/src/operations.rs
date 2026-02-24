@@ -199,7 +199,8 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
 
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this fund operation
-    let (_, proof) = ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
+    let (_, proof) =
+        ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
 
     // Generate audit if auditor is configured
     let audit = if let Some(ref auditor_key) = params.auditor_pub_key {
@@ -234,8 +235,11 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
 
         // Generate audit hint (XChaCha20-Poly1305 encryption of the plaintext balance)
         // The auditor can decrypt this using ECDH with user's public key
-        let (audit_hint_ct, audit_hint_nonce) =
-            encrypt_for_auditor(new_balance, account.keypair.private_key.expose_secret(), auditor_key)?;
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+            new_balance,
+            account.keypair.private_key.expose_secret(),
+            auditor_key,
+        )?;
 
         Some(Audit {
             audited_balance,
@@ -418,17 +422,26 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     )?;
 
     // Compute 5 scalar responses s = k + value * c (transfer.ts:158-162)
-    let s_x = krusty_kms_crypto::scalar::scalar_add(&kx, &krusty_kms_crypto::scalar::scalar_mul(&challenge, x)?)?;
+    let s_x = krusty_kms_crypto::scalar::scalar_add(
+        &kx,
+        &krusty_kms_crypto::scalar::scalar_mul(&challenge, x)?,
+    )?;
     let s_b = krusty_kms_crypto::scalar::scalar_add(
         &kb,
         &krusty_kms_crypto::scalar::scalar_mul(&challenge, &Felt::from(b))?,
     )?;
-    let s_r = krusty_kms_crypto::scalar::scalar_add(&kr, &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r)?)?;
+    let s_r = krusty_kms_crypto::scalar::scalar_add(
+        &kr,
+        &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r)?,
+    )?;
     let s_b2 = krusty_kms_crypto::scalar::scalar_add(
         &kb2,
         &krusty_kms_crypto::scalar::scalar_mul(&challenge, &Felt::from(b_left))?,
     )?;
-    let s_r2 = krusty_kms_crypto::scalar::scalar_add(&kr2, &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r2)?)?;
+    let s_r2 = krusty_kms_crypto::scalar::scalar_add(
+        &kr2,
+        &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r2)?,
+    )?;
 
     // Assemble ProofOfTransfer (transfer.ts:164-182)
     let proof = ProofOfTransfer {
@@ -489,8 +502,11 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         )?;
 
         // Encrypt sender's new balance for auditor
-        let (audit_balance_hint_ct, audit_balance_hint_nonce) =
-            encrypt_for_auditor(b_left, account.keypair.private_key.expose_secret(), auditor_key)?;
+        let (audit_balance_hint_ct, audit_balance_hint_nonce) = encrypt_for_auditor(
+            b_left,
+            account.keypair.private_key.expose_secret(),
+            auditor_key,
+        )?;
 
         // AUDIT 2: Transfer amount
         // transfer_cipher_self is a proper ElGamal encryption (L = g^b * y^r, R = g^r)
@@ -577,7 +593,8 @@ pub fn rollover(account: &TongoAccount, params: RolloverParams) -> Result<Rollov
 
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this rollover operation
-    let (_, proof) = ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
+    let (_, proof) =
+        ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
 
     Ok(RolloverProof {
         y,
@@ -789,8 +806,11 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
         )?;
 
         // Encrypt leftover balance for auditor using XChaCha20-Poly1305
-        let (audit_hint_ct, audit_hint_nonce) =
-            encrypt_for_auditor(left, account.keypair.private_key.expose_secret(), &auditor_key)?;
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+            left,
+            account.keypair.private_key.expose_secret(),
+            &auditor_key,
+        )?;
 
         Some(Audit {
             audited_balance,
@@ -1001,15 +1021,15 @@ pub struct RolloverProof {
 }
 
 pub struct WithdrawProof {
-    pub y: ProjectivePoint,         // User's public key
-    pub a_x: ProjectivePoint,       // Commitment for proof of private key
-    pub a_r: ProjectivePoint,       // Commitment for range proof randomness
-    pub a: ProjectivePoint,         // Commitment for balance encryption proof
-    pub a_v: ProjectivePoint,       // Commitment for V linkage proof
-    pub sx: Felt,                   // Response for private key
-    pub sb: Felt,                   // Response for leftover balance
-    pub sr: Felt,                   // Response for range proof randomness
-    pub r_aux: ProjectivePoint,     // R auxiliary point (g^r)
+    pub y: ProjectivePoint,              // User's public key
+    pub a_x: ProjectivePoint,            // Commitment for proof of private key
+    pub a_r: ProjectivePoint,            // Commitment for range proof randomness
+    pub a: ProjectivePoint,              // Commitment for balance encryption proof
+    pub a_v: ProjectivePoint,            // Commitment for V linkage proof
+    pub sx: Felt,                        // Response for private key
+    pub sb: Felt,                        // Response for leftover balance
+    pub sr: Felt,                        // Response for range proof randomness
+    pub r_aux: ProjectivePoint,          // R auxiliary point (g^r)
     pub range: krusty_kms_common::Range, // Range proof for leftover balance
     pub amount: u128,
     pub recipient: Felt,

@@ -6,13 +6,13 @@
 use crate::account::WasmAccount;
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use krusty_kms_common::ElGamalCiphertext;
-use serde::{Deserialize, Serialize};
-use starknet_types_core::curve::ProjectivePoint;
-use starknet_types_core::felt::Felt;
 use krusty_kms_sdk::operations::{
     fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
     TransferParams, WithdrawParams,
 };
+use serde::{Deserialize, Serialize};
+use starknet_types_core::curve::ProjectivePoint;
+use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 
 /// Default bit size for range proofs (40 bits = ~1 trillion max).
@@ -774,7 +774,10 @@ fn convert_transfer_params(params: &WasmTransferParams) -> WasmResult<TransferPa
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
         current_balance,
-        bit_size: params.bit_size.map(|b| b as usize).unwrap_or(DEFAULT_BIT_SIZE),
+        bit_size: params
+            .bit_size
+            .map(|b| b as usize)
+            .unwrap_or(DEFAULT_BIT_SIZE),
         auditor_pub_key,
     })
 }
@@ -806,7 +809,10 @@ fn convert_withdraw_params(params: &WasmWithdrawParams) -> WasmResult<WithdrawPa
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
         current_balance,
-        bit_size: params.bit_size.map(|b| b as usize).unwrap_or(DEFAULT_BIT_SIZE),
+        bit_size: params
+            .bit_size
+            .map(|b| b as usize)
+            .unwrap_or(DEFAULT_BIT_SIZE),
         auditor_key,
     })
 }
@@ -863,4 +869,3 @@ fn serialize_audit(audit: &krusty_kms_sdk::operations::Audit) -> Result<String, 
 
     serde_json::to_string(&json).map_err(|e| e.to_string())
 }
-

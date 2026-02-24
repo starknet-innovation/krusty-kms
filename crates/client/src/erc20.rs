@@ -8,10 +8,10 @@ use krusty_kms_common::address::Address;
 use krusty_kms_common::amount::Amount;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::{KmsError, Result};
-use std::sync::Arc;
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
+use std::sync::Arc;
 
 /// An ERC-20 contract handle.
 pub struct Erc20 {
@@ -216,16 +216,16 @@ impl Erc20 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use krusty_kms_common::token::presets;
     use krusty_kms_common::chain::ChainId;
+    use krusty_kms_common::token::presets;
 
     #[test]
     fn test_populate_transfer() {
-        let provider = Arc::new(
-            JsonRpcClient::new(starknet_rust::providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(JsonRpcClient::new(
+            starknet_rust::providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
-            )),
-        );
+            ),
+        ));
         let token = presets::strk(ChainId::Sepolia);
         let erc20 = Erc20::new(provider, token);
 
@@ -239,11 +239,11 @@ mod tests {
 
     #[test]
     fn test_populate_approve() {
-        let provider = Arc::new(
-            JsonRpcClient::new(starknet_rust::providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(JsonRpcClient::new(
+            starknet_rust::providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
-            )),
-        );
+            ),
+        ));
         let token = presets::eth(ChainId::Mainnet);
         let erc20 = Erc20::new(provider, token);
 

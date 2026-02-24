@@ -126,10 +126,8 @@ mod tests {
 
     #[test]
     fn test_from_private_key() {
-        let bytes = hex::decode(
-            "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-        )
-        .unwrap();
+        let bytes = hex::decode("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+            .unwrap();
         let mut arr = [0u8; 32];
         arr.copy_from_slice(&bytes);
         let signer = EthSigner::from_private_key(&arr);
@@ -144,9 +142,8 @@ mod tests {
 
     #[test]
     fn test_from_hex_no_prefix() {
-        let signer = EthSigner::from_hex(
-            "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-        );
+        let signer =
+            EthSigner::from_hex("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
         assert!(signer.is_ok());
     }
 
@@ -199,7 +196,7 @@ mod tests {
         // (statistically impossible for both halves to be zero)
         assert!(sig[0] != Felt::ZERO || sig[1] != Felt::ZERO); // r
         assert!(sig[2] != Felt::ZERO || sig[3] != Felt::ZERO); // s
-        // v should be 0 or 1
+                                                               // v should be 0 or 1
         assert!(sig[4] == Felt::ZERO || sig[4] == Felt::ONE);
     }
 

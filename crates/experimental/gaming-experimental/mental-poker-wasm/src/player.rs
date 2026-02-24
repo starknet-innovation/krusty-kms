@@ -314,14 +314,20 @@ mod tests {
     #[wasm_bindgen_test]
     fn test_verify_key_ownership() {
         let keypair = generate_keypair("test_context").unwrap();
-        let valid =
-            verify_key_ownership(&keypair.public_key, &keypair.key_ownership_proof, "test_context");
+        let valid = verify_key_ownership(
+            &keypair.public_key,
+            &keypair.key_ownership_proof,
+            "test_context",
+        );
         assert!(valid.is_ok());
         assert!(valid.unwrap());
 
         // Wrong context should fail
-        let invalid =
-            verify_key_ownership(&keypair.public_key, &keypair.key_ownership_proof, "wrong_context");
+        let invalid = verify_key_ownership(
+            &keypair.public_key,
+            &keypair.key_ownership_proof,
+            "wrong_context",
+        );
         assert!(invalid.is_ok());
         assert!(!invalid.unwrap());
     }

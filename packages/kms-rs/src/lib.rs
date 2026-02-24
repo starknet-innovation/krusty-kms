@@ -73,20 +73,50 @@ unsafe extern "C" {
     fn kms_get_version_string(out: *mut c_char, out_len: usize, out_written: *mut usize) -> i32;
 
     fn kms_felt_from_hex(hex: *const c_char, out: *mut KmsFelt) -> i32;
-    fn kms_felt_to_hex(value: *const KmsFelt, out: *mut c_char, out_len: usize, out_written: *mut usize) -> i32;
+    fn kms_felt_to_hex(
+        value: *const KmsFelt,
+        out: *mut c_char,
+        out_len: usize,
+        out_written: *mut usize,
+    ) -> i32;
     fn kms_felt_from_bytes_be(bytes: *const u8, bytes_len: usize, out: *mut KmsFelt) -> i32;
-    fn kms_felt_to_bytes_be(value: *const KmsFelt, out: *mut u8, out_len: usize, out_written: *mut usize) -> i32;
+    fn kms_felt_to_bytes_be(
+        value: *const KmsFelt,
+        out: *mut u8,
+        out_len: usize,
+        out_written: *mut usize,
+    ) -> i32;
 
-    fn kms_projective_from_affine(affine: *const KmsAffinePoint, out: *mut KmsProjectivePoint) -> i32;
+    fn kms_projective_from_affine(
+        affine: *const KmsAffinePoint,
+        out: *mut KmsProjectivePoint,
+    ) -> i32;
     fn kms_projective_to_affine(point: *const KmsProjectivePoint, out: *mut KmsAffinePoint) -> i32;
 
     fn kms_pedersen_hash(left: *const KmsFelt, right: *const KmsFelt, out: *mut KmsFelt) -> i32;
     fn kms_poseidon_hash_many(values: *const KmsFelt, values_len: usize, out: *mut KmsFelt) -> i32;
 
-    fn kms_generate_mnemonic(word_count: u32, out: *mut c_char, out_len: usize, out_written: *mut usize) -> i32;
-    fn kms_generate_mnemonic_from_entropy(entropy: *const u8, entropy_len: usize, out: *mut c_char, out_len: usize, out_written: *mut usize) -> i32;
+    fn kms_generate_mnemonic(
+        word_count: u32,
+        out: *mut c_char,
+        out_len: usize,
+        out_written: *mut usize,
+    ) -> i32;
+    fn kms_generate_mnemonic_from_entropy(
+        entropy: *const u8,
+        entropy_len: usize,
+        out: *mut c_char,
+        out_len: usize,
+        out_written: *mut usize,
+    ) -> i32;
     fn kms_validate_mnemonic(phrase: *const c_char) -> i32;
-    fn kms_mnemonic_to_seed(phrase: *const c_char, passphrase: *const c_char, out: *mut u8, out_len: usize, out_written: *mut usize) -> i32;
+    fn kms_mnemonic_to_seed(
+        phrase: *const c_char,
+        passphrase: *const c_char,
+        out: *mut u8,
+        out_len: usize,
+        out_written: *mut usize,
+    ) -> i32;
 
     fn kms_derive_private_key_with_coin_type(
         mnemonic: *const c_char,
@@ -294,7 +324,13 @@ pub fn generate_mnemonic(word_count: u32) -> Result<String> {
 
 pub fn generate_mnemonic_from_entropy(entropy: &[u8]) -> Result<String> {
     dynamic_string(|out, out_len, out_written| unsafe {
-        kms_generate_mnemonic_from_entropy(entropy.as_ptr(), entropy.len(), out, out_len, out_written)
+        kms_generate_mnemonic_from_entropy(
+            entropy.as_ptr(),
+            entropy.len(),
+            out,
+            out_len,
+            out_written,
+        )
     })
 }
 

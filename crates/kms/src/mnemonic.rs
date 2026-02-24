@@ -95,7 +95,8 @@ mod tests {
 
     #[test]
     fn test_validate_valid_mnemonic() {
-        let mnemonic = "habit hope tip crystal because grunt nation idea electric witness alert like";
+        let mnemonic =
+            "habit hope tip crystal because grunt nation idea electric witness alert like";
         assert!(validate_mnemonic(mnemonic).is_ok());
     }
 
@@ -134,14 +135,16 @@ mod tests {
 
     #[test]
     fn test_mnemonic_to_seed() {
-        let mnemonic = "habit hope tip crystal because grunt nation idea electric witness alert like";
+        let mnemonic =
+            "habit hope tip crystal because grunt nation idea electric witness alert like";
         let seed = mnemonic_to_seed(mnemonic, "").unwrap();
         assert_eq!(seed.len(), 64);
     }
 
     #[test]
     fn test_mnemonic_to_seed_with_passphrase() {
-        let mnemonic = "habit hope tip crystal because grunt nation idea electric witness alert like";
+        let mnemonic =
+            "habit hope tip crystal because grunt nation idea electric witness alert like";
         let seed1 = mnemonic_to_seed(mnemonic, "").unwrap();
         let seed2 = mnemonic_to_seed(mnemonic, "mypassphrase").unwrap();
         assert_ne!(seed1, seed2);

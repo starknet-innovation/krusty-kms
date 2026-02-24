@@ -7,12 +7,12 @@
 //! 3. Proof verification
 //! 4. Multi-player scenarios
 
+use krusty_kms_crypto::StarkCurve;
 use mental_poker::{
     deck::{CardEncoding, Hand, MaskedDeck, PlayingCard, Rank, Suit},
     protocol::MentalPokerProtocol,
     types::{Card, MaskedCard, Permutation, PublicKey},
 };
-use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::felt::Felt;
 
 // ====================
@@ -230,7 +230,9 @@ fn test_shuffle_permutation() {
 
     // Known permutation: [3, 1, 4, 0, 2] (indices)
     let perm = Permutation::new(vec![3, 1, 4, 0, 2]);
-    let factors: Vec<Felt> = (0..5).map(|_| krusty_kms_crypto::scalar::random_felt()).collect();
+    let factors: Vec<Felt> = (0..5)
+        .map(|_| krusty_kms_crypto::scalar::random_felt())
+        .collect();
 
     let shuffled =
         MentalPokerProtocol::shuffle_and_remask(&masked_deck, &pk, &perm, &factors).unwrap();
@@ -469,10 +471,10 @@ fn test_five_player_aggregate_key() {
 /// Test shuffle with proof generation and verification
 #[test]
 fn test_shuffle_with_proof() {
+    use krusty_kms_crypto::scalar;
     use mental_poker::shuffle::{
         ShuffleArgument, ShuffleParameters, ShuffleStatement, ShuffleWitness,
     };
-    use krusty_kms_crypto::scalar;
 
     let (pk, _sk) = MentalPokerProtocol::player_keygen();
 

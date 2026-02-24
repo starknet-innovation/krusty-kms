@@ -56,9 +56,9 @@ pub fn card_value(index: u64) -> u8 {
 
     let rank = rank_from_index(index);
     match rank {
-        0..=8 => rank + 2,      // 2-10
-        9 | 10 | 11 => 10,      // J, Q, K
-        12 => 11,               // A (soft value)
+        0..=8 => rank + 2, // 2-10
+        9 | 10 | 11 => 10, // J, Q, K
+        12 => 11,          // A (soft value)
         _ => unreachable!(),
     }
 }
@@ -353,7 +353,7 @@ pub fn calculate_payout(bet: u64, outcome: Outcome) -> u64 {
     match outcome {
         Outcome::PlayerBlackjack => bet + (bet * 3) / 2, // 3:2 payout
         Outcome::PlayerWins | Outcome::DealerBusts => bet * 2, // 1:1 payout
-        Outcome::Push | Outcome::BothBlackjack => bet, // Return bet
+        Outcome::Push | Outcome::BothBlackjack => bet,   // Return bet
         Outcome::DealerWins | Outcome::DealerBlackjack | Outcome::PlayerBusts => 0, // Lose bet
     }
 }
@@ -468,15 +468,15 @@ mod tests {
     #[test]
     fn test_card_value_number_cards() {
         // Clubs: indices 1-13
-        assert_eq!(card_value(1), 2);   // 2 of Clubs
-        assert_eq!(card_value(2), 3);   // 3 of Clubs
-        assert_eq!(card_value(3), 4);   // 4 of Clubs
-        assert_eq!(card_value(4), 5);   // 5 of Clubs
-        assert_eq!(card_value(5), 6);   // 6 of Clubs
-        assert_eq!(card_value(6), 7);   // 7 of Clubs
-        assert_eq!(card_value(7), 8);   // 8 of Clubs
-        assert_eq!(card_value(8), 9);   // 9 of Clubs
-        assert_eq!(card_value(9), 10);  // 10 of Clubs
+        assert_eq!(card_value(1), 2); // 2 of Clubs
+        assert_eq!(card_value(2), 3); // 3 of Clubs
+        assert_eq!(card_value(3), 4); // 4 of Clubs
+        assert_eq!(card_value(4), 5); // 5 of Clubs
+        assert_eq!(card_value(5), 6); // 6 of Clubs
+        assert_eq!(card_value(6), 7); // 7 of Clubs
+        assert_eq!(card_value(7), 8); // 8 of Clubs
+        assert_eq!(card_value(8), 9); // 9 of Clubs
+        assert_eq!(card_value(9), 10); // 10 of Clubs
     }
 
     #[test]
@@ -502,12 +502,12 @@ mod tests {
 
     #[test]
     fn test_is_ace() {
-        assert!(is_ace(13));  // A of Clubs
-        assert!(is_ace(26));  // A of Diamonds
-        assert!(is_ace(39));  // A of Hearts
-        assert!(is_ace(52));  // A of Spades
+        assert!(is_ace(13)); // A of Clubs
+        assert!(is_ace(26)); // A of Diamonds
+        assert!(is_ace(39)); // A of Hearts
+        assert!(is_ace(52)); // A of Spades
 
-        assert!(!is_ace(1));  // 2 of Clubs
+        assert!(!is_ace(1)); // 2 of Clubs
         assert!(!is_ace(10)); // J of Clubs
         assert!(!is_ace(12)); // K of Clubs
     }
@@ -518,18 +518,18 @@ mod tests {
         assert!(is_face_card(11)); // Q of Clubs
         assert!(is_face_card(12)); // K of Clubs
 
-        assert!(!is_face_card(9));  // 10 of Clubs
+        assert!(!is_face_card(9)); // 10 of Clubs
         assert!(!is_face_card(13)); // A of Clubs
     }
 
     #[test]
     fn test_is_ten_value() {
-        assert!(is_ten_value(9));  // 10 of Clubs
+        assert!(is_ten_value(9)); // 10 of Clubs
         assert!(is_ten_value(10)); // J of Clubs
         assert!(is_ten_value(11)); // Q of Clubs
         assert!(is_ten_value(12)); // K of Clubs
 
-        assert!(!is_ten_value(8));  // 9 of Clubs
+        assert!(!is_ten_value(8)); // 9 of Clubs
         assert!(!is_ten_value(13)); // A of Clubs
     }
 
@@ -634,7 +634,7 @@ mod tests {
     fn test_not_blackjack_three_cards() {
         // 21 with 3+ cards is not blackjack
         assert!(!is_blackjack(&[13, 5, 5])); // A + 6 + 5 = 21
-        assert!(!is_blackjack(&[6, 7, 8]));  // 7 + 8 + 9 = 21... wait, that's 24
+        assert!(!is_blackjack(&[6, 7, 8])); // 7 + 8 + 9 = 21... wait, that's 24
     }
 
     #[test]
@@ -777,9 +777,9 @@ mod tests {
     fn test_player_21_vs_dealer_21_not_blackjack() {
         // Both have 21 but neither is blackjack
         let result = determine_winner(&[6, 7, 8], &[5, 6, 9]); // 7+8+9=24 vs 6+7+10=23... let me recalculate
-        // Actually: 6=7, 7=8, 8=9 → 7+8+9=24 (bust!)
-        // Let me use correct indices
-        // 5 (6), 6 (7), 7 (8) → 6+7+8=21
+                                                               // Actually: 6=7, 7=8, 8=9 → 7+8+9=24 (bust!)
+                                                               // Let me use correct indices
+                                                               // 5 (6), 6 (7), 7 (8) → 6+7+8=21
         let result = determine_winner(&[5, 6, 7], &[4, 5, 9]); // 6+7+8=21 vs 5+6+10=21
         assert_eq!(result, Outcome::Push);
     }

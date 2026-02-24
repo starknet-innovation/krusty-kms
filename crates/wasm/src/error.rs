@@ -40,7 +40,10 @@ impl WasmError {
             Self::InvalidPublicKey(s) => format!("Invalid public key: {s}"),
             Self::CryptoError(s) => format!("Crypto error: {s}"),
             Self::SerializationError(s) => format!("Serialization error: {s}"),
-            Self::InsufficientBalance { available, required } => {
+            Self::InsufficientBalance {
+                available,
+                required,
+            } => {
                 format!("Insufficient balance: available={available}, required={required}")
             }
             Self::InvalidAmount(s) => format!("Invalid amount: {s}"),
@@ -82,9 +85,13 @@ impl From<krusty_kms_common::KmsError> for WasmError {
             krusty_kms_common::KmsError::CryptoError(s) => Self::CryptoError(s),
             krusty_kms_common::KmsError::SerializationError(s) => Self::SerializationError(s),
             krusty_kms_common::KmsError::DeserializationError(s) => Self::SerializationError(s),
-            krusty_kms_common::KmsError::InsufficientBalance { available, required } => {
-                Self::InsufficientBalance { available, required }
-            }
+            krusty_kms_common::KmsError::InsufficientBalance {
+                available,
+                required,
+            } => Self::InsufficientBalance {
+                available,
+                required,
+            },
             krusty_kms_common::KmsError::InvalidAmount(s) => Self::InvalidAmount(s),
             krusty_kms_common::KmsError::InvalidProof(s) => Self::ProofError(s),
             krusty_kms_common::KmsError::PointAtInfinity => {

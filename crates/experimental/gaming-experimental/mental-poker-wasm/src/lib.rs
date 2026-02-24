@@ -62,9 +62,8 @@ pub use blackjack::{
 };
 pub use crossy::{
     calculate_crossy_multiplier, create_crossy_deck, get_crossy_card_index_for_lane,
-    get_crossy_card_indices, get_crossy_difficulty_name, get_crossy_total_rows,
-    is_crossy_hit_card, is_crossy_survive_card, resolve_crossy_card_type_wasm,
-    WasmCrossyDeckConfig,
+    get_crossy_card_indices, get_crossy_difficulty_name, get_crossy_total_rows, is_crossy_hit_card,
+    is_crossy_survive_card, resolve_crossy_card_type_wasm, WasmCrossyDeckConfig,
 };
 pub use deck::{
     create_standard_deck, resolve_card_index, resolve_card_index_from_bytes, WasmDeck,
@@ -154,14 +153,10 @@ pub fn point_add(
     use starknet_types_core::curve::ProjectivePoint;
     use starknet_types_core::felt::Felt;
 
-    let p1x =
-        Felt::from_hex(p1_x).map_err(|e| JsValue::from_str(&format!("Invalid P1 X: {e}")))?;
-    let p1y =
-        Felt::from_hex(p1_y).map_err(|e| JsValue::from_str(&format!("Invalid P1 Y: {e}")))?;
-    let p2x =
-        Felt::from_hex(p2_x).map_err(|e| JsValue::from_str(&format!("Invalid P2 X: {e}")))?;
-    let p2y =
-        Felt::from_hex(p2_y).map_err(|e| JsValue::from_str(&format!("Invalid P2 Y: {e}")))?;
+    let p1x = Felt::from_hex(p1_x).map_err(|e| JsValue::from_str(&format!("Invalid P1 X: {e}")))?;
+    let p1y = Felt::from_hex(p1_y).map_err(|e| JsValue::from_str(&format!("Invalid P1 Y: {e}")))?;
+    let p2x = Felt::from_hex(p2_x).map_err(|e| JsValue::from_str(&format!("Invalid P2 X: {e}")))?;
+    let p2y = Felt::from_hex(p2_y).map_err(|e| JsValue::from_str(&format!("Invalid P2 Y: {e}")))?;
 
     let p1 = ProjectivePoint::from_affine(p1x, p1y)
         .map_err(|e| JsValue::from_str(&format!("Invalid P1: {e:?}")))?;

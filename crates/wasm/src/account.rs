@@ -69,8 +69,11 @@ impl WasmAccount {
         let sk = parse_felt(private_key)?;
         let contract_felt = parse_felt(contract_address)?;
 
-        let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_private_key(sk, contract_felt))
-            .map_err(JsValue::from)?;
+        let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_private_key(
+            sk,
+            contract_felt,
+        ))
+        .map_err(JsValue::from)?;
 
         Ok(Self { inner })
     }
@@ -93,9 +96,12 @@ impl WasmAccount {
         let view_sk = parse_felt(view_private_key)?;
         let contract_felt = parse_felt(contract_address)?;
 
-        let inner =
-            from_sdk_result(krusty_kms_sdk::TongoAccount::from_keys(owner_sk, view_sk, contract_felt))
-                .map_err(JsValue::from)?;
+        let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_keys(
+            owner_sk,
+            view_sk,
+            contract_felt,
+        ))
+        .map_err(JsValue::from)?;
 
         Ok(Self { inner })
     }
@@ -169,10 +175,7 @@ impl WasmAccount {
     /// # Returns
     /// The decrypted point g^m as (x, y) coordinates
     #[wasm_bindgen(js_name = "decryptToPoint")]
-    pub fn decrypt_to_point(
-        &self,
-        ciphertext: &WasmCiphertext,
-    ) -> Result<WasmPoint, JsValue> {
+    pub fn decrypt_to_point(&self, ciphertext: &WasmCiphertext) -> Result<WasmPoint, JsValue> {
         // Parse ciphertext points
         let l_x = parse_felt(&ciphertext.l_x)?;
         let l_y = parse_felt(&ciphertext.l_y)?;
@@ -187,8 +190,8 @@ impl WasmAccount {
         let cipher = krusty_kms_common::ElGamalCiphertext { l, r };
 
         // Decrypt to get g^m
-        let decrypted_point = from_sdk_result(self.inner.decrypt_with_view(&cipher))
-            .map_err(JsValue::from)?;
+        let decrypted_point =
+            from_sdk_result(self.inner.decrypt_with_view(&cipher)).map_err(JsValue::from)?;
 
         let affine = decrypted_point
             .to_affine()
@@ -231,8 +234,8 @@ impl WasmAccount {
         let cipher = krusty_kms_common::ElGamalCiphertext { l, r };
 
         // Decrypt to get g^m
-        let decrypted_point = from_sdk_result(self.inner.decrypt_with_view(&cipher))
-            .map_err(JsValue::from)?;
+        let decrypted_point =
+            from_sdk_result(self.inner.decrypt_with_view(&cipher)).map_err(JsValue::from)?;
 
         // Try to convert to affine - if it fails, it's the identity (balance = 0)
         if decrypted_point.to_affine().is_err() {
@@ -241,8 +244,8 @@ impl WasmAccount {
 
         // Perform discrete log recovery using brute force
         let max = max_search.unwrap_or(1_000_000);
-        let balance = discrete_log_brute_force(&decrypted_point, max)
-            .map_err(|e| JsValue::from_str(&e))?;
+        let balance =
+            discrete_log_brute_force(&decrypted_point, max).map_err(|e| JsValue::from_str(&e))?;
 
         Ok(balance.to_string())
     }
@@ -631,8 +634,14 @@ mod tests {
 
         // Nostr keypair should be different from both Starknet and TONGO keypairs
         // (different curves and coin types)
-        assert_ne!(nostr_kp.private_key, starknet_kp.private_key.trim_start_matches("0x"));
-        assert_ne!(nostr_kp.private_key, tongo_kp.private_key.trim_start_matches("0x"));
+        assert_ne!(
+            nostr_kp.private_key,
+            starknet_kp.private_key.trim_start_matches("0x")
+        );
+        assert_ne!(
+            nostr_kp.private_key,
+            tongo_kp.private_key.trim_start_matches("0x")
+        );
     }
 
     #[wasm_bindgen_test]

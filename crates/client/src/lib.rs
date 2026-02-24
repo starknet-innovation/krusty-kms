@@ -19,12 +19,15 @@ pub mod wallet;
 pub use contract::TongoContract;
 pub use erc20::Erc20;
 pub use krusty_kms_common::{KmsError, Result};
-pub use operations::{build_erc20_approve, build_fund_calls, build_rollover_call, build_transfer_call, build_withdraw_call, build_ragequit_call};
+pub use operations::{
+    build_erc20_approve, build_fund_calls, build_ragequit_call, build_rollover_call,
+    build_transfer_call, build_withdraw_call,
+};
 pub use provider::create_provider;
-pub use staking::{Staking, PoolPosition};
+pub use staking::{PoolPosition, Staking};
 pub use starknet_rust;
 pub use tx::{Tx, TxBuilder};
-pub use types::{AccountState, CipherBalance, DecryptedAccountState, decrypt_cipher_balance};
+pub use types::{decrypt_cipher_balance, AccountState, CipherBalance, DecryptedAccountState};
 pub use wallet::{Wallet, WalletExecutor};
 
 #[cfg(feature = "controller")]

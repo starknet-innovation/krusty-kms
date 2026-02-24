@@ -394,10 +394,7 @@ pub fn remask_card(
 
 /// Unmask a card using reveal tokens from all players.
 #[wasm_bindgen(js_name = "unmaskCard")]
-pub fn unmask_card(
-    masked: &WasmMaskedCard,
-    reveal_tokens_json: &str,
-) -> Result<WasmCard, JsValue> {
+pub fn unmask_card(masked: &WasmMaskedCard, reveal_tokens_json: &str) -> Result<WasmCard, JsValue> {
     use mental_poker::types::RevealToken;
 
     #[derive(Deserialize)]
@@ -415,11 +412,8 @@ pub fn unmask_card(
         .to_native()
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    let mut reveal_data: Vec<(
-        RevealToken,
-        mental_poker::types::DLEqualityProof,
-        PublicKey,
-    )> = Vec::new();
+    let mut reveal_data: Vec<(RevealToken, mental_poker::types::DLEqualityProof, PublicKey)> =
+        Vec::new();
 
     for t in tokens {
         let token_x = Felt::from_hex(&t.token_x)
@@ -537,7 +531,10 @@ pub fn resolve_card_index(
 /// # Returns
 /// The card index (1-based) if found, or an error if the point doesn't match any card.
 #[wasm_bindgen(js_name = "resolveCardIndexFromBytes")]
-pub fn resolve_card_index_from_bytes(card_point_bytes: &[u8], deck_size: u32) -> Result<u32, JsValue> {
+pub fn resolve_card_index_from_bytes(
+    card_point_bytes: &[u8],
+    deck_size: u32,
+) -> Result<u32, JsValue> {
     use krusty_kms_crypto::StarkCurve;
 
     if card_point_bytes.len() != 64 {
@@ -729,7 +726,13 @@ mod tests {
         for i in 0..52 {
             let card = deck.get_card(i).unwrap();
             let resolved = resolve_card_index(&card.point.x, &card.point.y, 52).unwrap();
-            assert_eq!(resolved, (i + 1) as u32, "Card at index {} should resolve to {}", i, i + 1);
+            assert_eq!(
+                resolved,
+                (i + 1) as u32,
+                "Card at index {} should resolve to {}",
+                i,
+                i + 1
+            );
         }
     }
 
@@ -786,7 +789,12 @@ mod tests {
             let card = deck.get_card(i).unwrap();
             let bytes = card.point.to_bytes().unwrap();
             let resolved = resolve_card_index_from_bytes(&bytes, 10).unwrap();
-            assert_eq!(resolved, (i + 1) as u32, "Card {} should resolve correctly from bytes", i);
+            assert_eq!(
+                resolved,
+                (i + 1) as u32,
+                "Card {} should resolve correctly from bytes",
+                i
+            );
         }
     }
 
@@ -799,7 +807,10 @@ mod tests {
         let card = deck.get_card(99).unwrap(); // This is card index 100
 
         let result = resolve_card_index(&card.point.x, &card.point.y, 52);
-        assert!(result.is_err(), "Card index 100 should not be found in 52-card deck");
+        assert!(
+            result.is_err(),
+            "Card index 100 should not be found in 52-card deck"
+        );
     }
 
     #[cfg(target_arch = "wasm32")]
