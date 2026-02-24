@@ -185,12 +185,29 @@ impl ControllerWallet {
     }
 
     /// Switch the controller to a different chain.
-    pub async fn switch_chain(&self, rpc_url: &str) -> Result<()> {
+    ///
+    /// Updates the inner Controller's RPC target **and** the local provider,
+    /// chain ID, and network preset so that subsequent `execute` / `deploy`
+    /// calls (and the `Tx` trackers they return) point at the new chain.
+    pub async fn switch_chain(
+        &mut self,
+        rpc_url: &str,
+        chain_id: ChainId,
+        network: NetworkPreset,
+    ) -> Result<()> {
         let url: url::Url = rpc_url
             .parse()
             .map_err(|e: url::ParseError| KmsError::RpcError(e.to_string()))?;
         let mut ctrl = self.controller.lock().await;
-        ctrl.switch_chain(url).await.map_err(error::controller_error_to_kms)
+        ctrl.switch_chain(url.clone())
+            .await
+            .map_err(error::controller_error_to_kms)?;
+        drop(ctrl);
+
+        self.provider = Arc::new(JsonRpcClient::new(HttpTransport::new(url)));
+        self.chain_id = chain_id;
+        self.network = network;
+        Ok(())
     }
 }
 
