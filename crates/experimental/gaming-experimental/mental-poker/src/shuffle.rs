@@ -50,8 +50,8 @@ impl ShuffleParameters {
 
         Ok(Self {
             n,
-            g: StarkCurve::GENERATOR,
-            h: StarkCurve::GENERATOR_H,
+            g: StarkCurve::generator(),
+            h: StarkCurve::generator_h(),
         })
     }
 }

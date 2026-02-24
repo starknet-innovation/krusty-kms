@@ -255,7 +255,7 @@ fn discrete_log_brute_force(
     g_m: &starknet_types_core::curve::ProjectivePoint,
     max_search: u64,
 ) -> Result<u128, String> {
-    let generator = krusty_kms_crypto::StarkCurve::GENERATOR;
+    let generator = krusty_kms_crypto::StarkCurve::generator();
 
     // Try to convert to affine - if it fails, it's the identity (balance = 0)
     let target_affine = match g_m.to_affine() {

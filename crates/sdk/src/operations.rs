@@ -45,7 +45,7 @@
 //! ).unwrap();
 //!
 //! // Create initial zero balance cipher
-//! let g = StarkCurve::GENERATOR;
+//! let g = StarkCurve::generator();
 //! let current_balance = krusty_kms_common::ElGamalCiphertext { l: g.clone(), r: g };
 //!
 //! // Fund account
@@ -213,11 +213,11 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
         // which is: L = g^amount + y^FUND_CAIRO_STRING, R = g^FUND_CAIRO_STRING
         let fund_cipher_l = {
             let g_amount =
-                StarkCurve::mul(&Felt::from(params.amount), Some(&StarkCurve::GENERATOR));
+                StarkCurve::mul(&Felt::from(params.amount), Some(&StarkCurve::generator()));
             let y_r = StarkCurve::mul(&FUND_CAIRO_STRING, Some(&account.keypair.public_key));
             StarkCurve::add(&g_amount, &y_r)
         };
-        let fund_cipher_r = StarkCurve::mul(&FUND_CAIRO_STRING, Some(&StarkCurve::GENERATOR));
+        let fund_cipher_r = StarkCurve::mul(&FUND_CAIRO_STRING, Some(&StarkCurve::generator()));
 
         let new_cipher_balance = ElGamalCiphertext {
             l: StarkCurve::add(&params.current_balance.l, &fund_cipher_l),
@@ -298,8 +298,8 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     let to = &params.recipient_public_key;
     let b = params.amount;
     let b0 = account.state.balance;
-    let g = StarkCurve::GENERATOR;
-    let h = StarkCurve::GENERATOR_H;
+    let g = StarkCurve::generator();
+    let h = StarkCurve::generator_h();
 
     // Get affine coordinates for prefix computation
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
@@ -623,8 +623,8 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     }
 
     let x: &Felt = account.keypair.private_key.expose_secret();
-    let g = StarkCurve::GENERATOR;
-    let h = StarkCurve::GENERATOR_H;
+    let g = StarkCurve::generator();
+    let h = StarkCurve::generator_h();
 
     // Compute y = g^x
     let y = account.keypair.public_key.clone();
@@ -841,7 +841,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 /// # Cyclomatic Complexity: 2
 pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<RagequitProof> {
     let x: &Felt = account.keypair.private_key.expose_secret();
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
 
     // Compute y = g^x
     let y = account.keypair.public_key.clone();
@@ -1048,8 +1048,8 @@ mod tests {
 
         // Create dummy current balance (zero balance for first fund)
         let current_balance = ElGamalCiphertext {
-            l: StarkCurve::GENERATOR,
-            r: StarkCurve::GENERATOR,
+            l: StarkCurve::generator(),
+            r: StarkCurve::generator(),
         };
 
         let params = FundParams {
@@ -1074,8 +1074,8 @@ mod tests {
         let contract_address = Felt::from(123456u64);
 
         let current_balance = ElGamalCiphertext {
-            l: StarkCurve::GENERATOR,
-            r: StarkCurve::GENERATOR,
+            l: StarkCurve::generator(),
+            r: StarkCurve::generator(),
         };
 
         let params = FundParams {
@@ -1096,7 +1096,7 @@ mod tests {
         use krusty_kms_crypto::StarkCurve;
         let account = create_test_account();
         let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -1122,7 +1122,7 @@ mod tests {
         use krusty_kms_crypto::StarkCurve;
         let account = create_test_account();
         let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -1167,7 +1167,7 @@ mod tests {
         use krusty_kms_crypto::StarkCurve;
         let mut account = create_test_account();
         account.state.balance = 1000; // Set balance to match cipher
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -1192,7 +1192,7 @@ mod tests {
     fn test_withdraw_insufficient_balance() {
         use krusty_kms_crypto::StarkCurve;
         let account = create_test_account();
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(100u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -1227,7 +1227,7 @@ mod tests {
 
         // Create a valid zero balance cipher (L = pk^r, R = g^r where balance = 0)
         // For balance=0: L = g^0 + pk^r = pk^r (since g^0 = identity)
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let random = Felt::from(12345u64);
         let r_point = StarkCurve::mul(&random, Some(&g));
         let pk_r = StarkCurve::mul(&random, Some(owner_pk));
@@ -1278,7 +1278,7 @@ mod tests {
         let mut account = create_test_account();
         account.state.balance = 1000;
 
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         // Construct a valid cipher for balance 1000 with some randomness
         // Use the owner key (spend key) rather than view key for this test
         // Ragequit uses owner key for verification
@@ -1312,7 +1312,7 @@ mod tests {
         let account = create_test_account();
         let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
         let auditor_key = StarkCurve::mul_generator(&Felt::from(888u64));
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -1342,7 +1342,7 @@ mod tests {
         use krusty_kms_crypto::StarkCurve;
         let account = create_test_account();
         let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
@@ -1367,7 +1367,7 @@ mod tests {
     fn test_withdraw_zero_amount() {
         use krusty_kms_crypto::StarkCurve;
         let account = create_test_account();
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
             r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),

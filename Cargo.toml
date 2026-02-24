@@ -48,3 +48,4 @@ proptest = "1.6.0"
 criterion = "0.5.1"
 tokio = "1.43.0"
 zeroize = { version = "1.8", features = ["derive"] }
+async-trait = "0.1"

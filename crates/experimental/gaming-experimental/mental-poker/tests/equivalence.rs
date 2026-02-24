@@ -57,11 +57,11 @@ fn test_card_index_determinism() {
 fn test_scalar_mul_known_values() {
     // g^1 should equal the generator
     let card1 = Card::from_index(1);
-    assert_eq!(card1.point, StarkCurve::GENERATOR);
+    assert_eq!(card1.point, StarkCurve::generator());
 
     // g^2 should be g + g
     let card2 = Card::from_index(2);
-    let g_plus_g = StarkCurve::add(&StarkCurve::GENERATOR, &StarkCurve::GENERATOR);
+    let g_plus_g = StarkCurve::add(&StarkCurve::generator(), &StarkCurve::generator());
     assert_eq!(card2.point, g_plus_g);
 }
 

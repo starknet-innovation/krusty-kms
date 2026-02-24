@@ -25,7 +25,7 @@ impl ProofOfExponentiation {
     ///
     /// # Cyclomatic Complexity: 1 (no branches)
     pub fn prove(x: &Felt, prefix: &Felt) -> Result<(ProjectivePoint, PoeProof)> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Compute y = g^x
         let y = StarkCurve::mul(x, Some(&g));
@@ -64,7 +64,7 @@ impl ProofOfExponentiation {
     ///
     /// # Cyclomatic Complexity: 2 (one early return)
     pub fn verify(y: &ProjectivePoint, proof: &PoeProof, prefix: &Felt) -> Result<bool> {
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
 
         // Parse proof components
         let a = proof.a.to_affine()?;
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_poe_verify_internal() {
         let x = Felt::from(100u64);
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let y = StarkCurve::mul(&x, Some(&g));
 
         // Generate commitment and response manually
@@ -236,7 +236,7 @@ mod tests {
     #[test]
     fn test_poe_verify_internal_wrong_response() {
         let x = Felt::from(100u64);
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let y = StarkCurve::mul(&x, Some(&g));
 
         let r = Felt::from(12345u64);

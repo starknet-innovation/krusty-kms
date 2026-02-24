@@ -236,8 +236,8 @@ impl Parameters {
             m,
             n,
             num_cards: m * n,
-            generator: StarkCurve::GENERATOR,
-            generator_h: StarkCurve::GENERATOR_H,
+            generator: StarkCurve::generator(),
+            generator_h: StarkCurve::generator_h(),
         }
     }
 

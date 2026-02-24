@@ -39,7 +39,7 @@ fn create_transfer_params(bit_size: usize) -> TransferParams {
     let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap();
     let tongo_address = Felt::from(123456u64);
 
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let current_balance = ElGamalCiphertext {
         l: StarkCurve::mul(&Felt::from(u128::MAX), Some(&g)),
         r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),

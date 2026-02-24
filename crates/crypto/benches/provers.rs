@@ -111,8 +111,8 @@ fn bench_poe2_prove(c: &mut Criterion) {
 
     let bit_sizes = vec![8, 16, 32, 64, 128, 192, 252];
     let prefix = Felt::from(42u64);
-    let g1 = StarkCurve::GENERATOR;
-    let g2 = StarkCurve::GENERATOR_H;
+    let g1 = StarkCurve::generator();
+    let g2 = StarkCurve::generator_h();
 
     for bits in bit_sizes {
         group.throughput(Throughput::Elements(1));
@@ -145,8 +145,8 @@ fn bench_poe2_verify(c: &mut Criterion) {
 
     let bit_sizes = vec![8, 16, 32, 64, 128, 192, 252];
     let prefix = Felt::from(42u64);
-    let g1 = StarkCurve::GENERATOR;
-    let g2 = StarkCurve::GENERATOR_H;
+    let g1 = StarkCurve::generator();
+    let g2 = StarkCurve::generator_h();
 
     for bits in bit_sizes {
         let x1 = felt_with_bits(bits);
@@ -285,8 +285,8 @@ fn bench_poe2_full_cycle(c: &mut Criterion) {
 
     let bit_sizes = vec![8, 16, 32, 64, 128, 192, 252];
     let prefix = Felt::from(42u64);
-    let g1 = StarkCurve::GENERATOR;
-    let g2 = StarkCurve::GENERATOR_H;
+    let g1 = StarkCurve::generator();
+    let g2 = StarkCurve::generator_h();
 
     for bits in bit_sizes {
         group.throughput(Throughput::Elements(1));

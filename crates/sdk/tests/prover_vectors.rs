@@ -185,7 +185,7 @@ fn test_fund_prover_vectors() {
         let tongo_address = Felt::from_dec_str(tongo_address_str).unwrap();
 
         // Create current balance cipher (zero balance for initial fund)
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let current_balance = krusty_kms_common::ElGamalCiphertext {
             l: g.clone(),
             r: g,
@@ -339,7 +339,7 @@ fn test_ragequit_prover_vectors() {
         // For ragequit (full withdrawal), the cipher must be a valid ElGamal encryption
         // ElGamal: L = g^amount + y^r, R = g^r (where y = g^x is public key)
         // We use r=1 for simplicity: L = g^amount + y, R = g
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let g_amount = StarkCurve::mul(&Felt::from(amount), Some(&g));
         let l = StarkCurve::add(&g_amount, &account.keypair.public_key);
         let current_balance = krusty_kms_common::ElGamalCiphertext {

@@ -141,8 +141,8 @@ fn test_poe2_protocol_vectors() {
         let prefix = Felt::from_dec_str(prefix_str).unwrap();
 
         // Use the standard generator points G and H
-        let g = StarkCurve::GENERATOR;
-        let h = StarkCurve::GENERATOR_H;
+        let g = StarkCurve::generator();
+        let h = StarkCurve::generator_h();
 
         let (y, proof) = ProofOfExponentiation2::prove(&x1, &x2, &g, &h, &prefix).unwrap();
         let valid = ProofOfExponentiation2::verify(&y, &g, &h, &proof, &prefix).unwrap();

@@ -185,8 +185,8 @@ mod tests {
 
     #[test]
     fn test_range_proof_small() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         let b = 7u128;
@@ -209,8 +209,8 @@ mod tests {
 
     #[test]
     fn test_range_proof_zero() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         let b = 0u128;
@@ -230,8 +230,8 @@ mod tests {
 
     #[test]
     fn test_range_proof_max_value() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         // Maximum value for 8 bits: 255
@@ -245,8 +245,8 @@ mod tests {
 
     #[test]
     fn test_range_proof_out_of_range() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         // Value 256 is out of range for 8 bits (max is 255)
@@ -262,8 +262,8 @@ mod tests {
 
     #[test]
     fn test_range_proof_bit_size_too_large() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         let b = 1u128;
@@ -278,8 +278,8 @@ mod tests {
 
     #[test]
     fn test_range_verify_length_mismatch() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         let b = 7u128;
@@ -297,8 +297,8 @@ mod tests {
 
     #[test]
     fn test_range_verify_tampered_commitment() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         let b = 7u128;
@@ -307,7 +307,7 @@ mod tests {
         let (mut range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
 
         // Tamper with first commitment
-        range.commitments[0] = SerializablePoint::try_from_projective(&StarkCurve::GENERATOR).unwrap();
+        range.commitments[0] = SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
 
         let result = verify(&range, bit_size, &g1, &g2, &prefix);
         assert!(result.is_err());
@@ -318,8 +318,8 @@ mod tests {
 
     #[test]
     fn test_range_verify_tampered_middle_commitment() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         let b = 7u128;
@@ -328,7 +328,7 @@ mod tests {
         let (mut range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
 
         // Tamper with a middle commitment (index 3)
-        range.commitments[3] = SerializablePoint::try_from_projective(&StarkCurve::GENERATOR).unwrap();
+        range.commitments[3] = SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
 
         let result = verify(&range, bit_size, &g1, &g2, &prefix);
         assert!(result.is_err());
@@ -339,8 +339,8 @@ mod tests {
 
     #[test]
     fn test_range_proof_larger_value() {
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
         let prefix = Felt::from(42u64);
 
         // Test with a larger value

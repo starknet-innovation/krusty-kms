@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn test_challenge_deterministic() {
         let prefix = Felt::from(42u64);
-        let point = StarkCurve::GENERATOR;
+        let point = StarkCurve::generator();
 
         let challenge1 = compute_challenge_single(&prefix, &point).unwrap();
         let challenge2 = compute_challenge_single(&prefix, &point).unwrap();
@@ -107,7 +107,7 @@ mod tests {
     fn test_challenge_different_prefix() {
         let prefix1 = Felt::from(42u64);
         let prefix2 = Felt::from(43u64);
-        let point = StarkCurve::GENERATOR;
+        let point = StarkCurve::generator();
 
         let challenge1 = compute_challenge_single(&prefix1, &point).unwrap();
         let challenge2 = compute_challenge_single(&prefix2, &point).unwrap();
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_challenge_pair() {
         let prefix = Felt::from(42u64);
-        let point1 = StarkCurve::GENERATOR;
+        let point1 = StarkCurve::generator();
         let point2 = StarkCurve::mul(&Felt::from(2u64), Some(&point1));
 
         let challenge = compute_challenge_pair(&prefix, &point1, &point2).unwrap();
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn test_challenge_triple() {
         let prefix = Felt::from(42u64);
-        let point1 = StarkCurve::GENERATOR;
+        let point1 = StarkCurve::generator();
         let point2 = StarkCurve::mul(&Felt::from(2u64), Some(&point1));
         let point3 = StarkCurve::mul(&Felt::from(3u64), Some(&point1));
 
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn test_compute_poseidon_challenge() {
         let prefix = Felt::from(42u64);
-        let point = StarkCurve::GENERATOR;
+        let point = StarkCurve::generator();
 
         let challenge = compute_poseidon_challenge(&prefix, &[&point]).unwrap();
         assert_ne!(challenge, Felt::ZERO);
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_compute_challenge_multiple_points() {
         let prefix = Felt::from(42u64);
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let p2 = StarkCurve::mul(&Felt::from(5u64), Some(&g));
         let p3 = StarkCurve::mul(&Felt::from(10u64), Some(&g));
 

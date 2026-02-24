@@ -95,6 +95,13 @@ impl From<krusty_kms_common::KmsError> for WasmError {
             krusty_kms_common::KmsError::JsonError(e) => Self::SerializationError(e.to_string()),
             krusty_kms_common::KmsError::StarknetCryptoError(s) => Self::CryptoError(s),
             krusty_kms_common::KmsError::RpcError(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::AccountNotDeployed(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::TransactionError(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::TransactionReverted(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::FeeEstimationFailed(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::Timeout(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::StakingError(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::ControllerError(s) => Self::InternalError(s),
         }
     }
 }

@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn test_negate_point_generator() {
         // Negate the generator point
-        let g = StarkCurve::GENERATOR;
+        let g = StarkCurve::generator();
         let neg_g = negate_point(&g).expect("Negation should succeed");
 
         // g + (-g) = identity

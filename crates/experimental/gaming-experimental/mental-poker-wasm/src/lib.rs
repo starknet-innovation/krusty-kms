@@ -134,7 +134,7 @@ pub fn random_felt() -> String {
 pub fn get_generator() -> types::WasmPoint {
     use krusty_kms_crypto::StarkCurve;
 
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let affine = g.to_affine().expect("Generator is never at infinity");
 
     types::WasmPoint {

@@ -180,8 +180,8 @@ mod tests {
         let x2 = Felt::from(200u64);
         let prefix = Felt::from(999u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         let valid = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &prefix).unwrap();
@@ -195,8 +195,8 @@ mod tests {
         let x2 = Felt::from(200u64);
         let prefix = Felt::from(999u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
 
@@ -214,8 +214,8 @@ mod tests {
         let x2 = Felt::from(200u64);
         let prefix = Felt::from(999u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, _proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         let y_affine = StarkCurve::projective_to_affine(&y).unwrap();
@@ -244,8 +244,8 @@ mod tests {
         let x2 = Felt::from(75u64);
         let prefix = Felt::from(42u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         // Compute y = g1^x1 * g2^x2
         let (y1, proof1) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
@@ -273,8 +273,8 @@ mod tests {
         let x2 = Felt::ZERO;
         let prefix = Felt::from(42u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         let valid = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &prefix).unwrap();
@@ -290,8 +290,8 @@ mod tests {
         let x2 = Felt::from(200u64);
         let prefix = Felt::from(999u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         proof.s1 = "invalid_hex".to_string();
@@ -306,8 +306,8 @@ mod tests {
         let x2 = Felt::from(200u64);
         let prefix = Felt::from(999u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         proof.s2 = "invalid_hex".to_string();
@@ -322,8 +322,8 @@ mod tests {
         let x2 = Felt::from(200u64);
         let prefix = Felt::from(999u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         proof.c = format!("{:#x}", Felt::from(999999u64));
@@ -339,8 +339,8 @@ mod tests {
         let prefix = Felt::from(999u64);
         let wrong_prefix = Felt::from(1000u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let (y, proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
         let valid = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &wrong_prefix).unwrap();
@@ -353,8 +353,8 @@ mod tests {
         let x1 = Felt::from(100u64);
         let x2 = Felt::from(200u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         // Compute y = g1^x1 * g2^x2
         let g1_x1 = StarkCurve::mul(&x1, Some(&g1));
@@ -386,8 +386,8 @@ mod tests {
         let x1 = Felt::from(100u64);
         let x2 = Felt::from(200u64);
 
-        let g1 = StarkCurve::GENERATOR;
-        let g2 = StarkCurve::GENERATOR_H;
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
 
         let g1_x1 = StarkCurve::mul(&x1, Some(&g1));
         let g2_x2 = StarkCurve::mul(&x2, Some(&g2));

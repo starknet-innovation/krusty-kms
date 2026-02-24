@@ -71,7 +71,7 @@ fn bench_scalar_mul_point(c: &mut Criterion) {
     let mut group = c.benchmark_group("scalar_mul_point");
 
     let bit_sizes = vec![8, 16, 32, 64, 128, 192, 252];
-    let point = StarkCurve::GENERATOR_H; // Use H generator as arbitrary point
+    let point = StarkCurve::generator_h(); // Use H generator as arbitrary point
 
     for bits in bit_sizes {
         group.throughput(Throughput::Elements(1));
@@ -95,8 +95,8 @@ fn bench_scalar_mul_point(c: &mut Criterion) {
 fn bench_point_addition(c: &mut Criterion) {
     let mut group = c.benchmark_group("point_addition");
 
-    let g = StarkCurve::GENERATOR;
-    let h = StarkCurve::GENERATOR_H;
+    let g = StarkCurve::generator();
+    let h = StarkCurve::generator_h();
 
     // Test with different point combinations
     let point_pairs = vec![
@@ -243,8 +243,8 @@ fn bench_mul_add_sequence(c: &mut Criterion) {
     let mut group = c.benchmark_group("mul_add_sequence");
 
     let bit_sizes = vec![8, 16, 32, 64, 128, 192, 252];
-    let g = StarkCurve::GENERATOR;
-    let h = StarkCurve::GENERATOR_H;
+    let g = StarkCurve::generator();
+    let h = StarkCurve::generator_h();
 
     for bits in bit_sizes {
         group.throughput(Throughput::Elements(1));

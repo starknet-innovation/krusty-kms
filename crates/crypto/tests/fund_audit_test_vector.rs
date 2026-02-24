@@ -32,7 +32,7 @@ fn test_fund_with_audit_typescript_vector() {
     // Auditor setup
     let auditor_private_key = Felt::from(109283109831u64);
 
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
     let public_key = StarkCurve::mul(&private_key, Some(&g));
     let auditor_public_key = StarkCurve::mul(&auditor_private_key, Some(&g));
 
@@ -216,7 +216,7 @@ fn create_cipher_balance(
     amount: u128,
     random: &Felt,
 ) -> ElGamalCiphertext {
-    let g = StarkCurve::GENERATOR;
+    let g = StarkCurve::generator();
 
     if amount == 0 {
         // Special case for zero amount
