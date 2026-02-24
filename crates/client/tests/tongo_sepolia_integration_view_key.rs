@@ -231,7 +231,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: initial_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
-        sender_address: Felt::ZERO,
+        sender_address: account_address,
         auditor_pub_key: auditor_key.clone(),
         current_balance: current_balance.clone(),
     };
@@ -275,13 +275,20 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         };
 
         // Verify the audit proof locally before submitting
-        use krusty_kms_crypto::AuditProver;
+        use krusty_kms_crypto::{AuditPrefixData, AuditProver};
+        let audit_prefix = AuditPrefixData {
+            chain_id,
+            tongo_address: tongo_contract_address,
+            sender_address: account_address,
+            user_pub_key: tongo_keypair_0.public_key.clone(),
+        };
         let is_valid = AuditProver::verify(
             &audit.proof,
             &tongo_keypair_0.public_key,
             &new_cipher_balance,  // Verify against NEW balance, not old
             &audit.audited_balance,
             auditor_key.as_ref().unwrap(),
+            Some(&audit_prefix),
         )?;
         println!("     - Local audit proof verification: {}", if is_valid { "✓ VALID" } else { "✗ INVALID" });
         if !is_valid {
@@ -444,7 +451,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: updated_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
-        sender_address: Felt::ZERO,
+        sender_address: account_address,
         current_balance: current_balance_cipher.clone(),
         bit_size: 32,  // 32-bit range proofs for u32 values
         fee_to_sender: 0,
@@ -487,7 +494,6 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         &hint_transfer_nonce,
         &hint_leftover_ct,
         &hint_leftover_nonce,
-        0u128,
     )?;
     let transfer_call_duration = transfer_call_start.elapsed();
 
@@ -581,7 +587,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: account1_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
-        sender_address: Felt::ZERO,
+        sender_address: account_address,
     };
     let rollover_proof = rollover(&tongo_account_1, rollover_params)?;
 
@@ -688,7 +694,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: withdraw_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
-        sender_address: Felt::ZERO,
+        sender_address: account_address,
         current_balance: ElGamalCiphertext {
             l: withdraw_state.balance.l.clone(),
             r: withdraw_state.balance.r.clone(),
@@ -713,7 +719,6 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         &withdraw_proof,
         &hint_withdraw_ct,
         &hint_withdraw_nonce,
-        0u128,
     )?;
 
     println!("   ✓ Withdraw call built: {} calldata felts", withdraw_call.calldata.len());
@@ -810,7 +815,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: ragequit_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
-        sender_address: Felt::ZERO,
+        sender_address: account_address,
         current_balance: ElGamalCiphertext {
             l: ragequit_state.balance.l.clone(),
             r: ragequit_state.balance.r.clone(),
@@ -830,7 +835,6 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         &ragequit_proof,
         &hint_ct,
         &hint_nonce,
-        0u128,
     )?;
 
     println!("   ✓ Ragequit call built: {} calldata felts", ragequit_call.calldata.len());

@@ -74,17 +74,11 @@ fn prove_bit_0(
     let k = SecretFelt::new(random_felt());
     let a0 = StarkCurve::mul(k.expose_secret(), Some(g2));
 
-    // Compute challenge from commitments
-    let c = compute_poseidon_challenge(prefix, &[&a0, &a1])?;
+    // Compute challenge from commitments: c = H(prefix, V, A0, A1)
+    let c = compute_poseidon_challenge(prefix, &[&v, &a0, &a1])?;
 
-    // c0 = c XOR c1
-    let c_bytes = c.to_bytes_be();
-    let c1_bytes = c1.to_bytes_be();
-    let mut c0_bytes = [0u8; 32];
-    for i in 0..32 {
-        c0_bytes[i] = c_bytes[i] ^ c1_bytes[i];
-    }
-    let c0 = Felt::from_bytes_be(&c0_bytes);
+    // c0 = c - c1 (mod curve order)
+    let c0 = scalar::scalar_sub(&c, &c1)?;
 
     // s0 = k + c0 * random
     let s0 = scalar::scalar_add(k.expose_secret(), &scalar::scalar_mul(&c0, random)?)?;
@@ -121,17 +115,11 @@ fn prove_bit_1(
     let k = SecretFelt::new(random_felt());
     let a1 = StarkCurve::mul(k.expose_secret(), Some(g2));
 
-    // Compute challenge from commitments
-    let c = compute_poseidon_challenge(prefix, &[&a0, &a1])?;
+    // Compute challenge from commitments: c = H(prefix, V, A0, A1)
+    let c = compute_poseidon_challenge(prefix, &[&v, &a0, &a1])?;
 
-    // c1 = c XOR c0
-    let c_bytes = c.to_bytes_be();
-    let c0_bytes = c0.to_bytes_be();
-    let mut c1_bytes = [0u8; 32];
-    for i in 0..32 {
-        c1_bytes[i] = c_bytes[i] ^ c0_bytes[i];
-    }
-    let c1 = Felt::from_bytes_be(&c1_bytes);
+    // c1 = c - c0 (mod curve order)
+    let c1 = scalar::scalar_sub(&c, &c0)?;
 
     // s1 = k + c1 * random
     let s1 = scalar::scalar_add(k.expose_secret(), &scalar::scalar_mul(&c1, random)?)?;
@@ -196,17 +184,11 @@ pub fn verify(
     let s1 = Felt::from_hex(&proof.s1)
         .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
 
-    // Recompute challenge
-    let c = compute_poseidon_challenge(prefix, &[&a0_proj, &a1_proj])?;
+    // Recompute challenge: c = H(prefix, V, A0, A1)
+    let c = compute_poseidon_challenge(prefix, &[v, &a0_proj, &a1_proj])?;
 
-    // c1 = c XOR c0
-    let c_bytes = c.to_bytes_be();
-    let c0_bytes = c0.to_bytes_be();
-    let mut c1_bytes = [0u8; 32];
-    for i in 0..32 {
-        c1_bytes[i] = c_bytes[i] ^ c0_bytes[i];
-    }
-    let c1 = Felt::from_bytes_be(&c1_bytes);
+    // c1 = c - c0 (mod curve order)
+    let c1 = scalar::scalar_sub(&c, &c0)?;
 
     // Verify first POE: g2^s0 = A0 + V^c0
     if !ProofOfExponentiation::verify_internal(v, g2, &a0_proj, &c0, &s0)? {
@@ -402,10 +384,10 @@ mod tests {
     }
 
     #[test]
-    fn test_bit_proof_zero_random() {
+    fn test_bit_proof_small_random() {
         let g1 = StarkCurve::generator();
         let g2 = StarkCurve::generator_h();
-        let random = Felt::ZERO;
+        let random = Felt::ONE; // Use 1 instead of 0 to avoid identity point
         let prefix = Felt::from(42u64);
 
         let (v, proof) = prove(0, &random, &g1, &g2, &prefix).unwrap();

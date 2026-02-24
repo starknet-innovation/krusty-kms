@@ -65,7 +65,8 @@ use crate::crypto::encrypt_for_auditor;
 use crate::TongoAccount;
 use krusty_kms_common::{AuditProof, ElGamalCiphertext, KmsError, ProofOfTransfer, Result};
 use krusty_kms_crypto::{
-    hash, poseidon_hash_many, range, scalar, AuditProver, ProofOfExponentiation, StarkCurve,
+    hash, poseidon_hash_many, range, scalar, AuditPrefixData, AuditProver,
+    ProofOfExponentiation, StarkCurve,
 };
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
@@ -234,11 +235,18 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
         };
 
         // Generate audit proof using the NEW balance (after funding)
+        let audit_prefix = AuditPrefixData {
+            chain_id: params.chain_id,
+            tongo_address: params.tongo_address,
+            sender_address: params.sender_address,
+            user_pub_key: y.clone(),
+        };
         let (audit_proof, audited_balance) = AuditProver::prove(
             account.keypair.private_key.expose_secret(),
             new_balance,
             &new_cipher_balance,
             auditor_key,
+            Some(&audit_prefix),
         )?;
 
         // Generate audit hint (XChaCha20-Poly1305 encryption of the plaintext balance)
@@ -369,12 +377,11 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     let v2_affine = v2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux2_affine = r_aux2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Build 30-element prefix matching contract exactly
+    // Build 29-element prefix (no fee_to_sender in this contract version)
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         TRANSFER_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -538,12 +545,19 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
     // Generate audits if auditor is configured
     let (audit_balance, audit_transfer) = if let Some(ref auditor_key) = params.auditor_pub_key {
+        let audit_prefix = AuditPrefixData {
+            chain_id: params.chain_id,
+            tongo_address: params.tongo_address,
+            sender_address: params.sender_address,
+            user_pub_key: y.clone(),
+        };
         let (audit_balance_proof, audited_balance) = AuditProver::prove_with_validation(
             account.keypair.private_key.expose_secret(),
             b_left,
             &new_balance_cipher,
             auditor_key,
             false,
+            Some(&audit_prefix),
         )?;
 
         let (audit_balance_hint_ct, audit_balance_hint_nonce) =
@@ -559,6 +573,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
             b,
             &transfer_cipher_self,
             auditor_key,
+            Some(&audit_prefix),
         )?;
 
         let (audit_transfer_hint_ct, audit_transfer_hint_nonce) =
@@ -730,13 +745,12 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let v_affine = v.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux_affine = r_aux.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, WITHDRAW, y.x, y.y, nonce, amount, to,
+    // Compute prefix: [chain_id, tongo_address, sender_address, WITHDRAW, y.x, y.y, nonce, amount, to,
     //                   L0.x, L0.y, R0.x, R0.y, V.x, V.y, R_aux.x, R_aux.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         WITHDRAW_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -820,12 +834,19 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
             r: r_left,
         };
 
+        let audit_prefix = AuditPrefixData {
+            chain_id: params.chain_id,
+            tongo_address: params.tongo_address,
+            sender_address: params.sender_address,
+            user_pub_key: y.clone(),
+        };
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
             account.keypair.private_key.expose_secret(),
             left,
             &leftover_cipher,
             &auditor_key,
             false,
+            Some(&audit_prefix),
         )?;
 
         let (audit_hint_ct, audit_hint_nonce) =
@@ -915,13 +936,12 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
     let l0_affine = l0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r0_affine = r0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, RAGEQUIT, y.x, y.y, nonce, amount, to,
+    // Compute prefix: [chain_id, tongo_address, sender_address, RAGEQUIT, y.x, y.y, nonce, amount, to,
     //                   L0.x, L0.y, R0.x, R0.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         RAGEQUIT_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -970,12 +990,19 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
         // - Cairo: 0 * g = O (point at infinity), so cipher (y, g) validates as: y - g*x = y - y = O = g^0
         // - Rust: 0 * g = g (bug in scalar_mul), so validation fails locally
         // The cipher is mathematically correct and will verify on-chain with Cairo's implementation
+        let audit_prefix = AuditPrefixData {
+            chain_id: params.chain_id,
+            tongo_address: params.tongo_address,
+            sender_address: params.sender_address,
+            user_pub_key: y.clone(),
+        };
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
             account.keypair.private_key.expose_secret(),
             0, // Balance after ragequit is 0
             &new_balance_cipher,
             &auditor_key,
             false, // Skip validation due to curve implementation difference
+            Some(&audit_prefix),
         )?;
 
         // Encrypt zero balance for auditor (after ragequit balance is 0)
