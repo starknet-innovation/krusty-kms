@@ -34,7 +34,7 @@ const OZ_ACCOUNT_CLASS_HASH: &str =
 
 /// TONGO contract address on Sepolia (same as TypeScript)
 const TONGO_CONTRACT_ADDRESS: &str =
-    "0x00b4cca30f0f641e01140c1c388f55641f1c3fe5515484e622b6cb91d8cee585";
+    "0x0408163bfcfc2d76f34b444cb55e09dace5905cf84c0884e4637c2c0f06ab6ed";
 
 /// Sepolia RPC URL (fallback if env var not set)
 const SEPOLIA_RPC_URL: &str = "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_9/B-Gw-B-hV805x00WY6hXRJc3OMqU-zxQ";
@@ -212,6 +212,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: initial_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
+        sender_address: account_address,
         auditor_pub_key: auditor_key.clone(),
         current_balance: current_balance.clone(),
     };
@@ -255,13 +256,20 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         };
 
         // Verify the audit proof locally before submitting
-        use krusty_kms_crypto::AuditProver;
+        use krusty_kms_crypto::{AuditPrefixData, AuditProver};
+        let audit_prefix = AuditPrefixData {
+            chain_id,
+            tongo_address: tongo_contract_address,
+            sender_address: account_address,
+            user_pub_key: tongo_keypair_0.public_key.clone(),
+        };
         let is_valid = AuditProver::verify(
             &audit.proof,
             &tongo_keypair_0.public_key,
             &new_cipher_balance,  // Verify against NEW balance, not old
             &audit.audited_balance,
             auditor_key.as_ref().unwrap(),
+            Some(&audit_prefix),
         )?;
         println!("     - Local audit proof verification: {}", if is_valid { "✓ VALID" } else { "✗ INVALID" });
         if !is_valid {
@@ -417,8 +425,10 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: updated_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
+        sender_address: account_address,
         current_balance: current_balance_cipher.clone(),
         bit_size: 32,  // 32-bit range proofs for u32 values
+        fee_to_sender: 0,
         auditor_pub_key: auditor_key.clone(),  // Enable audits (required by contract)
     };
 
@@ -542,6 +552,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: account1_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
+        sender_address: account_address,
     };
     let rollover_proof = rollover(&tongo_account_1, rollover_params)?;
 
@@ -648,11 +659,13 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: withdraw_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
+        sender_address: account_address,
         current_balance: ElGamalCiphertext {
             l: withdraw_state.balance.l.clone(),
             r: withdraw_state.balance.r.clone(),
         },
         bit_size: 32,  // 32-bit range proofs
+        fee_to_sender: 0,
         auditor_key: auditor_key.clone(), // Include auditor for balance audit
     };
 
@@ -760,10 +773,12 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         nonce: ragequit_state.nonce,
         chain_id,
         tongo_address: tongo_contract_address,
+        sender_address: account_address,
         current_balance: ElGamalCiphertext {
             l: ragequit_state.balance.l.clone(),
             r: ragequit_state.balance.r.clone(),
         },
+        fee_to_sender: 0,
         auditor_key: auditor_key.clone(),  // Contract requires audit
     };
 

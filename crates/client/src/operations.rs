@@ -169,7 +169,7 @@ pub fn build_rollover_call(
 
 /// Build a Call for the Withdraw operation.
 ///
-/// Serializes withdraw operation with full proof structure matching TypeScript.
+/// Serializes withdraw operation with full proof structure matching contract.
 ///
 /// # Cyclomatic Complexity: 1
 #[must_use]
@@ -184,7 +184,8 @@ pub fn build_withdraw_call(
     // 2. to: ContractAddress (1 felt)
     // 3. amount: u128 (1 felt)
     // 4. hint: AEBalance (6 felts)
-    // 5. proof: ProofOfWithdraw
+    // 5. auxiliarCipher: CipherBalance (4 felts - V.x, V.y, R_aux.x, R_aux.y)
+    // 6. proof: ProofOfWithdraw
     //    - A_x: Point (2 felts)
     //    - A_r: Point (2 felts)
     //    - A: Point (2 felts)
@@ -192,9 +193,8 @@ pub fn build_withdraw_call(
     //    - sx: felt (1 felt)
     //    - sb: felt (1 felt)
     //    - sr: felt (1 felt)
-    //    - R_aux: Point (2 felts)
     //    - range: Range (variable felts)
-    // 6. auditPart: CairoOption<Audit> (1 felt for None)
+    // 7. auditPart: CairoOption<Audit>
 
     let mut calldata = Vec::new();
 
@@ -215,7 +215,13 @@ pub fn build_withdraw_call(
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // 5. Serialize proof (ProofOfWithdraw) - BEFORE auditPart!
+    // 5. Serialize auxiliarCipher (4 felts: V.x, V.y, R_aux.x, R_aux.y)
+    let ac_felts = serialization::serialize_cipher_balance(&proof.auxiliar_cipher)?;
+    for felt in ac_felts {
+        calldata.push(core_felt_to_rs(felt));
+    }
+
+    // 6. Serialize proof (ProofOfWithdraw)
     // Serialize A_x commitment
     let (ax_x, ax_y) = serialization::serialize_projective_point(&proof.a_x)?;
     calldata.push(core_felt_to_rs(ax_x));
@@ -241,18 +247,13 @@ pub fn build_withdraw_call(
     calldata.push(core_felt_to_rs(proof.sb));
     calldata.push(core_felt_to_rs(proof.sr));
 
-    // Serialize R_aux point
-    let (raux_x, raux_y) = serialization::serialize_projective_point(&proof.r_aux)?;
-    calldata.push(core_felt_to_rs(raux_x));
-    calldata.push(core_felt_to_rs(raux_y));
-
     // Serialize range proof
     let range_felts = serialization::serialize_range(&proof.range)?;
     for felt in range_felts {
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // 6. Serialize auditPart - AFTER proof!
+    // 7. Serialize auditPart
     if let Some(ref audit) = proof.audit {
         // CairoOption::Some(Audit)
         // Format: [0, audited_balance (4 felts), hint (6 felts), proof (11 felts)]
@@ -307,13 +308,15 @@ pub fn build_transfer_call(
     // Calldata structure (matching Cairo Transfer struct):
     // 1. from: PubKey (2 felts)
     // 2. to: PubKey (2 felts)
-    // 3. transferBalance: CipherBalance (4 felts - L.x, L.y, R.x, R.y)
+    // 3. transferBalance: CipherBalance (4 felts)
     // 4. transferBalanceSelf: CipherBalance (4 felts)
     // 5. hintTransfer: AEBalance (6 felts)
     // 6. hintLeftover: AEBalance (6 felts)
-    // 7. proof: ProofOfTransfer (complex with range proofs)
-    // 8. auditPart: CairoOption<Audit>
-    // 9. auditPartTransfer: CairoOption<Audit>
+    // 7. auxiliarCipher: CipherBalance (4 felts)
+    // 8. auxiliarCipher2: CipherBalance (4 felts)
+    // 9. proof: ProofOfTransfer (8 commitments, 5 scalars, 2 range proofs)
+    // 10. auditPart: CairoOption<Audit>
+    // 11. auditPartTransfer: CairoOption<Audit>
 
     let mut calldata = Vec::new();
 
@@ -327,7 +330,7 @@ pub fn build_transfer_call(
     calldata.push(core_felt_to_rs(to_x));
     calldata.push(core_felt_to_rs(to_y));
 
-    // 3. Serialize transferBalance (encrypted for recipient)
+    // 3. Serialize transferBalance (CipherBalance: 4 felts - L.x, L.y, R.x, R.y)
     let (tb_l_x, tb_l_y) = serialization::serialize_projective_point(&proof.transfer_balance_l)?;
     let (tb_r_x, tb_r_y) = serialization::serialize_projective_point(&proof.transfer_balance_r)?;
     calldata.push(core_felt_to_rs(tb_l_x));
@@ -355,25 +358,37 @@ pub fn build_transfer_call(
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // 7. Serialize proof (ProofOfTransfer)
+    // 7. Serialize auxiliarCipher (4 felts: V.x, V.y, R_aux.x, R_aux.y)
+    let ac_felts = serialization::serialize_cipher_balance(&proof.auxiliar_cipher)?;
+    for felt in ac_felts {
+        calldata.push(core_felt_to_rs(felt));
+    }
+
+    // 8. Serialize auxiliarCipher2 (4 felts: V2.x, V2.y, R_aux2.x, R_aux2.y)
+    let ac2_felts = serialization::serialize_cipher_balance(&proof.auxiliar_cipher2)?;
+    for felt in ac2_felts {
+        calldata.push(core_felt_to_rs(felt));
+    }
+
+    // 9. Serialize proof (ProofOfTransfer)
     // This includes 8 commitments, 5 scalars, and 2 range proofs
     let proof_felts = serialization::serialize_proof_of_transfer(&proof.proof)?;
     for felt in proof_felts {
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // 8. Serialize auditPart (sender's balance after transfer)
+    // 10. Serialize auditPart (sender's balance after transfer)
     if let Some(ref audit) = proof.audit_balance {
         // CairoOption::Some = 0
         calldata.push(core_felt_to_rs(CoreFelt::ZERO));
 
-        // Serialize audited balance (4 felts)
+        // Serialize audited balance (CipherBalance: 4 felts)
         let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
         for felt in balance_felts {
             calldata.push(core_felt_to_rs(felt));
         }
 
-        // Serialize audit hint (6 felts)
+        // Serialize audit hint (AEBalance: 6 felts)
         let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
@@ -389,18 +404,18 @@ pub fn build_transfer_call(
         calldata.push(core_felt_to_rs(CoreFelt::ONE));
     }
 
-    // 9. Serialize auditPartTransfer (transfer cipher audit)
+    // 11. Serialize auditPartTransfer (transfer cipher audit)
     if let Some(ref audit) = proof.audit_transfer {
         // CairoOption::Some = 0
         calldata.push(core_felt_to_rs(CoreFelt::ZERO));
 
-        // Serialize audited balance (4 felts)
+        // Serialize audited balance (CipherBalance: 4 felts)
         let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
         for felt in balance_felts {
             calldata.push(core_felt_to_rs(felt));
         }
 
-        // Serialize audit hint (6 felts)
+        // Serialize audit hint (AEBalance: 6 felts)
         let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
@@ -438,7 +453,6 @@ pub fn build_ragequit_call(
     hint_nonce: &[u8; 24],
 ) -> Result<Call> {
     // Calldata structure (MUST match Cairo struct order):
-    // Reference: typescript-reference/tongo/packages/contracts/src/structs/operations/ragequit.cairo:22-29
     // 1. from.x, from.y (2 felts)
     // 2. to (1 felt)
     // 3. amount (1 felt)
@@ -484,13 +498,13 @@ pub fn build_ragequit_call(
         // CairoOption::Some = 0
         calldata.push(core_felt_to_rs(CoreFelt::ZERO));
 
-        // Serialize audited balance (4 felts)
+        // Serialize audited balance (CipherBalance: 4 felts)
         let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
         for felt in balance_felts {
             calldata.push(core_felt_to_rs(felt));
         }
 
-        // Serialize audit hint (6 felts)
+        // Serialize audit hint (AEBalance: 6 felts)
         let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));

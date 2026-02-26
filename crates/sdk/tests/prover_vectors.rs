@@ -196,6 +196,7 @@ fn test_fund_prover_vectors() {
             nonce,
             chain_id,
             tongo_address,
+            sender_address: Felt::from(0u64),
             auditor_pub_key: None,
             current_balance,
         };
@@ -268,7 +269,7 @@ fn test_rollover_prover_vectors() {
         let chain_id = Felt::from_dec_str(chain_id_str).unwrap();
         let tongo_address = Felt::from_dec_str(tongo_address_str).unwrap();
 
-        let params = RolloverParams { nonce, chain_id, tongo_address };
+        let params = RolloverParams { nonce, chain_id, tongo_address, sender_address: Felt::from(0u64) };
         let _proof = rollover(&account, params).expect("Rollover operation failed");
 
         // Verify outputs
@@ -352,6 +353,8 @@ fn test_ragequit_prover_vectors() {
             nonce,
             chain_id,
             tongo_address,
+            sender_address: Felt::from(0u64),
+            fee_to_sender: 0,
             current_balance,
             auditor_key: None,
         };

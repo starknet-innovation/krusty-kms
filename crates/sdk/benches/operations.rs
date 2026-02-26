@@ -68,6 +68,7 @@ fn bench_fund(c: &mut Criterion) {
                     nonce: Felt::from(1u64),
                     chain_id,
                     tongo_address,
+                    sender_address: Felt::ZERO,
                     auditor_pub_key: None,
                     current_balance: current_balance.clone(),
                 };
@@ -121,6 +122,8 @@ fn bench_transfer(c: &mut Criterion) {
                     nonce: Felt::from(1u64),
                     chain_id,
                     tongo_address,
+                    sender_address: Felt::ZERO,
+                    fee_to_sender: 0,
                     current_balance: current_balance.clone(),
                     bit_size: bits as usize,
                     auditor_pub_key: None,  // No audit for pure performance measurement
@@ -158,6 +161,7 @@ fn bench_rollover(c: &mut Criterion) {
                     nonce: Felt::from(1u64),
                     chain_id,
                     tongo_address,
+                    sender_address: Felt::ZERO,
                 };
                 b.iter(|| {
                     let result = rollover(black_box(&account), black_box(params.clone()));
@@ -214,6 +218,8 @@ fn bench_withdraw(c: &mut Criterion) {
                     nonce: Felt::from(1u64),
                     chain_id,
                     tongo_address,
+                    sender_address: Felt::ZERO,
+                    fee_to_sender: 0,
                     current_balance: current_balance.clone(),
                     bit_size: bits as usize,
                     auditor_key: None,  // No audit for pure performance measurement
@@ -261,6 +267,8 @@ fn bench_ragequit(c: &mut Criterion) {
                     nonce: Felt::from(1u64),
                     chain_id,
                     tongo_address,
+                    sender_address: Felt::ZERO,
+                    fee_to_sender: 0,
                     current_balance: current_balance.clone(),
                     auditor_key: None,  // No audit for pure performance measurement
                 };
@@ -308,6 +316,7 @@ fn bench_complete_flow(c: &mut Criterion) {
                         nonce: Felt::from(1u64),
                         chain_id,
                         tongo_address: contract_address,
+                        sender_address: Felt::ZERO,
                         auditor_pub_key: None,
                         current_balance: current_balance.clone(),
                     };
@@ -321,6 +330,7 @@ fn bench_complete_flow(c: &mut Criterion) {
                         nonce: Felt::from(1u64),
                         chain_id,
                         tongo_address: contract_address,
+                        sender_address: Felt::ZERO,
                     };
                     let _rollover_proof = rollover(black_box(&account), black_box(rollover_params)).unwrap();
 
@@ -341,6 +351,8 @@ fn bench_complete_flow(c: &mut Criterion) {
                         nonce: Felt::from(2u64),
                         chain_id,
                         tongo_address: contract_address,
+                        sender_address: Felt::ZERO,
+                        fee_to_sender: 0,
                         current_balance: updated_balance.clone(),
                         bit_size: bits as usize,
                         auditor_pub_key: None,
@@ -361,6 +373,8 @@ fn bench_complete_flow(c: &mut Criterion) {
                         nonce: Felt::from(3u64),
                         chain_id,
                         tongo_address: contract_address,
+                        sender_address: Felt::ZERO,
+                        fee_to_sender: 0,
                         current_balance: leftover_balance,
                         bit_size: bits as usize,
                         auditor_key: None,
