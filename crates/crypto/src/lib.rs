@@ -31,7 +31,7 @@ pub mod random;
 pub mod range;
 pub mod scalar;
 
-pub use audit::AuditProver;
+pub use audit::{AuditPrefixData, AuditProver};
 pub use curve::StarkCurve;
 pub use elgamal::{ElGamal, ElGamalEncryption};
 pub use hash::poseidon_hash_many;

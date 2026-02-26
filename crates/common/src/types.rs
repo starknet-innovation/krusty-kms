@@ -181,11 +181,7 @@ pub struct ProofOfTransfer {
     pub s_b: String,
     pub s_b2: String,
     pub s_r2: String,
-    #[serde(rename = "R_aux")]
-    pub r_aux: SerializablePoint,
     pub range: Range,
-    #[serde(rename = "R_aux2")]
-    pub r_aux2: SerializablePoint,
     pub range2: Range,
 }
 

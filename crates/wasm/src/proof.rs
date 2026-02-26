@@ -6,13 +6,13 @@
 use crate::account::WasmAccount;
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use krusty_kms_common::ElGamalCiphertext;
+use serde::{Deserialize, Serialize};
+use starknet_types_core::curve::ProjectivePoint;
+use starknet_types_core::felt::Felt;
 use krusty_kms_sdk::operations::{
     fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
     TransferParams, WithdrawParams,
 };
-use serde::{Deserialize, Serialize};
-use starknet_types_core::curve::ProjectivePoint;
-use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 
 /// Default bit size for range proofs (40 bits = ~1 trillion max).
@@ -34,6 +34,8 @@ pub struct WasmFundParams {
     pub chain_id: String,
     /// TONGO contract address (hex)
     pub tongo_address: String,
+    /// Sender address (hex) - from get_caller_address()
+    pub sender_address: String,
     /// Current balance ciphertext
     pub current_cipher_l_x: String,
     pub current_cipher_l_y: String,
@@ -51,6 +53,7 @@ impl WasmFundParams {
         nonce: String,
         chain_id: String,
         tongo_address: String,
+        sender_address: String,
         current_cipher_l_x: String,
         current_cipher_l_y: String,
         current_cipher_r_x: String,
@@ -61,6 +64,7 @@ impl WasmFundParams {
             nonce,
             chain_id,
             tongo_address,
+            sender_address,
             current_cipher_l_x,
             current_cipher_l_y,
             current_cipher_r_x,
@@ -142,6 +146,8 @@ pub struct WasmTransferParams {
     pub chain_id: String,
     /// TONGO contract address (hex)
     pub tongo_address: String,
+    /// Sender address (hex)
+    pub sender_address: String,
     /// Current balance ciphertext
     pub current_cipher_l_x: String,
     pub current_cipher_l_y: String,
@@ -149,6 +155,8 @@ pub struct WasmTransferParams {
     pub current_cipher_r_y: String,
     /// Bit size for range proof (default: 40)
     pub bit_size: Option<u8>,
+    /// Fee to sender for relayed transactions (defaults to "0")
+    pub fee_to_sender: Option<String>,
     /// Optional auditor public key
     pub auditor_public_key: Option<String>,
 }
@@ -162,6 +170,7 @@ impl WasmTransferParams {
         nonce: String,
         chain_id: String,
         tongo_address: String,
+        sender_address: String,
         current_cipher_l_x: String,
         current_cipher_l_y: String,
         current_cipher_r_x: String,
@@ -173,11 +182,13 @@ impl WasmTransferParams {
             nonce,
             chain_id,
             tongo_address,
+            sender_address,
             current_cipher_l_x,
             current_cipher_l_y,
             current_cipher_r_x,
             current_cipher_r_y,
             bit_size: None,
+            fee_to_sender: None,
             auditor_public_key: None,
         }
     }
@@ -185,6 +196,12 @@ impl WasmTransferParams {
     #[wasm_bindgen(js_name = "withBitSize")]
     pub fn with_bit_size(mut self, bit_size: u8) -> Self {
         self.bit_size = Some(bit_size);
+        self
+    }
+
+    #[wasm_bindgen(js_name = "withFeeToSender")]
+    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
+        self.fee_to_sender = Some(fee_to_sender);
         self
     }
 
@@ -211,6 +228,18 @@ pub struct WasmTransferProofResult {
     /// Transfer cipher for self (R)
     pub self_r_x: String,
     pub self_r_y: String,
+    /// Auxiliar cipher (V = g^b*h^r)
+    pub aux_v_x: String,
+    pub aux_v_y: String,
+    /// Auxiliar cipher (R_aux = g^r)
+    pub aux_r_x: String,
+    pub aux_r_y: String,
+    /// Auxiliar cipher 2 (V2 = g^b_left*h^r2)
+    pub aux2_v_x: String,
+    pub aux2_v_y: String,
+    /// Auxiliar cipher 2 (R_aux2 = g^r2)
+    pub aux2_r_x: String,
+    pub aux2_r_y: String,
     /// New balance cipher (L)
     pub new_balance_l_x: String,
     pub new_balance_l_y: String,
@@ -250,6 +279,26 @@ pub fn generate_transfer_proof(
         .transfer_balance_self_r
         .to_affine()
         .map_err(|_| JsValue::from_str("Invalid self R point"))?;
+    let aux_v = proof
+        .auxiliar_cipher
+        .l
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid auxiliar cipher V point"))?;
+    let aux_r = proof
+        .auxiliar_cipher
+        .r
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid auxiliar cipher R_aux point"))?;
+    let aux2_v = proof
+        .auxiliar_cipher2
+        .l
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid auxiliar cipher2 V2 point"))?;
+    let aux2_r = proof
+        .auxiliar_cipher2
+        .r
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid auxiliar cipher2 R_aux2 point"))?;
     let new_l = proof
         .new_balance_cipher
         .l
@@ -285,6 +334,14 @@ pub fn generate_transfer_proof(
         self_l_y: format!("{:#x}", self_l.y()),
         self_r_x: format!("{:#x}", self_r.x()),
         self_r_y: format!("{:#x}", self_r.y()),
+        aux_v_x: format!("{:#x}", aux_v.x()),
+        aux_v_y: format!("{:#x}", aux_v.y()),
+        aux_r_x: format!("{:#x}", aux_r.x()),
+        aux_r_y: format!("{:#x}", aux_r.y()),
+        aux2_v_x: format!("{:#x}", aux2_v.x()),
+        aux2_v_y: format!("{:#x}", aux2_v.y()),
+        aux2_r_x: format!("{:#x}", aux2_r.x()),
+        aux2_r_y: format!("{:#x}", aux2_r.y()),
         new_balance_l_x: format!("{:#x}", new_l.x()),
         new_balance_l_y: format!("{:#x}", new_l.y()),
         new_balance_r_x: format!("{:#x}", new_r.x()),
@@ -309,16 +366,19 @@ pub struct WasmRolloverParams {
     pub chain_id: String,
     /// TONGO contract address (hex)
     pub tongo_address: String,
+    /// Sender address (hex)
+    pub sender_address: String,
 }
 
 #[wasm_bindgen]
 impl WasmRolloverParams {
     #[wasm_bindgen(constructor)]
-    pub fn new(nonce: String, chain_id: String, tongo_address: String) -> Self {
+    pub fn new(nonce: String, chain_id: String, tongo_address: String, sender_address: String) -> Self {
         Self {
             nonce,
             chain_id,
             tongo_address,
+            sender_address,
         }
     }
 }
@@ -346,6 +406,7 @@ pub fn generate_rollover_proof(
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
+        sender_address: parse_felt(&params.sender_address)?,
     };
 
     let proof = from_sdk_result(rollover(&account.inner, sdk_params)).map_err(JsValue::from)?;
@@ -384,6 +445,8 @@ pub struct WasmWithdrawParams {
     pub chain_id: String,
     /// TONGO contract address (hex)
     pub tongo_address: String,
+    /// Sender address (hex)
+    pub sender_address: String,
     /// Current balance ciphertext
     pub current_cipher_l_x: String,
     pub current_cipher_l_y: String,
@@ -391,6 +454,8 @@ pub struct WasmWithdrawParams {
     pub current_cipher_r_y: String,
     /// Bit size for range proof (default: 40)
     pub bit_size: Option<u8>,
+    /// Fee to sender for relayed transactions (defaults to "0")
+    pub fee_to_sender: Option<String>,
     /// Optional auditor public key
     pub auditor_public_key: Option<String>,
 }
@@ -404,6 +469,7 @@ impl WasmWithdrawParams {
         nonce: String,
         chain_id: String,
         tongo_address: String,
+        sender_address: String,
         current_cipher_l_x: String,
         current_cipher_l_y: String,
         current_cipher_r_x: String,
@@ -415,11 +481,13 @@ impl WasmWithdrawParams {
             nonce,
             chain_id,
             tongo_address,
+            sender_address,
             current_cipher_l_x,
             current_cipher_l_y,
             current_cipher_r_x,
             current_cipher_r_y,
             bit_size: None,
+            fee_to_sender: None,
             auditor_public_key: None,
         }
     }
@@ -427,6 +495,12 @@ impl WasmWithdrawParams {
     #[wasm_bindgen(js_name = "withBitSize")]
     pub fn with_bit_size(mut self, bit_size: u8) -> Self {
         self.bit_size = Some(bit_size);
+        self
+    }
+
+    #[wasm_bindgen(js_name = "withFeeToSender")]
+    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
+        self.fee_to_sender = Some(fee_to_sender);
         self
     }
 
@@ -457,9 +531,12 @@ pub struct WasmWithdrawProofResult {
     pub sx: String,
     pub sb: String,
     pub sr: String,
-    /// Range proof auxiliary point
-    pub r_aux_x: String,
-    pub r_aux_y: String,
+    /// Auxiliar cipher (V = g^b_left*h^r)
+    pub aux_v_x: String,
+    pub aux_v_y: String,
+    /// Auxiliar cipher (R_aux = g^r)
+    pub aux_r_x: String,
+    pub aux_r_y: String,
     /// Range proof as JSON
     pub range_json: String,
     /// Amount withdrawn
@@ -499,10 +576,16 @@ pub fn generate_withdraw_proof(
         .a_v
         .to_affine()
         .map_err(|_| JsValue::from_str("Invalid A_v point"))?;
-    let r_aux = proof
-        .r_aux
+    let aux_v = proof
+        .auxiliar_cipher
+        .l
         .to_affine()
-        .map_err(|_| JsValue::from_str("Invalid R_aux point"))?;
+        .map_err(|_| JsValue::from_str("Invalid auxiliar cipher V point"))?;
+    let aux_r = proof
+        .auxiliar_cipher
+        .r
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid auxiliar cipher R_aux point"))?;
 
     let range_json = serde_json::to_string(&proof.range)
         .map_err(|e| JsValue::from_str(&format!("Serialization error: {e}")))?;
@@ -527,8 +610,10 @@ pub fn generate_withdraw_proof(
         sx: format!("{:#x}", proof.sx),
         sb: format!("{:#x}", proof.sb),
         sr: format!("{:#x}", proof.sr),
-        r_aux_x: format!("{:#x}", r_aux.x()),
-        r_aux_y: format!("{:#x}", r_aux.y()),
+        aux_v_x: format!("{:#x}", aux_v.x()),
+        aux_v_y: format!("{:#x}", aux_v.y()),
+        aux_r_x: format!("{:#x}", aux_r.x()),
+        aux_r_y: format!("{:#x}", aux_r.y()),
         range_json,
         amount: proof.amount.to_string(),
         recipient: format!("{:#x}", proof.recipient),
@@ -552,11 +637,15 @@ pub struct WasmRagequitParams {
     pub chain_id: String,
     /// TONGO contract address (hex)
     pub tongo_address: String,
+    /// Sender address (hex)
+    pub sender_address: String,
     /// Current balance ciphertext
     pub current_cipher_l_x: String,
     pub current_cipher_l_y: String,
     pub current_cipher_r_x: String,
     pub current_cipher_r_y: String,
+    /// Fee to sender for relayed transactions (defaults to "0")
+    pub fee_to_sender: Option<String>,
     /// Optional auditor public key
     pub auditor_public_key: Option<String>,
 }
@@ -569,6 +658,7 @@ impl WasmRagequitParams {
         nonce: String,
         chain_id: String,
         tongo_address: String,
+        sender_address: String,
         current_cipher_l_x: String,
         current_cipher_l_y: String,
         current_cipher_r_x: String,
@@ -579,12 +669,20 @@ impl WasmRagequitParams {
             nonce,
             chain_id,
             tongo_address,
+            sender_address,
             current_cipher_l_x,
             current_cipher_l_y,
             current_cipher_r_x,
             current_cipher_r_y,
+            fee_to_sender: None,
             auditor_public_key: None,
         }
+    }
+
+    #[wasm_bindgen(js_name = "withFeeToSender")]
+    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
+        self.fee_to_sender = Some(fee_to_sender);
+        self
     }
 
     #[wasm_bindgen(js_name = "withAuditor")]
@@ -740,6 +838,7 @@ fn convert_fund_params(params: &WasmFundParams) -> WasmResult<FundParams> {
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
+        sender_address: parse_felt(&params.sender_address)?,
         auditor_pub_key,
         current_balance,
     })
@@ -767,17 +866,23 @@ fn convert_transfer_params(params: &WasmTransferParams) -> WasmResult<TransferPa
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
+    let fee_to_sender: u128 = params
+        .fee_to_sender
+        .as_deref()
+        .unwrap_or("0")
+        .parse()
+        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
+
     Ok(TransferParams {
         recipient_public_key,
         amount,
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
+        sender_address: parse_felt(&params.sender_address)?,
         current_balance,
-        bit_size: params
-            .bit_size
-            .map(|b| b as usize)
-            .unwrap_or(DEFAULT_BIT_SIZE),
+        bit_size: params.bit_size.map(|b| b as usize).unwrap_or(DEFAULT_BIT_SIZE),
+        fee_to_sender,
         auditor_pub_key,
     })
 }
@@ -802,17 +907,23 @@ fn convert_withdraw_params(params: &WasmWithdrawParams) -> WasmResult<WithdrawPa
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
+    let fee_to_sender: u128 = params
+        .fee_to_sender
+        .as_deref()
+        .unwrap_or("0")
+        .parse()
+        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
+
     Ok(WithdrawParams {
         recipient_address: parse_felt(&params.recipient_address)?,
         amount,
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
+        sender_address: parse_felt(&params.sender_address)?,
         current_balance,
-        bit_size: params
-            .bit_size
-            .map(|b| b as usize)
-            .unwrap_or(DEFAULT_BIT_SIZE),
+        bit_size: params.bit_size.map(|b| b as usize).unwrap_or(DEFAULT_BIT_SIZE),
+        fee_to_sender,
         auditor_key,
     })
 }
@@ -832,12 +943,21 @@ fn convert_ragequit_params(params: &WasmRagequitParams) -> WasmResult<RagequitPa
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
+    let fee_to_sender: u128 = params
+        .fee_to_sender
+        .as_deref()
+        .unwrap_or("0")
+        .parse()
+        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
+
     Ok(RagequitParams {
         recipient_address: parse_felt(&params.recipient_address)?,
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
+        sender_address: parse_felt(&params.sender_address)?,
         current_balance,
+        fee_to_sender,
         auditor_key,
     })
 }
@@ -869,3 +989,4 @@ fn serialize_audit(audit: &krusty_kms_sdk::operations::Audit) -> Result<String, 
 
     serde_json::to_string(&json).map_err(|e| e.to_string())
 }
+

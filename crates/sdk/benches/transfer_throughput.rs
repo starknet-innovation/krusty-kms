@@ -52,6 +52,8 @@ fn create_transfer_params(bit_size: usize) -> TransferParams {
         nonce: Felt::from(1u64),
         chain_id,
         tongo_address,
+        sender_address: Felt::ZERO,
+        fee_to_sender: 0,
         current_balance,
         bit_size,
         auditor_pub_key: None,

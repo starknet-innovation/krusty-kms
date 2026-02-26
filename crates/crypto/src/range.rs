@@ -16,6 +16,22 @@ use rayon::prelude::*;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
+/// Computes the total randomness from per-bit random values.
+///
+/// Computes r = sum(random_values[i] * 2^i) for i in 0..random_values.len()
+///
+/// This is useful when you need to know `r` before calling `prove_with_randomness`,
+/// e.g. to compute cipher balance coordinates for prefix hashing.
+pub fn compute_total_randomness(random_values: &[Felt]) -> Result<Felt> {
+    let mut r = Felt::ZERO;
+    for (i, r_inn) in random_values.iter().enumerate() {
+        let pow = Felt::from(1u128 << i);
+        let r_inn_pow = scalar::scalar_mul(&pow, r_inn)?;
+        r = scalar::scalar_add(&r, &r_inn_pow)?;
+    }
+    Ok(r)
+}
+
 /// Generates a range proof that b is in [0, 2^bit_size - 1].
 ///
 /// # Arguments
@@ -37,12 +53,47 @@ pub fn prove(
     g2: &ProjectivePoint,
     initial_prefix: &Felt,
 ) -> Result<(Range, Felt)> {
+    let random_values = random_felts(bit_size);
+    prove_with_randomness(b, bit_size, g1, g2, initial_prefix, &random_values)
+}
+
+/// Generates a range proof using pre-generated random values.
+///
+/// Identical to [`prove`] but uses the supplied `random_values` instead of
+/// generating fresh ones. This breaks the circular dependency where the prefix
+/// needs cipher balance coordinates that depend on `r`, but `r` comes from the
+/// range proof which needs the prefix.
+///
+/// # Arguments
+/// * `b` - The value to prove is in range
+/// * `bit_size` - Number of bits (range is [0, 2^bit_size - 1])
+/// * `g1` - First generator
+/// * `g2` - Second generator
+/// * `initial_prefix` - Prefix for challenge computation
+/// * `random_values` - Pre-generated random felt values (one per bit)
+///
+/// # Returns
+/// Tuple of (range proof, total randomness r where V = g1^b * g2^r)
+pub fn prove_with_randomness(
+    b: u128,
+    bit_size: usize,
+    g1: &ProjectivePoint,
+    g2: &ProjectivePoint,
+    initial_prefix: &Felt,
+    random_values: &[Felt],
+) -> Result<(Range, Felt)> {
     // Check range
     if bit_size > 128 {
         return Err(krusty_kms_common::KmsError::CryptoError(format!(
             "bit_size {} exceeds maximum 128",
             bit_size
         )));
+    }
+
+    if random_values.len() != bit_size {
+        return Err(krusty_kms_common::KmsError::CryptoError(
+            format!("random_values length {} != bit_size {}", random_values.len(), bit_size)
+        ));
     }
 
     let max_value = if bit_size == 128 {
@@ -60,9 +111,6 @@ pub fn prove(
 
     // Convert to binary (little-endian: bit 0 is LSB)
     let b_bin: Vec<u8> = (0..bit_size).map(|i| ((b >> i) & 1) as u8).collect();
-
-    // OPTIMIZATION: Generate all random values at once to amortize RNG overhead
-    let random_values = random_felts(bit_size);
 
     // OPTIMIZATION: Generate all bit proofs in PARALLEL (8-10x speedup expected on 8-core CPU)
     // This is safe because each bit proof is independent - only the final accumulation
@@ -365,5 +413,36 @@ mod tests {
         let expected_affine = StarkCurve::projective_to_affine(&expected).unwrap();
 
         assert_eq!(v_affine, expected_affine);
+    }
+
+    #[test]
+    fn test_prove_with_randomness_same_as_prove() {
+        let g1 = StarkCurve::generator();
+        let g2 = StarkCurve::generator_h();
+        let prefix = Felt::from(42u64);
+
+        let b = 7u128;
+        let bit_size = 8;
+
+        // Generate random values manually
+        let random_values = random_felts(bit_size);
+
+        // prove_with_randomness should produce valid proof
+        let (range, r) = prove_with_randomness(b, bit_size, &g1, &g2, &prefix, &random_values).unwrap();
+        let v = verify(&range, bit_size, &g1, &g2, &prefix).unwrap();
+
+        // Check V = g1^b * g2^r
+        let expected = StarkCurve::add(
+            &StarkCurve::mul(&Felt::from(b), Some(&g1)),
+            &StarkCurve::mul(&r, Some(&g2))
+        );
+
+        let v_affine = StarkCurve::projective_to_affine(&v).unwrap();
+        let expected_affine = StarkCurve::projective_to_affine(&expected).unwrap();
+        assert_eq!(v_affine, expected_affine);
+
+        // compute_total_randomness should give same r
+        let r2 = compute_total_randomness(&random_values).unwrap();
+        assert_eq!(r, r2);
     }
 }

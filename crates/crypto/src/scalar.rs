@@ -43,6 +43,39 @@ pub fn scalar_add(a: &Felt, b: &Felt) -> Result<Felt> {
     Ok(result_felt)
 }
 
+/// Perform scalar subtraction modulo curve order: (a - b) mod order.
+///
+/// # Cyclomatic Complexity: 1
+pub fn scalar_sub(a: &Felt, b: &Felt) -> Result<Felt> {
+    let a_big = BigUint::from_bytes_be(&a.to_bytes_be());
+    let b_big = BigUint::from_bytes_be(&b.to_bytes_be());
+
+    let result = if a_big >= b_big {
+        (a_big - b_big) % &*CURVE_ORDER_BIGUINT
+    } else {
+        // a < b: compute (order - (b - a) % order)
+        let diff = (b_big - a_big) % &*CURVE_ORDER_BIGUINT;
+        if diff == BigUint::ZERO {
+            BigUint::ZERO
+        } else {
+            &*CURVE_ORDER_BIGUINT - diff
+        }
+    };
+
+    let mut bytes = result.to_bytes_be();
+    let result_felt = if bytes.len() < 32 {
+        let mut padded = [0u8; 32];
+        padded[32 - bytes.len()..].copy_from_slice(&bytes);
+        let felt = Felt::from_bytes_be(&padded);
+        padded.zeroize();
+        felt
+    } else {
+        Felt::from_bytes_be_slice(&bytes)
+    };
+    bytes.zeroize();
+    Ok(result_felt)
+}
+
 /// Perform scalar multiplication modulo curve order.
 ///
 /// # Cyclomatic Complexity: 1

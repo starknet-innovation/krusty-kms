@@ -111,6 +111,7 @@ fn test_fund_with_audit_typescript_vector() {
         initial_balance,
         &initial_cipher_balance,
         &auditor_public_key,
+        None,
     )
     .unwrap();
 
@@ -229,6 +230,7 @@ fn test_fund_with_audit_typescript_vector() {
         &initial_cipher_balance,
         &audited_balance,
         &auditor_public_key,
+        None,
     )
     .unwrap();
     assert!(is_valid, "Audit proof verification failed");
