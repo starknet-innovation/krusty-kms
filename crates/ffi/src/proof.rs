@@ -20,7 +20,7 @@ use starknet_types_core::felt::Felt;
 
 use crate::error::*;
 use crate::handle;
-use crate::helpers::write_string_output;
+use crate::helpers::{felt_hex_fixed, to_deterministic_json, write_string_output};
 use crate::json_types::*;
 use crate::types::KmsAccountHandle;
 
@@ -61,7 +61,7 @@ fn parse_ciphertext(c: &JsonCiphertext) -> Result<ElGamalCiphertext, i32> {
 
 fn point_to_hex_xy(p: &ProjectivePoint) -> Result<(String, String), i32> {
     let a = p.to_affine().map_err(|_| KMS_ERR_CRYPTO)?;
-    Ok((format!("{:#x}", a.x()), format!("{:#x}", a.y())))
+    Ok((felt_hex_fixed(&a.x()), felt_hex_fixed(&a.y())))
 }
 
 fn serialize_audit(audit: &krusty_kms_sdk::operations::Audit) -> Result<String, i32> {
@@ -78,15 +78,15 @@ fn serialize_audit(audit: &krusty_kms_sdk::operations::Audit) -> Result<String, 
 
     let json = serde_json::json!({
         "audited_balance": {
-            "l": { "x": format!("{:#x}", l_a.x()), "y": format!("{:#x}", l_a.y()) },
-            "r": { "x": format!("{:#x}", r_a.x()), "y": format!("{:#x}", r_a.y()) }
+            "l": { "x": felt_hex_fixed(&l_a.x()), "y": felt_hex_fixed(&l_a.y()) },
+            "r": { "x": felt_hex_fixed(&r_a.x()), "y": felt_hex_fixed(&r_a.y()) }
         },
         "hint_ciphertext": hex::encode(audit.hint_ciphertext),
         "hint_nonce": hex::encode(audit.hint_nonce),
         "proof": &audit.proof
     });
 
-    serde_json::to_string(&json).map_err(|_| KMS_ERR_JSON)
+    to_deterministic_json(&json)
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +162,7 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
             Err(e) => return e,
         };
 
-        let proof_json_str = match serde_json::to_string(&proof.proof) {
+        let proof_json_str = match to_deterministic_json(&proof.proof) {
             Ok(s) => s,
             Err(_) => return KMS_ERR_JSON,
         };
@@ -293,7 +293,7 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             Err(e) => return e,
         };
 
-        let proof_json_str = match serde_json::to_string(&proof.proof) {
+        let proof_json_str = match to_deterministic_json(&proof.proof) {
             Ok(s) => s,
             Err(_) => return KMS_ERR_JSON,
         };
@@ -395,7 +395,7 @@ pub unsafe extern "C" fn kms_generate_rollover_proof(
             Err(e) => return e,
         };
 
-        let proof_json_str = match serde_json::to_string(&proof.proof) {
+        let proof_json_str = match to_deterministic_json(&proof.proof) {
             Ok(s) => s,
             Err(_) => return KMS_ERR_JSON,
         };
@@ -518,7 +518,7 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             Err(e) => return e,
         };
 
-        let range_json = match serde_json::to_string(&proof.range) {
+        let range_json = match to_deterministic_json(&proof.range) {
             Ok(s) => s,
             Err(_) => return KMS_ERR_JSON,
         };
@@ -539,14 +539,14 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             a_y2,
             a_v_x: av_x,
             a_v_y: av_y,
-            sx: format!("{:#x}", proof.sx),
-            sb: format!("{:#x}", proof.sb),
-            sr: format!("{:#x}", proof.sr),
+            sx: felt_hex_fixed(&proof.sx),
+            sb: felt_hex_fixed(&proof.sb),
+            sr: felt_hex_fixed(&proof.sr),
             r_aux_x: raux_x,
             r_aux_y: raux_y,
             range_json,
             amount: proof.amount.to_string(),
-            recipient: format!("{:#x}", proof.recipient),
+            recipient: felt_hex_fixed(&proof.recipient),
             audit_json,
         };
 
@@ -651,9 +651,9 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
             a_x_y: ax_y,
             a_r_x: ar_x,
             a_r_y: ar_y,
-            sx: format!("{:#x}", proof.sx),
+            sx: felt_hex_fixed(&proof.sx),
             amount: proof.amount.to_string(),
-            recipient: format!("{:#x}", proof.recipient),
+            recipient: felt_hex_fixed(&proof.recipient),
             audit_json,
         };
 
@@ -663,4 +663,250 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
         }
     })
     .unwrap_or(KMS_ERR_INTERNAL)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::account::{
+        kms_account_create_from_keys, kms_account_destroy, kms_account_update_state,
+    };
+    use crate::helpers::{felt_hex_fixed, felt_to_kms};
+    use crate::json_types::JsonCiphertext;
+    use crate::types::{KmsAccountHandle, KmsAccountState};
+    use krusty_kms_crypto::StarkCurve;
+    use serde_json::json;
+    use starknet_types_core::felt::Felt;
+    use std::ffi::{c_char, CString};
+
+    struct TestAccount {
+        handle: KmsAccountHandle,
+        contract_address: Felt,
+        chain_id: Felt,
+        current_cipher: JsonCiphertext,
+        auditor_public_key: String,
+        recipient_public_key: String,
+    }
+
+    impl Drop for TestAccount {
+        fn drop(&mut self) {
+            // Best-effort cleanup for global registry.
+            let _ = unsafe { kms_account_destroy(self.handle) };
+        }
+    }
+
+    fn u128_to_pair(v: u128) -> (u64, u64) {
+        (v as u64, (v >> 64) as u64)
+    }
+
+    fn point_hex_xy(p: &starknet_types_core::curve::ProjectivePoint) -> (String, String) {
+        let a = StarkCurve::projective_to_affine(p).unwrap();
+        (felt_hex_fixed(&a.x()), felt_hex_fixed(&a.y()))
+    }
+
+    fn point_hex_concat_xy(p: &starknet_types_core::curve::ProjectivePoint) -> String {
+        let a = StarkCurve::projective_to_affine(p).unwrap();
+        format!("0x{:064x}{:064x}", a.x(), a.y())
+    }
+
+    fn make_cipher(
+        balance: u128,
+        owner_public_key: &starknet_types_core::curve::ProjectivePoint,
+    ) -> JsonCiphertext {
+        let g = StarkCurve::generator();
+        let random = Felt::from(42u64);
+        let g_m = StarkCurve::mul(&Felt::from(balance), Some(&g));
+        let pk_r = StarkCurve::mul(&random, Some(owner_public_key));
+        let l = StarkCurve::add(&g_m, &pk_r);
+        let r = StarkCurve::mul(&random, Some(&g));
+
+        let (l_x, l_y) = point_hex_xy(&l);
+        let (r_x, r_y) = point_hex_xy(&r);
+        JsonCiphertext { l_x, l_y, r_x, r_y }
+    }
+
+    fn create_test_account(balance: u128) -> TestAccount {
+        let contract_address = Felt::from(123456u64);
+        let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap(); // SN_SEPOLIA
+        let contract_addr_kms = felt_to_kms(&contract_address);
+        let owner_private_key = Felt::from(42u64);
+        let view_private_key = Felt::from(123u64);
+        let owner_key_kms = felt_to_kms(&owner_private_key);
+        let view_key_kms = felt_to_kms(&view_private_key);
+
+        let mut handle: KmsAccountHandle = 0;
+        let rc = unsafe {
+            kms_account_create_from_keys(
+                &owner_key_kms,
+                &view_key_kms,
+                &contract_addr_kms,
+                &mut handle,
+            )
+        };
+        assert_eq!(rc, KMS_OK);
+
+        let (balance_low, balance_high) = u128_to_pair(balance);
+        let state = KmsAccountState {
+            balance_low,
+            balance_high,
+            pending_balance_low: 0,
+            pending_balance_high: 0,
+            nonce: 0,
+        };
+        let rc = unsafe { kms_account_update_state(handle, &state) };
+        assert_eq!(rc, KMS_OK);
+
+        let owner_public_key = StarkCurve::mul_generator(&owner_private_key);
+        let current_cipher = make_cipher(balance, &owner_public_key);
+
+        let auditor_public_key =
+            point_hex_concat_xy(&StarkCurve::mul_generator(&Felt::from(777u64)));
+        let recipient_public_key =
+            point_hex_concat_xy(&StarkCurve::mul_generator(&Felt::from(99u64)));
+
+        TestAccount {
+            handle,
+            contract_address,
+            chain_id,
+            current_cipher,
+            auditor_public_key,
+            recipient_public_key,
+        }
+    }
+
+    unsafe fn assert_two_call_stable(
+        f: unsafe extern "C" fn(
+            KmsAccountHandle,
+            *const c_char,
+            *mut c_char,
+            usize,
+            *mut usize,
+        ) -> i32,
+        handle: KmsAccountHandle,
+        params_json: &str,
+    ) {
+        let params = CString::new(params_json).unwrap();
+
+        let mut needed1 = 0usize;
+        let rc = f(
+            handle,
+            params.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            &mut needed1,
+        );
+        assert_eq!(rc, KMS_OK);
+        assert!(needed1 > 0);
+
+        let mut needed2 = 0usize;
+        let rc = f(
+            handle,
+            params.as_ptr(),
+            std::ptr::null_mut(),
+            0,
+            &mut needed2,
+        );
+        assert_eq!(rc, KMS_OK);
+        assert_eq!(needed2, needed1);
+
+        let mut buf = vec![0u8; needed1 + 1];
+        let mut written = 0usize;
+        let rc = f(
+            handle,
+            params.as_ptr(),
+            buf.as_mut_ptr() as *mut c_char,
+            buf.len(),
+            &mut written,
+        );
+        assert_eq!(rc, KMS_OK);
+        assert_eq!(written, needed1);
+
+        let json = std::str::from_utf8(&buf[..written]).unwrap();
+        let _: serde_json::Value = serde_json::from_str(json).unwrap();
+    }
+
+    #[test]
+    fn proof_endpoints_two_call_pattern_is_stable() {
+        let account = create_test_account(1000);
+
+        let fund_params = json!({
+            "amount": "50",
+            "nonce": felt_hex_fixed(&Felt::from(1u64)),
+            "chain_id": felt_hex_fixed(&account.chain_id),
+            "tongo_address": felt_hex_fixed(&account.contract_address),
+            "current_cipher": &account.current_cipher,
+            "auditor_public_key": account.auditor_public_key,
+        })
+        .to_string();
+        unsafe { assert_two_call_stable(kms_generate_fund_proof, account.handle, &fund_params) };
+
+        let transfer_params = json!({
+            "recipient_public_key": account.recipient_public_key,
+            "amount": "100",
+            "nonce": felt_hex_fixed(&Felt::from(2u64)),
+            "chain_id": felt_hex_fixed(&account.chain_id),
+            "tongo_address": felt_hex_fixed(&account.contract_address),
+            "current_cipher": &account.current_cipher,
+            "bit_size": 16,
+            "auditor_public_key": account.auditor_public_key,
+        })
+        .to_string();
+        unsafe {
+            assert_two_call_stable(
+                kms_generate_transfer_proof,
+                account.handle,
+                &transfer_params,
+            )
+        };
+
+        let rollover_params = json!({
+            "nonce": felt_hex_fixed(&Felt::from(3u64)),
+            "chain_id": felt_hex_fixed(&account.chain_id),
+            "tongo_address": felt_hex_fixed(&account.contract_address),
+        })
+        .to_string();
+        unsafe {
+            assert_two_call_stable(
+                kms_generate_rollover_proof,
+                account.handle,
+                &rollover_params,
+            )
+        };
+
+        let withdraw_params = json!({
+            "recipient_address": felt_hex_fixed(&Felt::from(999u64)),
+            "amount": "100",
+            "nonce": felt_hex_fixed(&Felt::from(4u64)),
+            "chain_id": felt_hex_fixed(&account.chain_id),
+            "tongo_address": felt_hex_fixed(&account.contract_address),
+            "current_cipher": &account.current_cipher,
+            "bit_size": 16,
+            "auditor_public_key": account.auditor_public_key,
+        })
+        .to_string();
+        unsafe {
+            assert_two_call_stable(
+                kms_generate_withdraw_proof,
+                account.handle,
+                &withdraw_params,
+            )
+        };
+
+        let ragequit_params = json!({
+            "recipient_address": felt_hex_fixed(&Felt::from(999u64)),
+            "nonce": felt_hex_fixed(&Felt::from(5u64)),
+            "chain_id": felt_hex_fixed(&account.chain_id),
+            "tongo_address": felt_hex_fixed(&account.contract_address),
+            "current_cipher": &account.current_cipher,
+            "auditor_public_key": account.auditor_public_key,
+        })
+        .to_string();
+        unsafe {
+            assert_two_call_stable(
+                kms_generate_ragequit_proof,
+                account.handle,
+                &ragequit_params,
+            )
+        };
+    }
 }

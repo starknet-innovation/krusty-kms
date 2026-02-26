@@ -2,6 +2,8 @@
 
 use std::ffi::{c_char, CStr};
 
+use serde::Serialize;
+use serde_json::Value;
 use starknet_types_core::curve::{AffinePoint, ProjectivePoint};
 use starknet_types_core::felt::Felt;
 
@@ -46,6 +48,53 @@ pub fn affine_to_kms(a: &AffinePoint) -> KmsAffinePoint {
         x: felt_to_kms(&a.x()),
         y: felt_to_kms(&a.y()),
     }
+}
+
+/// Deterministic fixed-width hex encoding for Stark felts.
+///
+/// Format: `0x` + 64 lowercase hex digits.
+pub fn felt_hex_fixed(f: &Felt) -> String {
+    format!("0x{:064x}", f)
+}
+
+fn normalize_hex_string(s: &str) -> Option<String> {
+    if !(s.starts_with("0x") || s.starts_with("0X")) || s.len() <= 2 {
+        return None;
+    }
+    if !s[2..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let felt = Felt::from_hex(s).ok()?;
+    Some(felt_hex_fixed(&felt))
+}
+
+fn normalize_hex_json(value: &mut Value) {
+    match value {
+        Value::String(s) => {
+            if let Some(normalized) = normalize_hex_string(s) {
+                *s = normalized;
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                normalize_hex_json(item);
+            }
+        }
+        Value::Object(map) => {
+            for value in map.values_mut() {
+                normalize_hex_json(value);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
+/// Serialize any serde value to JSON while normalizing hex-string fields to a
+/// deterministic fixed-width felt format.
+pub fn to_deterministic_json<T: Serialize>(value: &T) -> Result<String, i32> {
+    let mut json_value = serde_json::to_value(value).map_err(|_| KMS_ERR_JSON)?;
+    normalize_hex_json(&mut json_value);
+    serde_json::to_string(&json_value).map_err(|_| KMS_ERR_JSON)
 }
 
 // ---------------------------------------------------------------------------
@@ -147,4 +196,26 @@ pub unsafe fn read_cstr_optional<'a>(ptr: *const c_char) -> std::result::Result<
     CStr::from_ptr(ptr)
         .to_str()
         .map_err(|_| KMS_ERR_INVALID_INPUT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Serialize)]
+    struct HexProbe<'a> {
+        value: &'a str,
+    }
+
+    #[test]
+    fn deterministic_hex_json_has_stable_width() {
+        let short = to_deterministic_json(&HexProbe { value: "0x1" }).unwrap();
+        let long = to_deterministic_json(&HexProbe { value: "0xabcdef" }).unwrap();
+
+        assert_eq!(short.len(), long.len());
+        assert!(
+            short.contains("0x0000000000000000000000000000000000000000000000000000000000000001")
+        );
+        assert!(long.contains("0x0000000000000000000000000000000000000000000000000000000000abcdef"));
+    }
 }

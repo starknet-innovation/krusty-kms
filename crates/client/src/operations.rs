@@ -5,7 +5,7 @@
 //! calldata format.
 
 use crate::serialization;
-use krusty_kms_common::Result;
+use krusty_kms_common::{KmsError, Result};
 use krusty_kms_sdk::operations::{
     FundProof, RagequitProof, RolloverProof, TransferProof, WithdrawProof,
 };
@@ -42,7 +42,10 @@ pub fn build_fund_calls(
     hint_nonce: &[u8; 24],
 ) -> Result<(Call, Call)> {
     // 1. Build ERC20 approve call
-    let approve_amount = proof.amount * rate;
+    let approve_amount = proof
+        .amount
+        .checked_mul(rate)
+        .ok_or_else(|| KmsError::InvalidAmount("approve amount overflow".to_string()))?;
     let approve_call = build_erc20_approve(erc20_address, tongo_address, approve_amount)?;
 
     // 2. Build fund call

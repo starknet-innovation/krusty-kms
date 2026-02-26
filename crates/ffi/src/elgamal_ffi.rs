@@ -49,9 +49,9 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
         *out_l = proj_to_kms(&enc.l);
         *out_r = proj_to_kms(&enc.r);
 
-        let proof_str = match serde_json::to_string(&enc.proof) {
+        let proof_str = match to_deterministic_json(&enc.proof) {
             Ok(s) => s,
-            Err(_) => return KMS_ERR_JSON,
+            Err(e) => return e,
         };
 
         write_string_output(
@@ -123,10 +123,42 @@ mod tests {
         };
         let mut out_r = out_l;
 
-        // Use a large buffer for the proof JSON (encrypt uses internal
-        // randomness for the proof, so the two-call pattern with a second
-        // encrypt call would produce a different-sized proof).
-        let mut proof_buf = vec![0u8; 8192];
+        // Two-call pattern: first probe required bytes, then write.
+        let mut needed = 0usize;
+        let rc = unsafe {
+            kms_elgamal_encrypt(
+                &msg_kms,
+                &pk_kms,
+                &rnd_kms,
+                &pfx_kms,
+                &mut out_l,
+                &mut out_r,
+                std::ptr::null_mut(),
+                0,
+                &mut needed,
+            )
+        };
+        assert_eq!(rc, KMS_OK);
+        assert!(needed > 0);
+
+        let mut needed2 = 0usize;
+        let rc = unsafe {
+            kms_elgamal_encrypt(
+                &msg_kms,
+                &pk_kms,
+                &rnd_kms,
+                &pfx_kms,
+                &mut out_l,
+                &mut out_r,
+                std::ptr::null_mut(),
+                0,
+                &mut needed2,
+            )
+        };
+        assert_eq!(rc, KMS_OK);
+        assert_eq!(needed2, needed);
+
+        let mut proof_buf = vec![0u8; needed + 1];
         let mut proof_written = 0usize;
         let rc = unsafe {
             kms_elgamal_encrypt(
@@ -143,6 +175,7 @@ mod tests {
         };
         assert_eq!(rc, KMS_OK);
         assert!(proof_written > 0);
+        assert_eq!(proof_written, needed);
 
         // Decrypt
         let sk_kms = felt_to_kms(&sk);
