@@ -13,7 +13,7 @@ extern "C" {
 /* ====================================================================== */
 
 #define KMS_ABI_VERSION_MAJOR 1
-#define KMS_ABI_VERSION_MINOR 1
+#define KMS_ABI_VERSION_MINOR 2
 
 /* ====================================================================== */
 /* Error codes (positive integers, matching Rust)                          */

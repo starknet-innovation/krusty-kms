@@ -28,3 +28,28 @@ final class KmsNostrKeyPair extends Struct {
   @Array(32)
   external Array<Uint8> publicKeyXonly;
 }
+
+final class KmsAccountState extends Struct {
+  @Uint64()
+  external int balanceLow;
+
+  @Uint64()
+  external int balanceHigh;
+
+  @Uint64()
+  external int pendingBalanceLow;
+
+  @Uint64()
+  external int pendingBalanceHigh;
+
+  @Uint64()
+  external int nonce;
+}
+
+final class KmsEthSignature extends Struct {
+  external KmsFelt rLow;
+  external KmsFelt rHigh;
+  external KmsFelt sLow;
+  external KmsFelt sHigh;
+  external KmsFelt v;
+}

@@ -1,5 +1,7 @@
 import 'dart:ffi';
 
+import 'package:ffi/ffi.dart';
+
 import 'types.dart';
 
 // Native function typedefs — version
@@ -136,6 +138,84 @@ typedef _ErrorNameDart = Pointer<Utf8> Function(int code);
 typedef _ErrorMessageC = Pointer<Utf8> Function(Int32 code);
 typedef _ErrorMessageDart = Pointer<Utf8> Function(int code);
 
+// Native function typedefs — account management
+typedef _AccountCreateFromMnemonicC = Int32 Function(Pointer<Utf8> mnemonic,
+    Uint32 index, Uint32 accountIndex, Pointer<KmsFelt> contractAddress,
+    Pointer<Utf8> passphrase, Pointer<Uint64> outHandle);
+typedef _AccountCreateFromMnemonicDart = int Function(Pointer<Utf8> mnemonic,
+    int index, int accountIndex, Pointer<KmsFelt> contractAddress,
+    Pointer<Utf8> passphrase, Pointer<Uint64> outHandle);
+
+typedef _AccountCreateFromKeysC = Int32 Function(Pointer<KmsFelt> ownerKey,
+    Pointer<KmsFelt> viewKey, Pointer<KmsFelt> contractAddress,
+    Pointer<Uint64> outHandle);
+typedef _AccountCreateFromKeysDart = int Function(Pointer<KmsFelt> ownerKey,
+    Pointer<KmsFelt> viewKey, Pointer<KmsFelt> contractAddress,
+    Pointer<Uint64> outHandle);
+
+typedef _AccountGetStateC = Int32 Function(
+    Uint64 handle, Pointer<KmsAccountState> outState);
+typedef _AccountGetStateDart = int Function(
+    int handle, Pointer<KmsAccountState> outState);
+
+typedef _AccountUpdateStateC = Int32 Function(
+    Uint64 handle, Pointer<KmsAccountState> state);
+typedef _AccountUpdateStateDart = int Function(
+    int handle, Pointer<KmsAccountState> state);
+
+typedef _AccountDestroyC = Int32 Function(Uint64 handle);
+typedef _AccountDestroyDart = int Function(int handle);
+
+// Native function typedefs — proof generation
+typedef _GenerateProofC = Int32 Function(Uint64 handle, Pointer<Utf8> paramsJson,
+    Pointer<Uint8> out, Size outLen, Pointer<Size> outWritten);
+typedef _GenerateProofDart = int Function(int handle, Pointer<Utf8> paramsJson,
+    Pointer<Uint8> out, int outLen, Pointer<Size> outWritten);
+
+// Native function typedefs — ElGamal
+typedef _ElgamalEncryptC = Int32 Function(
+    Pointer<KmsFelt> message, Pointer<KmsProjectivePoint> publicKey,
+    Pointer<KmsFelt> random, Pointer<KmsFelt> prefix,
+    Pointer<KmsProjectivePoint> outL, Pointer<KmsProjectivePoint> outR,
+    Pointer<Uint8> outProofJson, Size outProofJsonLen,
+    Pointer<Size> outProofJsonWritten);
+typedef _ElgamalEncryptDart = int Function(
+    Pointer<KmsFelt> message, Pointer<KmsProjectivePoint> publicKey,
+    Pointer<KmsFelt> random, Pointer<KmsFelt> prefix,
+    Pointer<KmsProjectivePoint> outL, Pointer<KmsProjectivePoint> outR,
+    Pointer<Uint8> outProofJson, int outProofJsonLen,
+    Pointer<Size> outProofJsonWritten);
+
+typedef _ElgamalDecryptC = Int32 Function(
+    Pointer<KmsProjectivePoint> ciphertextL,
+    Pointer<KmsProjectivePoint> ciphertextR,
+    Pointer<KmsFelt> privateKey,
+    Pointer<KmsProjectivePoint> outPoint);
+typedef _ElgamalDecryptDart = int Function(
+    Pointer<KmsProjectivePoint> ciphertextL,
+    Pointer<KmsProjectivePoint> ciphertextR,
+    Pointer<KmsFelt> privateKey,
+    Pointer<KmsProjectivePoint> outPoint);
+
+// Native function typedefs — signing
+typedef _StarkSignC = Int32 Function(Pointer<KmsFelt> hash,
+    Pointer<KmsFelt> privateKey, Pointer<KmsFelt> outR, Pointer<KmsFelt> outS);
+typedef _StarkSignDart = int Function(Pointer<KmsFelt> hash,
+    Pointer<KmsFelt> privateKey, Pointer<KmsFelt> outR, Pointer<KmsFelt> outS);
+
+typedef _EthSignC = Int32 Function(Pointer<KmsFelt> hash,
+    Pointer<Uint8> ethPrivateKeyBytes, Pointer<KmsEthSignature> outSignature);
+typedef _EthSignDart = int Function(Pointer<KmsFelt> hash,
+    Pointer<Uint8> ethPrivateKeyBytes, Pointer<KmsEthSignature> outSignature);
+
+// Native function typedefs — calldata encoding
+typedef _EncodeCalldataC = Int32 Function(
+    Pointer<Utf8> paramsJson, Pointer<Uint8> out, Size outLen,
+    Pointer<Size> outWritten);
+typedef _EncodeCalldataDart = int Function(
+    Pointer<Utf8> paramsJson, Pointer<Uint8> out, int outLen,
+    Pointer<Size> outWritten);
+
 class KmsBindings {
   // Version
   late final _GetAbiVersionDart getAbiVersion;
@@ -182,6 +262,36 @@ class KmsBindings {
   // Error
   late final _ErrorNameDart errorName;
   late final _ErrorMessageDart errorMessage;
+
+  // Account management
+  late final _AccountCreateFromMnemonicDart accountCreateFromMnemonic;
+  late final _AccountCreateFromKeysDart accountCreateFromKeys;
+  late final _AccountGetStateDart accountGetState;
+  late final _AccountUpdateStateDart accountUpdateState;
+  late final _AccountDestroyDart accountDestroy;
+
+  // Proof generation
+  late final _GenerateProofDart generateFundProof;
+  late final _GenerateProofDart generateTransferProof;
+  late final _GenerateProofDart generateRolloverProof;
+  late final _GenerateProofDart generateWithdrawProof;
+  late final _GenerateProofDart generateRagequitProof;
+
+  // ElGamal
+  late final _ElgamalEncryptDart elgamalEncrypt;
+  late final _ElgamalDecryptDart elgamalDecrypt;
+
+  // Signing
+  late final _StarkSignDart starkSign;
+  late final _EthSignDart ethSign;
+
+  // Calldata encoding
+  late final _EncodeCalldataDart encodeErc20Approve;
+  late final _EncodeCalldataDart encodeFundCalls;
+  late final _EncodeCalldataDart encodeTransferCalls;
+  late final _EncodeCalldataDart encodeRolloverCalls;
+  late final _EncodeCalldataDart encodeWithdrawCalls;
+  late final _EncodeCalldataDart encodeRagequitCalls;
 
   KmsBindings(DynamicLibrary lib) {
     // Version
@@ -266,5 +376,73 @@ class KmsBindings {
     errorName = lib.lookupFunction<_ErrorNameC, _ErrorNameDart>('kms_error_name');
     errorMessage =
         lib.lookupFunction<_ErrorMessageC, _ErrorMessageDart>('kms_error_message');
+
+    // Account management
+    accountCreateFromMnemonic =
+        lib.lookupFunction<_AccountCreateFromMnemonicC, _AccountCreateFromMnemonicDart>(
+            'kms_account_create_from_mnemonic');
+    accountCreateFromKeys =
+        lib.lookupFunction<_AccountCreateFromKeysC, _AccountCreateFromKeysDart>(
+            'kms_account_create_from_keys');
+    accountGetState =
+        lib.lookupFunction<_AccountGetStateC, _AccountGetStateDart>(
+            'kms_account_get_state');
+    accountUpdateState =
+        lib.lookupFunction<_AccountUpdateStateC, _AccountUpdateStateDart>(
+            'kms_account_update_state');
+    accountDestroy =
+        lib.lookupFunction<_AccountDestroyC, _AccountDestroyDart>(
+            'kms_account_destroy');
+
+    // Proof generation
+    generateFundProof =
+        lib.lookupFunction<_GenerateProofC, _GenerateProofDart>(
+            'kms_generate_fund_proof');
+    generateTransferProof =
+        lib.lookupFunction<_GenerateProofC, _GenerateProofDart>(
+            'kms_generate_transfer_proof');
+    generateRolloverProof =
+        lib.lookupFunction<_GenerateProofC, _GenerateProofDart>(
+            'kms_generate_rollover_proof');
+    generateWithdrawProof =
+        lib.lookupFunction<_GenerateProofC, _GenerateProofDart>(
+            'kms_generate_withdraw_proof');
+    generateRagequitProof =
+        lib.lookupFunction<_GenerateProofC, _GenerateProofDart>(
+            'kms_generate_ragequit_proof');
+
+    // ElGamal
+    elgamalEncrypt =
+        lib.lookupFunction<_ElgamalEncryptC, _ElgamalEncryptDart>(
+            'kms_elgamal_encrypt');
+    elgamalDecrypt =
+        lib.lookupFunction<_ElgamalDecryptC, _ElgamalDecryptDart>(
+            'kms_elgamal_decrypt');
+
+    // Signing
+    starkSign =
+        lib.lookupFunction<_StarkSignC, _StarkSignDart>('kms_stark_sign');
+    ethSign =
+        lib.lookupFunction<_EthSignC, _EthSignDart>('kms_eth_sign');
+
+    // Calldata encoding
+    encodeErc20Approve =
+        lib.lookupFunction<_EncodeCalldataC, _EncodeCalldataDart>(
+            'kms_encode_erc20_approve');
+    encodeFundCalls =
+        lib.lookupFunction<_EncodeCalldataC, _EncodeCalldataDart>(
+            'kms_encode_fund_calls');
+    encodeTransferCalls =
+        lib.lookupFunction<_EncodeCalldataC, _EncodeCalldataDart>(
+            'kms_encode_transfer_calls');
+    encodeRolloverCalls =
+        lib.lookupFunction<_EncodeCalldataC, _EncodeCalldataDart>(
+            'kms_encode_rollover_calls');
+    encodeWithdrawCalls =
+        lib.lookupFunction<_EncodeCalldataC, _EncodeCalldataDart>(
+            'kms_encode_withdraw_calls');
+    encodeRagequitCalls =
+        lib.lookupFunction<_EncodeCalldataC, _EncodeCalldataDart>(
+            'kms_encode_ragequit_calls');
   }
 }

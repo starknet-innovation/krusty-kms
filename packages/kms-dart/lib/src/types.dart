@@ -147,3 +147,88 @@ class NostrKeyPair {
   String toString() => 'NostrKeyPair(privateKey: [${privateKey.length} bytes], '
       'publicKeyXonly: [${publicKeyXonly.length} bytes])';
 }
+
+class AccountHandle {
+  final int rawValue;
+
+  const AccountHandle(this.rawValue);
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || (other is AccountHandle && rawValue == other.rawValue);
+
+  @override
+  int get hashCode => rawValue.hashCode;
+
+  @override
+  String toString() => 'AccountHandle($rawValue)';
+}
+
+class AccountState {
+  final int balanceLow;
+  final int balanceHigh;
+  final int pendingBalanceLow;
+  final int pendingBalanceHigh;
+  final int nonce;
+
+  const AccountState({
+    required this.balanceLow,
+    required this.balanceHigh,
+    required this.pendingBalanceLow,
+    required this.pendingBalanceHigh,
+    required this.nonce,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AccountState &&
+          balanceLow == other.balanceLow &&
+          balanceHigh == other.balanceHigh &&
+          pendingBalanceLow == other.pendingBalanceLow &&
+          pendingBalanceHigh == other.pendingBalanceHigh &&
+          nonce == other.nonce);
+
+  @override
+  int get hashCode =>
+      Object.hash(balanceLow, balanceHigh, pendingBalanceLow, pendingBalanceHigh, nonce);
+
+  @override
+  String toString() =>
+      'AccountState(balanceLow: $balanceLow, balanceHigh: $balanceHigh, '
+      'pendingBalanceLow: $pendingBalanceLow, pendingBalanceHigh: $pendingBalanceHigh, '
+      'nonce: $nonce)';
+}
+
+class EthSignature {
+  final Felt rLow;
+  final Felt rHigh;
+  final Felt sLow;
+  final Felt sHigh;
+  final Felt v;
+
+  const EthSignature({
+    required this.rLow,
+    required this.rHigh,
+    required this.sLow,
+    required this.sHigh,
+    required this.v,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EthSignature &&
+          rLow == other.rLow &&
+          rHigh == other.rHigh &&
+          sLow == other.sLow &&
+          sHigh == other.sHigh &&
+          v == other.v);
+
+  @override
+  int get hashCode => Object.hash(rLow, rHigh, sLow, sHigh, v);
+
+  @override
+  String toString() =>
+      'EthSignature(rLow: $rLow, rHigh: $rHigh, sLow: $sLow, sHigh: $sHigh, v: $v)';
+}

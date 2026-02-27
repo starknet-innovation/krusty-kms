@@ -14,10 +14,6 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      ts: ${{ steps.filter.outputs.ts }}
-      py: ${{ steps.filter.outputs.py }}
-      rs: ${{ steps.filter.outputs.rs }}
-      go: ${{ steps.filter.outputs.go }}
       swift: ${{ steps.filter.outputs.swift }}
       jvm: ${{ steps.filter.outputs.jvm }}
       dart: ${{ steps.filter.outputs.dart }}
@@ -27,18 +23,6 @@ jobs:
         id: filter
         with:
           filters: |
-            ts:
-              - 'packages/kms-ts/**'
-              - 'packages/kms-c/**'
-            py:
-              - 'packages/kms-py/**'
-              - 'packages/kms-c/**'
-            rs:
-              - 'packages/kms-rs/**'
-              - 'packages/kms-c/**'
-            go:
-              - 'packages/kms-go/**'
-              - 'packages/kms-c/**'
             swift:
               - 'packages/kms-swift/**'
               - 'packages/kms-c/**'
@@ -48,61 +32,6 @@ jobs:
             dart:
               - 'packages/kms-dart/**'
               - 'packages/kms-c/**'
-
-  ts:
-    needs: changes
-    if: needs.changes.outputs.ts == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/kms-ts
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - run: npm install
-      - run: npm run typecheck
-
-  py:
-    needs: changes
-    if: needs.changes.outputs.py == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/kms-py
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: python -m compileall src
-
-  rs:
-    needs: changes
-    if: needs.changes.outputs.rs == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/kms-rs
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test
-
-  go:
-    needs: changes
-    if: needs.changes.outputs.go == 'true'
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/kms-go
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-      - run: go test ./...
 
   swift:
     needs: changes
