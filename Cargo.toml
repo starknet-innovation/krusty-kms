@@ -5,6 +5,7 @@ members = [
     "crates/kms",
     "crates/crypto",
     "crates/client",
+    "crates/controller",
     "crates/sdk",
     "crates/wasm",
     "crates/experimental/gaming-experimental/mental-poker",

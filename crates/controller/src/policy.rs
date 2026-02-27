@@ -1,6 +1,6 @@
 //! Session policies and fee mode types for the Cartridge Controller.
 
-use super::convert::felt_ours_to_sdk;
+use crate::convert::felt_ours_to_sdk;
 use account_sdk::account::session::policy::{CallPolicy, Policy};
 use krusty_kms_common::address::Address;
 

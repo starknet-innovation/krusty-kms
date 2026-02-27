@@ -29,6 +29,3 @@ pub use starknet_rust;
 pub use tx::{Tx, TxBuilder};
 pub use types::{decrypt_cipher_balance, AccountState, CipherBalance, DecryptedAccountState};
 pub use wallet::{Wallet, WalletExecutor};
-
-#[cfg(feature = "controller")]
-pub use wallet::controller::{ControllerWallet, FeeMode, SessionPolicy};

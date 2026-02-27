@@ -2,9 +2,6 @@
 
 pub mod utils;
 
-#[cfg(feature = "controller")]
-pub mod controller;
-
 use krusty_kms::AccountClass;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
@@ -22,7 +19,7 @@ use self::utils::{check_deployed, core_felt_to_rs};
 use crate::tx::Tx;
 
 /// Trait abstracting wallet execution so consumers work with either `Wallet`
-/// or `ControllerWallet` (behind the `controller` feature).
+/// or `ControllerWallet` (from the `krusty-kms-controller` crate).
 #[async_trait::async_trait]
 pub trait WalletExecutor: Send + Sync {
     /// Execute a list of calls as a single transaction.

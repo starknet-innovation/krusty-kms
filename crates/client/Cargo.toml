@@ -5,9 +5,6 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Starknet RPC client for interacting with TONGO contracts"
-# Cannot publish: `account_sdk` (controller feature) is a git-only dependency
-# with no crates.io release.
-publish = false
 
 [dependencies]
 krusty-kms-common = { path = "../common" }
@@ -23,14 +20,6 @@ hex.workspace = true
 thiserror.workspace = true
 url = "2.5"
 async-trait.workspace = true
-
-# Optional: Cartridge Controller SDK
-account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.9.4", optional = true }
-starknet = { version = "0.17.0", optional = true }
-
-[features]
-default = []
-controller = ["dep:account_sdk", "dep:starknet"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
