@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Starknet RPC client for interacting with TONGO contracts"
+# Cannot publish: `account_sdk` (controller feature) is a git-only dependency
+# with no crates.io release.
+publish = false
 
 [dependencies]
 krusty-kms-common = { path = "../common" }
