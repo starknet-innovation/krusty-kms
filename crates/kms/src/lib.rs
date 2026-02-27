@@ -23,7 +23,9 @@ pub mod eth_signer;
 pub mod mnemonic;
 
 pub use account::{calculate_contract_address, derive_oz_account_address};
-pub use account_class::{AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount};
+pub use account_class::{
+    AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount, OzDeploymentDescriptor,
+};
 pub use derivation::{
     derive_keypair, derive_keypair_with_coin_type, derive_nostr_keypair, derive_nostr_private_key,
     derive_private_key, derive_private_key_with_coin_type, derive_view_keypair,

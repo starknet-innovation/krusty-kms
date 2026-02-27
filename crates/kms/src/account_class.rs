@@ -42,6 +42,28 @@ pub struct OpenZeppelinAccount {
     class_hash: Felt,
 }
 
+/// Bundles all deployment parameters for an OpenZeppelin account into one
+/// inspectable value, ensuring the same canonical path is used for both
+/// address derivation and the `DEPLOY_ACCOUNT` transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OzDeploymentDescriptor {
+    pub address: Felt,
+    pub class_hash: Felt,
+    pub salt: Felt,
+    pub constructor_calldata: Vec<Felt>,
+    /// Always `Felt::ZERO` for counterfactual deployment.
+    pub deployer_address: Felt,
+}
+
+impl OzDeploymentDescriptor {
+    /// Return the address as a zero-padded hex string (`0x` + 64 hex chars).
+    ///
+    /// Prevents leading-zero ambiguity that can occur with `{:#x}` formatting.
+    pub fn normalized_address_hex(&self) -> String {
+        format!("0x{:064x}", self.address)
+    }
+}
+
 impl OpenZeppelinAccount {
     /// OpenZeppelin Account class hash (Cairo 1, v0.14.0).
     pub const CLASS_HASH: &str =
@@ -56,6 +78,28 @@ impl OpenZeppelinAccount {
     /// Create with a custom class hash.
     pub fn with_class_hash(class_hash: Felt) -> Self {
         Self { class_hash }
+    }
+
+    /// Build an [`OzDeploymentDescriptor`] that captures every parameter
+    /// needed for both address derivation and the deploy transaction.
+    pub fn deployment_descriptor(&self, public_key: &Felt) -> Result<OzDeploymentDescriptor> {
+        let salt = self.get_salt(public_key);
+        let constructor_calldata = self.build_constructor_calldata(public_key);
+        let deployer_address = Felt::ZERO;
+        let address = calculate_contract_address(
+            &salt,
+            &self.class_hash(),
+            &constructor_calldata,
+            &deployer_address,
+        )?;
+
+        Ok(OzDeploymentDescriptor {
+            address,
+            class_hash: self.class_hash(),
+            salt,
+            constructor_calldata,
+            deployer_address,
+        })
     }
 }
 
@@ -231,5 +275,69 @@ mod tests {
         let custom_hash = Felt::from(0xDEADBEEFu64);
         let oz = OpenZeppelinAccount::with_class_hash(custom_hash);
         assert_eq!(oz.class_hash(), custom_hash);
+    }
+
+    // -----------------------------------------------------------------------
+    // OzDeploymentDescriptor consistency tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_descriptor_address_matches_calculate_address() {
+        let oz = OpenZeppelinAccount::new();
+        let pk = Felt::from(12345u64);
+        let descriptor = oz.deployment_descriptor(&pk).unwrap();
+        let addr = oz.calculate_address(&pk).unwrap();
+        assert_eq!(descriptor.address, addr);
+    }
+
+    #[test]
+    fn test_descriptor_salt_is_public_key() {
+        let oz = OpenZeppelinAccount::new();
+        let pk = Felt::from(42u64);
+        let descriptor = oz.deployment_descriptor(&pk).unwrap();
+        assert_eq!(descriptor.salt, pk);
+    }
+
+    #[test]
+    fn test_descriptor_deployer_is_zero() {
+        let oz = OpenZeppelinAccount::new();
+        let pk = Felt::from(42u64);
+        let descriptor = oz.deployment_descriptor(&pk).unwrap();
+        assert_eq!(descriptor.deployer_address, Felt::ZERO);
+    }
+
+    #[test]
+    fn test_descriptor_calldata_is_pubkey() {
+        let oz = OpenZeppelinAccount::new();
+        let pk = Felt::from(42u64);
+        let descriptor = oz.deployment_descriptor(&pk).unwrap();
+        assert_eq!(descriptor.constructor_calldata, vec![pk]);
+    }
+
+    #[test]
+    fn test_normalized_hex_has_leading_zeros() {
+        let oz = OpenZeppelinAccount::new();
+        let pk = Felt::from(1u64); // small key → address with leading zeros
+        let descriptor = oz.deployment_descriptor(&pk).unwrap();
+        let hex = descriptor.normalized_address_hex();
+        // "0x" + 64 hex chars = 66 total
+        assert_eq!(
+            hex.len(),
+            66,
+            "expected 66 chars, got {}: {}",
+            hex.len(),
+            hex
+        );
+        assert!(hex.starts_with("0x"));
+    }
+
+    #[test]
+    fn test_custom_class_hash_descriptor() {
+        let custom_hash = Felt::from(0xDEADBEEFu64);
+        let oz = OpenZeppelinAccount::with_class_hash(custom_hash);
+        let pk = Felt::from(99u64);
+        let descriptor = oz.deployment_descriptor(&pk).unwrap();
+        assert_eq!(descriptor.class_hash, custom_hash);
+        assert_eq!(descriptor.address, oz.calculate_address(&pk).unwrap());
     }
 }
