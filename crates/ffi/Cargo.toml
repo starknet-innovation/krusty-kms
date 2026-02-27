@@ -2,6 +2,7 @@
 name = "krusty-kms-cabi"
 version.workspace = true
 edition.workspace = true
+publish = false
 
 [lib]
 name = "kms"

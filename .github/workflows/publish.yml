@@ -1,0 +1,30 @@
+name: Publish to crates.io
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "!crates/ffi/**"
+      - "!crates/experimental/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo publish -p krusty-kms-common --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+      - run: cargo publish -p krusty-kms-crypto --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+      - run: cargo publish -p krusty-kms --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+      - run: cargo publish -p krusty-kms-sdk --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+      - run: cargo publish -p krusty-kms-client --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true
+      - run: cargo publish -p krusty-kms-wasm --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true

@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Computer Quarterback - A lying prover game with cryptographic commitments"
+publish = false
 keywords = ["cryptography", "game", "commitments", "zero-knowledge"]
 categories = ["cryptography", "games"]
 

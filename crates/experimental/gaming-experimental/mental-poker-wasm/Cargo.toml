@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "WASM bindings for mental poker protocol - browser-compatible card game cryptography"
+publish = false
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
