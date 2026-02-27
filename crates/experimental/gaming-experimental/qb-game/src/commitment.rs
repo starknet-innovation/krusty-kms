@@ -9,8 +9,8 @@
 //! - Binding: Cannot open to a different play (hash collision resistant)
 
 use rand::RngCore;
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::types::{DefensiveCoverage, OffensivePlay};
 
@@ -86,7 +86,9 @@ pub fn commit_offensive_play(play: OffensivePlay) -> (PlayCommitment, Commitment
 }
 
 /// Create a commitment to a defensive coverage.
-pub fn commit_defensive_coverage(coverage: DefensiveCoverage) -> (PlayCommitment, CommitmentOpening) {
+pub fn commit_defensive_coverage(
+    coverage: DefensiveCoverage,
+) -> (PlayCommitment, CommitmentOpening) {
     let opening = CommitmentOpening::new_random(coverage.to_index() as u8);
     let hash = compute_commitment_hash(opening.play_index, &opening.salt);
     (PlayCommitment { hash }, opening)
@@ -151,7 +153,10 @@ mod tests {
         // Same play with different salts should produce different commitments
         let (c1, _) = commit_offensive_play(OffensivePlay::Slant);
         let (c2, _) = commit_offensive_play(OffensivePlay::Slant);
-        assert_ne!(c1.hash, c2.hash, "Different salts should produce different commitments");
+        assert_ne!(
+            c1.hash, c2.hash,
+            "Different salts should produce different commitments"
+        );
     }
 
     #[test]

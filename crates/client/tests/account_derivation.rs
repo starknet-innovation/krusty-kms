@@ -36,8 +36,7 @@ fn test_derive_starknet_account_address() {
     // using the same class hash as the TypeScript reference
 
     // Parse the OZ class hash
-    let class_hash = Felt::from_hex(OZ_ACCOUNT_CLASS_HASH)
-        .expect("Invalid OZ class hash");
+    let class_hash = Felt::from_hex(OZ_ACCOUNT_CLASS_HASH).expect("Invalid OZ class hash");
 
     // Derive a keypair (using standard Starknet coin type 9004 path for account contracts)
     // For account contract derivation, we'd use: m/44'/9004'/0'/0/0

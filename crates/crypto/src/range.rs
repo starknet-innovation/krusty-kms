@@ -84,9 +84,10 @@ pub fn prove_with_randomness(
 ) -> Result<(Range, Felt)> {
     // Check range
     if bit_size > 128 {
-        return Err(krusty_kms_common::KmsError::CryptoError(
-            format!("bit_size {} exceeds maximum 128", bit_size)
-        ));
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "bit_size {} exceeds maximum 128",
+            bit_size
+        )));
     }
 
     if random_values.len() != bit_size {
@@ -102,15 +103,14 @@ pub fn prove_with_randomness(
     };
 
     if b > max_value {
-        return Err(krusty_kms_common::KmsError::CryptoError(
-            format!("Value {} is not in range [0, {}]", b, max_value)
-        ));
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "Value {} is not in range [0, {}]",
+            b, max_value
+        )));
     }
 
     // Convert to binary (little-endian: bit 0 is LSB)
-    let b_bin: Vec<u8> = (0..bit_size)
-        .map(|i| ((b >> i) & 1) as u8)
-        .collect();
+    let b_bin: Vec<u8> = (0..bit_size).map(|i| ((b >> i) & 1) as u8).collect();
 
     // OPTIMIZATION: Generate all bit proofs in PARALLEL (8-10x speedup expected on 8-core CPU)
     // This is safe because each bit proof is independent - only the final accumulation
@@ -185,10 +185,12 @@ pub fn verify(
 ) -> Result<ProjectivePoint> {
     // Check lengths match
     if range.commitments.len() != bit_size || range.proofs.len() != bit_size {
-        return Err(krusty_kms_common::KmsError::CryptoError(
-            format!("Length mismatch: commitments={}, proofs={}, bit_size={}",
-                range.commitments.len(), range.proofs.len(), bit_size)
-        ));
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "Length mismatch: commitments={}, proofs={}, bit_size={}",
+            range.commitments.len(),
+            range.proofs.len(),
+            bit_size
+        )));
     }
 
     // Verify first bit and initialize accumulator
@@ -198,7 +200,7 @@ pub fn verify(
     let prefix0 = scalar::scalar_add(initial_prefix, &Felt::ZERO)?;
     if !bit::verify(&v0, g1, g2, &range.proofs[0], &prefix0)? {
         return Err(krusty_kms_common::KmsError::CryptoError(
-            "Bit proof failed at index 0".to_string()
+            "Bit proof failed at index 0".to_string(),
         ));
     }
 
@@ -214,9 +216,10 @@ pub fn verify(
         // Verify this bit proof
         let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
         if !bit::verify(&v, g1, g2, &range.proofs[i], &prefix)? {
-            return Err(krusty_kms_common::KmsError::CryptoError(
-                format!("Bit proof failed at index {}", i)
-            ));
+            return Err(krusty_kms_common::KmsError::CryptoError(format!(
+                "Bit proof failed at index {}",
+                i
+            )));
         }
 
         // V_total = V_total + V * pow
@@ -246,7 +249,7 @@ mod tests {
         // Check V = g1^b * g2^r
         let expected = StarkCurve::add(
             &StarkCurve::mul(&Felt::from(b), Some(&g1)),
-            &StarkCurve::mul(&r, Some(&g2))
+            &StarkCurve::mul(&r, Some(&g2)),
         );
 
         let v_affine = StarkCurve::projective_to_affine(&v).unwrap();
@@ -355,7 +358,8 @@ mod tests {
         let (mut range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
 
         // Tamper with first commitment
-        range.commitments[0] = SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
+        range.commitments[0] =
+            SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
 
         let result = verify(&range, bit_size, &g1, &g2, &prefix);
         assert!(result.is_err());
@@ -376,7 +380,8 @@ mod tests {
         let (mut range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
 
         // Tamper with a middle commitment (index 3)
-        range.commitments[3] = SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
+        range.commitments[3] =
+            SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
 
         let result = verify(&range, bit_size, &g1, &g2, &prefix);
         assert!(result.is_err());
@@ -401,7 +406,7 @@ mod tests {
         // Check V = g1^b * g2^r
         let expected = StarkCurve::add(
             &StarkCurve::mul(&Felt::from(b), Some(&g1)),
-            &StarkCurve::mul(&r, Some(&g2))
+            &StarkCurve::mul(&r, Some(&g2)),
         );
 
         let v_affine = StarkCurve::projective_to_affine(&v).unwrap();

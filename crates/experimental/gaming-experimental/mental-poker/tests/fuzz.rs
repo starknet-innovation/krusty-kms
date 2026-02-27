@@ -3,6 +3,7 @@
 //! These tests help ensure correctness under a wide range of inputs,
 //! catching edge cases and potential security issues.
 
+use krusty_kms_crypto::StarkCurve;
 use mental_poker::{
     types::{
         Card, CompactDLEqualityProof, CompactKeyOwnershipProof, CompactMaskedCard, CompactPoint,
@@ -11,7 +12,6 @@ use mental_poker::{
     MentalPokerProtocol,
 };
 use proptest::prelude::*;
-use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::felt::Felt;
 
 // Strategy for generating random scalars (non-zero)

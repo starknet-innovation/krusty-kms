@@ -44,10 +44,7 @@ pub struct DecryptedAccountState {
 /// We can decrypt by computing: m = L / R^x, where x is the private key.
 ///
 /// # Cyclomatic Complexity: 3
-pub fn decrypt_cipher_balance(
-    private_key: &Felt,
-    cipher: &CipherBalance,
-) -> Result<u128> {
+pub fn decrypt_cipher_balance(private_key: &Felt, cipher: &CipherBalance) -> Result<u128> {
     // Calculate R^x (scalar multiplication)
     let r_x = multiply_point(&cipher.r, private_key)?;
 
@@ -86,12 +83,14 @@ fn multiply_point(point: &ProjectivePoint, scalar: &Felt) -> Result<ProjectivePo
 /// Subtract two points (add the inverse).
 fn subtract_points(a: &ProjectivePoint, b: &ProjectivePoint) -> Result<ProjectivePoint> {
     // Negate b by negating the y-coordinate
-    let b_affine = b.to_affine()
-        .map_err(|_| krusty_kms_common::KmsError::CryptoError("Invalid point (identity)".to_string()))?;
+    let b_affine = b.to_affine().map_err(|_| {
+        krusty_kms_common::KmsError::CryptoError("Invalid point (identity)".to_string())
+    })?;
 
     let neg_y = Felt::ZERO - b_affine.y();
-    let neg_b = ProjectivePoint::from_affine(b_affine.x(), neg_y)
-        .map_err(|_| krusty_kms_common::KmsError::CryptoError("Invalid negated point".to_string()))?;
+    let neg_b = ProjectivePoint::from_affine(b_affine.x(), neg_y).map_err(|_| {
+        krusty_kms_common::KmsError::CryptoError("Invalid negated point".to_string())
+    })?;
 
     Ok(a + &neg_b)
 }
@@ -127,17 +126,15 @@ fn discrete_log_brute_force(g_m: &ProjectivePoint) -> Result<u128> {
         }
     }
 
-    Err(krusty_kms_common::KmsError::CryptoError(
-        format!("Failed to recover balance (discrete log not found within search limit)")
-    ))
+    Err(krusty_kms_common::KmsError::CryptoError(format!(
+        "Failed to recover balance (discrete log not found within search limit)"
+    )))
 }
 
 /// Check if two points are equal.
 fn points_equal(a: &ProjectivePoint, b: &ProjectivePoint) -> bool {
     match (a.to_affine(), b.to_affine()) {
-        (Ok(a_aff), Ok(b_aff)) => {
-            a_aff.x() == b_aff.x() && a_aff.y() == b_aff.y()
-        }
+        (Ok(a_aff), Ok(b_aff)) => a_aff.x() == b_aff.x() && a_aff.y() == b_aff.y(),
         (Err(_), Err(_)) => true, // Both are identity
         _ => false,
     }
@@ -153,10 +150,12 @@ mod tests {
         let private_key = Felt::from(12345u64);
 
         // Generate public key
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let generator = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let public_key = multiply_point(&generator, &private_key).unwrap();
@@ -166,10 +165,7 @@ mod tests {
         let r_point = multiply_point(&generator, &r).unwrap();
         let y_r = multiply_point(&public_key, &r).unwrap();
 
-        let cipher = CipherBalance {
-            l: y_r,
-            r: r_point,
-        };
+        let cipher = CipherBalance { l: y_r, r: r_point };
 
         let decrypted = decrypt_cipher_balance(&private_key, &cipher).unwrap();
         assert_eq!(decrypted, 0);
@@ -177,10 +173,12 @@ mod tests {
 
     #[test]
     fn test_point_subtraction() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // g - g should give identity
@@ -190,10 +188,12 @@ mod tests {
 
     #[test]
     fn test_points_equal_same_point() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         assert!(points_equal(&g, &g));
@@ -201,10 +201,12 @@ mod tests {
 
     #[test]
     fn test_points_equal_different_points() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let g2 = &g + &g;
@@ -213,10 +215,12 @@ mod tests {
 
     #[test]
     fn test_points_equal_both_identity() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // g - g = identity
@@ -228,10 +232,12 @@ mod tests {
 
     #[test]
     fn test_points_equal_one_identity() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // g - g = identity
@@ -244,10 +250,12 @@ mod tests {
 
     #[test]
     fn test_multiply_point_by_one() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let result = multiply_point(&g, &Felt::ONE).unwrap();
@@ -256,10 +264,12 @@ mod tests {
 
     #[test]
     fn test_multiply_point_by_two() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let result = multiply_point(&g, &Felt::TWO).unwrap();
@@ -269,10 +279,12 @@ mod tests {
 
     #[test]
     fn test_discrete_log_small_value() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // Test discrete log for small value (1)
@@ -282,10 +294,12 @@ mod tests {
 
     #[test]
     fn test_discrete_log_value_5() {
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // Compute 5*g
@@ -300,10 +314,12 @@ mod tests {
         let private_key = Felt::from(12345u64);
 
         // Use the generator
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let generator = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // Compute public key y = g^x
@@ -316,10 +332,7 @@ mod tests {
         let g_m = multiply_point(&generator, &Felt::from(5u64)).unwrap(); // g^5
         let l = &g_m + &y_r; // g^5 * y^r
 
-        let cipher = CipherBalance {
-            l,
-            r: r_point,
-        };
+        let cipher = CipherBalance { l, r: r_point };
 
         let decrypted = decrypt_cipher_balance(&private_key, &cipher).unwrap();
         assert_eq!(decrypted, 5);

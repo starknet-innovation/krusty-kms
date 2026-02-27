@@ -14,15 +14,15 @@
 //! 5. Probabilistic verification: P(caught) = 1 - e^(-0.15 * lie_magnitude)
 //! 6. If caught: penalty; if not caught: claimed yards count
 
-pub mod types;
-pub mod payoff;
-pub mod detection;
 pub mod commitment;
+pub mod detection;
+pub mod payoff;
+pub mod types;
 pub mod verification;
 
 // Re-exports
-pub use types::*;
-pub use payoff::*;
-pub use detection::*;
 pub use commitment::*;
+pub use detection::*;
+pub use payoff::*;
+pub use types::*;
 pub use verification::*;

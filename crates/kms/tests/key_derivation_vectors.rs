@@ -16,10 +16,7 @@ const TEST_MNEMONIC: &str =
 #[test]
 fn test_tongo_coin_type_constant() {
     // Verify that TONGO_COIN_TYPE is set to the correct value
-    assert_eq!(
-        TONGO_COIN_TYPE, 5454,
-        "TONGO coin type should be 5454"
-    );
+    assert_eq!(TONGO_COIN_TYPE, 5454, "TONGO coin type should be 5454");
 
     println!("\n=> TONGO Coin Type:");
     println!("   Coin Type: {}", TONGO_COIN_TYPE);
@@ -139,8 +136,7 @@ fn test_passphrase_affects_derivation() {
     let keypair_no_pass = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
 
     // Derive with passphrase
-    let keypair_with_pass =
-        derive_keypair(TEST_MNEMONIC, 0, 0, Some("test_passphrase")).unwrap();
+    let keypair_with_pass = derive_keypair(TEST_MNEMONIC, 0, 0, Some("test_passphrase")).unwrap();
 
     // Different passphrases should produce different keys
     assert_ne!(
@@ -154,7 +150,10 @@ fn test_passphrase_affects_derivation() {
 
     println!("\n=> Passphrase Effect on Derivation:");
     println!("   Without passphrase: {:#x}", keypair_no_pass.private_key);
-    println!("   With passphrase:    {:#x}", keypair_with_pass.private_key);
+    println!(
+        "   With passphrase:    {:#x}",
+        keypair_with_pass.private_key
+    );
 }
 
 #[test]

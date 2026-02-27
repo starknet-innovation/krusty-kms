@@ -34,7 +34,10 @@ impl SerializablePoint {
     ///
     /// # Panics
     /// Panics if the point is at infinity. Use `try_from_projective` for fallible conversion.
-    #[deprecated(since = "0.2.0", note = "Use try_from_projective for fallible conversion")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use try_from_projective for fallible conversion"
+    )]
     pub fn from_projective(point: &ProjectivePoint) -> Self {
         Self::try_from_projective(point).expect("Point at infinity cannot be serialized")
     }
@@ -202,10 +205,12 @@ mod tests {
     #[test]
     fn test_serializable_point_try_from_projective() {
         // Use the generator point which is always valid
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let projective = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let result = SerializablePoint::try_from_projective(&projective);
@@ -233,7 +238,8 @@ mod tests {
         let affine = point.to_affine().unwrap();
         assert_eq!(
             affine.x(),
-            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca").unwrap()
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap()
         );
     }
 
@@ -250,10 +256,12 @@ mod tests {
     #[test]
     fn test_serializable_point_roundtrip() {
         // Create a valid point, serialize, deserialize
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
-            .unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
-            .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let original = AffinePoint::new(g_x, g_y).unwrap();
 
         let serialized = SerializablePoint::from_affine(&original);

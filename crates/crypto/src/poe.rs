@@ -253,7 +253,8 @@ mod tests {
     #[test]
     fn test_poe_large_exponent() {
         // Test with a large exponent
-        let x = Felt::from_hex("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef").unwrap();
+        let x = Felt::from_hex("0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+            .unwrap();
         let prefix = Felt::from(42u64);
 
         let (y, proof) = ProofOfExponentiation::prove(&x, &prefix).unwrap();

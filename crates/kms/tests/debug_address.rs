@@ -29,8 +29,9 @@ fn debug_account_address_calculation() {
     println!();
 
     // Manually calculate each step
-    let oz_class_hash = Felt::from_hex("0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564")
-        .expect("Should parse class hash");
+    let oz_class_hash =
+        Felt::from_hex("0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564")
+            .expect("Should parse class hash");
     let salt = Felt::ZERO;
     let deployer = Felt::ZERO;
 
@@ -52,13 +53,22 @@ fn debug_account_address_calculation() {
     for (i, element) in calldata.iter().enumerate() {
         let prev = chain_hash;
         chain_hash = Pedersen::hash(&chain_hash, element);
-        println!("  Step 3.{}: pedersen({:#x}, {:#x}) = {:#x}", i+1, prev, element, chain_hash);
+        println!(
+            "  Step 3.{}: pedersen({:#x}, {:#x}) = {:#x}",
+            i + 1,
+            prev,
+            element,
+            chain_hash
+        );
     }
 
     // Hash with length
     let length = Felt::from(calldata.len() as u64);
     let calldata_hash = Pedersen::hash(&chain_hash, &length);
-    println!("  Step 3.final: pedersen({:#x}, {:#x}) = {:#x}", chain_hash, length, calldata_hash);
+    println!(
+        "  Step 3.final: pedersen({:#x}, {:#x}) = {:#x}",
+        chain_hash, length, calldata_hash
+    );
     println!();
 
     // Step 4: Prefix - short string encoding
@@ -94,7 +104,10 @@ fn debug_account_address_calculation() {
     println!("Step 6: Result");
     println!("  Expected: {}", expected_address);
     println!("  Derived:  {:#x}", current);
-    println!("  Match:    {}", format!("{:#x}", current) == expected_address);
+    println!(
+        "  Match:    {}",
+        format!("{:#x}", current) == expected_address
+    );
     println!();
 
     // Use the actual function
@@ -103,5 +116,8 @@ fn debug_account_address_calculation() {
     println!("Step 7: Using derive_oz_account_address function");
     println!("  Result:   {:#x}", derived_address);
     println!("  Expected: {}", expected_address);
-    println!("  Match:    {}", format!("{:#x}", derived_address) == expected_address);
+    println!(
+        "  Match:    {}",
+        format!("{:#x}", derived_address) == expected_address
+    );
 }

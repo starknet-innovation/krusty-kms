@@ -3,9 +3,9 @@
 //! This test suite validates the Rust implementation against the TypeScript
 //! reference implementation using the generated test vectors.
 
+use krusty_kms_crypto::*;
 use serde::Deserialize;
 use serde_json;
-use krusty_kms_crypto::*;
 use starknet_types_core::felt::Felt;
 use std::fs;
 
@@ -34,17 +34,23 @@ fn test_point_arithmetic_vectors() {
 
     // Skip if test vectors don't exist (they're gitignored)
     if !std::path::Path::new(test_vectors_path).exists() {
-        eprintln!("Skipping test: test-vectors.json not found at {}", test_vectors_path);
+        eprintln!(
+            "Skipping test: test-vectors.json not found at {}",
+            test_vectors_path
+        );
         return;
     }
 
-    let contents = fs::read_to_string(test_vectors_path)
-        .expect("Failed to read test vectors");
+    let contents = fs::read_to_string(test_vectors_path).expect("Failed to read test vectors");
 
-    let test_data: TestVectors = serde_json::from_str(&contents)
-        .expect("Failed to parse test vectors");
+    let test_data: TestVectors =
+        serde_json::from_str(&contents).expect("Failed to parse test vectors");
 
-    for vector in test_data.vectors.iter().filter(|v| v.category == "point_arithmetic") {
+    for vector in test_data
+        .vectors
+        .iter()
+        .filter(|v| v.category == "point_arithmetic")
+    {
         let scalar_str = vector.inputs["scalar"].as_str().unwrap();
         let scalar = Felt::from_dec_str(scalar_str).unwrap();
 
@@ -56,12 +62,14 @@ fn test_point_arithmetic_vectors() {
         let expected_y = Felt::from_dec_str(&expected.y).unwrap();
 
         assert_eq!(
-            result_affine.x(), expected_x,
+            result_affine.x(),
+            expected_x,
             "Vector {} failed: x coordinate mismatch",
             vector.name
         );
         assert_eq!(
-            result_affine.y(), expected_y,
+            result_affine.y(),
+            expected_y,
             "Vector {} failed: y coordinate mismatch",
             vector.name
         );
@@ -77,13 +85,16 @@ fn test_poe_protocol_vectors() {
         return;
     }
 
-    let contents = fs::read_to_string(test_vectors_path)
-        .expect("Failed to read test vectors");
+    let contents = fs::read_to_string(test_vectors_path).expect("Failed to read test vectors");
 
-    let test_data: TestVectors = serde_json::from_str(&contents)
-        .expect("Failed to parse test vectors");
+    let test_data: TestVectors =
+        serde_json::from_str(&contents).expect("Failed to parse test vectors");
 
-    for vector in test_data.vectors.iter().filter(|v| v.category == "poe_protocol") {
+    for vector in test_data
+        .vectors
+        .iter()
+        .filter(|v| v.category == "poe_protocol")
+    {
         let x_str = vector.inputs["x"].as_str().unwrap();
         let prefix_str = vector.inputs["prefix"].as_str().unwrap();
 
@@ -98,18 +109,21 @@ fn test_poe_protocol_vectors() {
         assert!(valid, "Generated proof for {} should be valid", vector.name);
 
         // Verify the y value matches expected
-        let expected_y: PointExpected = serde_json::from_value(vector.expected["y"].clone()).unwrap();
+        let expected_y: PointExpected =
+            serde_json::from_value(vector.expected["y"].clone()).unwrap();
         let expected_y_x = Felt::from_dec_str(&expected_y.x).unwrap();
         let expected_y_y = Felt::from_dec_str(&expected_y.y).unwrap();
 
         let y_affine = StarkCurve::projective_to_affine(&y).unwrap();
         assert_eq!(
-            y_affine.x(), expected_y_x,
+            y_affine.x(),
+            expected_y_x,
             "Vector {} failed: y.x mismatch",
             vector.name
         );
         assert_eq!(
-            y_affine.y(), expected_y_y,
+            y_affine.y(),
+            expected_y_y,
             "Vector {} failed: y.y mismatch",
             vector.name
         );
@@ -125,13 +139,16 @@ fn test_poe2_protocol_vectors() {
         return;
     }
 
-    let contents = fs::read_to_string(test_vectors_path)
-        .expect("Failed to read test vectors");
+    let contents = fs::read_to_string(test_vectors_path).expect("Failed to read test vectors");
 
-    let test_data: TestVectors = serde_json::from_str(&contents)
-        .expect("Failed to parse test vectors");
+    let test_data: TestVectors =
+        serde_json::from_str(&contents).expect("Failed to parse test vectors");
 
-    for vector in test_data.vectors.iter().filter(|v| v.category == "poe2_protocol") {
+    for vector in test_data
+        .vectors
+        .iter()
+        .filter(|v| v.category == "poe2_protocol")
+    {
         let x1_str = vector.inputs["x1"].as_str().unwrap();
         let x2_str = vector.inputs["x2"].as_str().unwrap();
         let prefix_str = vector.inputs["prefix"].as_str().unwrap();
@@ -150,18 +167,21 @@ fn test_poe2_protocol_vectors() {
         assert!(valid, "Generated proof for {} should be valid", vector.name);
 
         // Verify the y value matches expected
-        let expected_y: PointExpected = serde_json::from_value(vector.expected["y"].clone()).unwrap();
+        let expected_y: PointExpected =
+            serde_json::from_value(vector.expected["y"].clone()).unwrap();
         let expected_y_x = Felt::from_dec_str(&expected_y.x).unwrap();
         let expected_y_y = Felt::from_dec_str(&expected_y.y).unwrap();
 
         let y_affine = StarkCurve::projective_to_affine(&y).unwrap();
         assert_eq!(
-            y_affine.x(), expected_y_x,
+            y_affine.x(),
+            expected_y_x,
             "Vector {} failed: y.x mismatch",
             vector.name
         );
         assert_eq!(
-            y_affine.y(), expected_y_y,
+            y_affine.y(),
+            expected_y_y,
             "Vector {} failed: y.y mismatch",
             vector.name
         );
@@ -177,13 +197,16 @@ fn test_elgamal_protocol_vectors() {
         return;
     }
 
-    let contents = fs::read_to_string(test_vectors_path)
-        .expect("Failed to read test vectors");
+    let contents = fs::read_to_string(test_vectors_path).expect("Failed to read test vectors");
 
-    let test_data: TestVectors = serde_json::from_str(&contents)
-        .expect("Failed to parse test vectors");
+    let test_data: TestVectors =
+        serde_json::from_str(&contents).expect("Failed to parse test vectors");
 
-    for vector in test_data.vectors.iter().filter(|v| v.category == "elgamal_protocol") {
+    for vector in test_data
+        .vectors
+        .iter()
+        .filter(|v| v.category == "elgamal_protocol")
+    {
         let message_str = vector.inputs["message"].as_str().unwrap();
         let random_str = vector.inputs["random"].as_str().unwrap();
         let prefix_str = vector.inputs["prefix"].as_str().unwrap();
@@ -197,7 +220,14 @@ fn test_elgamal_protocol_vectors() {
         let pk = StarkCurve::mul_generator(&sk);
 
         let encryption = ElGamal::encrypt(&message, &pk, &random, &prefix).unwrap();
-        let valid = ElGamal::verify(&encryption.l, &encryption.r, &pk, &encryption.proof, &prefix).unwrap();
+        let valid = ElGamal::verify(
+            &encryption.l,
+            &encryption.r,
+            &pk,
+            &encryption.proof,
+            &prefix,
+        )
+        .unwrap();
 
         assert!(valid, "Generated proof for {} should be valid", vector.name);
     }

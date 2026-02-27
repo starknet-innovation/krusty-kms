@@ -181,8 +181,13 @@ mod tests {
             for defense in DefensiveCoverage::ALL {
                 let yards = get_yards(offense, defense);
                 // Yards should be in reasonable range
-                assert!(yards >= -10 && yards <= 50,
-                    "Yards out of range for {:?} vs {:?}: {}", offense, defense, yards);
+                assert!(
+                    yards >= -10 && yards <= 50,
+                    "Yards out of range for {:?} vs {:?}: {}",
+                    offense,
+                    defense,
+                    yards
+                );
             }
         }
     }
@@ -196,8 +201,13 @@ mod tests {
             let range = max - min;
 
             // Each play should have at least 3 yard range
-            assert!(range >= 3,
-                "{:?} has too narrow range: {} to {}", offense, min, max);
+            assert!(
+                range >= 3,
+                "{:?} has too narrow range: {} to {}",
+                offense,
+                min,
+                max
+            );
         }
     }
 }

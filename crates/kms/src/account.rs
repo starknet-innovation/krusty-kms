@@ -54,7 +54,13 @@ pub fn calculate_contract_address(
 
     // Calculate address using computeHashOnElements on the array
     // [PREFIX, deployer, salt, class_hash, calldata_hash]
-    let elements = vec![prefix_felt, *deployer_address, *salt, *class_hash, calldata_hash];
+    let elements = vec![
+        prefix_felt,
+        *deployer_address,
+        *salt,
+        *class_hash,
+        calldata_hash,
+    ];
     let address = hash_elements(&elements);
 
     Ok(address)
@@ -168,7 +174,8 @@ mod tests {
         let constructor_calldata = vec![public_key];
         let deployer = Felt::ZERO;
 
-        let address = calculate_contract_address(&salt, &class_hash, &constructor_calldata, &deployer);
+        let address =
+            calculate_contract_address(&salt, &class_hash, &constructor_calldata, &deployer);
         assert!(address.is_ok());
 
         let addr = address.unwrap();
@@ -228,7 +235,8 @@ mod tests {
         let class_hash = Felt::from(0xabcdef123456u64);
         let salt = Felt::from(42u64);
 
-        let addr_with_salt = derive_oz_account_address(&public_key, &class_hash, Some(&salt)).unwrap();
+        let addr_with_salt =
+            derive_oz_account_address(&public_key, &class_hash, Some(&salt)).unwrap();
         let addr_without_salt = derive_oz_account_address(&public_key, &class_hash, None).unwrap();
 
         assert_ne!(addr_with_salt, addr_without_salt);

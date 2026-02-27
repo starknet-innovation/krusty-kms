@@ -19,18 +19,18 @@
 pub mod account;
 pub mod account_class;
 pub mod derivation;
+pub mod eth_signer;
 pub mod mnemonic;
 
 pub use account::{calculate_contract_address, derive_oz_account_address};
-pub use account_class::{
-    AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount,
-};
+pub use account_class::{AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount};
 pub use derivation::{
-    derive_keypair, derive_keypair_with_coin_type, derive_private_key,
-    derive_private_key_with_coin_type, derive_view_keypair, derive_view_private_key,
-    derive_nostr_keypair, derive_nostr_private_key, NostrKeyPair, TongoKeyPair,
-    NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE, TONGO_VIEW_COIN_TYPE,
+    derive_keypair, derive_keypair_with_coin_type, derive_nostr_keypair, derive_nostr_private_key,
+    derive_private_key, derive_private_key_with_coin_type, derive_view_keypair,
+    derive_view_private_key, NostrKeyPair, TongoKeyPair, NOSTR_COIN_TYPE, STARKNET_COIN_TYPE,
+    TONGO_COIN_TYPE, TONGO_VIEW_COIN_TYPE,
 };
+pub use eth_signer::EthSigner;
 pub use krusty_kms_common::SecretFelt;
 pub use mnemonic::{generate_mnemonic, mnemonic_to_seed, validate_mnemonic};
 

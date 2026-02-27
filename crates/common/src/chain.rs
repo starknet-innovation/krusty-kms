@@ -64,10 +64,7 @@ mod tests {
         assert_eq!(ChainId::from_felt(&mainnet_felt).unwrap(), ChainId::Mainnet);
 
         let sepolia_felt = ChainId::Sepolia.as_felt();
-        assert_eq!(
-            ChainId::from_felt(&sepolia_felt).unwrap(),
-            ChainId::Sepolia
-        );
+        assert_eq!(ChainId::from_felt(&sepolia_felt).unwrap(), ChainId::Sepolia);
     }
 
     #[test]

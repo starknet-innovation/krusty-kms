@@ -6,9 +6,9 @@ pub use builder::TxBuilder;
 
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
-use std::sync::Arc;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
+use std::sync::Arc;
 
 type StarknetRsFelt = starknet_rust::core::types::Felt;
 

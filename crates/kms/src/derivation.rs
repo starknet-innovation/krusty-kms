@@ -5,9 +5,9 @@
 //! 2. At the end, grind the secp256k1 private key to make it valid for Stark curve
 
 use crate::mnemonic::mnemonic_to_seed;
-use krusty_kms_common::{KmsError, Result, SecretFelt};
 use hmac::{Hmac, Mac};
 use k256::ecdsa::SigningKey;
+use krusty_kms_common::{KmsError, Result, SecretFelt};
 use num_bigint::BigUint;
 use num_traits::Num;
 use sha2::{Digest, Sha256, Sha512};
@@ -86,11 +86,11 @@ pub fn derive_private_key_with_coin_type(
 
     // BIP-44 path: m/44'/{coin_type}'/account_index'/0/index
     let path = [
-        44 | 0x8000_0000,  // purpose (hardened)
-        coin_type | 0x8000_0000, // coin_type (hardened)
-        account_index | 0x8000_0000,   // account (hardened)
-        0,  // change
-        index, // address_index
+        44 | 0x8000_0000,            // purpose (hardened)
+        coin_type | 0x8000_0000,     // coin_type (hardened)
+        account_index | 0x8000_0000, // account (hardened)
+        0,                           // change
+        index,                       // address_index
     ];
 
     let derived = derive_path(&master.0, &master.1, &path)?;
@@ -171,7 +171,8 @@ pub fn derive_keypair_with_coin_type(
     coin_type: u32,
     passphrase: Option<&str>,
 ) -> Result<TongoKeyPair> {
-    let private_key = derive_private_key_with_coin_type(mnemonic, index, account_index, coin_type, passphrase)?;
+    let private_key =
+        derive_private_key_with_coin_type(mnemonic, index, account_index, coin_type, passphrase)?;
     let public_key = compute_public_key(&private_key)?;
 
     Ok(TongoKeyPair {
@@ -268,11 +269,11 @@ pub fn derive_nostr_private_key(
 
     // BIP-44 path: m/44'/1237'/account_index'/0/index
     let path = [
-        44 | 0x8000_0000,         // purpose (hardened)
+        44 | 0x8000_0000,              // purpose (hardened)
         NOSTR_COIN_TYPE | 0x8000_0000, // coin_type (hardened) - 1237 for Nostr
         account_index | 0x8000_0000,   // account (hardened)
-        0,                        // change
-        index,                    // address_index
+        0,                             // change
+        index,                         // address_index
     ];
 
     let derived = derive_path(&master.0, &master.1, &path)?;
@@ -310,9 +311,9 @@ pub fn derive_nostr_keypair(
 
     // Get x-only public key (BIP-340 format used by Nostr)
     let point = verifying_key.to_encoded_point(false); // uncompressed
-    let x_bytes = point.x().ok_or_else(|| {
-        KmsError::CryptoError("Failed to get x coordinate".to_string())
-    })?;
+    let x_bytes = point
+        .x()
+        .ok_or_else(|| KmsError::CryptoError("Failed to get x coordinate".to_string()))?;
 
     let mut public_key = [0u8; 32];
     public_key.copy_from_slice(x_bytes);
@@ -350,9 +351,13 @@ fn derive_master_key(seed: &[u8]) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8;
 /// - child_key = (IL + parent_key) mod secp256k1_n
 ///
 /// # Cyclomatic Complexity: 3
-fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
-    let mut mac = HmacSha512::new_from_slice(chain_code)
-        .map_err(|e| KmsError::CryptoError(e.to_string()))?;
+fn derive_child(
+    key: &[u8; 32],
+    chain_code: &[u8; 32],
+    index: u32,
+) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+    let mut mac =
+        HmacSha512::new_from_slice(chain_code).map_err(|e| KmsError::CryptoError(e.to_string()))?;
 
     let hardened = (index & 0x8000_0000) != 0;
 
@@ -378,10 +383,9 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<(Ze
 
     // secp256k1 curve order
     let secp256k1_n = BigUint::from_bytes_be(&[
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
-        0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
-        0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFE, 0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36,
+        0x41, 0x41,
     ]);
 
     // BIP-32: child_key = (parse256(IL) + parent_key) mod n
@@ -491,7 +495,8 @@ fn compute_public_key(private_key: &Felt) -> Result<ProjectivePoint> {
 mod tests {
     use super::*;
 
-    const TEST_MNEMONIC: &str = "habit hope tip crystal because grunt nation idea electric witness alert like";
+    const TEST_MNEMONIC: &str =
+        "habit hope tip crystal because grunt nation idea electric witness alert like";
 
     #[test]
     fn test_derive_private_key() {
@@ -571,14 +576,16 @@ mod tests {
 
     #[test]
     fn test_derive_keypair_with_coin_type() {
-        let keypair = derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None).unwrap();
+        let keypair =
+            derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None).unwrap();
         let standard = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
         assert_eq!(keypair.private_key, standard.private_key);
     }
 
     #[test]
     fn test_derive_keypair_with_starknet_coin_type() {
-        let keypair = derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, STARKNET_COIN_TYPE, None).unwrap();
+        let keypair =
+            derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, STARKNET_COIN_TYPE, None).unwrap();
         let tongo = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
         // Different coin types should produce different keys
         assert_ne!(keypair.private_key, tongo.private_key);

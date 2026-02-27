@@ -41,8 +41,8 @@ impl ElGamal {
         // Compute ciphertext: L = g^m + pk^r, R = g^r (TONGO standard format)
         let g_m = StarkCurve::mul(message, Some(&g));
         let pk_r = StarkCurve::mul(random, Some(public_key));
-        let l = StarkCurve::add(&g_m, &pk_r);  // L = g^m + pk^r (ciphertext)
-        let r = StarkCurve::mul(random, Some(&g));  // R = g^r (randomness)
+        let l = StarkCurve::add(&g_m, &pk_r); // L = g^m + pk^r (ciphertext)
+        let r = StarkCurve::mul(random, Some(&g)); // R = g^r (randomness)
 
         // Generate proof of correct encryption
         let proof = Self::prove_encryption(message, random, public_key, &l, &r, prefix)?;
@@ -180,7 +180,6 @@ impl ElGamal {
         let message_point = StarkCurve::add(&ciphertext.l, &neg_r_sk);
         Ok(message_point)
     }
-
 }
 
 use starknet_types_core::curve::AffinePoint;
@@ -206,8 +205,14 @@ mod tests {
         let encryption = ElGamal::encrypt(&message, &pk, &random, &prefix).unwrap();
 
         // Verify proof
-        let valid = ElGamal::verify(&encryption.l, &encryption.r, &pk, &encryption.proof, &prefix)
-            .unwrap();
+        let valid = ElGamal::verify(
+            &encryption.l,
+            &encryption.r,
+            &pk,
+            &encryption.proof,
+            &prefix,
+        )
+        .unwrap();
         assert!(valid);
 
         // Decrypt
@@ -237,8 +242,14 @@ mod tests {
         // Tamper with proof
         encryption.proof.sb = format!("{:#x}", Felt::from(1u64));
 
-        let valid =
-            ElGamal::verify(&encryption.l, &encryption.r, &pk, &encryption.proof, &prefix).unwrap();
+        let valid = ElGamal::verify(
+            &encryption.l,
+            &encryption.r,
+            &pk,
+            &encryption.proof,
+            &prefix,
+        )
+        .unwrap();
         assert!(!valid);
     }
 
@@ -255,8 +266,14 @@ mod tests {
         // Tamper with challenge - this should fail challenge verification
         encryption.proof.c = format!("{:#x}", Felt::from(999999u64));
 
-        let valid =
-            ElGamal::verify(&encryption.l, &encryption.r, &pk, &encryption.proof, &prefix).unwrap();
+        let valid = ElGamal::verify(
+            &encryption.l,
+            &encryption.r,
+            &pk,
+            &encryption.proof,
+            &prefix,
+        )
+        .unwrap();
         assert!(!valid);
     }
 
@@ -273,8 +290,14 @@ mod tests {
         // Tamper with s_r - this should fail the first equation check
         encryption.proof.sr = format!("{:#x}", Felt::from(1u64));
 
-        let valid =
-            ElGamal::verify(&encryption.l, &encryption.r, &pk, &encryption.proof, &prefix).unwrap();
+        let valid = ElGamal::verify(
+            &encryption.l,
+            &encryption.r,
+            &pk,
+            &encryption.proof,
+            &prefix,
+        )
+        .unwrap();
         assert!(!valid);
     }
 

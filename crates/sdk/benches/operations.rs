@@ -11,18 +11,23 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_crypto::StarkCurve;
-use starknet_types_core::felt::Felt;
 use krusty_kms_sdk::{
-    operations::{fund, rollover, transfer, withdraw, ragequit, FundParams, RolloverParams, TransferParams, WithdrawParams, RagequitParams},
+    operations::{
+        fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
+        TransferParams, WithdrawParams,
+    },
     TongoAccount,
 };
+use starknet_types_core::felt::Felt;
 
-const TEST_MNEMONIC: &str = "habit hope tip crystal because grunt nation idea electric witness alert like";
+const TEST_MNEMONIC: &str =
+    "habit hope tip crystal because grunt nation idea electric witness alert like";
 
 /// Create a test account with a specific balance.
 fn create_account_with_balance(balance: u128, pending: u128) -> TongoAccount {
     let contract_address = Felt::from(123456u64);
-    let mut account = TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+    let mut account =
+        TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
     account.state.balance = balance;
     account.state.pending_balance = pending;
     account
@@ -126,7 +131,7 @@ fn bench_transfer(c: &mut Criterion) {
                     fee_to_sender: 0,
                     current_balance: current_balance.clone(),
                     bit_size: bits as usize,
-                    auditor_pub_key: None,  // No audit for pure performance measurement
+                    auditor_pub_key: None, // No audit for pure performance measurement
                 };
                 b.iter(|| {
                     let result = transfer(black_box(&account), black_box(params.clone()));
@@ -222,7 +227,7 @@ fn bench_withdraw(c: &mut Criterion) {
                     fee_to_sender: 0,
                     current_balance: current_balance.clone(),
                     bit_size: bits as usize,
-                    auditor_key: None,  // No audit for pure performance measurement
+                    auditor_key: None, // No audit for pure performance measurement
                 };
                 b.iter(|| {
                     let result = withdraw(black_box(&account), black_box(params.clone()));
@@ -270,7 +275,7 @@ fn bench_ragequit(c: &mut Criterion) {
                     sender_address: Felt::ZERO,
                     fee_to_sender: 0,
                     current_balance: current_balance.clone(),
-                    auditor_key: None,  // No audit for pure performance measurement
+                    auditor_key: None, // No audit for pure performance measurement
                 };
                 b.iter(|| {
                     let result = ragequit(black_box(&account), black_box(params.clone()));
@@ -301,7 +306,9 @@ fn bench_complete_flow(c: &mut Criterion) {
             |b, &amount| {
                 b.iter(|| {
                     // Create fresh account
-                    let mut account = TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+                    let mut account =
+                        TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None)
+                            .unwrap();
 
                     let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap();
                     let g = StarkCurve::generator();
@@ -332,7 +339,8 @@ fn bench_complete_flow(c: &mut Criterion) {
                         tongo_address: contract_address,
                         sender_address: Felt::ZERO,
                     };
-                    let _rollover_proof = rollover(black_box(&account), black_box(rollover_params)).unwrap();
+                    let _rollover_proof =
+                        rollover(black_box(&account), black_box(rollover_params)).unwrap();
 
                     // Update state
                     account.state.balance += account.state.pending_balance;
@@ -357,7 +365,8 @@ fn bench_complete_flow(c: &mut Criterion) {
                         bit_size: bits as usize,
                         auditor_pub_key: None,
                     };
-                    let _transfer_proof = transfer(black_box(&account), black_box(transfer_params)).unwrap();
+                    let _transfer_proof =
+                        transfer(black_box(&account), black_box(transfer_params)).unwrap();
 
                     // Update state
                     account.state.balance -= amount / 2;
@@ -379,7 +388,8 @@ fn bench_complete_flow(c: &mut Criterion) {
                         bit_size: bits as usize,
                         auditor_key: None,
                     };
-                    let _withdraw_proof = withdraw(black_box(&account), black_box(withdraw_params)).unwrap();
+                    let _withdraw_proof =
+                        withdraw(black_box(&account), black_box(withdraw_params)).unwrap();
 
                     black_box(())
                 });

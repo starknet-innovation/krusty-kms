@@ -1,10 +1,10 @@
 //! Wallet utility functions for Felt conversion and deployment checking.
 
 use krusty_kms_common::{KmsError, Result};
-use std::sync::Arc;
 use starknet_rust::core::types::{BlockId, BlockTag};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
+use std::sync::Arc;
 
 /// Type alias for starknet-rs Felt.
 pub type StarknetRsFelt = starknet_rust::core::types::Felt;

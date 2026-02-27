@@ -135,7 +135,8 @@ impl CardEncoding {
                 let card = Card::from_index(index);
 
                 // Use the card point's serialized form as key
-                if let Ok(affine) = krusty_kms_crypto::StarkCurve::projective_to_affine(&card.point) {
+                if let Ok(affine) = krusty_kms_crypto::StarkCurve::projective_to_affine(&card.point)
+                {
                     let mut key = [0u8; 64];
                     key[..32].copy_from_slice(&affine.x().to_bytes_be());
                     key[32..].copy_from_slice(&affine.y().to_bytes_be());
@@ -213,7 +214,9 @@ impl MaskedDeck {
     pub fn shuffle(&self, aggregate_pk: &PublicKey) -> Result<Self> {
         let n = self.cards.len();
         let permutation = Permutation::random(n);
-        let factors: Vec<_> = (0..n).map(|_| krusty_kms_crypto::scalar::random_felt()).collect();
+        let factors: Vec<_> = (0..n)
+            .map(|_| krusty_kms_crypto::scalar::random_felt())
+            .collect();
 
         let shuffled = MentalPokerProtocol::shuffle_and_remask(
             &self.cards,

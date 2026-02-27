@@ -5,17 +5,17 @@ pub mod utils;
 #[cfg(feature = "controller")]
 pub mod controller;
 
+use krusty_kms::AccountClass;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
-use krusty_kms::AccountClass;
-use std::sync::Arc;
-use std::time::Instant;
 use starknet_rust::accounts::{ExecutionEncoding, SingleOwnerAccount};
 use starknet_rust::core::types::Call;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::signers::{LocalWallet, SigningKey};
+use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 use self::utils::{check_deployed, core_felt_to_rs};
@@ -28,7 +28,10 @@ pub trait WalletExecutor: Send + Sync {
     /// Execute a list of calls as a single transaction.
     async fn execute(&self, calls: Vec<Call>) -> Result<Tx>;
     /// Estimate fees for a list of calls.
-    async fn estimate_fee(&self, calls: Vec<Call>) -> Result<starknet_rust::core::types::FeeEstimate>;
+    async fn estimate_fee(
+        &self,
+        calls: Vec<Call>,
+    ) -> Result<starknet_rust::core::types::FeeEstimate>;
     /// The wallet's on-chain address.
     fn address(&self) -> &Address;
     /// The chain ID this wallet targets.
@@ -178,9 +181,7 @@ impl Wallet {
     }
 
     /// The underlying `SingleOwnerAccount` (for advanced usage).
-    pub fn account(
-        &self,
-    ) -> &SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, LocalWallet> {
+    pub fn account(&self) -> &SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, LocalWallet> {
         &self.account
     }
 
@@ -201,7 +202,10 @@ impl WalletExecutor for Wallet {
         Wallet::execute(self, calls).await
     }
 
-    async fn estimate_fee(&self, calls: Vec<Call>) -> Result<starknet_rust::core::types::FeeEstimate> {
+    async fn estimate_fee(
+        &self,
+        calls: Vec<Call>,
+    ) -> Result<starknet_rust::core::types::FeeEstimate> {
         Wallet::estimate_fee(self, calls).await
     }
 

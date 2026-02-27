@@ -102,7 +102,11 @@ fn bench_point_addition(c: &mut Criterion) {
     let point_pairs = vec![
         ("G+G", g.clone(), g.clone()),
         ("G+H", g.clone(), h.clone()),
-        ("2G+3G", StarkCurve::mul_generator(&Felt::from(2u64)), StarkCurve::mul_generator(&Felt::from(3u64))),
+        (
+            "2G+3G",
+            StarkCurve::mul_generator(&Felt::from(2u64)),
+            StarkCurve::mul_generator(&Felt::from(3u64)),
+        ),
     ];
 
     for (name, p1, p2) in point_pairs {

@@ -7,19 +7,17 @@
 //! The benchmark outputs raw timing data suitable for statistical analysis and
 //! visualization with tools like seaborn.
 
-use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
-};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use krusty_kms_common::ElGamalCiphertext;
-use rayon::prelude::*;
 use krusty_kms_crypto::StarkCurve;
-use starknet_types_core::felt::Felt;
-use std::io::Write;
-use std::time::{Duration, Instant};
 use krusty_kms_sdk::{
     operations::{transfer, TransferParams},
     TongoAccount,
 };
+use rayon::prelude::*;
+use starknet_types_core::felt::Felt;
+use std::io::Write;
+use std::time::{Duration, Instant};
 
 const TEST_MNEMONIC: &str =
     "habit hope tip crystal because grunt nation idea electric witness alert like";
@@ -178,27 +176,22 @@ fn bench_sustained_throughput(c: &mut Criterion) {
         .unwrap_or(4);
 
     group.throughput(Throughput::Elements(batch_size as u64));
-    group.bench_function(
-        format!("64bits_batch{}_sustained", batch_size),
-        |b| {
-            let accounts: Vec<_> = (0..batch_size).map(|_| create_test_account()).collect();
-            let params: Vec<_> = (0..batch_size)
-                .map(|_| create_transfer_params(bit_size))
+    group.bench_function(format!("64bits_batch{}_sustained", batch_size), |b| {
+        let accounts: Vec<_> = (0..batch_size).map(|_| create_test_account()).collect();
+        let params: Vec<_> = (0..batch_size)
+            .map(|_| create_transfer_params(bit_size))
+            .collect();
+
+        b.iter(|| {
+            let results: Vec<_> = accounts
+                .par_iter()
+                .zip(params.par_iter())
+                .map(|(account, params)| transfer(black_box(account), black_box(params.clone())))
                 .collect();
 
-            b.iter(|| {
-                let results: Vec<_> = accounts
-                    .par_iter()
-                    .zip(params.par_iter())
-                    .map(|(account, params)| {
-                        transfer(black_box(account), black_box(params.clone()))
-                    })
-                    .collect();
-
-                black_box(results)
-            });
-        },
-    );
+            black_box(results)
+        });
+    });
 
     group.finish();
 }
@@ -316,10 +309,22 @@ fn bench_raw_throughput_samples(_c: &mut Criterion) {
 
     let data_file = output_dir.join("raw_samples.csv");
     if let Ok(mut file) = std::fs::File::create(&data_file) {
-        writeln!(file, "sample_id,batch_time_ms,throughput_tps,batch_size,bit_size").ok();
-        for (i, (time, tps)) in sample_times_ms.iter().zip(throughputs_per_sec.iter()).enumerate()
+        writeln!(
+            file,
+            "sample_id,batch_time_ms,throughput_tps,batch_size,bit_size"
+        )
+        .ok();
+        for (i, (time, tps)) in sample_times_ms
+            .iter()
+            .zip(throughputs_per_sec.iter())
+            .enumerate()
         {
-            writeln!(file, "{},{:.4},{:.4},{},{}", i, time, tps, batch_size, bit_size).ok();
+            writeln!(
+                file,
+                "{},{:.4},{:.4},{},{}",
+                i, time, tps, batch_size, bit_size
+            )
+            .ok();
         }
         println!("Raw data saved to: {}", data_file.display());
     }

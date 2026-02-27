@@ -63,12 +63,7 @@ impl<'w> TxBuilder<'w> {
     }
 
     /// Add calls to enter a delegation pool (approve + enter).
-    pub fn enter_pool(
-        self,
-        staking: &Staking,
-        amount: &Amount,
-        reward_address: &Address,
-    ) -> Self {
+    pub fn enter_pool(self, staking: &Staking, amount: &Amount, reward_address: &Address) -> Self {
         let calls = staking.populate_enter(amount, reward_address);
         let mut s = self;
         for call in calls {
@@ -111,9 +106,7 @@ impl<'w> TxBuilder<'w> {
     }
 
     /// Estimate the fee for all accumulated calls.
-    pub async fn estimate_fee(
-        &self,
-    ) -> Result<starknet_rust::core::types::FeeEstimate> {
+    pub async fn estimate_fee(&self) -> Result<starknet_rust::core::types::FeeEstimate> {
         self.wallet.estimate_fee(self.calls.clone()).await
     }
 
