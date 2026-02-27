@@ -448,6 +448,14 @@ struct TransferProofData {
     new_balance_l_y: String,
     new_balance_r_x: String,
     new_balance_r_y: String,
+    aux_v_x: String,
+    aux_v_y: String,
+    aux_r_x: String,
+    aux_r_y: String,
+    aux2_v_x: String,
+    aux2_v_y: String,
+    aux2_r_x: String,
+    aux2_r_y: String,
     proof_json: String,
     audit_balance_json: Option<String>,
     audit_transfer_json: Option<String>,
@@ -502,6 +510,24 @@ pub unsafe extern "C" fn kms_encode_transfer_calls(
             &params.hint_nonce_hex,
         ) {
             return e;
+        }
+
+        // Auxiliary ciphers (V, R_aux for transfer amount; V2, R_aux2 for leftover)
+        for hex_val in [
+            &proof_data.aux_v_x,
+            &proof_data.aux_v_y,
+            &proof_data.aux_r_x,
+            &proof_data.aux_r_y,
+        ] {
+            calldata.push(hex_val.clone());
+        }
+        for hex_val in [
+            &proof_data.aux2_v_x,
+            &proof_data.aux2_v_y,
+            &proof_data.aux2_r_x,
+            &proof_data.aux2_r_y,
+        ] {
+            calldata.push(hex_val.clone());
         }
 
         // Transfer proof (serialized as JSON, contains all commitments and range proofs)
@@ -569,6 +595,8 @@ struct WithdrawProofData {
     sx: String,
     sb: String,
     sr: String,
+    v_aux_x: String,
+    v_aux_y: String,
     r_aux_x: String,
     r_aux_y: String,
     range_json: String,
@@ -622,6 +650,12 @@ pub unsafe extern "C" fn kms_encode_withdraw_calls(
             return e;
         }
 
+        // Auxiliary cipher (V.x, V.y, R_aux.x, R_aux.y) — before proof fields
+        calldata.push(pd.v_aux_x.clone());
+        calldata.push(pd.v_aux_y.clone());
+        calldata.push(pd.r_aux_x.clone());
+        calldata.push(pd.r_aux_y.clone());
+
         // Proof commitments
         for hex_val in [
             &pd.a_x_x, &pd.a_x_y, &pd.a_r_x, &pd.a_r_y, &pd.a_x2, &pd.a_y2, &pd.a_v_x, &pd.a_v_y,
@@ -632,9 +666,6 @@ pub unsafe extern "C" fn kms_encode_withdraw_calls(
         calldata.push(pd.sx.clone());
         calldata.push(pd.sb.clone());
         calldata.push(pd.sr.clone());
-        // R_aux
-        calldata.push(pd.r_aux_x.clone());
-        calldata.push(pd.r_aux_y.clone());
 
         // Range proof
         let range: krusty_kms_common::Range = match serde_json::from_str(&pd.range_json) {
@@ -1044,6 +1075,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(2u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "bit_size": 16,
             "auditor_public_key": account.auditor_public_key,
@@ -1077,7 +1109,8 @@ mod tests {
             .unwrap()
             .len();
 
-        let base_len = 8 + 6 + proof_len;
+        // 8 cipher points + 6 hint + 8 auxiliary ciphers (4+4) + proof
+        let base_len = 8 + 6 + 8 + proof_len;
         let audit_some_len = 1 + 4 + 6 + 11;
         assert_eq!(calldata[base_len], "0x0");
         assert_eq!(calldata[base_len + audit_some_len], "0x0");
@@ -1094,6 +1127,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(4u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "bit_size": 16,
             "auditor_public_key": account.auditor_public_key,
@@ -1125,7 +1159,8 @@ mod tests {
             .unwrap()
             .len();
 
-        let base_len = 23 + range_len;
+        // y(2) + recipient(1) + amount(1) + hint(6) + aux_cipher(4) + commitments(8) + scalars(3) + range
+        let base_len = 25 + range_len;
         let audit_some_len = 1 + 4 + 6 + 11;
         assert_eq!(calldata[base_len], "0x0");
         assert_eq!(calldata.len(), base_len + audit_some_len);
@@ -1140,6 +1175,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(5u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "auditor_public_key": account.auditor_public_key,
         })

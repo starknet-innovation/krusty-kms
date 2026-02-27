@@ -27,6 +27,7 @@ pub struct JsonFundParams {
     pub nonce: String,
     pub chain_id: String,
     pub tongo_address: String,
+    pub sender_address: String,
     pub current_cipher: JsonCiphertext,
     pub auditor_public_key: Option<String>,
 }
@@ -51,8 +52,11 @@ pub struct JsonTransferParams {
     pub nonce: String,
     pub chain_id: String,
     pub tongo_address: String,
+    pub sender_address: String,
     pub current_cipher: JsonCiphertext,
     pub bit_size: Option<u8>,
+    #[serde(default)]
+    pub fee_to_sender: Option<String>,
     pub auditor_public_key: Option<String>,
 }
 
@@ -70,6 +74,14 @@ pub struct JsonTransferResult {
     pub new_balance_l_y: String,
     pub new_balance_r_x: String,
     pub new_balance_r_y: String,
+    pub aux_v_x: String,
+    pub aux_v_y: String,
+    pub aux_r_x: String,
+    pub aux_r_y: String,
+    pub aux2_v_x: String,
+    pub aux2_v_y: String,
+    pub aux2_r_x: String,
+    pub aux2_r_y: String,
     pub proof_json: String,
     pub audit_balance_json: Option<String>,
     pub audit_transfer_json: Option<String>,
@@ -84,6 +96,7 @@ pub struct JsonRolloverParams {
     pub nonce: String,
     pub chain_id: String,
     pub tongo_address: String,
+    pub sender_address: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,8 +118,11 @@ pub struct JsonWithdrawParams {
     pub nonce: String,
     pub chain_id: String,
     pub tongo_address: String,
+    pub sender_address: String,
     pub current_cipher: JsonCiphertext,
     pub bit_size: Option<u8>,
+    #[serde(default)]
+    pub fee_to_sender: Option<String>,
     pub auditor_public_key: Option<String>,
 }
 
@@ -125,6 +141,8 @@ pub struct JsonWithdrawResult {
     pub sx: String,
     pub sb: String,
     pub sr: String,
+    pub v_aux_x: String,
+    pub v_aux_y: String,
     pub r_aux_x: String,
     pub r_aux_y: String,
     pub range_json: String,
@@ -143,7 +161,10 @@ pub struct JsonRagequitParams {
     pub nonce: String,
     pub chain_id: String,
     pub tongo_address: String,
+    pub sender_address: String,
     pub current_cipher: JsonCiphertext,
+    #[serde(default)]
+    pub fee_to_sender: Option<String>,
     pub auditor_public_key: Option<String>,
 }
 

@@ -146,6 +146,10 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
+            sender_address: match parse_felt(&params.sender_address) {
+                Ok(f) => f,
+                Err(e) => return e,
+            },
             auditor_pub_key,
             current_balance,
         };
@@ -236,6 +240,16 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             Err(e) => return e,
         };
 
+        let fee_to_sender: u128 = match params
+            .fee_to_sender
+            .as_deref()
+            .unwrap_or("0")
+            .parse()
+        {
+            Ok(f) => f,
+            Err(_) => return KMS_ERR_INVALID_INPUT,
+        };
+
         let sdk_params = TransferParams {
             recipient_public_key,
             amount,
@@ -251,11 +265,16 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
+            sender_address: match parse_felt(&params.sender_address) {
+                Ok(f) => f,
+                Err(e) => return e,
+            },
             current_balance,
             bit_size: params
                 .bit_size
                 .map(|b| b as usize)
                 .unwrap_or(DEFAULT_BIT_SIZE),
+            fee_to_sender,
             auditor_pub_key,
         };
 
@@ -289,6 +308,22 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             Err(e) => return e,
         };
         let (nr_x, nr_y) = match point_to_hex_xy(&proof.new_balance_cipher.r) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let (aux_v_x, aux_v_y) = match point_to_hex_xy(&proof.auxiliar_cipher.l) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let (aux_r_x, aux_r_y) = match point_to_hex_xy(&proof.auxiliar_cipher.r) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let (aux2_v_x, aux2_v_y) = match point_to_hex_xy(&proof.auxiliar_cipher2.l) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let (aux2_r_x, aux2_r_y) = match point_to_hex_xy(&proof.auxiliar_cipher2.r) {
             Ok(v) => v,
             Err(e) => return e,
         };
@@ -330,6 +365,14 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             new_balance_l_y: nl_y,
             new_balance_r_x: nr_x,
             new_balance_r_y: nr_y,
+            aux_v_x,
+            aux_v_y,
+            aux_r_x,
+            aux_r_y,
+            aux2_v_x,
+            aux2_v_y,
+            aux2_r_x,
+            aux2_r_y,
             proof_json: proof_json_str,
             audit_balance_json,
             audit_transfer_json,
@@ -376,6 +419,10 @@ pub unsafe extern "C" fn kms_generate_rollover_proof(
                 Err(e) => return e,
             },
             tongo_address: match parse_felt(&params.tongo_address) {
+                Ok(f) => f,
+                Err(e) => return e,
+            },
+            sender_address: match parse_felt(&params.sender_address) {
                 Ok(f) => f,
                 Err(e) => return e,
             },
@@ -458,6 +505,16 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             Err(e) => return e,
         };
 
+        let fee_to_sender: u128 = match params
+            .fee_to_sender
+            .as_deref()
+            .unwrap_or("0")
+            .parse()
+        {
+            Ok(f) => f,
+            Err(_) => return KMS_ERR_INVALID_INPUT,
+        };
+
         let sdk_params = WithdrawParams {
             recipient_address: match parse_felt(&params.recipient_address) {
                 Ok(f) => f,
@@ -476,11 +533,16 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
+            sender_address: match parse_felt(&params.sender_address) {
+                Ok(f) => f,
+                Err(e) => return e,
+            },
             current_balance,
             bit_size: params
                 .bit_size
                 .map(|b| b as usize)
                 .unwrap_or(DEFAULT_BIT_SIZE),
+            fee_to_sender,
             auditor_key,
         };
 
@@ -513,7 +575,11 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             Ok(v) => v,
             Err(e) => return e,
         };
-        let (raux_x, raux_y) = match point_to_hex_xy(&proof.r_aux) {
+        let (vaux_x, vaux_y) = match point_to_hex_xy(&proof.auxiliar_cipher.l) {
+            Ok(v) => v,
+            Err(e) => return e,
+        };
+        let (raux_x, raux_y) = match point_to_hex_xy(&proof.auxiliar_cipher.r) {
             Ok(v) => v,
             Err(e) => return e,
         };
@@ -542,6 +608,8 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             sx: felt_hex_fixed(&proof.sx),
             sb: felt_hex_fixed(&proof.sb),
             sr: felt_hex_fixed(&proof.sr),
+            v_aux_x: vaux_x,
+            v_aux_y: vaux_y,
             r_aux_x: raux_x,
             r_aux_y: raux_y,
             range_json,
@@ -596,6 +664,16 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
             Err(e) => return e,
         };
 
+        let fee_to_sender: u128 = match params
+            .fee_to_sender
+            .as_deref()
+            .unwrap_or("0")
+            .parse()
+        {
+            Ok(f) => f,
+            Err(_) => return KMS_ERR_INVALID_INPUT,
+        };
+
         let sdk_params = RagequitParams {
             recipient_address: match parse_felt(&params.recipient_address) {
                 Ok(f) => f,
@@ -613,7 +691,12 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
+            sender_address: match parse_felt(&params.sender_address) {
+                Ok(f) => f,
+                Err(e) => return e,
+            },
             current_balance,
+            fee_to_sender,
             auditor_key,
         };
 
@@ -834,6 +917,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(1u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "auditor_public_key": account.auditor_public_key,
         })
@@ -846,6 +930,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(2u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "bit_size": 16,
             "auditor_public_key": account.auditor_public_key,
@@ -863,6 +948,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(3u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
         })
         .to_string();
         unsafe {
@@ -879,6 +965,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(4u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "bit_size": 16,
             "auditor_public_key": account.auditor_public_key,
@@ -897,6 +984,7 @@ mod tests {
             "nonce": felt_hex_fixed(&Felt::from(5u64)),
             "chain_id": felt_hex_fixed(&account.chain_id),
             "tongo_address": felt_hex_fixed(&account.contract_address),
+            "sender_address": felt_hex_fixed(&account.contract_address),
             "current_cipher": &account.current_cipher,
             "auditor_public_key": account.auditor_public_key,
         })

@@ -411,10 +411,10 @@ pub fn serialize_range(range: &Range) -> Result<Vec<Felt>> {
 /// Cairo serialization:
 /// - 8 commitment points (16 felts): A_x, A_r, A_r2, A_b, A_b2, A_v, A_v2, A_bar
 /// - 5 scalar responses (5 felts): s_x, s_r, s_b, s_b2, s_r2
-/// - R_aux point (2 felts)
 /// - range proof (variable felts)
-/// - R_aux2 point (2 felts)
 /// - range2 proof (variable felts)
+///
+/// Note: R_aux/R_aux2 are serialized separately as auxiliary ciphers, not part of this proof.
 ///
 /// # Cyclomatic Complexity: 2
 #[must_use]
@@ -450,27 +450,9 @@ pub fn serialize_proof_of_transfer(proof: &ProofOfTransfer) -> Result<Vec<Felt>>
         felts.push(scalar_felt);
     }
 
-    // Serialize R_aux (2 felts)
-    let r_aux_x = Felt::from_hex(&proof.r_aux.x)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid R_aux.x: {}", e)))?;
-    let r_aux_y = Felt::from_hex(&proof.r_aux.y)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid R_aux.y: {}", e)))?;
-    felts.push(r_aux_x);
-    felts.push(r_aux_y);
-
     // Serialize range proof (variable felts)
     let range_felts = serialize_range(&proof.range)?;
     felts.extend(range_felts);
-
-    // Serialize R_aux2 (2 felts)
-    let r_aux2_x = Felt::from_hex(&proof.r_aux2.x).map_err(|e| {
-        krusty_kms_common::KmsError::CryptoError(format!("Invalid R_aux2.x: {}", e))
-    })?;
-    let r_aux2_y = Felt::from_hex(&proof.r_aux2.y).map_err(|e| {
-        krusty_kms_common::KmsError::CryptoError(format!("Invalid R_aux2.y: {}", e))
-    })?;
-    felts.push(r_aux2_x);
-    felts.push(r_aux2_y);
 
     // Serialize range2 proof (variable felts)
     let range2_felts = serialize_range(&proof.range2)?;
