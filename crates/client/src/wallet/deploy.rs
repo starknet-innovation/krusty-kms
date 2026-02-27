@@ -119,17 +119,29 @@ pub async fn estimate_deploy_fee(
 }
 
 /// Map a provider/factory error string to a typed [`KmsError`] variant.
+///
+/// Handles both human-readable phrases (`"contract not found"`) and the
+/// camel-case tokens emitted by starknet-rust providers (`ContractNotFound`,
+/// `ClassHashNotFound`, `InsufficientAccountBalance`).
 fn classify_deploy_error(msg: String) -> KmsError {
     let lower = msg.to_lowercase();
-    if lower.contains("already deployed") || lower.contains("already been deployed") {
+    if lower.contains("already deployed")
+        || lower.contains("already been deployed")
+        || lower.contains("alreadydeployed")
+    {
         KmsError::AlreadyDeployed(msg)
-    } else if lower.contains("insufficient")
-        && (lower.contains("balance") || lower.contains("fee"))
+    } else if lower.contains("insufficientaccountbalance")
+        || (lower.contains("insufficient") && (lower.contains("balance") || lower.contains("fee")))
     {
         KmsError::InsufficientFeeBalance(msg)
-    } else if lower.contains("class hash") && lower.contains("not") {
+    } else if lower.contains("classhashnotfound")
+        || (lower.contains("class hash") && lower.contains("not"))
+    {
         KmsError::InvalidClassHash(msg)
-    } else if lower.contains("contract not found") || lower.contains("is not deployed") {
+    } else if lower.contains("contractnotfound")
+        || lower.contains("contract not found")
+        || lower.contains("is not deployed")
+    {
         KmsError::ContractNotFound(msg)
     } else {
         KmsError::TransactionError(msg)
