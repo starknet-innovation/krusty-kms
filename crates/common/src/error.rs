@@ -54,6 +54,18 @@ pub enum KmsError {
     #[error("Account not deployed at {0}")]
     AccountNotDeployed(String),
 
+    #[error("Account already deployed at {0}")]
+    AlreadyDeployed(String),
+
+    #[error("Insufficient fee balance for deployment: {0}")]
+    InsufficientFeeBalance(String),
+
+    #[error("Invalid class hash: {0}")]
+    InvalidClassHash(String),
+
+    #[error("Contract not found: {0}")]
+    ContractNotFound(String),
+
     #[error("Transaction error: {0}")]
     TransactionError(String),
 

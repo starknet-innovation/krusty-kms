@@ -37,8 +37,11 @@ pub async fn check_deployed(
         Ok(_) => Ok(true),
         Err(e) => {
             let msg = e.to_string();
-            // "Contract not found" or similar indicates not deployed
-            if msg.contains("not found") || msg.contains("is not deployed") {
+            // "Contract not found", "ContractNotFound", or similar indicates not deployed
+            if msg.contains("not found")
+                || msg.contains("is not deployed")
+                || msg.contains("ContractNotFound")
+            {
                 Ok(false)
             } else {
                 Err(KmsError::RpcError(msg))

@@ -109,6 +109,10 @@ impl From<krusty_kms_common::KmsError> for WasmError {
             krusty_kms_common::KmsError::Timeout(s) => Self::InternalError(s),
             krusty_kms_common::KmsError::StakingError(s) => Self::InternalError(s),
             krusty_kms_common::KmsError::ControllerError(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::AlreadyDeployed(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::InsufficientFeeBalance(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::InvalidClassHash(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::ContractNotFound(s) => Self::InternalError(s),
         }
     }
 }

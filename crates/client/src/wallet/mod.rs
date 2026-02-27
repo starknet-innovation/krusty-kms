@@ -1,5 +1,6 @@
 //! Wallet: owns a provider + account, can sign and execute transactions.
 
+pub mod deploy;
 pub mod utils;
 
 #[cfg(feature = "controller")]
