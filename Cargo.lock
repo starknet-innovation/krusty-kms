@@ -857,9 +857,9 @@ dependencies = [
 
 [[package]]
 name = "const-hex"
-version = "1.17.0"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bb320cac8a0750d7f25280aa97b09c26edfe161164238ecbbb31092b079e735"
+checksum = "af9a108e542ddf1de36743a6126e94d6659dccda38fc8a77e80b915102ac784a"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -2280,7 +2280,6 @@ dependencies = [
 name = "krusty-kms-client"
 version = "0.1.0"
 dependencies = [
- "account_sdk",
  "async-trait",
  "hex",
  "krusty-kms",
@@ -2289,7 +2288,6 @@ dependencies = [
  "krusty-kms-sdk",
  "serde",
  "serde_json",
- "starknet",
  "starknet-rust",
  "starknet-types-core",
  "thiserror 1.0.69",
@@ -2310,6 +2308,21 @@ dependencies = [
  "starknet-types-core",
  "thiserror 1.0.69",
  "zeroize",
+]
+
+[[package]]
+name = "krusty-kms-controller"
+version = "0.1.0"
+dependencies = [
+ "account_sdk",
+ "async-trait",
+ "krusty-kms-client",
+ "krusty-kms-common",
+ "starknet",
+ "starknet-rust",
+ "starknet-types-core",
+ "tokio",
+ "url",
 ]
 
 [[package]]

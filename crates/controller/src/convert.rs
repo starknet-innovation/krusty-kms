@@ -6,7 +6,7 @@
 use starknet_rust::core::types as our;
 
 /// `starknet` 0.17 types used by `account_sdk`.
-mod sdk {
+pub(crate) mod sdk {
     pub use starknet::core::types::Call;
     pub use starknet::core::types::FeeEstimate;
     pub use starknet::core::types::Felt;

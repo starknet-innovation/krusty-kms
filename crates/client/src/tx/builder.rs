@@ -18,7 +18,7 @@ pub struct TxBuilder<'w> {
 }
 
 impl<'w> TxBuilder<'w> {
-    pub(crate) fn new(wallet: &'w dyn WalletExecutor) -> Self {
+    pub fn new(wallet: &'w dyn WalletExecutor) -> Self {
         Self {
             wallet,
             calls: Vec::new(),
