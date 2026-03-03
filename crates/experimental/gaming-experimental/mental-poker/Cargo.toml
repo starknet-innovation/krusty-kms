@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Mental poker protocol implementation for confidential card games on Starknet"
+publish = false
 readme = "README.md"
 keywords = ["cryptography", "mental-poker", "zero-knowledge", "starknet", "cards"]
 categories = ["cryptography", "games"]

@@ -30,7 +30,6 @@ static GENERATOR_INNER: LazyLock<ProjectivePoint> = LazyLock::new(|| {
             18446744073709551585,
         ]),
     )
-    .expect("Generator G is a valid curve point")
 });
 
 /// The H generator point (lazily initialized).
@@ -55,7 +54,6 @@ static GENERATOR_H_INNER: LazyLock<ProjectivePoint> = LazyLock::new(|| {
             18446744073709551585,
         ]),
     )
-    .expect("Generator H is a valid curve point")
 });
 
 impl StarkCurve {

@@ -27,6 +27,10 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Krusty KMS Contributors"]
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/starknet-innovation/kms"
+homepage = "https://github.com/starknet-innovation/kms"
+keywords = ["cryptography", "kms", "starknet", "encryption"]
+categories = ["cryptography"]
 
 [workspace.dependencies]
 starknet-types-core = { version = "0.2.0", features = ["hash"] }

@@ -5,12 +5,16 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Starknet RPC client for interacting with TONGO contracts"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
-krusty-kms-common = { path = "../common" }
-krusty-kms = { path = "../kms" }
-krusty-kms-sdk = { path = "../sdk" }
-krusty-kms-crypto = { path = "../crypto" }
+krusty-kms-common = { version = "0.1.0", path = "../common" }
+krusty-kms = { version = "0.1.0", path = "../kms" }
+krusty-kms-sdk = { version = "0.1.0", path = "../sdk" }
+krusty-kms-crypto = { version = "0.1.0", path = "../crypto" }
 starknet-types-core.workspace = true
 starknet-rust = "0.18.0"
 tokio = { workspace = true, features = ["time", "sync", "macros"] }
