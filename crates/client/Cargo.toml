@@ -17,20 +17,14 @@ krusty-kms-sdk = { version = "0.1.0", path = "../sdk" }
 krusty-kms-crypto = { version = "0.1.0", path = "../crypto" }
 starknet-types-core.workspace = true
 starknet-rust = "0.18.0"
-tokio = { workspace = true, features = ["time", "sync"] }
+tokio = { workspace = true, features = ["time", "sync", "macros"] }
 serde.workspace = true
 serde_json.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 url = "2.5"
+bs58 = "0.5"
 async-trait.workspace = true
-
-[features]
-default = []
-# controller feature temporarily disabled for crates.io publishing
-# (account_sdk is not yet published on crates.io)
-# Re-enable when available: controller = ["dep:account_sdk", "dep:starknet"]
-controller = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }

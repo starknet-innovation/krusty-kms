@@ -140,6 +140,23 @@ fn points_equal(a: &ProjectivePoint, b: &ProjectivePoint) -> bool {
     }
 }
 
+/// Convert ERC-20 amount to Tongo units (ceiling division by rate).
+pub fn erc20_to_tongo(erc20_amount: u128, rate: u128) -> u128 {
+    (erc20_amount + rate - 1) / rate
+}
+
+/// Convert Tongo amount to ERC-20 units.
+pub fn tongo_to_erc20(tongo_amount: u128, rate: u128) -> u128 {
+    tongo_amount * rate
+}
+
+/// Authenticated encryption balance (raw on-chain representation).
+#[derive(Debug, Clone)]
+pub struct AEBalance {
+    pub ciphertext: [u8; 64],
+    pub nonce: [u8; 24],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,5 +353,55 @@ mod tests {
 
         let decrypted = decrypt_cipher_balance(&private_key, &cipher).unwrap();
         assert_eq!(decrypted, 5);
+    }
+
+    #[test]
+    fn test_erc20_to_tongo_exact() {
+        assert_eq!(erc20_to_tongo(1000, 10), 100);
+    }
+
+    #[test]
+    fn test_erc20_to_tongo_ceiling() {
+        assert_eq!(erc20_to_tongo(1001, 10), 101);
+        assert_eq!(erc20_to_tongo(1009, 10), 101);
+    }
+
+    #[test]
+    fn test_erc20_to_tongo_rate_one() {
+        assert_eq!(erc20_to_tongo(42, 1), 42);
+    }
+
+    #[test]
+    fn test_erc20_to_tongo_rate_greater_than_amount() {
+        assert_eq!(erc20_to_tongo(5, 100), 1);
+    }
+
+    #[test]
+    fn test_erc20_to_tongo_zero_amount() {
+        assert_eq!(erc20_to_tongo(0, 10), 0);
+    }
+
+    #[test]
+    fn test_tongo_to_erc20_basic() {
+        assert_eq!(tongo_to_erc20(100, 10), 1000);
+    }
+
+    #[test]
+    fn test_tongo_to_erc20_rate_one() {
+        assert_eq!(tongo_to_erc20(42, 1), 42);
+    }
+
+    #[test]
+    fn test_tongo_to_erc20_zero_amount() {
+        assert_eq!(tongo_to_erc20(0, 10), 0);
+    }
+
+    #[test]
+    fn test_roundtrip_conversion() {
+        let rate = 1000u128;
+        let original_tongo = 50u128;
+        let erc20 = tongo_to_erc20(original_tongo, rate);
+        let back = erc20_to_tongo(erc20, rate);
+        assert_eq!(back, original_tongo);
     }
 }

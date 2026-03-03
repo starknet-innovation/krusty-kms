@@ -27,6 +27,14 @@ void main() {
     test('KmsNostrKeyPair is 64 bytes', () {
       expect(sizeOf<c.KmsNostrKeyPair>(), equals(64));
     });
+
+    test('KmsAccountState is 40 bytes', () {
+      expect(sizeOf<c.KmsAccountState>(), equals(40));
+    });
+
+    test('KmsEthSignature is 160 bytes', () {
+      expect(sizeOf<c.KmsEthSignature>(), equals(160));
+    });
   });
 
   group('Felt', () {
@@ -126,6 +134,46 @@ void main() {
     });
   });
 
+  group('AccountHandle', () {
+    test('equality', () {
+      expect(AccountHandle(42), equals(AccountHandle(42)));
+      expect(AccountHandle(1), isNot(equals(AccountHandle(2))));
+    });
+
+    test('toString', () {
+      expect(AccountHandle(42).toString(), equals('AccountHandle(42)'));
+    });
+  });
+
+  group('AccountState', () {
+    test('equality', () {
+      final a = AccountState(
+          balanceLow: 1, balanceHigh: 2, pendingBalanceLow: 3,
+          pendingBalanceHigh: 4, nonce: 5);
+      final b = AccountState(
+          balanceLow: 1, balanceHigh: 2, pendingBalanceLow: 3,
+          pendingBalanceHigh: 4, nonce: 5);
+      expect(a, equals(b));
+    });
+
+    test('toString', () {
+      final s = AccountState(
+          balanceLow: 10, balanceHigh: 0, pendingBalanceLow: 0,
+          pendingBalanceHigh: 0, nonce: 1);
+      expect(s.toString(), contains('balanceLow: 10'));
+      expect(s.toString(), contains('nonce: 1'));
+    });
+  });
+
+  group('EthSignature', () {
+    test('equality', () {
+      final zero = Felt(Uint8List(32));
+      final a = EthSignature(rLow: zero, rHigh: zero, sLow: zero, sHigh: zero, v: zero);
+      final b = EthSignature(rLow: zero, rHigh: zero, sLow: zero, sHigh: zero, v: zero);
+      expect(a, equals(b));
+    });
+  });
+
   // Integration tests — only run when KMS_LIB_PATH is set
   final hasLib = Platform.environment.containsKey('KMS_LIB_PATH');
 
@@ -136,10 +184,10 @@ void main() {
       kms = Kms.instance;
     });
 
-    test('getAbiVersion returns (1, 0)', () {
+    test('getAbiVersion returns (1, 2)', () {
       final (major, minor) = kms.getAbiVersion();
       expect(major, equals(1));
-      expect(minor, equals(0));
+      expect(minor, equals(2));
     });
 
     test('getVersionString is non-empty', () {

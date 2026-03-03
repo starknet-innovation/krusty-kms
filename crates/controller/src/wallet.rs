@@ -1,18 +1,12 @@
-//! Cartridge Controller wallet integration.
-//!
-//! Provides [`ControllerWallet`] — a [`WalletExecutor`] backed by the
-//! `account_sdk` crate, offering session-based signing, paymaster-sponsored
-//! gas, and Cartridge identity.
-
-pub mod convert;
-pub mod error;
-pub mod policy;
+//! Cartridge Controller wallet.
 
 use std::sync::Arc;
 
 use account_sdk::controller::Controller;
 use account_sdk::execute_from_outside::FeeSource;
 use account_sdk::signers::{Owner, Signer};
+use krusty_kms_client::wallet::utils::{check_deployed, core_felt_to_rs};
+use krusty_kms_client::{Tx, TxBuilder, WalletExecutor};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
@@ -20,11 +14,10 @@ use krusty_kms_common::{KmsError, Result};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use tokio::sync::Mutex;
 
-pub use policy::{FeeMode, SessionPolicy};
-
-use super::utils::check_deployed;
-use super::WalletExecutor;
-use crate::tx::Tx;
+use crate::convert;
+use crate::error;
+use crate::policy::FeeMode;
+use crate::SessionPolicy;
 
 /// A Cartridge Controller wallet implementing [`WalletExecutor`].
 ///
@@ -170,8 +163,8 @@ impl ControllerWallet {
     }
 
     /// Start building a batched transaction.
-    pub fn tx(&self) -> crate::tx::TxBuilder<'_> {
-        crate::tx::TxBuilder::new(self)
+    pub fn tx(&self) -> TxBuilder<'_> {
+        TxBuilder::new(self)
     }
 
     /// Access the raw Controller for advanced usage.
@@ -267,7 +260,7 @@ impl WalletExecutor for ControllerWallet {
     }
 
     async fn is_deployed(&self) -> Result<bool> {
-        let address_rs = super::utils::core_felt_to_rs(self.address.as_felt());
+        let address_rs = core_felt_to_rs(self.address.as_felt());
         check_deployed(&self.provider, address_rs).await
     }
 }

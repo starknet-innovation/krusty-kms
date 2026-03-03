@@ -16,6 +16,9 @@ class KmsException implements Exception {
   static const int errUnimplemented = -9;
   static const int errInternal = -10;
 
+  static const int errInvalidHandle = 6;
+  static const int errJson = 7;
+
   @override
   String toString() => 'KmsException($code): $message';
 }

@@ -8,6 +8,7 @@ use crate::serialization;
 use krusty_kms_common::Result;
 use starknet_rust::core::types::Call;
 use starknet_rust::core::utils::get_selector_from_name;
+use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt as CoreFelt;
 use krusty_kms_sdk::operations::{FundProof, RolloverProof, TransferProof, WithdrawProof, RagequitProof};
 
@@ -528,6 +529,43 @@ pub fn build_ragequit_call(
     })
 }
 
+/// Build calls for the Outside Fund operation (no proof required).
+///
+/// Returns (approve_call, outside_fund_call).
+///
+/// The approve call approves `amount * rate` ERC-20 tokens.
+/// The outside_fund calldata is simply `[to.x, to.y, amount]`.
+#[must_use]
+pub fn build_outside_fund_calls(
+    tongo_address: CoreFelt,
+    erc20_address: CoreFelt,
+    to: &ProjectivePoint,
+    amount: u128,
+    rate: u128,
+) -> Result<(Call, Call)> {
+    // 1. Build ERC20 approve call
+    let approve_amount = amount * rate;
+    let approve_call = build_erc20_approve(erc20_address, tongo_address, approve_amount)?;
+
+    // 2. Build outside_fund call: [to.x, to.y, amount]
+    let (to_x, to_y) = serialization::serialize_projective_point(to)?;
+
+    let calldata = vec![
+        core_felt_to_rs(to_x),
+        core_felt_to_rs(to_y),
+        core_felt_to_rs(CoreFelt::from(amount)),
+    ];
+
+    let outside_fund_call = Call {
+        to: core_felt_to_rs(tongo_address),
+        selector: get_selector_from_name("outside_fund")
+            .map_err(|e| krusty_kms_common::KmsError::CryptoError(e.to_string()))?,
+        calldata,
+    };
+
+    Ok((approve_call, outside_fund_call))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -546,4 +584,35 @@ mod tests {
 
     // Note: Full operation tests would require creating complete proof structures
     // which is complex. Integration tests will verify the full flow.
+
+    #[test]
+    fn test_build_outside_fund_calls() {
+        use starknet_types_core::curve::ProjectivePoint;
+        use starknet_types_core::felt::Felt;
+
+        let tongo = CoreFelt::from(0x111u64);
+        let erc20 = CoreFelt::from(0x222u64);
+        let amount = 500u128;
+        let rate = 10u128;
+
+        // Use a known point (generator)
+        let g_x = Felt::from_hex(
+            "0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca",
+        )
+        .unwrap();
+        let g_y = Felt::from_hex(
+            "0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f",
+        )
+        .unwrap();
+        let to = ProjectivePoint::from_affine(g_x, g_y).unwrap();
+
+        let (approve_call, fund_call) =
+            build_outside_fund_calls(tongo, erc20, &to, amount, rate).unwrap();
+
+        // Approve call should have 3 felts: spender, low, high
+        assert_eq!(approve_call.calldata.len(), 3);
+
+        // Outside fund call should have 3 felts: to.x, to.y, amount
+        assert_eq!(fund_call.calldata.len(), 3);
+    }
 }
