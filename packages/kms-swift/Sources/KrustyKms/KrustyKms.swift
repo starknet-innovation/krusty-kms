@@ -89,6 +89,64 @@ public struct NostrKeyPair: Equatable {
     }
 }
 
+public struct AccountHandle: Equatable {
+    public let rawValue: UInt64
+
+    public init(rawValue: UInt64) {
+        self.rawValue = rawValue
+    }
+}
+
+public struct AccountState: Equatable {
+    public let balanceLow: UInt64
+    public let balanceHigh: UInt64
+    public let pendingBalanceLow: UInt64
+    public let pendingBalanceHigh: UInt64
+    public let nonce: UInt64
+
+    public init(balanceLow: UInt64, balanceHigh: UInt64, pendingBalanceLow: UInt64, pendingBalanceHigh: UInt64, nonce: UInt64) {
+        self.balanceLow = balanceLow
+        self.balanceHigh = balanceHigh
+        self.pendingBalanceLow = pendingBalanceLow
+        self.pendingBalanceHigh = pendingBalanceHigh
+        self.nonce = nonce
+    }
+
+    fileprivate init(cValue: KmsAccountState) {
+        self.balanceLow = cValue.balance_low
+        self.balanceHigh = cValue.balance_high
+        self.pendingBalanceLow = cValue.pending_balance_low
+        self.pendingBalanceHigh = cValue.pending_balance_high
+        self.nonce = cValue.nonce
+    }
+
+    fileprivate func toCValue() -> KmsAccountState {
+        KmsAccountState(
+            balance_low: balanceLow,
+            balance_high: balanceHigh,
+            pending_balance_low: pendingBalanceLow,
+            pending_balance_high: pendingBalanceHigh,
+            nonce: nonce
+        )
+    }
+}
+
+public struct EthSignature: Equatable {
+    public let rLow: Felt
+    public let rHigh: Felt
+    public let sLow: Felt
+    public let sHigh: Felt
+    public let v: Felt
+
+    fileprivate init(cValue: KmsEthSignature) {
+        self.rLow = Felt(cValue: cValue.r_low)
+        self.rHigh = Felt(cValue: cValue.r_high)
+        self.sLow = Felt(cValue: cValue.s_low)
+        self.sHigh = Felt(cValue: cValue.s_high)
+        self.v = Felt(cValue: cValue.v)
+    }
+}
+
 public enum CoinTypes {
     public static let tongo = Int(kms_get_coin_type_tongo())
     public static let starknet = Int(kms_get_coin_type_starknet())
@@ -379,5 +437,217 @@ public enum Kms {
         }
         try check(rc)
         return Felt(cValue: out)
+    }
+
+    // MARK: - Account management
+
+    public static func accountCreateFromMnemonic(
+        mnemonic: String,
+        index: UInt32,
+        accountIndex: UInt32,
+        contractAddress: Felt,
+        passphrase: String = ""
+    ) throws -> AccountHandle {
+        var cAddr = contractAddress.toCValue()
+        var handle: KmsAccountHandle = 0
+        let rc = mnemonic.withCString { m in
+            passphrase.withCString { p in
+                kms_account_create_from_mnemonic(m, index, accountIndex, &cAddr, p, &handle)
+            }
+        }
+        try check(rc)
+        return AccountHandle(rawValue: handle)
+    }
+
+    public static func accountCreateFromKeys(
+        ownerKey: Felt,
+        viewKey: Felt,
+        contractAddress: Felt
+    ) throws -> AccountHandle {
+        var cOwner = ownerKey.toCValue()
+        var cView = viewKey.toCValue()
+        var cAddr = contractAddress.toCValue()
+        var handle: KmsAccountHandle = 0
+        try check(kms_account_create_from_keys(&cOwner, &cView, &cAddr, &handle))
+        return AccountHandle(rawValue: handle)
+    }
+
+    public static func accountGetState(_ handle: AccountHandle) throws -> AccountState {
+        var out = KmsAccountState()
+        try check(kms_account_get_state(handle.rawValue, &out))
+        return AccountState(cValue: out)
+    }
+
+    public static func accountUpdateState(_ handle: AccountHandle, state: AccountState) throws {
+        var cState = state.toCValue()
+        try check(kms_account_update_state(handle.rawValue, &cState))
+    }
+
+    public static func accountDestroy(_ handle: AccountHandle) throws {
+        try check(kms_account_destroy(handle.rawValue))
+    }
+
+    // MARK: - Proof generation
+
+    public static func generateFundProof(handle: AccountHandle, paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_generate_fund_proof(handle.rawValue, json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func generateTransferProof(handle: AccountHandle, paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_generate_transfer_proof(handle.rawValue, json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func generateRolloverProof(handle: AccountHandle, paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_generate_rollover_proof(handle.rawValue, json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func generateWithdrawProof(handle: AccountHandle, paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_generate_withdraw_proof(handle.rawValue, json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func generateRagequitProof(handle: AccountHandle, paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_generate_ragequit_proof(handle.rawValue, json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    // MARK: - ElGamal
+
+    public static func elgamalEncrypt(
+        message: Felt,
+        publicKey: ProjectivePoint,
+        random: Felt,
+        prefix: Felt
+    ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
+        var cMsg = message.toCValue()
+        var cPub = publicKey.toCValue()
+        var cRand = random.toCValue()
+        var cPrefix = prefix.toCValue()
+        var outL = KmsProjectivePoint()
+        var outR = KmsProjectivePoint()
+
+        // Two-call pattern for the proof JSON
+        var written = 0
+        try check(kms_elgamal_encrypt(
+            &cMsg, &cPub, &cRand, &cPrefix,
+            &outL, &outR,
+            nil, 0, &written
+        ))
+
+        var proofBuf = [CChar](repeating: 0, count: written + 1)
+        try check(kms_elgamal_encrypt(
+            &cMsg, &cPub, &cRand, &cPrefix,
+            &outL, &outR,
+            &proofBuf, proofBuf.count, &written
+        ))
+
+        return (
+            l: ProjectivePoint(cValue: outL),
+            r: ProjectivePoint(cValue: outR),
+            proofJson: String(cString: proofBuf)
+        )
+    }
+
+    public static func elgamalDecrypt(
+        ciphertextL: ProjectivePoint,
+        ciphertextR: ProjectivePoint,
+        privateKey: Felt
+    ) throws -> ProjectivePoint {
+        var cL = ciphertextL.toCValue()
+        var cR = ciphertextR.toCValue()
+        var cKey = privateKey.toCValue()
+        var out = KmsProjectivePoint()
+        try check(kms_elgamal_decrypt(&cL, &cR, &cKey, &out))
+        return ProjectivePoint(cValue: out)
+    }
+
+    // MARK: - Signing
+
+    public static func starkSign(hash: Felt, privateKey: Felt) throws -> (r: Felt, s: Felt) {
+        var cHash = hash.toCValue()
+        var cKey = privateKey.toCValue()
+        var outR = KmsFelt()
+        var outS = KmsFelt()
+        try check(kms_stark_sign(&cHash, &cKey, &outR, &outS))
+        return (r: Felt(cValue: outR), s: Felt(cValue: outS))
+    }
+
+    public static func ethSign(hash: Felt, privateKeyBytes: [UInt8]) throws -> EthSignature {
+        var cHash = hash.toCValue()
+        var keyBytes = privateKeyBytes
+        var out = KmsEthSignature()
+        let rc = keyBytes.withUnsafeMutableBufferPointer { ptr in
+            kms_eth_sign(&cHash, ptr.baseAddress, &out)
+        }
+        try check(rc)
+        return EthSignature(cValue: out)
+    }
+
+    // MARK: - Calldata encoding
+
+    public static func encodeErc20Approve(paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_encode_erc20_approve(json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func encodeFundCalls(paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_encode_fund_calls(json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func encodeTransferCalls(paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_encode_transfer_calls(json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func encodeRolloverCalls(paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_encode_rollover_calls(json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func encodeWithdrawCalls(paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_encode_withdraw_calls(json, out, outLen, outWritten)
+            }
+        }
+    }
+
+    public static func encodeRagequitCalls(paramsJson: String) throws -> String {
+        try paramsJson.withCString { json in
+            try dynamicString { out, outLen, outWritten in
+                kms_encode_ragequit_calls(json, out, outLen, outWritten)
+            }
+        }
     }
 }

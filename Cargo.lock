@@ -2337,10 +2337,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "krusty-kms-ffi"
-version = "0.1.0"
-
-[[package]]
 name = "krusty-kms-sdk"
 version = "0.1.0"
 dependencies = [
