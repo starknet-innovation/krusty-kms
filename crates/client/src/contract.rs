@@ -221,6 +221,175 @@ impl TongoContract {
         Ok(rs_felt_to_core(result[0]))
     }
 
+    /// Deserialize a CipherBalance from 4 consecutive felts `[L.x, L.y, R.x, R.y]`.
+    fn parse_cipher_balance(felts: &[StarknetRsFelt]) -> Result<CipherBalance> {
+        if felts.len() < 4 {
+            return Err(krusty_kms_common::KmsError::DeserializationError(format!(
+                "Expected 4 felts for CipherBalance, got {}",
+                felts.len()
+            )));
+        }
+        let l = ProjectivePoint::from_affine(
+            rs_felt_to_core(felts[0]),
+            rs_felt_to_core(felts[1]),
+        )
+        .map_err(|_| {
+            krusty_kms_common::KmsError::DeserializationError("Invalid L point".to_string())
+        })?;
+        let r = ProjectivePoint::from_affine(
+            rs_felt_to_core(felts[2]),
+            rs_felt_to_core(felts[3]),
+        )
+        .map_err(|_| {
+            krusty_kms_common::KmsError::DeserializationError("Invalid R point".to_string())
+        })?;
+        Ok(CipherBalance { l, r })
+    }
+
+    /// Query the encrypted balance for a given public key.
+    pub async fn get_balance(&self, public_key: &ProjectivePoint) -> Result<CipherBalance> {
+        let affine = public_key.to_affine().map_err(|_| {
+            krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
+        })?;
+
+        let result = self
+            .provider
+            .call(
+                FunctionCall {
+                    contract_address: self.address,
+                    entry_point_selector: get_selector_from_name("get_balance")
+                        .map_err(|e| krusty_kms_common::KmsError::CryptoError(e.to_string()))?,
+                    calldata: vec![core_felt_to_rs(affine.x()), core_felt_to_rs(affine.y())],
+                },
+                BlockId::Tag(BlockTag::Latest),
+            )
+            .await
+            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+
+        Self::parse_cipher_balance(&result)
+    }
+
+    /// Query the encrypted pending balance for a given public key.
+    pub async fn get_pending(&self, public_key: &ProjectivePoint) -> Result<CipherBalance> {
+        let affine = public_key.to_affine().map_err(|_| {
+            krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
+        })?;
+
+        let result = self
+            .provider
+            .call(
+                FunctionCall {
+                    contract_address: self.address,
+                    entry_point_selector: get_selector_from_name("get_pending")
+                        .map_err(|e| krusty_kms_common::KmsError::CryptoError(e.to_string()))?,
+                    calldata: vec![core_felt_to_rs(affine.x()), core_felt_to_rs(affine.y())],
+                },
+                BlockId::Tag(BlockTag::Latest),
+            )
+            .await
+            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+
+        Self::parse_cipher_balance(&result)
+    }
+
+    /// Query the audit cipher balance for a given public key (CairoOption).
+    pub async fn get_audit(
+        &self,
+        public_key: &ProjectivePoint,
+    ) -> Result<Option<CipherBalance>> {
+        let affine = public_key.to_affine().map_err(|_| {
+            krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
+        })?;
+
+        let result = self
+            .provider
+            .call(
+                FunctionCall {
+                    contract_address: self.address,
+                    entry_point_selector: get_selector_from_name("get_audit")
+                        .map_err(|e| krusty_kms_common::KmsError::CryptoError(e.to_string()))?,
+                    calldata: vec![core_felt_to_rs(affine.x()), core_felt_to_rs(affine.y())],
+                },
+                BlockId::Tag(BlockTag::Latest),
+            )
+            .await
+            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+
+        if result.is_empty() {
+            return Err(krusty_kms_common::KmsError::DeserializationError(
+                "Empty response from get_audit".to_string(),
+            ));
+        }
+
+        // CairoOption: [1] for None, [0, L.x, L.y, R.x, R.y] for Some
+        if result[0] == StarknetRsFelt::ONE {
+            return Ok(None);
+        }
+
+        if result[0] == StarknetRsFelt::ZERO {
+            let cb = Self::parse_cipher_balance(&result[1..])?;
+            return Ok(Some(cb));
+        }
+
+        Err(krusty_kms_common::KmsError::DeserializationError(
+            "Invalid CairoOption variant".to_string(),
+        ))
+    }
+
+    /// Query the nonce for a given public key.
+    pub async fn get_nonce(&self, public_key: &ProjectivePoint) -> Result<CoreFelt> {
+        let affine = public_key.to_affine().map_err(|_| {
+            krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
+        })?;
+
+        let result = self
+            .provider
+            .call(
+                FunctionCall {
+                    contract_address: self.address,
+                    entry_point_selector: get_selector_from_name("get_nonce")
+                        .map_err(|e| krusty_kms_common::KmsError::CryptoError(e.to_string()))?,
+                    calldata: vec![core_felt_to_rs(affine.x()), core_felt_to_rs(affine.y())],
+                },
+                BlockId::Tag(BlockTag::Latest),
+            )
+            .await
+            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+
+        if result.is_empty() {
+            return Err(krusty_kms_common::KmsError::DeserializationError(
+                "Empty response from get_nonce".to_string(),
+            ));
+        }
+
+        Ok(rs_felt_to_core(result[0]))
+    }
+
+    /// Query the contract owner address.
+    pub async fn get_owner(&self) -> Result<CoreFelt> {
+        let result = self
+            .provider
+            .call(
+                FunctionCall {
+                    contract_address: self.address,
+                    entry_point_selector: get_selector_from_name("get_owner")
+                        .map_err(|e| krusty_kms_common::KmsError::CryptoError(e.to_string()))?,
+                    calldata: vec![],
+                },
+                BlockId::Tag(BlockTag::Latest),
+            )
+            .await
+            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+
+        if result.is_empty() {
+            return Err(krusty_kms_common::KmsError::DeserializationError(
+                "Empty response from get_owner".to_string(),
+            ));
+        }
+
+        Ok(rs_felt_to_core(result[0]))
+    }
+
     /// Get the auditor's public key if configured.
     ///
     /// Returns None if no auditor is set.
