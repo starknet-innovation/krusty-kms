@@ -341,13 +341,18 @@ Prefer "show one good example" over "explain every possibility."
 
 ## Change workflow
 
-1. **Pick an issue** (or open one).
-2. For non-trivial changes, write a **design note** before coding.
-3. Implement in small steps:
+1. **Set up git hooks** (once per clone):
+   ```bash
+   git config core.hooksPath .githooks
+   ```
+   This enables the pre-commit hook that runs `cargo fmt` automatically.
+2. **Pick an issue** (or open one).
+3. For non-trivial changes, write a **design note** before coding.
+4. Implement in small steps:
    - keep commits coherent
    - keep code compiling / tests passing
-4. Run the full check suite locally (format/lint/tests).
-5. Open a PR early if you want feedback; mark it as draft.
+5. Run the full check suite locally (format/lint/tests).
+6. Open a PR early if you want feedback; mark it as draft.
 
 **Non-trivial** includes:
 - new public API

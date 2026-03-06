@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+
+# Auto-format staged Rust files before committing
+if command -v cargo >/dev/null 2>&1; then
+    cargo fmt --all -- --check 2>/dev/null
+    if [ $? -ne 0 ]; then
+        echo "Running cargo fmt..."
+        cargo fmt --all
+        echo "Formatted. Please review and re-stage the changes."
+        exit 1
+    fi
+fi
