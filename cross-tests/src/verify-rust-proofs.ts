@@ -6,7 +6,7 @@
  * using the exact same prefix computation and challenge derivation.
  *
  * Usage: npx tsx src/verify-rust-proofs.ts [path-to-vectors]
- * Default vectors path: ../cross-compat-vectors.json
+ * Default vectors path (resolved from this src directory): ../../cross-compat-vectors.json
  */
 
 import { readFileSync } from "fs";
