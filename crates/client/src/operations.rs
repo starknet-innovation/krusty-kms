@@ -6,11 +6,13 @@
 
 use crate::serialization;
 use krusty_kms_common::Result;
+use krusty_kms_sdk::operations::{
+    FundProof, RagequitProof, RolloverProof, TransferProof, WithdrawProof,
+};
 use starknet_rust::core::types::Call;
 use starknet_rust::core::utils::get_selector_from_name;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt as CoreFelt;
-use krusty_kms_sdk::operations::{FundProof, RolloverProof, TransferProof, WithdrawProof, RagequitProof};
 
 // Type aliases for clarity
 type StarknetRsFelt = starknet_rust::core::types::Felt;
@@ -31,7 +33,6 @@ fn core_felt_to_rs(felt: CoreFelt) -> StarknetRsFelt {
 /// A tuple of (approve_call, fund_call)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn build_fund_calls(
     tongo_address: CoreFelt,
     erc20_address: CoreFelt,
@@ -81,7 +82,8 @@ pub fn build_fund_calls(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -109,7 +111,6 @@ pub fn build_fund_calls(
 /// Build an ERC20 approve call.
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn build_erc20_approve(
     erc20_address: CoreFelt,
     spender: CoreFelt,
@@ -133,7 +134,6 @@ pub fn build_erc20_approve(
 /// Build a Call for the Rollover operation.
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn build_rollover_call(
     tongo_address: CoreFelt,
     proof: &RolloverProof,
@@ -173,7 +173,6 @@ pub fn build_rollover_call(
 /// Serializes withdraw operation with full proof structure matching contract.
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn build_withdraw_call(
     tongo_address: CoreFelt,
     proof: &WithdrawProof,
@@ -267,7 +266,8 @@ pub fn build_withdraw_call(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -295,7 +295,7 @@ pub fn build_withdraw_call(
 /// Serializes transfer operation with full audit support.
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
+#[allow(clippy::too_many_arguments)]
 pub fn build_transfer_call(
     tongo_address: CoreFelt,
     from: &starknet_types_core::curve::ProjectivePoint,
@@ -340,21 +340,25 @@ pub fn build_transfer_call(
     calldata.push(core_felt_to_rs(tb_r_y));
 
     // 4. Serialize transferBalanceSelf (encrypted for sender)
-    let (tbs_l_x, tbs_l_y) = serialization::serialize_projective_point(&proof.transfer_balance_self_l)?;
-    let (tbs_r_x, tbs_r_y) = serialization::serialize_projective_point(&proof.transfer_balance_self_r)?;
+    let (tbs_l_x, tbs_l_y) =
+        serialization::serialize_projective_point(&proof.transfer_balance_self_l)?;
+    let (tbs_r_x, tbs_r_y) =
+        serialization::serialize_projective_point(&proof.transfer_balance_self_r)?;
     calldata.push(core_felt_to_rs(tbs_l_x));
     calldata.push(core_felt_to_rs(tbs_l_y));
     calldata.push(core_felt_to_rs(tbs_r_x));
     calldata.push(core_felt_to_rs(tbs_r_y));
 
     // 5. Serialize hintTransfer
-    let hint_transfer = serialization::serialize_ae_balance(hint_transfer_ciphertext, hint_transfer_nonce)?;
+    let hint_transfer =
+        serialization::serialize_ae_balance(hint_transfer_ciphertext, hint_transfer_nonce)?;
     for felt in hint_transfer {
         calldata.push(core_felt_to_rs(felt));
     }
 
     // 6. Serialize hintLeftover
-    let hint_leftover = serialization::serialize_ae_balance(hint_leftover_ciphertext, hint_leftover_nonce)?;
+    let hint_leftover =
+        serialization::serialize_ae_balance(hint_leftover_ciphertext, hint_leftover_nonce)?;
     for felt in hint_leftover {
         calldata.push(core_felt_to_rs(felt));
     }
@@ -390,7 +394,8 @@ pub fn build_transfer_call(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -417,7 +422,8 @@ pub fn build_transfer_call(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -446,7 +452,6 @@ pub fn build_transfer_call(
 /// Reference: typescript-reference/tongo-sdk/src/operations/ragequit.ts:53-64
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn build_ragequit_call(
     tongo_address: CoreFelt,
     proof: &RagequitProof,
@@ -506,7 +511,8 @@ pub fn build_ragequit_call(
         }
 
         // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts = serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
+        let audit_hint_felts =
+            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
         for felt in audit_hint_felts {
             calldata.push(core_felt_to_rs(felt));
         }
@@ -535,7 +541,6 @@ pub fn build_ragequit_call(
 ///
 /// The approve call approves `amount * rate` ERC-20 tokens.
 /// The outside_fund calldata is simply `[to.x, to.y, amount]`.
-#[must_use]
 pub fn build_outside_fund_calls(
     tongo_address: CoreFelt,
     erc20_address: CoreFelt,
@@ -596,14 +601,12 @@ mod tests {
         let rate = 10u128;
 
         // Use a known point (generator)
-        let g_x = Felt::from_hex(
-            "0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca",
-        )
-        .unwrap();
-        let g_y = Felt::from_hex(
-            "0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f",
-        )
-        .unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let to = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let (approve_call, fund_call) =

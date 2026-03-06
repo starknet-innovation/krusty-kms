@@ -27,7 +27,7 @@ const PENALTY_PER_LIE_YARD: f64 = 0.5;
 ///
 /// # Arguments
 /// * `lie_magnitude` - The difference between claimed yards and true yards.
-///                     Must be >= 0. Negative values (under-claiming) return 0.
+///   Must be >= 0. Negative values (under-claiming) return 0.
 ///
 /// # Returns
 /// Probability between 0.0 and 0.95.

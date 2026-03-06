@@ -3,14 +3,16 @@
 //! This module handles conversion between Rust types and Cairo felt arrays
 //! for contract calldata and response parsing.
 
-use krusty_kms_common::{AuditProof, ElGamalCiphertext, ElGamalProof, Poe2Proof, PoeProof, ProofOfBit, ProofOfTransfer, Range, Result};
+use krusty_kms_common::{
+    AuditProof, ElGamalCiphertext, ElGamalProof, Poe2Proof, PoeProof, ProofOfBit, ProofOfTransfer,
+    Range, Result,
+};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
 /// Serialize a ProjectivePoint to Cairo StarkPoint format (x, y).
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn serialize_projective_point(point: &ProjectivePoint) -> Result<(Felt, Felt)> {
     let affine = point
         .to_affine()
@@ -22,10 +24,10 @@ pub fn serialize_projective_point(point: &ProjectivePoint) -> Result<(Felt, Felt
 /// Deserialize Cairo StarkPoint (x, y) to ProjectivePoint.
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn deserialize_projective_point(x: Felt, y: Felt) -> Result<ProjectivePoint> {
-    ProjectivePoint::from_affine(x, y)
-        .map_err(|_| krusty_kms_common::KmsError::CryptoError("Invalid point coordinates".to_string()))
+    ProjectivePoint::from_affine(x, y).map_err(|_| {
+        krusty_kms_common::KmsError::CryptoError("Invalid point coordinates".to_string())
+    })
 }
 
 /// Serialize Proof of Exponentiation (PoE) proof for Cairo.
@@ -36,7 +38,6 @@ pub fn deserialize_projective_point(x: Felt, y: Felt) -> Result<ProjectivePoint>
 /// Cairo serialization: `[Ax, Ay, s]` (3 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_poe_proof(proof: &PoeProof) -> Result<Vec<Felt>> {
     // Convert the SerializablePoint to felts
     let a_x = Felt::from_hex(&proof.a.x)
@@ -45,8 +46,9 @@ pub fn serialize_poe_proof(proof: &PoeProof) -> Result<Vec<Felt>> {
         .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid point y: {}", e)))?;
 
     // Convert s string to Felt (s is hex format like "0x123abc")
-    let s_felt = Felt::from_hex(&proof.s)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid s scalar: {}", e)))?;
+    let s_felt = Felt::from_hex(&proof.s).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid s scalar: {}", e))
+    })?;
 
     // Serialize as: [Ax, Ay, s]
     Ok(vec![a_x, a_y, s_felt])
@@ -60,7 +62,6 @@ pub fn serialize_poe_proof(proof: &PoeProof) -> Result<Vec<Felt>> {
 /// Cairo serialization: `[Ax, Ay, s1, s2]` (4 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_poe2_proof(proof: &Poe2Proof) -> Result<Vec<Felt>> {
     // Convert the SerializablePoint to felts
     let a_x = Felt::from_hex(&proof.a.x)
@@ -69,10 +70,12 @@ pub fn serialize_poe2_proof(proof: &Poe2Proof) -> Result<Vec<Felt>> {
         .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid point y: {}", e)))?;
 
     // Convert s1 and s2 strings to Felts (hex format)
-    let s1_felt = Felt::from_hex(&proof.s1)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid s1 scalar: {}", e)))?;
-    let s2_felt = Felt::from_hex(&proof.s2)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid s2 scalar: {}", e)))?;
+    let s1_felt = Felt::from_hex(&proof.s1).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid s1 scalar: {}", e))
+    })?;
+    let s2_felt = Felt::from_hex(&proof.s2).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid s2 scalar: {}", e))
+    })?;
 
     // Serialize as: [Ax, Ay, s1, s2]
     Ok(vec![a_x, a_y, s1_felt, s2_felt])
@@ -86,7 +89,6 @@ pub fn serialize_poe2_proof(proof: &Poe2Proof) -> Result<Vec<Felt>> {
 /// Cairo serialization: `[ALx, ALy, ARx, ARy, sb, sr]` (6 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_elgamal_proof(proof: &ElGamalProof) -> Result<Vec<Felt>> {
     // Convert AL point
     let al_x = Felt::from_hex(&proof.al.x)
@@ -101,10 +103,12 @@ pub fn serialize_elgamal_proof(proof: &ElGamalProof) -> Result<Vec<Felt>> {
         .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid AR.y: {}", e)))?;
 
     // Convert sb and sr strings to Felts (hex format)
-    let sb_felt = Felt::from_hex(&proof.sb)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid sb scalar: {}", e)))?;
-    let sr_felt = Felt::from_hex(&proof.sr)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid sr scalar: {}", e)))?;
+    let sb_felt = Felt::from_hex(&proof.sb).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid sb scalar: {}", e))
+    })?;
+    let sr_felt = Felt::from_hex(&proof.sr).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid sr scalar: {}", e))
+    })?;
 
     // Serialize as: [ALx, ALy, ARx, ARy, sb, sr]
     Ok(vec![al_x, al_y, ar_x, ar_y, sb_felt, sr_felt])
@@ -152,17 +156,18 @@ pub fn u256_to_u128(low: Felt, high: Felt) -> Result<u128> {
 /// * `nonce_bytes` - 24 bytes of XChaCha20 nonce (will be padded to 32)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_ae_balance(ciphertext_bytes: &[u8], nonce_bytes: &[u8]) -> Result<Vec<Felt>> {
     if ciphertext_bytes.len() != 64 {
-        return Err(krusty_kms_common::KmsError::CryptoError(
-            format!("Ciphertext must be 64 bytes, got {}", ciphertext_bytes.len())
-        ));
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "Ciphertext must be 64 bytes, got {}",
+            ciphertext_bytes.len()
+        )));
     }
     if nonce_bytes.len() != 24 {
-        return Err(krusty_kms_common::KmsError::CryptoError(
-            format!("Nonce must be 24 bytes, got {}", nonce_bytes.len())
-        ));
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "Nonce must be 24 bytes, got {}",
+            nonce_bytes.len()
+        )));
     }
 
     // Convert 64-byte ciphertext to u512 (4 u128 limbs)
@@ -214,12 +219,12 @@ fn bytes_to_u256(bytes: &[u8]) -> (Felt, Felt) {
     let mut low_bytes = [0u8; 16];
     let mut high_bytes = [0u8; 16];
 
-    low_bytes.copy_from_slice(&bytes[16..32]);  // Lower 16 bytes
-    high_bytes.copy_from_slice(&bytes[0..16]);  // Upper 16 bytes
+    low_bytes.copy_from_slice(&bytes[16..32]); // Lower 16 bytes
+    high_bytes.copy_from_slice(&bytes[0..16]); // Upper 16 bytes
 
     (
-        Felt::from(u128::from_be_bytes(low_bytes)),   // low
-        Felt::from(u128::from_be_bytes(high_bytes)),  // high
+        Felt::from(u128::from_be_bytes(low_bytes)),  // low
+        Felt::from(u128::from_be_bytes(high_bytes)), // high
     )
 }
 
@@ -258,7 +263,6 @@ pub fn serialize_cairo_none() -> Vec<Felt> {
 /// Cairo serialization: `[Ax_x, Ax_y, AL0_x, AL0_y, AL1_x, AL1_y, AR1_x, AR1_y, sx, sb, sr]` (11 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_audit_proof(proof: &AuditProof) -> Result<Vec<Felt>> {
     // Convert Ax point
     let ax_x = Felt::from_hex(&proof.ax.x)
@@ -285,20 +289,19 @@ pub fn serialize_audit_proof(proof: &AuditProof) -> Result<Vec<Felt>> {
         .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid AR1.y: {}", e)))?;
 
     // Convert scalars sx, sb, sr to Felts (hex format)
-    let sx_felt = Felt::from_hex(&proof.sx)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid sx scalar: {}", e)))?;
-    let sb_felt = Felt::from_hex(&proof.sb)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid sb scalar: {}", e)))?;
-    let sr_felt = Felt::from_hex(&proof.sr)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid sr scalar: {}", e)))?;
+    let sx_felt = Felt::from_hex(&proof.sx).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid sx scalar: {}", e))
+    })?;
+    let sb_felt = Felt::from_hex(&proof.sb).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid sb scalar: {}", e))
+    })?;
+    let sr_felt = Felt::from_hex(&proof.sr).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid sr scalar: {}", e))
+    })?;
 
     // Serialize as: [Ax_x, Ax_y, AL0_x, AL0_y, AL1_x, AL1_y, AR1_x, AR1_y, sx, sb, sr]
     Ok(vec![
-        ax_x, ax_y,
-        al0_x, al0_y,
-        al1_x, al1_y,
-        ar1_x, ar1_y,
-        sx_felt, sb_felt, sr_felt,
+        ax_x, ax_y, al0_x, al0_y, al1_x, al1_y, ar1_x, ar1_y, sx_felt, sb_felt, sr_felt,
     ])
 }
 
@@ -308,7 +311,6 @@ pub fn serialize_audit_proof(proof: &AuditProof) -> Result<Vec<Felt>> {
 /// Cairo serialization: `[Lx, Ly, Rx, Ry]` (4 felts)
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn serialize_cipher_balance(cipher: &ElGamalCiphertext) -> Result<Vec<Felt>> {
     let (l_x, l_y) = serialize_projective_point(&cipher.l)?;
     let (r_x, r_y) = serialize_projective_point(&cipher.r)?;
@@ -324,7 +326,6 @@ pub fn serialize_cipher_balance(cipher: &ElGamalCiphertext) -> Result<Vec<Felt>>
 /// Note: c0 IS needed because Cairo's bitProof struct includes it
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_bit_proof(proof: &ProofOfBit) -> Result<Vec<Felt>> {
     // Convert A0 point
     let a0_x = Felt::from_hex(&proof.a0.x)
@@ -339,12 +340,15 @@ pub fn serialize_bit_proof(proof: &ProofOfBit) -> Result<Vec<Felt>> {
         .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid A1.y: {}", e)))?;
 
     // Convert c0, s0, and s1 strings to Felts (hex format)
-    let c0_felt = Felt::from_hex(&proof.c0)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid c0 scalar: {}", e)))?;
-    let s0_felt = Felt::from_hex(&proof.s0)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid s0 scalar: {}", e)))?;
-    let s1_felt = Felt::from_hex(&proof.s1)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid s1 scalar: {}", e)))?;
+    let c0_felt = Felt::from_hex(&proof.c0).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid c0 scalar: {}", e))
+    })?;
+    let s0_felt = Felt::from_hex(&proof.s0).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid s0 scalar: {}", e))
+    })?;
+    let s1_felt = Felt::from_hex(&proof.s1).map_err(|e| {
+        krusty_kms_common::KmsError::CryptoError(format!("Invalid s1 scalar: {}", e))
+    })?;
 
     // Serialize as: [A0_x, A0_y, A1_x, A1_y, c0, s0, s1]
     Ok(vec![a0_x, a0_y, a1_x, a1_y, c0_felt, s0_felt, s1_felt])
@@ -359,7 +363,6 @@ pub fn serialize_bit_proof(proof: &ProofOfBit) -> Result<Vec<Felt>> {
 /// Each commitment is 2 felts, each proof is 7 felts (A0_x, A0_y, A1_x, A1_y, c0, s0, s1)
 ///
 /// # Cyclomatic Complexity: 3
-#[must_use]
 pub fn serialize_range(range: &Range) -> Result<Vec<Felt>> {
     let mut felts = Vec::new();
 
@@ -368,10 +371,12 @@ pub fn serialize_range(range: &Range) -> Result<Vec<Felt>> {
 
     // Serialize all commitments (each is 2 felts)
     for commitment in &range.commitments {
-        let x = Felt::from_hex(&commitment.x)
-            .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid commitment.x: {}", e)))?;
-        let y = Felt::from_hex(&commitment.y)
-            .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid commitment.y: {}", e)))?;
+        let x = Felt::from_hex(&commitment.x).map_err(|e| {
+            krusty_kms_common::KmsError::CryptoError(format!("Invalid commitment.x: {}", e))
+        })?;
+        let y = Felt::from_hex(&commitment.y).map_err(|e| {
+            krusty_kms_common::KmsError::CryptoError(format!("Invalid commitment.y: {}", e))
+        })?;
         felts.push(x);
         felts.push(y);
     }
@@ -402,27 +407,35 @@ pub fn serialize_range(range: &Range) -> Result<Vec<Felt>> {
 /// Note: R_aux/R_aux2 moved to separate auxiliarCipher fields in calldata.
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_proof_of_transfer(proof: &ProofOfTransfer) -> Result<Vec<Felt>> {
     let mut felts = Vec::new();
 
     // Serialize 8 commitment points (2 felts each = 16 total)
     for point_ref in [
-        &proof.a_x, &proof.a_r, &proof.a_r2, &proof.a_b,
-        &proof.a_b2, &proof.a_v, &proof.a_v2, &proof.a_bar,
+        &proof.a_x,
+        &proof.a_r,
+        &proof.a_r2,
+        &proof.a_b,
+        &proof.a_b2,
+        &proof.a_v,
+        &proof.a_v2,
+        &proof.a_bar,
     ] {
-        let x = Felt::from_hex(&point_ref.x)
-            .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid point.x: {}", e)))?;
-        let y = Felt::from_hex(&point_ref.y)
-            .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid point.y: {}", e)))?;
+        let x = Felt::from_hex(&point_ref.x).map_err(|e| {
+            krusty_kms_common::KmsError::CryptoError(format!("Invalid point.x: {}", e))
+        })?;
+        let y = Felt::from_hex(&point_ref.y).map_err(|e| {
+            krusty_kms_common::KmsError::CryptoError(format!("Invalid point.y: {}", e))
+        })?;
         felts.push(x);
         felts.push(y);
     }
 
     // Serialize 5 scalar responses (5 felts)
     for scalar_str in [&proof.s_x, &proof.s_r, &proof.s_b, &proof.s_b2, &proof.s_r2] {
-        let scalar_felt = Felt::from_hex(scalar_str)
-            .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid scalar: {}", e)))?;
+        let scalar_felt = Felt::from_hex(scalar_str).map_err(|e| {
+            krusty_kms_common::KmsError::CryptoError(format!("Invalid scalar: {}", e))
+        })?;
         felts.push(scalar_felt);
     }
 
@@ -745,10 +758,22 @@ mod tests {
         use krusty_kms_common::SerializablePoint;
 
         let proof = AuditProof {
-            ax: SerializablePoint { x: "0x1".to_string(), y: "0x2".to_string() },
-            al0: SerializablePoint { x: "0x3".to_string(), y: "0x4".to_string() },
-            al1: SerializablePoint { x: "0x5".to_string(), y: "0x6".to_string() },
-            ar1: SerializablePoint { x: "0x7".to_string(), y: "0x8".to_string() },
+            ax: SerializablePoint {
+                x: "0x1".to_string(),
+                y: "0x2".to_string(),
+            },
+            al0: SerializablePoint {
+                x: "0x3".to_string(),
+                y: "0x4".to_string(),
+            },
+            al1: SerializablePoint {
+                x: "0x5".to_string(),
+                y: "0x6".to_string(),
+            },
+            ar1: SerializablePoint {
+                x: "0x7".to_string(),
+                y: "0x8".to_string(),
+            },
             sx: "0x9".to_string(),
             sb: "0xa".to_string(),
             sr: "0xb".to_string(),
@@ -771,10 +796,22 @@ mod tests {
         use krusty_kms_common::SerializablePoint;
 
         let proof = AuditProof {
-            ax: SerializablePoint { x: "invalid".to_string(), y: "0x2".to_string() },
-            al0: SerializablePoint { x: "0x3".to_string(), y: "0x4".to_string() },
-            al1: SerializablePoint { x: "0x5".to_string(), y: "0x6".to_string() },
-            ar1: SerializablePoint { x: "0x7".to_string(), y: "0x8".to_string() },
+            ax: SerializablePoint {
+                x: "invalid".to_string(),
+                y: "0x2".to_string(),
+            },
+            al0: SerializablePoint {
+                x: "0x3".to_string(),
+                y: "0x4".to_string(),
+            },
+            al1: SerializablePoint {
+                x: "0x5".to_string(),
+                y: "0x6".to_string(),
+            },
+            ar1: SerializablePoint {
+                x: "0x7".to_string(),
+                y: "0x8".to_string(),
+            },
             sx: "0x9".to_string(),
             sb: "0xa".to_string(),
             sr: "0xb".to_string(),
@@ -788,8 +825,12 @@ mod tests {
     #[test]
     fn test_serialize_cipher_balance() {
         // Use generator point for valid test
-        let g_x = Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca").unwrap();
-        let g_y = Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f").unwrap();
+        let g_x =
+            Felt::from_hex("0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca")
+                .unwrap();
+        let g_y =
+            Felt::from_hex("0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f")
+                .unwrap();
         let point = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         let cipher = ElGamalCiphertext {
@@ -823,8 +864,14 @@ mod tests {
         use krusty_kms_common::SerializablePoint;
 
         let proof = ProofOfBit {
-            a0: SerializablePoint { x: "0x1".to_string(), y: "0x2".to_string() },
-            a1: SerializablePoint { x: "0x3".to_string(), y: "0x4".to_string() },
+            a0: SerializablePoint {
+                x: "0x1".to_string(),
+                y: "0x2".to_string(),
+            },
+            a1: SerializablePoint {
+                x: "0x3".to_string(),
+                y: "0x4".to_string(),
+            },
             c0: "0x5".to_string(),
             s0: "0x6".to_string(),
             s1: "0x7".to_string(),
@@ -843,8 +890,14 @@ mod tests {
         use krusty_kms_common::SerializablePoint;
 
         let proof = ProofOfBit {
-            a0: SerializablePoint { x: "0x1".to_string(), y: "0x2".to_string() },
-            a1: SerializablePoint { x: "0x3".to_string(), y: "0x4".to_string() },
+            a0: SerializablePoint {
+                x: "0x1".to_string(),
+                y: "0x2".to_string(),
+            },
+            a1: SerializablePoint {
+                x: "0x3".to_string(),
+                y: "0x4".to_string(),
+            },
             c0: "invalid".to_string(),
             s0: "0x6".to_string(),
             s1: "0x7".to_string(),
@@ -860,20 +913,38 @@ mod tests {
 
         let range = Range {
             commitments: vec![
-                SerializablePoint { x: "0x1".to_string(), y: "0x2".to_string() },
-                SerializablePoint { x: "0x3".to_string(), y: "0x4".to_string() },
+                SerializablePoint {
+                    x: "0x1".to_string(),
+                    y: "0x2".to_string(),
+                },
+                SerializablePoint {
+                    x: "0x3".to_string(),
+                    y: "0x4".to_string(),
+                },
             ],
             proofs: vec![
                 ProofOfBit {
-                    a0: SerializablePoint { x: "0xa".to_string(), y: "0xb".to_string() },
-                    a1: SerializablePoint { x: "0xc".to_string(), y: "0xd".to_string() },
+                    a0: SerializablePoint {
+                        x: "0xa".to_string(),
+                        y: "0xb".to_string(),
+                    },
+                    a1: SerializablePoint {
+                        x: "0xc".to_string(),
+                        y: "0xd".to_string(),
+                    },
                     c0: "0xe".to_string(),
                     s0: "0xf".to_string(),
                     s1: "0x10".to_string(),
                 },
                 ProofOfBit {
-                    a0: SerializablePoint { x: "0x11".to_string(), y: "0x12".to_string() },
-                    a1: SerializablePoint { x: "0x13".to_string(), y: "0x14".to_string() },
+                    a0: SerializablePoint {
+                        x: "0x11".to_string(),
+                        y: "0x12".to_string(),
+                    },
+                    a1: SerializablePoint {
+                        x: "0x13".to_string(),
+                        y: "0x14".to_string(),
+                    },
                     c0: "0x15".to_string(),
                     s0: "0x16".to_string(),
                     s1: "0x17".to_string(),
@@ -894,9 +965,10 @@ mod tests {
         use krusty_kms_common::SerializablePoint;
 
         let range = Range {
-            commitments: vec![
-                SerializablePoint { x: "invalid".to_string(), y: "0x2".to_string() },
-            ],
+            commitments: vec![SerializablePoint {
+                x: "invalid".to_string(),
+                y: "0x2".to_string(),
+            }],
             proofs: vec![],
         };
 

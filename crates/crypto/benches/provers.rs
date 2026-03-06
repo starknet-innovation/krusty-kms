@@ -32,7 +32,7 @@ fn felt_with_bits(bits: u32) -> Felt {
     }
 
     // For larger bit sizes, construct from bytes
-    let bytes_needed = ((effective_bits + 7) / 8) as usize;
+    let bytes_needed = effective_bits.div_ceil(8) as usize;
     let mut bytes = vec![0u8; 32];
 
     // Fill the required bytes with 0xFF to get maximum value

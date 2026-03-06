@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn test_parallel_mask_cards() {
         let (pk, _sk) = MentalPokerProtocol::player_keygen();
-        let cards: Vec<Card> = (1..=10).map(|i| Card::from_index(i)).collect();
+        let cards: Vec<Card> = (1..=10).map(Card::from_index).collect();
 
         let results = ParallelOps::mask_cards_parallel(&cards, &pk).unwrap();
         assert_eq!(results.len(), 10);
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn test_parallel_reveal_tokens() {
         let (pk, sk) = MentalPokerProtocol::player_keygen();
-        let cards: Vec<Card> = (1..=5).map(|i| Card::from_index(i)).collect();
+        let cards: Vec<Card> = (1..=5).map(Card::from_index).collect();
 
         let masked: Vec<MaskedCard> = cards
             .iter()
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn test_parallel_verify_masks() {
         let (pk, _sk) = MentalPokerProtocol::player_keygen();
-        let cards: Vec<Card> = (1..=8).map(|i| Card::from_index(i)).collect();
+        let cards: Vec<Card> = (1..=8).map(Card::from_index).collect();
 
         let results = ParallelOps::mask_cards_parallel(&cards, &pk).unwrap();
         let (masked_cards, proofs): (Vec<_>, Vec<_>) = results.into_iter().unzip();

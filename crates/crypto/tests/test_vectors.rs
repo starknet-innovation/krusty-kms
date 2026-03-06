@@ -5,7 +5,7 @@
 
 use krusty_kms_crypto::*;
 use serde::Deserialize;
-use serde_json;
+
 use starknet_types_core::felt::Felt;
 use std::fs;
 

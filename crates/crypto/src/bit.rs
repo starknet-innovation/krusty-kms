@@ -84,8 +84,8 @@ fn prove_bit_0(
     let s0 = scalar::scalar_add(k.expose_secret(), &scalar::scalar_mul(&c0, random)?)?;
 
     let proof = ProofOfBit {
-        a0: SerializablePoint::from_projective(&a0),
-        a1: SerializablePoint::from_projective(&a1),
+        a0: SerializablePoint::try_from_projective(&a0)?,
+        a1: SerializablePoint::try_from_projective(&a1)?,
         c0: format!("{:#x}", c0),
         s0: format!("{:#x}", s0),
         s1: format!("{:#x}", s1),
@@ -125,8 +125,8 @@ fn prove_bit_1(
     let s1 = scalar::scalar_add(k.expose_secret(), &scalar::scalar_mul(&c1, random)?)?;
 
     let proof = ProofOfBit {
-        a0: SerializablePoint::from_projective(&a0),
-        a1: SerializablePoint::from_projective(&a1),
+        a0: SerializablePoint::try_from_projective(&a0)?,
+        a1: SerializablePoint::try_from_projective(&a1)?,
         c0: format!("{:#x}", c0),
         s0: format!("{:#x}", s0),
         s1: format!("{:#x}", s1),

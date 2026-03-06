@@ -90,8 +90,5 @@ async fn test_estimate_deploy_fee_returns_nonzero() {
         .await
         .expect("fee estimate");
 
-    assert!(
-        estimate.overall_fee > 0,
-        "fee estimate should be non-zero"
-    );
+    assert!(estimate.overall_fee > 0, "fee estimate should be non-zero");
 }

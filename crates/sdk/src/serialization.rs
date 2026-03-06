@@ -13,7 +13,6 @@ use starknet_types_core::felt::Felt;
 /// Serialize a ProjectivePoint to Cairo StarkPoint format (x, y).
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn serialize_projective_point(point: &ProjectivePoint) -> Result<(Felt, Felt)> {
     let affine = point
         .to_affine()
@@ -25,7 +24,6 @@ pub fn serialize_projective_point(point: &ProjectivePoint) -> Result<(Felt, Felt
 /// Deserialize Cairo StarkPoint (x, y) to ProjectivePoint.
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn deserialize_projective_point(x: Felt, y: Felt) -> Result<ProjectivePoint> {
     ProjectivePoint::from_affine(x, y).map_err(|_| {
         krusty_kms_common::KmsError::CryptoError("Invalid point coordinates".to_string())
@@ -40,7 +38,6 @@ pub fn deserialize_projective_point(x: Felt, y: Felt) -> Result<ProjectivePoint>
 /// Cairo serialization: `[Ax, Ay, s]` (3 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_poe_proof(proof: &PoeProof) -> Result<Vec<Felt>> {
     // Convert the SerializablePoint to felts
     let a_x = Felt::from_hex(&proof.a.x)
@@ -65,7 +62,6 @@ pub fn serialize_poe_proof(proof: &PoeProof) -> Result<Vec<Felt>> {
 /// Cairo serialization: `[Ax, Ay, s1, s2]` (4 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_poe2_proof(proof: &Poe2Proof) -> Result<Vec<Felt>> {
     // Convert the SerializablePoint to felts
     let a_x = Felt::from_hex(&proof.a.x)
@@ -93,7 +89,6 @@ pub fn serialize_poe2_proof(proof: &Poe2Proof) -> Result<Vec<Felt>> {
 /// Cairo serialization: `[ALx, ALy, ARx, ARy, sb, sr]` (6 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_elgamal_proof(proof: &ElGamalProof) -> Result<Vec<Felt>> {
     // Convert AL point
     let al_x = Felt::from_hex(&proof.al.x)
@@ -161,7 +156,6 @@ pub fn u256_to_u128(low: Felt, high: Felt) -> Result<u128> {
 /// * `nonce_bytes` - 24 bytes of XChaCha20 nonce (will be padded to 32)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_ae_balance(ciphertext_bytes: &[u8], nonce_bytes: &[u8]) -> Result<Vec<Felt>> {
     if ciphertext_bytes.len() != 64 {
         return Err(krusty_kms_common::KmsError::CryptoError(format!(
@@ -269,7 +263,6 @@ pub fn serialize_cairo_none() -> Vec<Felt> {
 /// Cairo serialization: `[Ax_x, Ax_y, AL0_x, AL0_y, AL1_x, AL1_y, AR1_x, AR1_y, sx, sb, sr]` (11 felts)
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_audit_proof(proof: &AuditProof) -> Result<Vec<Felt>> {
     // Convert Ax point
     let ax_x = Felt::from_hex(&proof.ax.x)
@@ -318,7 +311,6 @@ pub fn serialize_audit_proof(proof: &AuditProof) -> Result<Vec<Felt>> {
 /// Cairo serialization: `[Lx, Ly, Rx, Ry]` (4 felts)
 ///
 /// # Cyclomatic Complexity: 1
-#[must_use]
 pub fn serialize_cipher_balance(cipher: &ElGamalCiphertext) -> Result<Vec<Felt>> {
     let (l_x, l_y) = serialize_projective_point(&cipher.l)?;
     let (r_x, r_y) = serialize_projective_point(&cipher.r)?;
@@ -334,7 +326,6 @@ pub fn serialize_cipher_balance(cipher: &ElGamalCiphertext) -> Result<Vec<Felt>>
 /// Note: c0 IS needed because Cairo's bitProof struct includes it
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_bit_proof(proof: &ProofOfBit) -> Result<Vec<Felt>> {
     // Convert A0 point
     let a0_x = Felt::from_hex(&proof.a0.x)
@@ -372,7 +363,6 @@ pub fn serialize_bit_proof(proof: &ProofOfBit) -> Result<Vec<Felt>> {
 /// Each commitment is 2 felts, each proof is 7 felts (A0_x, A0_y, A1_x, A1_y, c0, s0, s1)
 ///
 /// # Cyclomatic Complexity: 3
-#[must_use]
 pub fn serialize_range(range: &Range) -> Result<Vec<Felt>> {
     let mut felts = Vec::new();
 
@@ -417,7 +407,6 @@ pub fn serialize_range(range: &Range) -> Result<Vec<Felt>> {
 /// Note: R_aux/R_aux2 are serialized separately as auxiliary ciphers, not part of this proof.
 ///
 /// # Cyclomatic Complexity: 2
-#[must_use]
 pub fn serialize_proof_of_transfer(proof: &ProofOfTransfer) -> Result<Vec<Felt>> {
     let mut felts = Vec::new();
 

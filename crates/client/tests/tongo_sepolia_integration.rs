@@ -15,18 +15,21 @@
 use krusty_kms::{
     derive_keypair_with_coin_type, derive_oz_account_address, STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
 };
+use krusty_kms_client::{
+    build_fund_calls, build_ragequit_call, build_rollover_call, build_transfer_call,
+    build_withdraw_call, create_provider, decrypt_cipher_balance, TongoContract,
+};
+use krusty_kms_common::ElGamalCiphertext;
+use krusty_kms_sdk::operations::{
+    fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
+    TransferParams, WithdrawParams,
+};
+use krusty_kms_sdk::{AccountState, TongoAccount};
 use starknet_rust::accounts::{Account, ExecutionEncoding, SingleOwnerAccount};
 use starknet_rust::core::types::{BlockId, BlockTag};
 use starknet_rust::signers::{LocalWallet, SigningKey};
-use krusty_kms_common::ElGamalCiphertext;
-use krusty_kms_client::{
-    build_fund_calls, build_transfer_call, build_rollover_call, build_withdraw_call, build_ragequit_call,
-    create_provider, decrypt_cipher_balance, TongoContract,
-};
-use std::sync::Arc;
 use starknet_types_core::felt::Felt;
-use krusty_kms_sdk::operations::{fund, rollover, transfer, withdraw, ragequit, FundParams, RolloverParams, TransferParams, WithdrawParams, RagequitParams};
-use krusty_kms_sdk::{AccountState, TongoAccount};
+use std::sync::Arc;
 
 /// OpenZeppelin account class hash (same as TypeScript)
 const OZ_ACCOUNT_CLASS_HASH: &str =
@@ -63,7 +66,10 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         .map_err(|e| format!("Failed to convert public key: {:?}", e))?
         .x();
 
-    println!("   ✓ Account Private Key: {:#x}", account_keypair.private_key);
+    println!(
+        "   ✓ Account Private Key: {:#x}",
+        account_keypair.private_key
+    );
     println!("   ✓ Account Public Key:  {:#x}", account_public_key);
 
     // -------------------------------------------------------------------------
@@ -73,7 +79,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
     let oz_class_hash = Felt::from_hex(OZ_ACCOUNT_CLASS_HASH)?;
     let salt = Felt::ZERO; // Salt "0x0" as in TypeScript
-    let account_address = derive_oz_account_address(&account_public_key, &oz_class_hash, Some(&salt))?;
+    let account_address =
+        derive_oz_account_address(&account_public_key, &oz_class_hash, Some(&salt))?;
 
     println!("   ✓ Derived Address: {:#x}", account_address);
     println!("   💡 This should match the deployed account in TypeScript test");
@@ -83,8 +90,10 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     // -------------------------------------------------------------------------
     println!("\n📍 Step 3: Deriving TONGO virtual account keys (coin type 5454)...");
 
-    let tongo_keypair_0 = derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None)?;
-    let tongo_keypair_1 = derive_keypair_with_coin_type(TEST_MNEMONIC, 1, 0, TONGO_COIN_TYPE, None)?;
+    let tongo_keypair_0 =
+        derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None)?;
+    let tongo_keypair_1 =
+        derive_keypair_with_coin_type(TEST_MNEMONIC, 1, 0, TONGO_COIN_TYPE, None)?;
 
     println!(
         "   ✓ TONGO Account 0 Private Key: {:#x}",
@@ -139,7 +148,10 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("   ✓ Bit Size: {} (for range proofs)", bit_size);
     println!("   ✓ ERC20 Address: {:#x}", erc20_address);
     if let Some(ref auditor) = auditor_key {
-        println!("   ✓ Auditor Key: {:#x}", auditor.to_affine().map_err(|e| format!("{:?}", e))?.x());
+        println!(
+            "   ✓ Auditor Key: {:#x}",
+            auditor.to_affine().map_err(|e| format!("{:?}", e))?.x()
+        );
         println!("   ⚠️  WARNING: This contract has an auditor - audits are REQUIRED for all operations!");
     } else {
         println!("   ✓ No Auditor configured (audits optional)");
@@ -150,9 +162,17 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     // -------------------------------------------------------------------------
     println!("\n📍 Step 6: Querying TONGO Account 0 initial state...");
 
-    let initial_state = tongo_contract.get_state(&tongo_keypair_0.public_key).await?;
-    let initial_balance = decrypt_cipher_balance(tongo_keypair_0.private_key.expose_secret(), &initial_state.balance)?;
-    let initial_pending = decrypt_cipher_balance(tongo_keypair_0.private_key.expose_secret(), &initial_state.pending)?;
+    let initial_state = tongo_contract
+        .get_state(&tongo_keypair_0.public_key)
+        .await?;
+    let initial_balance = decrypt_cipher_balance(
+        tongo_keypair_0.private_key.expose_secret(),
+        &initial_state.balance,
+    )?;
+    let initial_pending = decrypt_cipher_balance(
+        tongo_keypair_0.private_key.expose_secret(),
+        &initial_state.pending,
+    )?;
 
     println!("   ✓ Initial Balance: {}", initial_balance);
     println!("   ✓ Initial Pending: {}", initial_pending);
@@ -164,7 +184,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("\n📍 Step 7: Creating TONGO account instances...");
 
     let mut tongo_account_0 = TongoAccount::from_private_key(
-        tongo_keypair_0.private_key.expose_secret().clone(),
+        *tongo_keypair_0.private_key.expose_secret(),
         tongo_contract_address,
     )?;
 
@@ -176,11 +196,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     };
 
     let mut tongo_account_1 = TongoAccount::from_private_key(
-        tongo_keypair_1.private_key.expose_secret().clone(),
+        *tongo_keypair_1.private_key.expose_secret(),
         tongo_contract_address,
     )?;
 
-    println!("   ✓ TONGO Account 0 created (balance: {})", initial_balance);
+    println!(
+        "   ✓ TONGO Account 0 created (balance: {})",
+        initial_balance
+    );
     println!("   ✓ TONGO Account 1 created");
 
     // -------------------------------------------------------------------------
@@ -188,7 +211,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     // -------------------------------------------------------------------------
     println!("\n📍 Step 8: Generating Fund proof...");
 
-    let fund_amount: u128 = 2;  // Fund 2 units so we can transfer 2 to Account 1
+    let fund_amount: u128 = 2; // Fund 2 units so we can transfer 2 to Account 1
     let chain_id = Felt::from_hex("0x534e5f5345504f4c4941")?; // SN_SEPOLIA
 
     // Convert CipherBalance to ElGamalCiphertext for audit proof generation
@@ -198,13 +221,31 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     };
 
     println!("   💡 Stored balance ciphertext (from contract):");
-    println!("     L: {:#x}, {:#x}",
-        current_balance.l.to_affine().map_err(|e| format!("{:?}", e))?.x(),
-        current_balance.l.to_affine().map_err(|e| format!("{:?}", e))?.y()
+    println!(
+        "     L: {:#x}, {:#x}",
+        current_balance
+            .l
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .x(),
+        current_balance
+            .l
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .y()
     );
-    println!("     R: {:#x}, {:#x}",
-        current_balance.r.to_affine().map_err(|e| format!("{:?}", e))?.x(),
-        current_balance.r.to_affine().map_err(|e| format!("{:?}", e))?.y()
+    println!(
+        "     R: {:#x}, {:#x}",
+        current_balance
+            .r
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .x(),
+        current_balance
+            .r
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .y()
     );
 
     let fund_params = FundParams {
@@ -222,21 +263,50 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("   ✓ Fund proof generated for {} units", fund_amount);
     println!(
         "   ✓ Proof y: {:#x}",
-        fund_proof.y.to_affine().map_err(|e| format!("{:?}", e))?.x()
+        fund_proof
+            .y
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .x()
     );
 
     // Debug and verify audit proof details
     if let Some(ref audit) = fund_proof.audit {
         println!("   ✓ Audit proof included:");
-        println!("     - Audited balance L: {:#x}, {:#x}",
-            audit.audited_balance.l.to_affine().map_err(|e| format!("{:?}", e))?.x(),
-            audit.audited_balance.l.to_affine().map_err(|e| format!("{:?}", e))?.y()
+        println!(
+            "     - Audited balance L: {:#x}, {:#x}",
+            audit
+                .audited_balance
+                .l
+                .to_affine()
+                .map_err(|e| format!("{:?}", e))?
+                .x(),
+            audit
+                .audited_balance
+                .l
+                .to_affine()
+                .map_err(|e| format!("{:?}", e))?
+                .y()
         );
-        println!("     - Audited balance R: {:#x}, {:#x}",
-            audit.audited_balance.r.to_affine().map_err(|e| format!("{:?}", e))?.x(),
-            audit.audited_balance.r.to_affine().map_err(|e| format!("{:?}", e))?.y()
+        println!(
+            "     - Audited balance R: {:#x}, {:#x}",
+            audit
+                .audited_balance
+                .r
+                .to_affine()
+                .map_err(|e| format!("{:?}", e))?
+                .x(),
+            audit
+                .audited_balance
+                .r
+                .to_affine()
+                .map_err(|e| format!("{:?}", e))?
+                .y()
         );
-        println!("     - Balance after funding: {}", initial_balance + fund_amount);
+        println!(
+            "     - Balance after funding: {}",
+            initial_balance + fund_amount
+        );
 
         // CRITICAL: The audit proof is for the balance AFTER funding, not before!
         // Compute the new cipher balance (what the contract will have after fund())
@@ -266,12 +336,15 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         let is_valid = AuditProver::verify(
             &audit.proof,
             &tongo_keypair_0.public_key,
-            &new_cipher_balance,  // Verify against NEW balance, not old
+            &new_cipher_balance, // Verify against NEW balance, not old
             &audit.audited_balance,
             auditor_key.as_ref().unwrap(),
             Some(&audit_prefix),
         )?;
-        println!("     - Local audit proof verification: {}", if is_valid { "✓ VALID" } else { "✗ INVALID" });
+        println!(
+            "     - Local audit proof verification: {}",
+            if is_valid { "✓ VALID" } else { "✗ INVALID" }
+        );
         if !is_valid {
             return Err("Audit proof failed local verification!".into());
         }
@@ -287,8 +360,15 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     // - This means: 1 TONGO unit = 1e18 ERC20 tokens
     // - For STRK (18 decimals): 1 TONGO = 1 STRK
     // - Approve amount = fund_amount * rate = 1 * 1e18 = 1 STRK
-    println!("   💡 Rate: {} (1 TONGO unit = {} ERC20 tokens)", rate, rate);
-    println!("   💡 Funding {} TONGO units = {} ERC20 tokens to approve", fund_amount, fund_amount * rate);
+    println!(
+        "   💡 Rate: {} (1 TONGO unit = {} ERC20 tokens)",
+        rate, rate
+    );
+    println!(
+        "   💡 Funding {} TONGO units = {} ERC20 tokens to approve",
+        fund_amount,
+        fund_amount * rate
+    );
 
     // Create dummy hint (in production, would be actual XChaCha20 encrypted balance)
     let hint_ciphertext = [0x42u8; 64];
@@ -303,8 +383,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         &hint_nonce,
     )?;
 
-    println!("   ✓ ERC20 Approve call built: {} calldata felts", approve_call.calldata.len());
-    println!("   ✓ Fund call built: {} calldata felts", fund_call.calldata.len());
+    println!(
+        "   ✓ ERC20 Approve call built: {} calldata felts",
+        approve_call.calldata.len()
+    );
+    println!(
+        "   ✓ Fund call built: {} calldata felts",
+        fund_call.calldata.len()
+    );
     println!("   💡 Full calldata (first 20 elements):");
     for (i, felt) in fund_call.calldata.iter().take(20).enumerate() {
         println!("     [{}]: {:#x}", i, felt);
@@ -316,9 +402,15 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("     - hint: {} felts (indices 3-8)", 6);
     println!("     - proof: {} felts (indices 9-11)", 3);
     if fund_call.calldata.len() > 12 {
-        println!("     - audit variant: {} (0=Some, 1=None)", fund_call.calldata[12]);
+        println!(
+            "     - audit variant: {} (0=Some, 1=None)",
+            fund_call.calldata[12]
+        );
         if fund_call.calldata[12] == starknet_rust::core::types::Felt::ZERO {
-            println!("     - audit: {} felts total (4 balance + 6 hint + 11 proof)", 21);
+            println!(
+                "     - audit: {} felts total (4 balance + 6 hint + 11 proof)",
+                21
+            );
         }
     }
     println!("   💡 These calls are ready to be executed via SingleOwnerAccount");
@@ -344,7 +436,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
         let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs =
+            starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -364,10 +457,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         let calls = vec![approve_call.clone(), fund_call.clone()];
         println!("   ⏳ Sending transaction with {} calls...", calls.len());
 
-        let execution = account
-            .execute_v3(calls)
-            .send()
-            .await?;
+        let execution = account.execute_v3(calls).send().await?;
 
         println!("   ✓ Transaction sent!");
         println!("   📝 Transaction hash: {:#x}", execution.transaction_hash);
@@ -379,12 +469,23 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
 
         // Query updated state
-        let new_state = tongo_contract.get_state(&tongo_keypair_0.public_key).await?;
-        let new_balance = decrypt_cipher_balance(tongo_keypair_0.private_key.expose_secret(), &new_state.balance)?;
+        let new_state = tongo_contract
+            .get_state(&tongo_keypair_0.public_key)
+            .await?;
+        let new_balance = decrypt_cipher_balance(
+            tongo_keypair_0.private_key.expose_secret(),
+            &new_state.balance,
+        )?;
 
         println!("   ✓ Transaction confirmed!");
-        println!("   📊 New Balance: {} (was: {})", new_balance, initial_balance);
-        println!("   📊 Change: +{}", new_balance.saturating_sub(initial_balance));
+        println!(
+            "   📊 New Balance: {} (was: {})",
+            new_balance, initial_balance
+        );
+        println!(
+            "   📊 Change: +{}",
+            new_balance.saturating_sub(initial_balance)
+        );
 
         // Update account state for subsequent operations
         tongo_account_0.state.balance = new_balance;
@@ -402,8 +503,13 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("\n📍 Step 10.5: Generating Transfer proof (Account 0 → Account 1)...");
 
     // Query updated balance after fund
-    let updated_state = tongo_contract.get_state(&tongo_keypair_0.public_key).await?;
-    let updated_balance = decrypt_cipher_balance(tongo_keypair_0.private_key.expose_secret(), &updated_state.balance)?;
+    let updated_state = tongo_contract
+        .get_state(&tongo_keypair_0.public_key)
+        .await?;
+    let updated_balance = decrypt_cipher_balance(
+        tongo_keypair_0.private_key.expose_secret(),
+        &updated_state.balance,
+    )?;
 
     println!("   💡 Sender balance after fund: {}", updated_balance);
 
@@ -411,7 +517,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     tongo_account_0.state.balance = updated_balance;
     tongo_account_0.state.nonce = updated_state.nonce.to_biguint().try_into().unwrap_or(0);
 
-    let transfer_amount: u128 = 2;  // Transfer 2 units so Account 1 can withdraw 1 and ragequit 1
+    let transfer_amount: u128 = 2; // Transfer 2 units so Account 1 can withdraw 1 and ragequit 1
 
     // Get current balance cipher for audit
     let current_balance_cipher = ElGamalCiphertext {
@@ -427,17 +533,23 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tongo_address: tongo_contract_address,
         sender_address: account_address,
         current_balance: current_balance_cipher.clone(),
-        bit_size: 32,  // 32-bit range proofs for u32 values
+        bit_size: 32, // 32-bit range proofs for u32 values
         fee_to_sender: 0,
-        auditor_pub_key: auditor_key.clone(),  // Enable audits (required by contract)
+        auditor_pub_key: auditor_key.clone(), // Enable audits (required by contract)
     };
 
     let transfer_start = std::time::Instant::now();
     let transfer_proof = transfer(&tongo_account_0, transfer_params)?;
     let transfer_duration = transfer_start.elapsed();
 
-    println!("   ✓ Transfer proof generated for {} units", transfer_amount);
-    println!("   ⏱️  Proof generation time: {:.2} ms", transfer_duration.as_secs_f64() * 1000.0);
+    println!(
+        "   ✓ Transfer proof generated for {} units",
+        transfer_amount
+    );
+    println!(
+        "   ⏱️  Proof generation time: {:.2} ms",
+        transfer_duration.as_secs_f64() * 1000.0
+    );
 
     // Verify audits locally
     if transfer_proof.audit_balance.is_some() {
@@ -472,8 +584,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     )?;
     let transfer_call_duration = transfer_call_start.elapsed();
 
-    println!("   ✓ Transfer call built: {} calldata felts", transfer_call.calldata.len());
-    println!("   ⏱️ Transfer call builder generation time: {:.2} ms", transfer_call_duration.as_secs_f64() * 1000.0);
+    println!(
+        "   ✓ Transfer call built: {} calldata felts",
+        transfer_call.calldata.len()
+    );
+    println!(
+        "   ⏱️ Transfer call builder generation time: {:.2} ms",
+        transfer_call_duration.as_secs_f64() * 1000.0
+    );
 
     // Execute transfer if EXECUTE_TX is set
     if should_execute {
@@ -488,7 +606,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
         let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs =
+            starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -512,12 +631,23 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
 
         // Query final balance
-        let final_state = tongo_contract.get_state(&tongo_keypair_0.public_key).await?;
-        let final_balance = decrypt_cipher_balance(tongo_keypair_0.private_key.expose_secret(), &final_state.balance)?;
+        let final_state = tongo_contract
+            .get_state(&tongo_keypair_0.public_key)
+            .await?;
+        let final_balance = decrypt_cipher_balance(
+            tongo_keypair_0.private_key.expose_secret(),
+            &final_state.balance,
+        )?;
 
         println!("   ✓ Transfer confirmed!");
-        println!("   📊 Sender's New Balance: {} (was: {})", final_balance, updated_balance);
-        println!("   📊 Change: {:+}", final_balance as i128 - updated_balance as i128);
+        println!(
+            "   📊 Sender's New Balance: {} (was: {})",
+            final_balance, updated_balance
+        );
+        println!(
+            "   📊 Change: {:+}",
+            final_balance as i128 - updated_balance as i128
+        );
 
         // Update account state
         tongo_account_0.state.balance = final_balance;
@@ -532,9 +662,17 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("\n📍 Step 11: Generating Rollover proof (Account 1)...");
 
     // Query Account 1's state after receiving transfer
-    let account1_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
-    let account1_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &account1_state.balance)?;
-    let account1_pending = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &account1_state.pending)?;
+    let account1_state = tongo_contract
+        .get_state(&tongo_keypair_1.public_key)
+        .await?;
+    let account1_balance = decrypt_cipher_balance(
+        tongo_keypair_1.private_key.expose_secret(),
+        &account1_state.balance,
+    )?;
+    let account1_pending = decrypt_cipher_balance(
+        tongo_keypair_1.private_key.expose_secret(),
+        &account1_state.pending,
+    )?;
     let account1_nonce: u64 = account1_state.nonce.to_biguint().try_into().unwrap_or(0);
 
     println!("   💡 Account 1 state before rollover:");
@@ -577,7 +715,10 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         &hint_rollover_nonce,
     )?;
 
-    println!("   ✓ Rollover call built: {} calldata felts", rollover_call.calldata.len());
+    println!(
+        "   ✓ Rollover call built: {} calldata felts",
+        rollover_call.calldata.len()
+    );
 
     // Execute rollover if EXECUTE_TX is set
     if should_execute {
@@ -592,7 +733,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
         let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs =
+            starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -616,15 +758,36 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
 
         // Query updated state
-        let post_rollover_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
-        let post_rollover_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &post_rollover_state.balance)?;
-        let post_rollover_pending = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &post_rollover_state.pending)?;
-        let post_rollover_nonce: u64 = post_rollover_state.nonce.to_biguint().try_into().unwrap_or(0);
+        let post_rollover_state = tongo_contract
+            .get_state(&tongo_keypair_1.public_key)
+            .await?;
+        let post_rollover_balance = decrypt_cipher_balance(
+            tongo_keypair_1.private_key.expose_secret(),
+            &post_rollover_state.balance,
+        )?;
+        let post_rollover_pending = decrypt_cipher_balance(
+            tongo_keypair_1.private_key.expose_secret(),
+            &post_rollover_state.pending,
+        )?;
+        let post_rollover_nonce: u64 = post_rollover_state
+            .nonce
+            .to_biguint()
+            .try_into()
+            .unwrap_or(0);
 
         println!("   ✓ Rollover confirmed!");
-        println!("   📊 Account 1 Balance: {} → {} (pending added to balance)", account1_balance, post_rollover_balance);
-        println!("   📊 Account 1 Pending: {} → {} (cleared)", account1_pending, post_rollover_pending);
-        println!("   📊 Account 1 Nonce: {} → {}", account1_nonce, post_rollover_nonce);
+        println!(
+            "   📊 Account 1 Balance: {} → {} (pending added to balance)",
+            account1_balance, post_rollover_balance
+        );
+        println!(
+            "   📊 Account 1 Pending: {} → {} (cleared)",
+            account1_pending, post_rollover_pending
+        );
+        println!(
+            "   📊 Account 1 Nonce: {} → {}",
+            account1_nonce, post_rollover_nonce
+        );
 
         // Update account state
         tongo_account_1.state.balance = post_rollover_balance;
@@ -640,10 +803,18 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("\n📍 Step 12: Generating Withdraw proof (Account 1)...");
 
     // Query Account 1's current state for withdraw
-    let withdraw_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
-    let withdraw_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &withdraw_state.balance)?;
+    let withdraw_state = tongo_contract
+        .get_state(&tongo_keypair_1.public_key)
+        .await?;
+    let withdraw_balance = decrypt_cipher_balance(
+        tongo_keypair_1.private_key.expose_secret(),
+        &withdraw_state.balance,
+    )?;
 
-    println!("   💡 Account 1 balance before withdraw: {}", withdraw_balance);
+    println!(
+        "   💡 Account 1 balance before withdraw: {}",
+        withdraw_balance
+    );
 
     // Skip withdraw if balance is too low (would leave 0), use ragequit instead
     if withdraw_balance <= 1 {
@@ -654,117 +825,157 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tongo_account_1.state.nonce = withdraw_state.nonce.to_biguint().try_into().unwrap_or(0);
 
         let withdraw_params = WithdrawParams {
-        recipient_address: account_address, // Withdraw to our account
-        amount: 1,
-        nonce: withdraw_state.nonce,
-        chain_id,
-        tongo_address: tongo_contract_address,
-        sender_address: account_address,
-        current_balance: ElGamalCiphertext {
-            l: withdraw_state.balance.l.clone(),
-            r: withdraw_state.balance.r.clone(),
-        },
-        bit_size: 32,  // 32-bit range proofs
-        fee_to_sender: 0,
-        auditor_key: auditor_key.clone(), // Include auditor for balance audit
-    };
+            recipient_address: account_address, // Withdraw to our account
+            amount: 1,
+            nonce: withdraw_state.nonce,
+            chain_id,
+            tongo_address: tongo_contract_address,
+            sender_address: account_address,
+            current_balance: ElGamalCiphertext {
+                l: withdraw_state.balance.l.clone(),
+                r: withdraw_state.balance.r.clone(),
+            },
+            bit_size: 32, // 32-bit range proofs
+            fee_to_sender: 0,
+            auditor_key: auditor_key.clone(), // Include auditor for balance audit
+        };
 
-    // Use Account 1 since it has balance
-    let withdraw_proof = withdraw(&tongo_account_1, withdraw_params)?;
+        // Use Account 1 since it has balance
+        let withdraw_proof = withdraw(&tongo_account_1, withdraw_params)?;
 
-    println!("   ✓ Withdraw proof generated for {} units", withdraw_proof.amount);
-    println!("   ✓ Recipient: {:#x}", withdraw_proof.recipient);
-
-    // Build withdraw call
-    let hint_withdraw_ct = [0x49u8; 64];
-    let hint_withdraw_nonce = [0x9Fu8; 24];
-
-    let withdraw_call = build_withdraw_call(
-        tongo_contract_address,
-        &withdraw_proof,
-        &hint_withdraw_ct,
-        &hint_withdraw_nonce,
-    )?;
-
-    println!("   ✓ Withdraw call built: {} calldata felts", withdraw_call.calldata.len());
-
-    // Execute withdraw if EXECUTE_TX is set
-    if should_execute {
-        println!("   🚀 Executing withdraw transaction on Sepolia...");
-
-        // Query state before withdraw
-        let pre_withdraw_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
-        let pre_withdraw_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &pre_withdraw_state.balance)?;
-
-        // Create account for withdraw
-        let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
-        let private_key_rs = starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
-        let signing_key = SigningKey::from_secret_scalar(private_key_rs);
-        let signer = LocalWallet::from(signing_key);
-
-        let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
-        let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
-        let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
-
-        let mut account = SingleOwnerAccount::new(
-            provider.clone(),
-            signer,
-            account_address_rs,
-            chain_id_rs,
-            ExecutionEncoding::New,
+        println!(
+            "   ✓ Withdraw proof generated for {} units",
+            withdraw_proof.amount
         );
-        account.set_block_id(BlockId::Tag(BlockTag::Latest));
+        println!("   ✓ Recipient: {:#x}", withdraw_proof.recipient);
 
-        let result = account
-            .execute_v3(vec![withdraw_call])
-            .send()
-            .await
-            .map_err(|e| format!("Withdraw transaction failed: {}", e))?;
+        // Build withdraw call
+        let hint_withdraw_ct = [0x49u8; 64];
+        let hint_withdraw_nonce = [0x9Fu8; 24];
 
-        println!("   ✓ Withdraw transaction sent!");
-        println!("   📝 Transaction hash: {:#x}", result.transaction_hash);
+        let withdraw_call = build_withdraw_call(
+            tongo_contract_address,
+            &withdraw_proof,
+            &hint_withdraw_ct,
+            &hint_withdraw_nonce,
+        )?;
 
-        println!("   ⏳ Waiting for withdraw confirmation...");
-        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+        println!(
+            "   ✓ Withdraw call built: {} calldata felts",
+            withdraw_call.calldata.len()
+        );
 
-        // Query updated state
-        let post_withdraw_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
-        let post_withdraw_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &post_withdraw_state.balance)?;
+        // Execute withdraw if EXECUTE_TX is set
+        if should_execute {
+            println!("   🚀 Executing withdraw transaction on Sepolia...");
 
-        println!("   ✓ Withdraw confirmed!");
-        println!("   📊 Account 1 Balance: {} → {}", pre_withdraw_balance, post_withdraw_balance);
-        println!("   📊 Change: {:+}", post_withdraw_balance as i128 - pre_withdraw_balance as i128);
+            // Query state before withdraw
+            let pre_withdraw_state = tongo_contract
+                .get_state(&tongo_keypair_1.public_key)
+                .await?;
+            let pre_withdraw_balance = decrypt_cipher_balance(
+                tongo_keypair_1.private_key.expose_secret(),
+                &pre_withdraw_state.balance,
+            )?;
 
-        // Update account state
-        tongo_account_1.state.balance = post_withdraw_balance;
-        tongo_account_1.state.nonce = post_withdraw_state.nonce.to_biguint().try_into().unwrap_or(0);
-    } else {
-        println!("   ⏭️  EXECUTE_TX not set - skipping withdraw execution");
-    }
-    }  // Close the else block from line 640
+            // Create account for withdraw
+            let private_key_bytes = account_keypair.private_key.expose_secret().to_bytes_be();
+            let private_key_rs =
+                starknet_rust::core::types::Felt::from_bytes_be(&private_key_bytes);
+            let signing_key = SigningKey::from_secret_scalar(private_key_rs);
+            let signer = LocalWallet::from(signing_key);
+
+            let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
+            let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
+            let account_address_bytes = account_address.to_bytes_be();
+            let account_address_rs =
+                starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
+
+            let mut account = SingleOwnerAccount::new(
+                provider.clone(),
+                signer,
+                account_address_rs,
+                chain_id_rs,
+                ExecutionEncoding::New,
+            );
+            account.set_block_id(BlockId::Tag(BlockTag::Latest));
+
+            let result = account
+                .execute_v3(vec![withdraw_call])
+                .send()
+                .await
+                .map_err(|e| format!("Withdraw transaction failed: {}", e))?;
+
+            println!("   ✓ Withdraw transaction sent!");
+            println!("   📝 Transaction hash: {:#x}", result.transaction_hash);
+
+            println!("   ⏳ Waiting for withdraw confirmation...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+
+            // Query updated state
+            let post_withdraw_state = tongo_contract
+                .get_state(&tongo_keypair_1.public_key)
+                .await?;
+            let post_withdraw_balance = decrypt_cipher_balance(
+                tongo_keypair_1.private_key.expose_secret(),
+                &post_withdraw_state.balance,
+            )?;
+
+            println!("   ✓ Withdraw confirmed!");
+            println!(
+                "   📊 Account 1 Balance: {} → {}",
+                pre_withdraw_balance, post_withdraw_balance
+            );
+            println!(
+                "   📊 Change: {:+}",
+                post_withdraw_balance as i128 - pre_withdraw_balance as i128
+            );
+
+            // Update account state
+            tongo_account_1.state.balance = post_withdraw_balance;
+            tongo_account_1.state.nonce = post_withdraw_state
+                .nonce
+                .to_biguint()
+                .try_into()
+                .unwrap_or(0);
+        } else {
+            println!("   ⏭️  EXECUTE_TX not set - skipping withdraw execution");
+        }
+    } // Close the else block from line 640
 
     // -------------------------------------------------------------------------
     // Step 13: Ragequit operation (Account 1 withdraws ALL remaining balance)
     // -------------------------------------------------------------------------
     println!("\n📍 Step 13: Generating Ragequit proof (Account 1)...");
     let pre_ragequit_balance = tongo_account_1.state.balance;
-    println!("   💡 Account 1 balance before ragequit: {}", pre_ragequit_balance);
+    println!(
+        "   💡 Account 1 balance before ragequit: {}",
+        pre_ragequit_balance
+    );
 
     // Fetch current state for ragequit
-    let ragequit_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
+    let ragequit_state = tongo_contract
+        .get_state(&tongo_keypair_1.public_key)
+        .await?;
 
     // Update account balance to match on-chain state
-    let current_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &ragequit_state.balance)?;
+    let current_balance = decrypt_cipher_balance(
+        tongo_keypair_1.private_key.expose_secret(),
+        &ragequit_state.balance,
+    )?;
     tongo_account_1.state.balance = current_balance;
     println!("   💡 Current on-chain balance: {}", current_balance);
 
     // Skip ragequit if balance is already 0
     if current_balance == 0 {
         println!("   ⏭️  Balance already 0, skipping ragequit");
-        println!("\n================================================================================");
+        println!(
+            "\n================================================================================"
+        );
         println!("✅ Integration Test Completed Successfully!");
-        println!("================================================================================");
+        println!(
+            "================================================================================"
+        );
         return Ok(());
     }
 
@@ -779,11 +990,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
             r: ragequit_state.balance.r.clone(),
         },
         fee_to_sender: 0,
-        auditor_key: auditor_key.clone(),  // Contract requires audit
+        auditor_key: auditor_key.clone(), // Contract requires audit
     };
 
     let ragequit_proof = ragequit(&tongo_account_1, ragequit_params)?;
-    println!("   ✓ Ragequit proof generated for {} units (full balance)", ragequit_proof.amount);
+    println!(
+        "   ✓ Ragequit proof generated for {} units (full balance)",
+        ragequit_proof.amount
+    );
     println!("   ✓ Recipient: {:#x}", ragequit_proof.recipient);
 
     // Build ragequit call
@@ -796,7 +1010,10 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         &hint_nonce,
     )?;
 
-    println!("   ✓ Ragequit call built: {} calldata felts", ragequit_call.calldata.len());
+    println!(
+        "   ✓ Ragequit call built: {} calldata felts",
+        ragequit_call.calldata.len()
+    );
 
     if should_execute {
         println!("   🚀 Executing ragequit transaction on Sepolia...");
@@ -810,7 +1027,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         let chain_id_bytes = Felt::from_hex("0x534e5f5345504f4c4941")?.to_bytes_be();
         let chain_id_rs = starknet_rust::core::types::Felt::from_bytes_be(&chain_id_bytes);
         let account_address_bytes = account_address.to_bytes_be();
-        let account_address_rs = starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
+        let account_address_rs =
+            starknet_rust::core::types::Felt::from_bytes_be(&account_address_bytes);
 
         let mut account = SingleOwnerAccount::new(
             provider.clone(),
@@ -834,15 +1052,27 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
 
         // Query updated state
-        let post_ragequit_state = tongo_contract.get_state(&tongo_keypair_1.public_key).await?;
-        let post_ragequit_balance = decrypt_cipher_balance(tongo_keypair_1.private_key.expose_secret(), &post_ragequit_state.balance)?;
+        let post_ragequit_state = tongo_contract
+            .get_state(&tongo_keypair_1.public_key)
+            .await?;
+        let post_ragequit_balance = decrypt_cipher_balance(
+            tongo_keypair_1.private_key.expose_secret(),
+            &post_ragequit_state.balance,
+        )?;
 
         println!("   ✓ Ragequit confirmed!");
-        println!("   📊 Account 1 Balance: {} → {} (full withdrawal)", pre_ragequit_balance, post_ragequit_balance);
+        println!(
+            "   📊 Account 1 Balance: {} → {} (full withdrawal)",
+            pre_ragequit_balance, post_ragequit_balance
+        );
 
         // Update account state
         tongo_account_1.state.balance = post_ragequit_balance;
-        tongo_account_1.state.nonce = post_ragequit_state.nonce.to_biguint().try_into().unwrap_or(0);
+        tongo_account_1.state.nonce = post_ragequit_state
+            .nonce
+            .to_biguint()
+            .try_into()
+            .unwrap_or(0);
     } else {
         println!("   ⏭️  EXECUTE_TX not set - skipping ragequit execution");
     }
@@ -871,7 +1101,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("\n📝 To Execute Transactions on Sepolia:");
     println!("   EXECUTE_TX=1 cargo test -p starknet-client --test tongo_sepolia_integration test_full_tongo_sepolia_flow -- --ignored --nocapture");
     println!("   ⚠️  WARNING: This will spend real STRK tokens for gas on Sepolia testnet!");
-    println!("");
+    println!();
     println!("📊 Rate Information:");
     println!("   • 1 TONGO unit = 1e18 ERC20 tokens");
     println!("   • For STRK (18 decimals): 1 TONGO = 1 STRK");
@@ -879,8 +1109,22 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
     println!("\n💡 Test Accounts (SAME as TypeScript):");
     println!("   Starknet Account: {:#x}", account_address);
-    println!("   TONGO Account 0:  {:#x}", tongo_keypair_0.public_key.to_affine().map_err(|e| format!("{:?}", e))?.x());
-    println!("   TONGO Account 1:  {:#x}", tongo_keypair_1.public_key.to_affine().map_err(|e| format!("{:?}", e))?.x());
+    println!(
+        "   TONGO Account 0:  {:#x}",
+        tongo_keypair_0
+            .public_key
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .x()
+    );
+    println!(
+        "   TONGO Account 1:  {:#x}",
+        tongo_keypair_1
+            .public_key
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .x()
+    );
 
     Ok(())
 }
@@ -891,7 +1135,8 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
     println!("\n🔍 Testing Key Derivation Parity with TypeScript\n");
 
     // Derive keys EXACTLY as TypeScript does
-    let starknet_key = derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, STARKNET_COIN_TYPE, None)?;
+    let starknet_key =
+        derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, STARKNET_COIN_TYPE, None)?;
     let tongo_key_0 = derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None)?;
     let tongo_key_1 = derive_keypair_with_coin_type(TEST_MNEMONIC, 1, 0, TONGO_COIN_TYPE, None)?;
 
@@ -932,7 +1177,11 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
     let oz_class_hash = Felt::from_hex(OZ_ACCOUNT_CLASS_HASH)?;
     let salt = Felt::ZERO;
     let account_address = derive_oz_account_address(
-        &starknet_key.public_key.to_affine().map_err(|e| format!("{:?}", e))?.x(),
+        &starknet_key
+            .public_key
+            .to_affine()
+            .map_err(|e| format!("{:?}", e))?
+            .x(),
         &oz_class_hash,
         Some(&salt),
     )?;

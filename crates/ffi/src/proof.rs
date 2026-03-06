@@ -240,12 +240,7 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params
-            .fee_to_sender
-            .as_deref()
-            .unwrap_or("0")
-            .parse()
-        {
+        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
             Ok(f) => f,
             Err(_) => return KMS_ERR_INVALID_INPUT,
         };
@@ -505,12 +500,7 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params
-            .fee_to_sender
-            .as_deref()
-            .unwrap_or("0")
-            .parse()
-        {
+        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
             Ok(f) => f,
             Err(_) => return KMS_ERR_INVALID_INPUT,
         };
@@ -664,12 +654,7 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params
-            .fee_to_sender
-            .as_deref()
-            .unwrap_or("0")
-            .parse()
-        {
+        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
             Ok(f) => f,
             Err(_) => return KMS_ERR_INVALID_INPUT,
         };

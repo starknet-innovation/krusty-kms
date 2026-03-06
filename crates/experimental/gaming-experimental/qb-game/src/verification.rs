@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use crate::commitment::PlayCommitment;
 use crate::detection::{calculate_penalty, detection_probability};
 use crate::payoff::get_yards;
-use crate::types::{DefensiveCoverage, OffensivePlay, Penalty, PlayResult};
+use crate::types::{DefensiveCoverage, OffensivePlay, PlayResult};
 
 /// Verification result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,7 +258,7 @@ mod tests {
             let mut seed = [i; 32];
             seed[1] = 255 - i;
             let r = seed_to_random(&seed);
-            assert!(r >= 0.0 && r < 1.0, "Random value {} out of range", r);
+            assert!((0.0..1.0).contains(&r), "Random value {} out of range", r);
         }
     }
 
@@ -267,7 +267,7 @@ mod tests {
         let (off_commit, _) = commit_offensive_play(OffensivePlay::Slant);
         let (def_commit, _) = commit_defensive_coverage(DefensiveCoverage::Cover2);
 
-        let true_yards = get_yards(OffensivePlay::Slant, DefensiveCoverage::Cover2);
+        let _true_yards = get_yards(OffensivePlay::Slant, DefensiveCoverage::Cover2);
 
         // Claim exact true yards
         let result = verify_claim(&off_commit, &def_commit, 1, 0);

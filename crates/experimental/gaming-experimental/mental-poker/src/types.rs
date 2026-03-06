@@ -785,7 +785,7 @@ mod tests {
     #[test]
     fn test_card_from_index_produces_unique_points() {
         // Ensure different indices produce different cards
-        let indices = vec![1u64, 2, 3, 10, 52, 100, 1000];
+        let indices = [1u64, 2, 3, 10, 52, 100, 1000];
         let cards: Vec<_> = indices
             .iter()
             .map(|&i| Card::try_from_index(i).unwrap())

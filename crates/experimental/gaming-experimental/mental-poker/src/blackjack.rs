@@ -52,12 +52,12 @@ fn rank_from_index(index: u64) -> u8 {
 /// # Panics
 /// Panics if index is 0 or > 52.
 pub fn card_value(index: u64) -> u8 {
-    assert!(index >= 1 && index <= 52, "Card index must be 1-52");
+    assert!((1..=52).contains(&index), "Card index must be 1-52");
 
     let rank = rank_from_index(index);
     match rank {
         0..=8 => rank + 2, // 2-10
-        9 | 10 | 11 => 10, // J, Q, K
+        9..=11 => 10,      // J, Q, K
         12 => 11,          // A (soft value)
         _ => unreachable!(),
     }
@@ -71,13 +71,13 @@ pub fn is_ace(index: u64) -> bool {
 /// Check if a card is a face card (J, Q, K).
 pub fn is_face_card(index: u64) -> bool {
     let rank = rank_from_index(index);
-    rank >= 9 && rank <= 11
+    (9..=11).contains(&rank)
 }
 
 /// Check if a card has value 10 (10, J, Q, K).
 pub fn is_ten_value(index: u64) -> bool {
     let rank = rank_from_index(index);
-    rank >= 8 && rank <= 11
+    (8..=11).contains(&rank)
 }
 
 /// Get the suit of a card (0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades).
@@ -776,10 +776,10 @@ mod tests {
     #[test]
     fn test_player_21_vs_dealer_21_not_blackjack() {
         // Both have 21 but neither is blackjack
-        let result = determine_winner(&[6, 7, 8], &[5, 6, 9]); // 7+8+9=24 vs 6+7+10=23... let me recalculate
-                                                               // Actually: 6=7, 7=8, 8=9 → 7+8+9=24 (bust!)
-                                                               // Let me use correct indices
-                                                               // 5 (6), 6 (7), 7 (8) → 6+7+8=21
+        let _result = determine_winner(&[6, 7, 8], &[5, 6, 9]); // 7+8+9=24 vs 6+7+10=23... let me recalculate
+                                                                // Actually: 6=7, 7=8, 8=9 → 7+8+9=24 (bust!)
+                                                                // Let me use correct indices
+                                                                // 5 (6), 6 (7), 7 (8) → 6+7+8=21
         let result = determine_winner(&[5, 6, 7], &[4, 5, 9]); // 6+7+8=21 vs 5+6+10=21
         assert_eq!(result, Outcome::Push);
     }

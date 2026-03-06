@@ -25,8 +25,8 @@ pub fn left_pad_hex(hex: &str, length: usize) -> String {
 
 /// Serialize public key as concatenated x,y coordinates (128 hex chars).
 pub fn serialize_public_key_hex(x: &Felt, y: &Felt) -> String {
-    let x_hex = left_pad_hex(&format!("{:#x}", x).trim_start_matches("0x"), 64);
-    let y_hex = left_pad_hex(&format!("{:#x}", y).trim_start_matches("0x"), 64);
+    let x_hex = left_pad_hex(format!("{:#x}", x).trim_start_matches("0x"), 64);
+    let y_hex = left_pad_hex(format!("{:#x}", y).trim_start_matches("0x"), 64);
     format!("0x{}{}", x_hex, y_hex)
 }
 

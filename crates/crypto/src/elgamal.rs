@@ -89,8 +89,8 @@ impl ElGamal {
         let s_r = scalar::scalar_add(r_r.expose_secret(), &c_random)?;
 
         Ok(ElGamalProof {
-            al: SerializablePoint::from_projective(&a_l),
-            ar: SerializablePoint::from_projective(&a_r),
+            al: SerializablePoint::try_from_projective(&a_l)?,
+            ar: SerializablePoint::try_from_projective(&a_r)?,
             sb: format!("{:#x}", s_b),
             sr: format!("{:#x}", s_r),
             c: format!("{:#x}", c),
