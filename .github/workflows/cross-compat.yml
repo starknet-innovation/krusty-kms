@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "crates/common/**"
       - "crates/crypto/**"
       - "crates/sdk/**"
@@ -11,6 +13,8 @@ on:
       - ".github/workflows/cross-compat.yml"
   pull_request:
     paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "crates/common/**"
       - "crates/crypto/**"
       - "crates/sdk/**"
