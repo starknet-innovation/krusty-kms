@@ -430,6 +430,11 @@ function verifyTransferVector(v: VectorJSON): void {
   if (!res) throw new Error("verifyTransfer: POE for y failed");
 
   // 2. Verify SameEncrypt: (L,R) and (L_bar, R_bar) encrypt the same amount
+  // NOTE: AR1=AR2=A_r and sr1=sr2=s_r is intentional — the prover uses the same
+  // randomness r (total_random) for transferBalanceSelf, transferBalance, and
+  // auxiliarCipher, so the same commitment A_r=g^kr and response s_r apply to both.
+  // A_r2/s_r2 are for the *second* range proof (leftover balance), not for the second
+  // argument of SameEncrypt. This matches tongo-sdk's verifyTransfer exactly.
   res = SameEncrypt.verify(
     { L1: L, R1: R, L2: L_bar, R2: R_bar, g: GENERATOR, y1: from, y2: to },
     { AL1: A_b, AR1: A_r, AL2: A_bar, AR2: A_r, c, sb: s_b, sr1: s_r, sr2: s_r }
@@ -441,7 +446,7 @@ function verifyTransferVector(v: VectorJSON): void {
   if (V_proof === false) throw new Error("verifyTransfer: range proof 1 failed");
   if (!V.equals(V_proof)) throw new Error("verifyTransfer: V mismatch");
 
-  // 4. Verify ElGamal for (V, R_aux)
+  // 4. Verify ElGamal for (V, R_aux): V=g^b*h^r, R_aux=g^r — same r as above
   res = ElGamal.verify(
     { L: V, R: R_aux, g1: GENERATOR, g2: SECONDARY_GENERATOR },
     { AL: A_v, AR: A_r, c, sb: s_b, sr: s_r }
