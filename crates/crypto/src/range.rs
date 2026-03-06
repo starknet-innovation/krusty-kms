@@ -123,7 +123,7 @@ pub fn prove_with_randomness(
         .map(|i| {
             let bit = b_bin[i];
             let r_inn = &random_values[i];
-            let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
+            let prefix = *initial_prefix + Felt::from(i as u64);
             let (v, proof) = bit::prove(bit, r_inn, g1, g2, &prefix)?;
             Ok((v, proof, *r_inn))
         })
@@ -133,7 +133,7 @@ pub fn prove_with_randomness(
         .map(|i| {
             let bit = b_bin[i];
             let r_inn = &random_values[i];
-            let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
+            let prefix = *initial_prefix + Felt::from(i as u64);
             let (v, proof) = bit::prove(bit, r_inn, g1, g2, &prefix)?;
             Ok((v, proof, *r_inn))
         })
@@ -199,7 +199,7 @@ pub fn verify(
     let v0_commitment = range.commitments[0].to_affine()?;
     let v0 = StarkCurve::affine_to_projective(&v0_commitment);
 
-    let prefix0 = scalar::scalar_add(initial_prefix, &Felt::ZERO)?;
+    let prefix0 = *initial_prefix;
     if !bit::verify(&v0, g1, g2, &range.proofs[0], &prefix0)? {
         return Err(krusty_kms_common::KmsError::CryptoError(
             "Bit proof failed at index 0".to_string(),
@@ -216,7 +216,7 @@ pub fn verify(
         let v = StarkCurve::affine_to_projective(&v_commitment);
 
         // Verify this bit proof
-        let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
+        let prefix = *initial_prefix + Felt::from(i as u64);
         if !bit::verify(&v, g1, g2, &range.proofs[i], &prefix)? {
             return Err(krusty_kms_common::KmsError::CryptoError(format!(
                 "Bit proof failed at index {}",
