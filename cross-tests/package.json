@@ -8,7 +8,8 @@
     "test": "npm run verify"
   },
   "dependencies": {
-    "@fatsolutions/she": "^0.4.0"
+    "@fatsolutions/she": "^0.4.0",
+    "@scure/starknet": "^1.1.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

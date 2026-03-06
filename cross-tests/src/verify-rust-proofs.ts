@@ -13,7 +13,7 @@ import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { poseidonHashMany, CURVE } from "@scure/starknet";
+import { poseidonHashMany } from "@scure/starknet";
 import { ProjectivePoint, compute_challenge } from "@fatsolutions/she";
 import {
   poe,
@@ -25,7 +25,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const GENERATOR = new ProjectivePoint(CURVE.Gx, CURVE.Gy, 1n);
+const GENERATOR = ProjectivePoint.BASE;
 // Secondary generator (must match Rust StarkCurve::generator_h())
 const SECONDARY_GENERATOR = new ProjectivePoint(
   627088272801405713560985229077786158610581355215145837257248988047835443922n,
