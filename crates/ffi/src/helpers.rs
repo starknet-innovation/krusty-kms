@@ -5,7 +5,7 @@ use std::ffi::{c_char, CStr};
 use serde::Serialize;
 use serde_json::Value;
 use starknet_types_core::curve::{AffinePoint, ProjectivePoint};
-use starknet_types_core::felt::Felt;
+use starknet_types_core::felt::{Felt, NonZeroFelt};
 
 use crate::error::*;
 use crate::types::*;
@@ -37,10 +37,19 @@ pub fn proj_to_kms(p: &ProjectivePoint) -> KmsProjectivePoint {
 }
 
 pub fn kms_to_proj(k: &KmsProjectivePoint) -> ProjectivePoint {
+    let z = kms_to_felt(&k.z);
+    if z == Felt::ZERO {
+        return ProjectivePoint::identity();
+    }
     let x = kms_to_felt(&k.x);
     let y = kms_to_felt(&k.y);
-    let z = kms_to_felt(&k.z);
-    ProjectivePoint::new(x, y, z)
+    // Convert projective (X, Y, Z) → affine, avoiding ProjectivePoint::new
+    // which changed signature in starknet-types-core 0.2.4.
+    // Homogeneous projective: affine = (X/Z, Y/Z).
+    let nz: NonZeroFelt = z.try_into().expect("z is non-zero, checked above");
+    let ax = x.field_div(&nz);
+    let ay = y.field_div(&nz);
+    ProjectivePoint::from_affine(ax, ay).expect("roundtrip from valid KmsProjectivePoint")
 }
 
 pub fn affine_to_kms(a: &AffinePoint) -> KmsAffinePoint {
