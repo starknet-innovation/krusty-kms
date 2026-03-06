@@ -281,7 +281,6 @@ fn generate_cross_compat_vectors() {
     }
 
     let output = json!({
-        "generated": "2026-03-06",
         "description": "Cross-SDK compatibility vectors: Rust proofs to be verified by TypeScript tongo-sdk",
         "totalVectors": vectors.len(),
         "vectors": vectors,

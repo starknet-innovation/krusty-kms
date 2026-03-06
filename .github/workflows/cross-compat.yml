@@ -37,7 +37,7 @@ jobs:
 
       - name: Install cross-tests dependencies
         working-directory: cross-tests
-        run: npm install
+        run: npm ci
 
       - name: Verify Rust proofs with TypeScript
         working-directory: cross-tests

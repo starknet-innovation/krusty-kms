@@ -132,6 +132,11 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
             Err(e) => return e,
         };
 
+        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
+            Ok(f) => f,
+            Err(_) => return KMS_ERR_INVALID_INPUT,
+        };
+
         let sdk_params = FundParams {
             amount,
             nonce: match parse_felt(&params.nonce) {
@@ -150,7 +155,7 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
-            fee_to_sender: 0,
+            fee_to_sender,
             auditor_pub_key,
             current_balance,
         };

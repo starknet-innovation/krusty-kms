@@ -41,7 +41,6 @@ interface VectorJSON {
 }
 
 interface VectorsFile {
-  generated: string;
   description: string;
   totalVectors: number;
   vectors: VectorJSON[];
@@ -192,7 +191,7 @@ async function main() {
   const data: VectorsFile = JSON.parse(content);
 
   console.log(
-    `Cross-SDK verification: ${data.totalVectors} vectors from ${data.generated}`
+    `Cross-SDK verification: ${data.totalVectors} vectors`
   );
   console.log(`${data.description}\n`);
 
