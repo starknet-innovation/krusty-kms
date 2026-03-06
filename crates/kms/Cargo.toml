@@ -15,8 +15,8 @@ default = ["parallel"]
 parallel = ["krusty-kms-crypto/parallel"]
 
 [dependencies]
-krusty-kms-common = { version = "0.1.0", path = "../common" }
-krusty-kms-crypto = { version = "0.1.0", path = "../crypto", default-features = false }
+krusty-kms-common = { version = "0.2.0", path = "../common" }
+krusty-kms-crypto = { version = "0.2.0", path = "../crypto", default-features = false }
 starknet-types-core.workspace = true
 bip39.workspace = true
 hmac.workspace = true
