@@ -345,7 +345,7 @@ Prefer "show one good example" over "explain every possibility."
    ```bash
    git config core.hooksPath .githooks
    ```
-   This enables the pre-commit hook that runs `cargo fmt` automatically.
+   This enables the pre-commit hook that checks Rust formatting (via `cargo fmt --check`) and will abort the commit if formatting is incorrect so you can run `cargo fmt` and re-stage changes.
 2. **Pick an issue** (or open one).
 3. For non-trivial changes, write a **design note** before coding.
 4. Implement in small steps:
