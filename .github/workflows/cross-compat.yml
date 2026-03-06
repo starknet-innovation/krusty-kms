@@ -4,11 +4,15 @@ on:
   push:
     branches: [main]
     paths:
+      - "crates/common/**"
+      - "crates/crypto/**"
       - "crates/sdk/**"
       - "cross-tests/**"
       - ".github/workflows/cross-compat.yml"
   pull_request:
     paths:
+      - "crates/common/**"
+      - "crates/crypto/**"
       - "crates/sdk/**"
       - "cross-tests/**"
       - ".github/workflows/cross-compat.yml"
