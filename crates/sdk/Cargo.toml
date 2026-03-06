@@ -31,6 +31,7 @@ sha2.workspace = true
 [dev-dependencies]
 serde_json.workspace = true
 criterion.workspace = true
+krusty-kms-crypto = { version = "0.2.0", path = "../crypto", features = ["test-utils"] }
 
 [[bench]]
 name = "operations"

@@ -3,7 +3,7 @@
 //! Run with: cargo test -p krusty-kms-sdk --test generate_vectors -- --ignored --nocapture
 
 use krusty_kms_common::ElGamalCiphertext;
-use krusty_kms_crypto::StarkCurve;
+use krusty_kms_crypto::{clear_deterministic_rng, set_deterministic_rng, StarkCurve};
 use krusty_kms_sdk::operations::{
     fund, ragequit, rollover, FundParams, RagequitParams, RolloverParams,
 };
@@ -71,6 +71,10 @@ struct RagequitCase {
 #[test]
 #[ignore] // Run manually: cargo test -p krusty-kms-sdk --test generate_vectors -- --ignored --nocapture
 fn generate_prover_vectors() {
+    // Use a fixed seed so every run produces identical `proof` fields.
+    let seed = [0x42u8; 32];
+    set_deterministic_rng(seed, b"generate-prover-vectors");
+
     let fund_cases = vec![
         FundCase {
             name: "fund_small_amount",
@@ -324,6 +328,9 @@ fn generate_prover_vectors() {
         "totalVectors": vectors.len(),
         "vectors": vectors,
     });
+
+    // Restore system randomness before writing output.
+    clear_deterministic_rng();
 
     let output_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../prover-vectors.json");
     let pretty = serde_json::to_string_pretty(&output).expect("Failed to serialize");
