@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "tsx src/generate-ts-proofs.ts",
     "verify": "tsx src/verify-rust-proofs.ts",
     "test": "npm run verify"
   },
