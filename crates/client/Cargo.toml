@@ -11,10 +11,10 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-krusty-kms-common = { version = "0.2.0", path = "../common" }
-krusty-kms = { version = "0.2.0", path = "../kms" }
-krusty-kms-sdk = { version = "0.2.0", path = "../sdk" }
-krusty-kms-crypto = { version = "0.2.0", path = "../crypto" }
+krusty-kms-common = { version = "0.2.1", path = "../common" }
+krusty-kms = { version = "0.2.1", path = "../kms" }
+krusty-kms-sdk = { version = "0.2.1", path = "../sdk" }
+krusty-kms-crypto = { version = "0.2.1", path = "../crypto" }
 starknet-types-core.workspace = true
 starknet-rust = "0.18.0"
 tokio = { workspace = true, features = ["time", "sync", "macros"] }

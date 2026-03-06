@@ -10,50 +10,28 @@ pub struct StarkCurve;
 
 /// The G generator point of the Stark curve (lazily initialized).
 static GENERATOR_INNER: LazyLock<ProjectivePoint> = LazyLock::new(|| {
-    ProjectivePoint::new(
-        Felt::from_raw([
-            232005955912912577,
-            299981207024966779,
-            5884444832209845738,
-            14484022957141291997,
-        ]),
-        Felt::from_raw([
-            405578048423154473,
-            18147424675297964973,
-            664812301889158119,
-            6241159653446987914,
-        ]),
-        Felt::from_raw([
-            576460752303422960,
-            18446744073709551615,
-            18446744073709551615,
-            18446744073709551585,
-        ]),
+    let gx = Felt::from_dec_str(
+        "874739451078007766457464989774322083649278607533249481151382481072868806602",
     )
+    .expect("Generator G x-coordinate is a valid constant");
+    let gy = Felt::from_dec_str(
+        "152666792071518830868575557812948353041420400780739481342941381225525861407",
+    )
+    .expect("Generator G y-coordinate is a valid constant");
+    ProjectivePoint::from_affine(gx, gy).expect("Generator G is a valid curve point")
 });
 
 /// The H generator point (lazily initialized).
 static GENERATOR_H_INNER: LazyLock<ProjectivePoint> = LazyLock::new(|| {
-    ProjectivePoint::new(
-        Felt::from_raw([
-            494630544989822523,
-            132181179302948286,
-            16480848587684502369,
-            5066196925898258193,
-        ]),
-        Felt::from_raw([
-            56004507632539839,
-            7751607942052885689,
-            1452278637989274185,
-            1071784586725618313,
-        ]),
-        Felt::from_raw([
-            576460752303422960,
-            18446744073709551615,
-            18446744073709551615,
-            18446744073709551585,
-        ]),
+    let hx = Felt::from_dec_str(
+        "627088272801405713560985229077786158610581355215145837257248988047835443922",
     )
+    .expect("Generator H x-coordinate is a valid constant");
+    let hy = Felt::from_dec_str(
+        "962306405833205337611861169387935900858447421343428280515103558221889311122",
+    )
+    .expect("Generator H y-coordinate is a valid constant");
+    ProjectivePoint::from_affine(hx, hy).expect("Generator H is a valid curve point")
 });
 
 impl StarkCurve {
