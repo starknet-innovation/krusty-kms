@@ -203,6 +203,7 @@ fn test_fund_prover_vectors() {
             chain_id,
             tongo_address,
             sender_address: Felt::from(0u64),
+            fee_to_sender: 0,
             auditor_pub_key: None,
             current_balance,
         };

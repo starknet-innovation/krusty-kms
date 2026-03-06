@@ -150,6 +150,7 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
+            fee_to_sender: 0,
             auditor_pub_key,
             current_balance,
         };

@@ -273,6 +273,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         chain_id,
         tongo_address: tongo_contract_address,
         sender_address: account_address,
+        fee_to_sender: 0,
         auditor_pub_key: auditor_key.clone(),
         current_balance: current_balance.clone(),
     };

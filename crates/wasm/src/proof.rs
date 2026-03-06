@@ -848,6 +848,7 @@ fn convert_fund_params(params: &WasmFundParams) -> WasmResult<FundParams> {
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
         sender_address: parse_felt(&params.sender_address)?,
+        fee_to_sender: 0,
         auditor_pub_key,
         current_balance,
     })
