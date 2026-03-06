@@ -27,7 +27,7 @@ fn felt_with_bits(bits: u32) -> Felt {
         return Felt::from(max_val >> 1);
     }
 
-    let bytes_needed = ((effective_bits + 7) / 8) as usize;
+    let bytes_needed = effective_bits.div_ceil(8) as usize;
     let mut bytes = vec![0u8; 32];
 
     for i in 0..bytes_needed {

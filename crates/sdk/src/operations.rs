@@ -65,8 +65,8 @@ use crate::crypto::encrypt_for_auditor;
 use crate::TongoAccount;
 use krusty_kms_common::{AuditProof, ElGamalCiphertext, KmsError, ProofOfTransfer, Result};
 use krusty_kms_crypto::{
-    hash, poseidon_hash_many, range, scalar, AuditPrefixData, AuditProver,
-    ProofOfExponentiation, StarkCurve,
+    hash, poseidon_hash_many, range, scalar, AuditPrefixData, AuditProver, ProofOfExponentiation,
+    StarkCurve,
 };
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
@@ -105,6 +105,7 @@ pub struct FundParams {
     pub chain_id: Felt,
     pub tongo_address: Felt,
     pub sender_address: Felt,
+    pub fee_to_sender: u128,
     pub auditor_pub_key: Option<ProjectivePoint>,
     pub current_balance: ElGamalCiphertext,
 }
@@ -194,11 +195,12 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
     // Compute prefix using Poseidon hash
-    // prefix = poseidon([chain_id, tongo_address, sender_address, FUND_CAIRO_STRING, y.x, y.y, amount, nonce])
+    // prefix = poseidon([chain_id, tongo_address, sender_address, fee_to_sender, FUND_CAIRO_STRING, y.x, y.y, amount, nonce])
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
+        Felt::from(params.fee_to_sender),
         FUND_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -209,7 +211,8 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
 
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this fund operation
-    let (_, proof) = ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
+    let (_, proof) =
+        ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
 
     // Generate audit if auditor is configured
     let audit = if let Some(ref auditor_key) = params.auditor_pub_key {
@@ -251,8 +254,11 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
 
         // Generate audit hint (XChaCha20-Poly1305 encryption of the plaintext balance)
         // The auditor can decrypt this using ECDH with user's public key
-        let (audit_hint_ct, audit_hint_nonce) =
-            encrypt_for_auditor(new_balance, account.keypair.private_key.expose_secret(), auditor_key)?;
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+            new_balance,
+            account.keypair.private_key.expose_secret(),
+            auditor_key,
+        )?;
 
         Some(Audit {
             audited_balance,
@@ -366,22 +372,39 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     };
 
     // Convert all cipher balance points to affine for prefix
-    let current_l_affine = params.current_balance.l.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
-    let current_r_affine = params.current_balance.r.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
-    let tbs_l_affine = transfer_balance_self_l.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
-    let tbs_r_affine = transfer_balance_self_r.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
-    let tb_l_affine = transfer_balance_l.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
-    let tb_r_affine = transfer_balance_r.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
+    let current_l_affine = params
+        .current_balance
+        .l
+        .to_affine()
+        .map_err(|_| KmsError::PointAtInfinity)?;
+    let current_r_affine = params
+        .current_balance
+        .r
+        .to_affine()
+        .map_err(|_| KmsError::PointAtInfinity)?;
+    let tbs_l_affine = transfer_balance_self_l
+        .to_affine()
+        .map_err(|_| KmsError::PointAtInfinity)?;
+    let tbs_r_affine = transfer_balance_self_r
+        .to_affine()
+        .map_err(|_| KmsError::PointAtInfinity)?;
+    let tb_l_affine = transfer_balance_l
+        .to_affine()
+        .map_err(|_| KmsError::PointAtInfinity)?;
+    let tb_r_affine = transfer_balance_r
+        .to_affine()
+        .map_err(|_| KmsError::PointAtInfinity)?;
     let v_affine = v.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux_affine = r_aux.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let v2_affine = v2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux2_affine = r_aux2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Build 29-element prefix (no fee_to_sender in this contract version)
+    // Build 30-element prefix matching tongo-sdk prefixTransfer
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
+        Felt::from(params.fee_to_sender),
         TRANSFER_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -484,17 +507,26 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     )?;
 
     // Compute 5 scalar responses s = k + value * c
-    let s_x = krusty_kms_crypto::scalar::scalar_add(&kx, &krusty_kms_crypto::scalar::scalar_mul(&challenge, x)?)?;
+    let s_x = krusty_kms_crypto::scalar::scalar_add(
+        &kx,
+        &krusty_kms_crypto::scalar::scalar_mul(&challenge, x)?,
+    )?;
     let s_b = krusty_kms_crypto::scalar::scalar_add(
         &kb,
         &krusty_kms_crypto::scalar::scalar_mul(&challenge, &Felt::from(b))?,
     )?;
-    let s_r = krusty_kms_crypto::scalar::scalar_add(&kr, &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r)?)?;
+    let s_r = krusty_kms_crypto::scalar::scalar_add(
+        &kr,
+        &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r)?,
+    )?;
     let s_b2 = krusty_kms_crypto::scalar::scalar_add(
         &kb2,
         &krusty_kms_crypto::scalar::scalar_mul(&challenge, &Felt::from(b_left))?,
     )?;
-    let s_r2 = krusty_kms_crypto::scalar::scalar_add(&kr2_k, &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r2)?)?;
+    let s_r2 = krusty_kms_crypto::scalar::scalar_add(
+        &kr2_k,
+        &krusty_kms_crypto::scalar::scalar_mul(&challenge, &r2)?,
+    )?;
 
     // Assemble ProofOfTransfer (without r_aux/r_aux2 — now in auxiliar ciphers)
     let proof = ProofOfTransfer {
@@ -560,8 +592,11 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
             Some(&audit_prefix),
         )?;
 
-        let (audit_balance_hint_ct, audit_balance_hint_nonce) =
-            encrypt_for_auditor(b_left, account.keypair.private_key.expose_secret(), auditor_key)?;
+        let (audit_balance_hint_ct, audit_balance_hint_nonce) = encrypt_for_auditor(
+            b_left,
+            account.keypair.private_key.expose_secret(),
+            auditor_key,
+        )?;
 
         let transfer_cipher_self = ElGamalCiphertext {
             l: transfer_balance_self_l.clone(),
@@ -648,7 +683,8 @@ pub fn rollover(account: &TongoAccount, params: RolloverParams) -> Result<Rollov
 
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this rollover operation
-    let (_, proof) = ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
+    let (_, proof) =
+        ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
 
     Ok(RolloverProof {
         y,
@@ -745,12 +781,13 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let v_affine = v.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux_affine = r_aux.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: [chain_id, tongo_address, sender_address, WITHDRAW, y.x, y.y, nonce, amount, to,
+    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, WITHDRAW, y.x, y.y, nonce, amount, to,
     //                   L0.x, L0.y, R0.x, R0.y, V.x, V.y, R_aux.x, R_aux.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
+        Felt::from(params.fee_to_sender),
         WITHDRAW_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -769,11 +806,16 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let prefix = poseidon_hash_many(&prefix_inputs);
 
     // Generate range proof for leftover balance using pre-generated randomness
-    let (range, _r) = range::prove_with_randomness(left, params.bit_size, &g, &h, &prefix, &random_values)?;
+    let (range, _r) =
+        range::prove_with_randomness(left, params.bit_size, &g, &h, &prefix, &random_values)?;
 
     // Generate random values for commitments
     let commitment_randoms = random_felts(3);
-    let (kb, kx, kr) = (&commitment_randoms[0], &commitment_randoms[1], &commitment_randoms[2]);
+    let (kb, kx, kr) = (
+        &commitment_randoms[0],
+        &commitment_randoms[1],
+        &commitment_randoms[2],
+    );
 
     // Compute commitments
     let a_x = StarkCurve::mul(kx, Some(&g));
@@ -792,17 +834,14 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let c_left = scalar::scalar_mul(&c, &Felt::from(left))?;
     let sb = scalar::scalar_add(kb, &c_left)?;
 
-    let c_x = scalar::scalar_mul(&c, &x)?;
+    let c_x = scalar::scalar_mul(&c, x)?;
     let sx = scalar::scalar_add(kx, &c_x)?;
 
     let c_r = scalar::scalar_mul(&c, &r)?;
     let sr = scalar::scalar_add(kr, &c_r)?;
 
     // Package auxiliar cipher
-    let auxiliar_cipher = ElGamalCiphertext {
-        l: v,
-        r: r_aux,
-    };
+    let auxiliar_cipher = ElGamalCiphertext { l: v, r: r_aux };
 
     // Generate audit proof if auditor key is provided
     let audit = if let Some(auditor_key) = params.auditor_key {
@@ -849,8 +888,11 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
             Some(&audit_prefix),
         )?;
 
-        let (audit_hint_ct, audit_hint_nonce) =
-            encrypt_for_auditor(left, account.keypair.private_key.expose_secret(), &auditor_key)?;
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+            left,
+            account.keypair.private_key.expose_secret(),
+            &auditor_key,
+        )?;
 
         Some(Audit {
             audited_balance,
@@ -913,7 +955,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
 
     // Verify storedBalance is an encryption of the full balance: g^b = L0 - R0^x
     // Reference: ragequit.ts:78-81
-    let r0_x = StarkCurve::mul(&x, Some(r0));
+    let r0_x = StarkCurve::mul(x, Some(r0));
     let r0_x_affine = StarkCurve::projective_to_affine(&r0_x)?;
     let neg_r0_x =
         StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
@@ -936,12 +978,13 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
     let l0_affine = l0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r0_affine = r0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: [chain_id, tongo_address, sender_address, RAGEQUIT, y.x, y.y, nonce, amount, to,
+    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, RAGEQUIT, y.x, y.y, nonce, amount, to,
     //                   L0.x, L0.y, R0.x, R0.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
+        Felt::from(params.fee_to_sender),
         RAGEQUIT_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -971,7 +1014,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
 
     // Compute response: sx = kx + c*x
     // Reference: ragequit.ts:99
-    let c_x = scalar::scalar_mul(&c, &x)?;
+    let c_x = scalar::scalar_mul(&c, x)?;
     let sx = scalar::scalar_add(&kx, &c_x)?;
 
     // Generate audit proof if auditor key is provided
@@ -1079,16 +1122,16 @@ pub struct RolloverProof {
 }
 
 pub struct WithdrawProof {
-    pub y: ProjectivePoint,         // User's public key
-    pub a_x: ProjectivePoint,       // Commitment for proof of private key
-    pub a_r: ProjectivePoint,       // Commitment for range proof randomness
-    pub a: ProjectivePoint,         // Commitment for balance encryption proof
-    pub a_v: ProjectivePoint,       // Commitment for V linkage proof
-    pub sx: Felt,                   // Response for private key
-    pub sb: Felt,                   // Response for leftover balance
-    pub sr: Felt,                   // Response for range proof randomness
+    pub y: ProjectivePoint,                 // User's public key
+    pub a_x: ProjectivePoint,               // Commitment for proof of private key
+    pub a_r: ProjectivePoint,               // Commitment for range proof randomness
+    pub a: ProjectivePoint,                 // Commitment for balance encryption proof
+    pub a_v: ProjectivePoint,               // Commitment for V linkage proof
+    pub sx: Felt,                           // Response for private key
+    pub sb: Felt,                           // Response for leftover balance
+    pub sr: Felt,                           // Response for range proof randomness
     pub auxiliar_cipher: ElGamalCiphertext, // (V = g^b_left*h^r, R_aux = g^r)
-    pub range: krusty_kms_common::Range, // Range proof for leftover balance
+    pub range: krusty_kms_common::Range,    // Range proof for leftover balance
     pub amount: u128,
     pub recipient: Felt,
     pub audit: Option<Audit>, // Optional audit proof for leftover balance
@@ -1136,6 +1179,7 @@ mod tests {
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(), // SN_SEPOLIA
             tongo_address: contract_address,
             sender_address: Felt::from(0xCAFEu64),
+            fee_to_sender: 0,
             auditor_pub_key: None,
             current_balance,
         };
@@ -1163,6 +1207,7 @@ mod tests {
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: contract_address,
             sender_address: Felt::from(0xCAFEu64),
+            fee_to_sender: 0,
             auditor_pub_key: None,
             current_balance,
         };
@@ -1334,6 +1379,7 @@ mod tests {
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: contract_address,
             sender_address: Felt::from(0xCAFEu64),
+            fee_to_sender: 0,
             auditor_pub_key: Some(auditor_pub_key),
             current_balance,
         };

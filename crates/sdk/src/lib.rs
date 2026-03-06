@@ -29,6 +29,4 @@ pub use crypto::{decrypt_as_auditor, encrypt_for_auditor};
 pub use operations::{fund, ragequit, rollover, transfer, withdraw};
 
 pub use krusty_kms::*;
-/// Re-export common types
-pub use krusty_kms_common::*;
 pub use krusty_kms_crypto::*;

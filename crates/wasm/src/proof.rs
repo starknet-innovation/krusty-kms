@@ -6,13 +6,13 @@
 use crate::account::WasmAccount;
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use krusty_kms_common::ElGamalCiphertext;
-use serde::{Deserialize, Serialize};
-use starknet_types_core::curve::ProjectivePoint;
-use starknet_types_core::felt::Felt;
 use krusty_kms_sdk::operations::{
     fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
     TransferParams, WithdrawParams,
 };
+use serde::{Deserialize, Serialize};
+use starknet_types_core::curve::ProjectivePoint;
+use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 
 /// Default bit size for range proofs (40 bits = ~1 trillion max).
@@ -41,6 +41,8 @@ pub struct WasmFundParams {
     pub current_cipher_l_y: String,
     pub current_cipher_r_x: String,
     pub current_cipher_r_y: String,
+    /// Fee to sender for relayed transactions (defaults to "0")
+    pub fee_to_sender: Option<String>,
     /// Optional auditor public key (hex, concatenated x||y)
     pub auditor_public_key: Option<String>,
 }
@@ -48,6 +50,7 @@ pub struct WasmFundParams {
 #[wasm_bindgen]
 impl WasmFundParams {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         amount: String,
         nonce: String,
@@ -69,8 +72,15 @@ impl WasmFundParams {
             current_cipher_l_y,
             current_cipher_r_x,
             current_cipher_r_y,
+            fee_to_sender: None,
             auditor_public_key: None,
         }
+    }
+
+    #[wasm_bindgen(js_name = "withFeeToSender")]
+    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
+        self.fee_to_sender = Some(fee_to_sender);
+        self
     }
 
     #[wasm_bindgen(js_name = "withAuditor")]
@@ -164,6 +174,7 @@ pub struct WasmTransferParams {
 #[wasm_bindgen]
 impl WasmTransferParams {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         recipient_public_key: String,
         amount: String,
@@ -373,7 +384,12 @@ pub struct WasmRolloverParams {
 #[wasm_bindgen]
 impl WasmRolloverParams {
     #[wasm_bindgen(constructor)]
-    pub fn new(nonce: String, chain_id: String, tongo_address: String, sender_address: String) -> Self {
+    pub fn new(
+        nonce: String,
+        chain_id: String,
+        tongo_address: String,
+        sender_address: String,
+    ) -> Self {
         Self {
             nonce,
             chain_id,
@@ -463,6 +479,7 @@ pub struct WasmWithdrawParams {
 #[wasm_bindgen]
 impl WasmWithdrawParams {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         recipient_address: String,
         amount: String,
@@ -653,6 +670,7 @@ pub struct WasmRagequitParams {
 #[wasm_bindgen]
 impl WasmRagequitParams {
     #[wasm_bindgen(constructor)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         recipient_address: String,
         nonce: String,
@@ -833,12 +851,20 @@ fn convert_fund_params(params: &WasmFundParams) -> WasmResult<FundParams> {
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
+    let fee_to_sender: u128 = params
+        .fee_to_sender
+        .as_deref()
+        .unwrap_or("0")
+        .parse()
+        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
+
     Ok(FundParams {
         amount,
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
         sender_address: parse_felt(&params.sender_address)?,
+        fee_to_sender,
         auditor_pub_key,
         current_balance,
     })
@@ -881,7 +907,10 @@ fn convert_transfer_params(params: &WasmTransferParams) -> WasmResult<TransferPa
         tongo_address: parse_felt(&params.tongo_address)?,
         sender_address: parse_felt(&params.sender_address)?,
         current_balance,
-        bit_size: params.bit_size.map(|b| b as usize).unwrap_or(DEFAULT_BIT_SIZE),
+        bit_size: params
+            .bit_size
+            .map(|b| b as usize)
+            .unwrap_or(DEFAULT_BIT_SIZE),
         fee_to_sender,
         auditor_pub_key,
     })
@@ -922,7 +951,10 @@ fn convert_withdraw_params(params: &WasmWithdrawParams) -> WasmResult<WithdrawPa
         tongo_address: parse_felt(&params.tongo_address)?,
         sender_address: parse_felt(&params.sender_address)?,
         current_balance,
-        bit_size: params.bit_size.map(|b| b as usize).unwrap_or(DEFAULT_BIT_SIZE),
+        bit_size: params
+            .bit_size
+            .map(|b| b as usize)
+            .unwrap_or(DEFAULT_BIT_SIZE),
         fee_to_sender,
         auditor_key,
     })
@@ -982,11 +1014,10 @@ fn serialize_audit(audit: &krusty_kms_sdk::operations::Audit) -> Result<String, 
             "l": { "x": format!("{:#x}", l_affine.x()), "y": format!("{:#x}", l_affine.y()) },
             "r": { "x": format!("{:#x}", r_affine.x()), "y": format!("{:#x}", r_affine.y()) }
         },
-        "hint_ciphertext": hex::encode(&audit.hint_ciphertext),
-        "hint_nonce": hex::encode(&audit.hint_nonce),
+        "hint_ciphertext": hex::encode(audit.hint_ciphertext),
+        "hint_nonce": hex::encode(audit.hint_nonce),
         "proof": &audit.proof
     });
 
     serde_json::to_string(&json).map_err(|e| e.to_string())
 }
-

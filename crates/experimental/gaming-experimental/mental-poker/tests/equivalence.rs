@@ -472,9 +472,6 @@ fn test_five_player_aggregate_key() {
 #[test]
 fn test_shuffle_with_proof() {
     use krusty_kms_crypto::scalar;
-    use mental_poker::shuffle::{
-        ShuffleArgument, ShuffleParameters, ShuffleStatement, ShuffleWitness,
-    };
 
     let (pk, _sk) = MentalPokerProtocol::player_keygen();
 
@@ -567,7 +564,7 @@ fn test_multiplayer_shuffle_with_proofs() {
     // Create initial deck
     let n = 8;
     let cards: Vec<Card> = (1..=n).map(|i| Card::from_index(i as u64)).collect();
-    let mut deck: Vec<MaskedCard> = cards
+    let deck: Vec<MaskedCard> = cards
         .iter()
         .map(|c| MentalPokerProtocol::mask(c, &aggregate_pk, None).unwrap().0)
         .collect();

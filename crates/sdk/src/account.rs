@@ -30,7 +30,6 @@ impl TongoAccount {
     /// * `passphrase` - Optional passphrase
     ///
     /// # Cyclomatic Complexity: 1
-    #[must_use]
     pub fn from_mnemonic(
         mnemonic: &str,
         index: u32,
@@ -57,7 +56,6 @@ impl TongoAccount {
     /// Create a TONGO account from a private key.
     ///
     /// # Cyclomatic Complexity: 1
-    #[must_use]
     pub fn from_private_key(private_key: Felt, contract_address: Felt) -> Result<Self> {
         let public_key = StarkCurve::mul_generator(&private_key);
 
@@ -78,7 +76,6 @@ impl TongoAccount {
     ///
     /// This is useful for wallets that store the viewing key separately and
     /// want to initialize an account without a mnemonic.
-    #[must_use]
     pub fn from_keys(
         owner_private_key: Felt,
         view_private_key: Felt,
@@ -102,7 +99,6 @@ impl TongoAccount {
     }
 
     /// Get the public key as a hex string.
-    #[must_use]
     pub fn public_key_hex(&self) -> Result<String> {
         let affine = self
             .keypair
@@ -117,7 +113,6 @@ impl TongoAccount {
     }
 
     /// Get the owner (spending) public key as a hex string.
-    #[must_use]
     pub fn owner_public_key_hex(&self) -> Result<String> {
         self.public_key_hex()
     }

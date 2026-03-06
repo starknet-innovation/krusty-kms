@@ -44,7 +44,7 @@ fn debug_account_address_calculation() {
 
     // Step 3: Hash calldata
     println!("Step 3: Calldata Hashing");
-    let calldata = vec![public_key_x];
+    let calldata = [public_key_x];
     println!("  Calldata array: [{:#x}]", calldata[0]);
     println!("  Calldata length: {}", calldata.len());
 

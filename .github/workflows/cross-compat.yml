@@ -1,0 +1,51 @@
+name: Cross-SDK Compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/common/**"
+      - "crates/crypto/**"
+      - "crates/sdk/**"
+      - "cross-tests/**"
+      - ".github/workflows/cross-compat.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/common/**"
+      - "crates/crypto/**"
+      - "crates/sdk/**"
+      - "cross-tests/**"
+      - ".github/workflows/cross-compat.yml"
+
+jobs:
+  cross-compat:
+    name: Verify Rust proofs with TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Generate cross-compat vectors from Rust
+        run: cargo test -p krusty-kms-sdk --test cross_compat -- --ignored --nocapture
+
+      - name: Install cross-tests dependencies
+        working-directory: cross-tests
+        run: npm ci
+
+      - name: Verify Rust proofs with TypeScript
+        working-directory: cross-tests
+        run: npx tsx src/verify-rust-proofs.ts

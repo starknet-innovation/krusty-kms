@@ -3,12 +3,10 @@
 use crate::address::pub_key_to_tongo_address;
 use crate::contract::TongoContract;
 use crate::events::{
-    BalanceDeclaredEvent, FundEvent, OutsideFundEvent, RagequitEvent, RolloverEvent,
-    TongoEvent, TongoEventReader, TransferDeclaredEvent, TransferEvent, WithdrawEvent,
+    BalanceDeclaredEvent, FundEvent, OutsideFundEvent, RagequitEvent, RolloverEvent, TongoEvent,
+    TongoEventReader, TransferDeclaredEvent, TransferEvent, WithdrawEvent,
 };
-use crate::types::{
-    decrypt_cipher_balance, AccountState, CipherBalance, DecryptedAccountState,
-};
+use crate::types::{decrypt_cipher_balance, AccountState, CipherBalance, DecryptedAccountState};
 use krusty_kms_common::Result;
 use krusty_kms_crypto::StarkCurve;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};

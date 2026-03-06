@@ -141,7 +141,8 @@ mod tests {
         for i in 1u64..=10 {
             let scalar = Felt::from(i * 1000);
             let point = StarkCurve::mul_generator(&scalar);
-            let neg_point = negate_point(&point).expect(&format!("Negation {} should succeed", i));
+            let neg_point =
+                negate_point(&point).unwrap_or_else(|_| panic!("Negation {} should succeed", i));
 
             let sum = StarkCurve::add(&point, &neg_point);
             assert!(

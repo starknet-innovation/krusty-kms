@@ -44,7 +44,7 @@ impl ProofOfExponentiation {
         let s = scalar::scalar_add(r.expose_secret(), &c_x)?;
 
         let proof = PoeProof {
-            a: SerializablePoint::from_projective(&a),
+            a: SerializablePoint::try_from_projective(&a)?,
             s: format!("{:#x}", s),
             c: format!("{:#x}", c),
         };

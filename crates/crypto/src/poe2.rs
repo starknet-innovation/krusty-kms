@@ -71,7 +71,7 @@ impl ProofOfExponentiation2 {
         let s2 = scalar::scalar_add(k2.expose_secret(), &c_x2)?;
 
         let proof = Poe2Proof {
-            a: SerializablePoint::from_projective(&a),
+            a: SerializablePoint::try_from_projective(&a)?,
             s1: format!("{:#x}", s1),
             s2: format!("{:#x}", s2),
             c: format!("{:#x}", c),

@@ -7,9 +7,8 @@ use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
 /// Stark curve β parameter: y² = x³ + x + β
-const STARK_BETA: Felt = Felt::from_hex_unchecked(
-    "0x6f21413efbe40de150e596d72f7a8c5609ad26c15c915c1f4cdfcb99cee9e89",
-);
+const STARK_BETA: Felt =
+    Felt::from_hex_unchecked("0x6f21413efbe40de150e596d72f7a8c5609ad26c15c915c1f4cdfcb99cee9e89");
 
 /// Encode a public key as a TongoAddress (base58-encoded compressed point).
 pub fn pub_key_to_tongo_address(pub_key: &ProjectivePoint) -> Result<String> {
@@ -76,9 +75,9 @@ fn decompress_point(bytes: &[u8]) -> Result<ProjectivePoint> {
     let y_squared = x3 + x + STARK_BETA;
 
     // Use Felt::sqrt() which handles the Stark field correctly
-    let y = y_squared
-        .sqrt()
-        .ok_or_else(|| KmsError::CryptoError("x-coordinate is not on the Stark curve".to_string()))?;
+    let y = y_squared.sqrt().ok_or_else(|| {
+        KmsError::CryptoError("x-coordinate is not on the Stark curve".to_string())
+    })?;
 
     // Choose correct y parity based on prefix
     let y_bytes = y.to_bytes_be();

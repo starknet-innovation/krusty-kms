@@ -213,7 +213,7 @@ impl From<WasmBlackjackOutcome> for Outcome {
 /// * 11 for Ace (caller handles soft/hard)
 #[wasm_bindgen(js_name = "blackjackCardValue")]
 pub fn blackjack_card_value(card_index: u32) -> Result<u8, JsValue> {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return Err(JsValue::from_str("Card index must be 1-52"));
     }
     Ok(card_value(card_index as u64))
@@ -222,7 +222,7 @@ pub fn blackjack_card_value(card_index: u32) -> Result<u8, JsValue> {
 /// Check if a card is an Ace.
 #[wasm_bindgen(js_name = "isBlackjackAce")]
 pub fn is_blackjack_ace(card_index: u32) -> bool {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return false;
     }
     is_ace(card_index as u64)
@@ -231,7 +231,7 @@ pub fn is_blackjack_ace(card_index: u32) -> bool {
 /// Check if a card is a face card (J, Q, K).
 #[wasm_bindgen(js_name = "isBlackjackFaceCard")]
 pub fn is_blackjack_face_card(card_index: u32) -> bool {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return false;
     }
     is_face_card(card_index as u64)
@@ -240,7 +240,7 @@ pub fn is_blackjack_face_card(card_index: u32) -> bool {
 /// Check if a card has value 10 (10, J, Q, K).
 #[wasm_bindgen(js_name = "isBlackjackTenValue")]
 pub fn is_blackjack_ten_value(card_index: u32) -> bool {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return false;
     }
     is_ten_value(card_index as u64)
@@ -249,7 +249,7 @@ pub fn is_blackjack_ten_value(card_index: u32) -> bool {
 /// Get the suit of a card (0=Clubs, 1=Diamonds, 2=Hearts, 3=Spades).
 #[wasm_bindgen(js_name = "blackjackCardSuit")]
 pub fn blackjack_card_suit(card_index: u32) -> Result<u8, JsValue> {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return Err(JsValue::from_str("Card index must be 1-52"));
     }
     Ok(card_suit(card_index as u64))
@@ -258,7 +258,7 @@ pub fn blackjack_card_suit(card_index: u32) -> Result<u8, JsValue> {
 /// Get the rank symbol for display (e.g., "A", "K", "10", "2").
 #[wasm_bindgen(js_name = "blackjackRankSymbol")]
 pub fn blackjack_rank_symbol(card_index: u32) -> Result<String, JsValue> {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return Err(JsValue::from_str("Card index must be 1-52"));
     }
     Ok(rank_symbol(card_index as u64).to_string())
@@ -273,7 +273,7 @@ pub fn blackjack_suit_symbol(suit: u8) -> String {
 /// Format a card for display (e.g., "A♠", "10♥").
 #[wasm_bindgen(js_name = "formatBlackjackCard")]
 pub fn format_blackjack_card(card_index: u32) -> Result<String, JsValue> {
-    if card_index < 1 || card_index > 52 {
+    if !(1..=52).contains(&card_index) {
         return Err(JsValue::from_str("Card index must be 1-52"));
     }
     Ok(format_card(card_index as u64))
@@ -294,7 +294,7 @@ pub fn format_blackjack_card(card_index: u32) -> Result<String, JsValue> {
 pub fn calculate_blackjack_hand_value(card_indices: &[u32]) -> Result<WasmHandValue, JsValue> {
     let indices: Vec<u64> = card_indices.iter().map(|&i| i as u64).collect();
     for &idx in &indices {
-        if idx < 1 || idx > 52 {
+        if !(1..=52).contains(&idx) {
             return Err(JsValue::from_str("All card indices must be 1-52"));
         }
     }
@@ -306,7 +306,7 @@ pub fn calculate_blackjack_hand_value(card_indices: &[u32]) -> Result<WasmHandVa
 pub fn blackjack_best_value(card_indices: &[u32]) -> Result<u8, JsValue> {
     let indices: Vec<u64> = card_indices.iter().map(|&i| i as u64).collect();
     for &idx in &indices {
-        if idx < 1 || idx > 52 {
+        if !(1..=52).contains(&idx) {
             return Err(JsValue::from_str("All card indices must be 1-52"));
         }
     }
@@ -336,7 +336,7 @@ pub fn is_blackjack_wasm(card_indices: &[u32]) -> bool {
 pub fn should_dealer_hit_wasm(card_indices: &[u32]) -> Result<bool, JsValue> {
     let indices: Vec<u64> = card_indices.iter().map(|&i| i as u64).collect();
     for &idx in &indices {
-        if idx < 1 || idx > 52 {
+        if !(1..=52).contains(&idx) {
             return Err(JsValue::from_str("All card indices must be 1-52"));
         }
     }
@@ -349,7 +349,7 @@ pub fn should_dealer_hit_wasm(card_indices: &[u32]) -> Result<bool, JsValue> {
 pub fn should_dealer_hit_soft17_wasm(card_indices: &[u32]) -> Result<bool, JsValue> {
     let indices: Vec<u64> = card_indices.iter().map(|&i| i as u64).collect();
     for &idx in &indices {
-        if idx < 1 || idx > 52 {
+        if !(1..=52).contains(&idx) {
             return Err(JsValue::from_str("All card indices must be 1-52"));
         }
     }
@@ -378,7 +378,7 @@ pub fn determine_blackjack_winner(
     let dealer: Vec<u64> = dealer_cards.iter().map(|&i| i as u64).collect();
 
     for &idx in player.iter().chain(dealer.iter()) {
-        if idx < 1 || idx > 52 {
+        if !(1..=52).contains(&idx) {
             return Err(JsValue::from_str("All card indices must be 1-52"));
         }
     }

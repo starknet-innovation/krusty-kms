@@ -64,8 +64,7 @@ pub mod tongo_events {
         starknet_rust::core::utils::starknet_keccak(name.as_bytes())
     }
 
-    pub static FUND_EVENT: LazyLock<StarknetRsFelt> =
-        LazyLock::new(|| event_selector("FundEvent"));
+    pub static FUND_EVENT: LazyLock<StarknetRsFelt> = LazyLock::new(|| event_selector("FundEvent"));
     pub static OUTSIDE_FUND_EVENT: LazyLock<StarknetRsFelt> =
         LazyLock::new(|| event_selector("OutsideFundEvent"));
     pub static ROLLOVER_EVENT: LazyLock<StarknetRsFelt> =
@@ -124,9 +123,6 @@ mod tests {
         assert_ne!(*tongo_events::WITHDRAW_EVENT, StarknetRsFelt::ZERO);
         assert_ne!(*tongo_events::RAGEQUIT_EVENT, StarknetRsFelt::ZERO);
         assert_ne!(*tongo_events::BALANCE_DECLARED_EVENT, StarknetRsFelt::ZERO);
-        assert_ne!(
-            *tongo_events::TRANSFER_DECLARED_EVENT,
-            StarknetRsFelt::ZERO
-        );
+        assert_ne!(*tongo_events::TRANSFER_DECLARED_EVENT, StarknetRsFelt::ZERO);
     }
 }

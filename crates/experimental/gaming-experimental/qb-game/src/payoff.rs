@@ -182,7 +182,7 @@ mod tests {
                 let yards = get_yards(offense, defense);
                 // Yards should be in reasonable range
                 assert!(
-                    yards >= -10 && yards <= 50,
+                    (-10..=50).contains(&yards),
                     "Yards out of range for {:?} vs {:?}: {}",
                     offense,
                     defense,

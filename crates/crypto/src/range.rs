@@ -91,9 +91,11 @@ pub fn prove_with_randomness(
     }
 
     if random_values.len() != bit_size {
-        return Err(krusty_kms_common::KmsError::CryptoError(
-            format!("random_values length {} != bit_size {}", random_values.len(), bit_size)
-        ));
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "random_values length {} != bit_size {}",
+            random_values.len(),
+            bit_size
+        )));
     }
 
     let max_value = if bit_size == 128 {
@@ -121,9 +123,9 @@ pub fn prove_with_randomness(
         .map(|i| {
             let bit = b_bin[i];
             let r_inn = &random_values[i];
-            let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
+            let prefix = *initial_prefix + Felt::from(i as u64);
             let (v, proof) = bit::prove(bit, r_inn, g1, g2, &prefix)?;
-            Ok((v, proof, r_inn.clone()))
+            Ok((v, proof, *r_inn))
         })
         .collect();
     #[cfg(not(feature = "parallel"))]
@@ -131,9 +133,9 @@ pub fn prove_with_randomness(
         .map(|i| {
             let bit = b_bin[i];
             let r_inn = &random_values[i];
-            let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
+            let prefix = *initial_prefix + Felt::from(i as u64);
             let (v, proof) = bit::prove(bit, r_inn, g1, g2, &prefix)?;
-            Ok((v, proof, r_inn.clone()))
+            Ok((v, proof, *r_inn))
         })
         .collect();
     let bit_results = bit_results?;
@@ -147,7 +149,7 @@ pub fn prove_with_randomness(
         let pow = Felt::from(1u128 << i);
 
         proofs.push(proof);
-        commitments.push(SerializablePoint::from_projective(&v));
+        commitments.push(SerializablePoint::try_from_projective(&v)?);
 
         // r = (r + r_inn * pow) % CURVE_ORDER
         let r_inn_pow = scalar::scalar_mul(&pow, &r_inn)?;
@@ -197,7 +199,7 @@ pub fn verify(
     let v0_commitment = range.commitments[0].to_affine()?;
     let v0 = StarkCurve::affine_to_projective(&v0_commitment);
 
-    let prefix0 = scalar::scalar_add(initial_prefix, &Felt::ZERO)?;
+    let prefix0 = *initial_prefix;
     if !bit::verify(&v0, g1, g2, &range.proofs[0], &prefix0)? {
         return Err(krusty_kms_common::KmsError::CryptoError(
             "Bit proof failed at index 0".to_string(),
@@ -214,7 +216,7 @@ pub fn verify(
         let v = StarkCurve::affine_to_projective(&v_commitment);
 
         // Verify this bit proof
-        let prefix = scalar::scalar_add(initial_prefix, &Felt::from(i as u64))?;
+        let prefix = *initial_prefix + Felt::from(i as u64);
         if !bit::verify(&v, g1, g2, &range.proofs[i], &prefix)? {
             return Err(krusty_kms_common::KmsError::CryptoError(format!(
                 "Bit proof failed at index {}",
@@ -428,13 +430,14 @@ mod tests {
         let random_values = random_felts(bit_size);
 
         // prove_with_randomness should produce valid proof
-        let (range, r) = prove_with_randomness(b, bit_size, &g1, &g2, &prefix, &random_values).unwrap();
+        let (range, r) =
+            prove_with_randomness(b, bit_size, &g1, &g2, &prefix, &random_values).unwrap();
         let v = verify(&range, bit_size, &g1, &g2, &prefix).unwrap();
 
         // Check V = g1^b * g2^r
         let expected = StarkCurve::add(
             &StarkCurve::mul(&Felt::from(b), Some(&g1)),
-            &StarkCurve::mul(&r, Some(&g2))
+            &StarkCurve::mul(&r, Some(&g2)),
         );
 
         let v_affine = StarkCurve::projective_to_affine(&v).unwrap();

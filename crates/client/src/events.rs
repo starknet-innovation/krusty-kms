@@ -279,11 +279,7 @@ impl TongoEventReader {
         to_block: Option<u64>,
     ) -> Result<Vec<OutsideFundEvent>> {
         let (kx, ky) = point_to_rs_felts(pub_key)?;
-        let keys = vec![
-            vec![*tongo_events::OUTSIDE_FUND_EVENT],
-            vec![kx],
-            vec![ky],
-        ];
+        let keys = vec![vec![*tongo_events::OUTSIDE_FUND_EVENT], vec![kx], vec![ky]];
         let raw = self.fetch_events(keys, from_block, to_block).await?;
         raw.iter().map(parse_outside_fund_event).collect()
     }
@@ -486,9 +482,7 @@ impl TongoEventReader {
 
 // ── Point conversion helper ─────────────────────────────────────────────
 
-fn point_to_rs_felts(
-    point: &ProjectivePoint,
-) -> Result<(StarknetRsFelt, StarknetRsFelt)> {
+fn point_to_rs_felts(point: &ProjectivePoint) -> Result<(StarknetRsFelt, StarknetRsFelt)> {
     let affine = point
         .to_affine()
         .map_err(|_| KmsError::CryptoError("Invalid public key".to_string()))?;
@@ -707,8 +701,8 @@ mod tests {
             amount: 0,
         });
 
-        let mut events = vec![e1, e2];
-        events.sort_by(|a, b| b.block_number().cmp(&a.block_number()));
+        let mut events = [e1, e2];
+        events.sort_by_key(|e| std::cmp::Reverse(e.block_number()));
         assert_eq!(events[0].block_number(), Some(200));
         assert_eq!(events[1].block_number(), Some(100));
     }

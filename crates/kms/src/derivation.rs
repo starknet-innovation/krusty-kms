@@ -16,6 +16,7 @@ use starknet_types_core::felt::Felt;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 type HmacSha512 = Hmac<Sha512>;
+type DerivedKeyPair = (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>);
 
 /// TONGO coin type for BIP-44 derivation path.
 pub const TONGO_COIN_TYPE: u32 = 5454;
@@ -329,7 +330,7 @@ pub fn derive_nostr_keypair(
 /// This matches the Swift implementation which uses "Bitcoin seed" for BIP-32.
 ///
 /// # Cyclomatic Complexity: 1
-fn derive_master_key(seed: &[u8]) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
     let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
         .map_err(|e| KmsError::CryptoError(e.to_string()))?;
     mac.update(seed);
@@ -351,11 +352,7 @@ fn derive_master_key(seed: &[u8]) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8;
 /// - child_key = (IL + parent_key) mod secp256k1_n
 ///
 /// # Cyclomatic Complexity: 3
-fn derive_child(
-    key: &[u8; 32],
-    chain_code: &[u8; 32],
-    index: u32,
-) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<DerivedKeyPair> {
     let mut mac =
         HmacSha512::new_from_slice(chain_code).map_err(|e| KmsError::CryptoError(e.to_string()))?;
 
@@ -412,7 +409,7 @@ fn derive_path(
     master_key: &[u8; 32],
     master_chain: &[u8; 32],
     path: &[u32],
-) -> Result<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>)> {
+) -> Result<DerivedKeyPair> {
     let mut key = Zeroizing::new(*master_key);
     let mut chain = Zeroizing::new(*master_chain);
 
@@ -452,7 +449,7 @@ fn grind_key(key_seed: &[u8; 32]) -> Result<Felt> {
         // Hash keySeed || i (single byte)
         let mut hasher = Sha256::new();
         hasher.update(key_seed);
-        hasher.update(&[i]);
+        hasher.update([i]);
         let digest = hasher.finalize();
 
         let candidate = BigUint::from_bytes_be(&digest);

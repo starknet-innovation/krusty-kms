@@ -126,9 +126,9 @@ fn discrete_log_brute_force(g_m: &ProjectivePoint) -> Result<u128> {
         }
     }
 
-    Err(krusty_kms_common::KmsError::CryptoError(format!(
-        "Failed to recover balance (discrete log not found within search limit)"
-    )))
+    Err(krusty_kms_common::KmsError::CryptoError(
+        "Failed to recover balance (discrete log not found within search limit)".to_string(),
+    ))
 }
 
 /// Check if two points are equal.
@@ -142,7 +142,7 @@ fn points_equal(a: &ProjectivePoint, b: &ProjectivePoint) -> bool {
 
 /// Convert ERC-20 amount to Tongo units (ceiling division by rate).
 pub fn erc20_to_tongo(erc20_amount: u128, rate: u128) -> u128 {
-    (erc20_amount + rate - 1) / rate
+    erc20_amount.div_ceil(rate)
 }
 
 /// Convert Tongo amount to ERC-20 units.

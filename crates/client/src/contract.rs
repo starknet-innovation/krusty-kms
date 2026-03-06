@@ -229,20 +229,14 @@ impl TongoContract {
                 felts.len()
             )));
         }
-        let l = ProjectivePoint::from_affine(
-            rs_felt_to_core(felts[0]),
-            rs_felt_to_core(felts[1]),
-        )
-        .map_err(|_| {
-            krusty_kms_common::KmsError::DeserializationError("Invalid L point".to_string())
-        })?;
-        let r = ProjectivePoint::from_affine(
-            rs_felt_to_core(felts[2]),
-            rs_felt_to_core(felts[3]),
-        )
-        .map_err(|_| {
-            krusty_kms_common::KmsError::DeserializationError("Invalid R point".to_string())
-        })?;
+        let l = ProjectivePoint::from_affine(rs_felt_to_core(felts[0]), rs_felt_to_core(felts[1]))
+            .map_err(|_| {
+                krusty_kms_common::KmsError::DeserializationError("Invalid L point".to_string())
+            })?;
+        let r = ProjectivePoint::from_affine(rs_felt_to_core(felts[2]), rs_felt_to_core(felts[3]))
+            .map_err(|_| {
+                krusty_kms_common::KmsError::DeserializationError("Invalid R point".to_string())
+            })?;
         Ok(CipherBalance { l, r })
     }
 
@@ -293,10 +287,7 @@ impl TongoContract {
     }
 
     /// Query the audit cipher balance for a given public key (CairoOption).
-    pub async fn get_audit(
-        &self,
-        public_key: &ProjectivePoint,
-    ) -> Result<Option<CipherBalance>> {
+    pub async fn get_audit(&self, public_key: &ProjectivePoint) -> Result<Option<CipherBalance>> {
         let affine = public_key.to_affine().map_err(|_| {
             krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
         })?;
