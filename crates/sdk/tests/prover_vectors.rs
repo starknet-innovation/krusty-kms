@@ -14,6 +14,14 @@ use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 use std::fs;
 
+fn parse_felt(s: &str) -> Felt {
+    if s.starts_with("0x") || s.starts_with("0X") {
+        Felt::from_hex_unchecked(s)
+    } else {
+        Felt::from_dec_str(s).unwrap()
+    }
+}
+
 /// Point representation in test vectors
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct PointVector {
@@ -23,8 +31,8 @@ struct PointVector {
 
 impl PointVector {
     fn to_projective(&self) -> ProjectivePoint {
-        let x = Felt::from_dec_str(&self.x).unwrap();
-        let y = Felt::from_dec_str(&self.y).unwrap();
+        let x = parse_felt(&self.x);
+        let y = parse_felt(&self.y);
         ProjectivePoint::from_affine(x, y).unwrap()
     }
 }
@@ -171,8 +179,8 @@ fn test_fund_prover_vectors() {
             .expect("Failed to parse fund expected outputs");
 
         // Create account from private key
-        let private_key = Felt::from_dec_str(private_key_str).unwrap();
-        let contract_address = Felt::from_dec_str(tongo_address_str).unwrap();
+        let private_key = parse_felt(private_key_str);
+        let contract_address = parse_felt(tongo_address_str);
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
 
         // Set initial balance
@@ -181,9 +189,9 @@ fn test_fund_prover_vectors() {
 
         // Execute fund operation
         let amount: u128 = amount_str.parse().unwrap();
-        let nonce = Felt::from_dec_str(nonce_str).unwrap();
-        let chain_id = Felt::from_dec_str(chain_id_str).unwrap();
-        let tongo_address = Felt::from_dec_str(tongo_address_str).unwrap();
+        let nonce = parse_felt(nonce_str);
+        let chain_id = parse_felt(chain_id_str);
+        let tongo_address = parse_felt(tongo_address_str);
 
         // Create current balance cipher (zero balance for initial fund)
         let g = StarkCurve::generator();
@@ -253,14 +261,14 @@ fn test_rollover_prover_vectors() {
             .expect("Failed to parse rollover expected outputs");
 
         // Create account from private key
-        let private_key = Felt::from_dec_str(private_key_str).unwrap();
-        let contract_address = Felt::from_dec_str(tongo_address_str).unwrap();
+        let private_key = parse_felt(private_key_str);
+        let contract_address = parse_felt(tongo_address_str);
         let account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
 
         // Execute rollover operation
-        let nonce = Felt::from_dec_str(nonce_str).unwrap();
-        let chain_id = Felt::from_dec_str(chain_id_str).unwrap();
-        let tongo_address = Felt::from_dec_str(tongo_address_str).unwrap();
+        let nonce = parse_felt(nonce_str);
+        let chain_id = parse_felt(chain_id_str);
+        let tongo_address = parse_felt(tongo_address_str);
 
         let params = RolloverParams {
             nonce,
@@ -322,8 +330,8 @@ fn test_ragequit_prover_vectors() {
             .expect("Failed to parse ragequit expected outputs");
 
         // Create account from private key
-        let private_key = Felt::from_dec_str(private_key_str).unwrap();
-        let contract_address = Felt::from_dec_str(tongo_address_str).unwrap();
+        let private_key = parse_felt(private_key_str);
+        let contract_address = parse_felt(tongo_address_str);
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
 
         // Set balance to the amount being withdrawn
@@ -331,10 +339,10 @@ fn test_ragequit_prover_vectors() {
         account.state.balance = amount;
 
         // Execute ragequit operation
-        let recipient_address = Felt::from_dec_str(send_to_str).unwrap();
-        let nonce = Felt::from_dec_str(nonce_str).unwrap();
-        let chain_id = Felt::from_dec_str(chain_id_str).unwrap();
-        let tongo_address = Felt::from_dec_str(tongo_address_str).unwrap();
+        let recipient_address = parse_felt(send_to_str);
+        let nonce = parse_felt(nonce_str);
+        let chain_id = parse_felt(chain_id_str);
+        let tongo_address = parse_felt(tongo_address_str);
 
         // Create current balance cipher encrypting the full amount
         // For ragequit (full withdrawal), the cipher must be a valid ElGamal encryption
