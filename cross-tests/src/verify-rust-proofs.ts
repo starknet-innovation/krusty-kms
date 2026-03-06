@@ -188,6 +188,11 @@ async function main() {
   const content = readFileSync(vectorsPath, "utf-8");
   const data: VectorsFile = JSON.parse(content);
 
+  if (data.vectors.length !== data.totalVectors) {
+    throw new Error(
+      `Vector file '${vectorsPath}' is inconsistent: expected totalVectors=${data.totalVectors}, but found ${data.vectors.length} vector entries`
+    );
+  }
   console.log(
     `Cross-SDK verification: ${data.totalVectors} vectors`
   );
