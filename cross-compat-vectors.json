@@ -1,0 +1,130 @@
+{
+  "description": "Cross-SDK compatibility vectors: Rust proofs to be verified by TypeScript tongo-sdk",
+  "generated": "2026-03-06",
+  "totalVectors": 4,
+  "vectors": [
+    {
+      "description": "Fund 100 from zero balance, fee_to_sender=0",
+      "inputs": {
+        "amount": "100",
+        "nonce": "1",
+        "prefix_data": {
+          "chain_id": "0x534e5f5345504f4c4941",
+          "sender_address": "0",
+          "tongo_address": "123456789"
+        },
+        "relay_data": {
+          "fee_to_sender": "0"
+        },
+        "y": {
+          "x": "0x399ab58e2d17603eeccae95933c81d504ce475eb1bd0080d2316b84232e133c",
+          "y": "0x78bfe903d7f0fd5c82bc9798f1d33c399d14a31f2d6e15e6607a0e2366d3fe4"
+        }
+      },
+      "name": "fund_zero_balance",
+      "operation": "fund",
+      "proof": {
+        "Ax": {
+          "x": "0x3b0eb0ea38d6bffddbad895b4f54e20d1071b26edba35dcf816c0607c172a1f",
+          "y": "0x266f2d4c7c4d4fa3a4ece8f52fe9f06a803536189412b35b70fc85db2f378a4"
+        },
+        "sx": "0x33b8afb7e3cc0002fe2db68ce3b96f798df910e2b7264fc214a3277d518cd3f"
+      }
+    },
+    {
+      "description": "Fund 500 from zero balance with fee_to_sender=10",
+      "inputs": {
+        "amount": "500",
+        "nonce": "42",
+        "prefix_data": {
+          "chain_id": "0x534e5f5345504f4c4941",
+          "sender_address": "555",
+          "tongo_address": "987654321"
+        },
+        "relay_data": {
+          "fee_to_sender": "10"
+        },
+        "y": {
+          "x": "0x234d3c9aab7cf16c652d7ef64091105b129fbf027a13c231977df92c03963e3",
+          "y": "0x5ace492c776fc876d2b53f70cf936104b20e2a90e72e68bc802dc613934b0f6"
+        }
+      },
+      "name": "fund_with_fee",
+      "operation": "fund",
+      "proof": {
+        "Ax": {
+          "x": "0x712f12ce8c7f6bd89c6cf051fb8df27cefcdf5998eaee93b2393e11229cb74b",
+          "y": "0x4d6088455c7da70f2ba20bbf9bf313d127673e9dd14b3559b2f660e5a8e749c"
+        },
+        "sx": "0x130aa2891976360422340428ef00e803682fa36acaaa3f3ad91d6ca38db2661"
+      }
+    },
+    {
+      "description": "Basic rollover",
+      "inputs": {
+        "nonce": "1",
+        "prefix_data": {
+          "chain_id": "0x534e5f5345504f4c4941",
+          "sender_address": "0",
+          "tongo_address": "123456789"
+        },
+        "y": {
+          "x": "0x399ab58e2d17603eeccae95933c81d504ce475eb1bd0080d2316b84232e133c",
+          "y": "0x78bfe903d7f0fd5c82bc9798f1d33c399d14a31f2d6e15e6607a0e2366d3fe4"
+        }
+      },
+      "name": "rollover_basic",
+      "operation": "rollover",
+      "proof": {
+        "Ax": {
+          "x": "0x1d96fdfd7c10cbf8682f9ac70378f512bdd6894d63ca00dbe3e7a5a9f9de0f",
+          "y": "0x47b21cd41e37433847fff5a968e8d7072fc4cbb916a2cc9e1f8da3742c1ede8"
+        },
+        "sx": "0x5457f16f9323805e1cf9a09c4de619b6baad412aab34ecdc0b72d7bd9b77e1c"
+      }
+    },
+    {
+      "description": "Full withdrawal of 1000, fee_to_sender=0",
+      "inputs": {
+        "amount": "1000",
+        "currentBalance": {
+          "L": {
+            "x": "0x55d2046e107cc647071fc2f3fc37aea95860762eddf7e79925157080741ee6d",
+            "y": "0x2a60ce925cf146513274f250926d9b6cd427891323dc947bf180f5d01b0f278"
+          },
+          "R": {
+            "x": "0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca",
+            "y": "0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f"
+          }
+        },
+        "nonce": "1",
+        "prefix_data": {
+          "chain_id": "0x534e5f5345504f4c4941",
+          "sender_address": "0",
+          "tongo_address": "123456789"
+        },
+        "relay_data": {
+          "fee_to_sender": "0"
+        },
+        "to": "999888777",
+        "y": {
+          "x": "0x399ab58e2d17603eeccae95933c81d504ce475eb1bd0080d2316b84232e133c",
+          "y": "0x78bfe903d7f0fd5c82bc9798f1d33c399d14a31f2d6e15e6607a0e2366d3fe4"
+        }
+      },
+      "name": "ragequit_full",
+      "operation": "ragequit",
+      "proof": {
+        "AR": {
+          "x": "0x2ead6734c92191d3b6ec2d32a90d714d97ccd5b6ff5e741848eb46acc2bbaf0",
+          "y": "0x571b750e6a3483d8b03fc5c0abf5bcbed23ca05e73a27540fecf7b06a9d6267"
+        },
+        "Ax": {
+          "x": "0x2ead6734c92191d3b6ec2d32a90d714d97ccd5b6ff5e741848eb46acc2bbaf0",
+          "y": "0x571b750e6a3483d8b03fc5c0abf5bcbed23ca05e73a27540fecf7b06a9d6267"
+        },
+        "sx": "0x528d144f7328abbccc9c1cdce19d35539bb5d9378123a45db7ce2ece2d8c75b"
+      }
+    }
+  ]
+}

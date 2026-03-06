@@ -1,0 +1,21 @@
+{
+  "name": "kms-cross-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "tsx src/generate-ts-proofs.ts",
+    "verify": "tsx src/verify-rust-proofs.ts",
+    "test": "npm run verify"
+  },
+  "dependencies": {
+    "@fatsolutions/tongo-sdk": "^1.3.1",
+    "@fatsolutions/she": "^0.4.0",
+    "@scure/starknet": "^1.1.0",
+    "starknet": "^9.2.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
