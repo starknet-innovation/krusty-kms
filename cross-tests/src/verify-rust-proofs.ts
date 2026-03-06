@@ -13,9 +13,7 @@ import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { ProjectivePoint, CURVE } from "@scure/starknet";
-import { poseidonHashMany } from "@scure/starknet";
-import { compute_challenge } from "@fatsolutions/she";
+import { ProjectivePoint, CURVE, poseidonHashMany, compute_challenge } from "@fatsolutions/she";
 import { poe } from "@fatsolutions/she/protocols";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
