@@ -74,6 +74,7 @@ fn bench_fund(c: &mut Criterion) {
                     chain_id,
                     tongo_address,
                     sender_address: Felt::ZERO,
+                    fee_to_sender: 0,
                     auditor_pub_key: None,
                     current_balance: current_balance.clone(),
                 };
@@ -324,6 +325,7 @@ fn bench_complete_flow(c: &mut Criterion) {
                         chain_id,
                         tongo_address: contract_address,
                         sender_address: Felt::ZERO,
+                        fee_to_sender: 0,
                         auditor_pub_key: None,
                         current_balance: current_balance.clone(),
                     };

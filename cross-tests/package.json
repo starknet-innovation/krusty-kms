@@ -1,0 +1,18 @@
+{
+  "name": "kms-cross-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "tsx src/verify-rust-proofs.ts",
+    "test": "npm run verify"
+  },
+  "dependencies": {
+    "@fatsolutions/she": "^0.4.0",
+    "@scure/starknet": "^1.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}
