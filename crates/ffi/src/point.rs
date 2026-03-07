@@ -40,7 +40,10 @@ pub unsafe extern "C" fn kms_projective_to_affine(
         if point.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let proj = kms_to_proj(&*point);
+        let proj = match kms_to_proj(&*point) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
         match krusty_kms_crypto::StarkCurve::projective_to_affine(&proj) {
             Ok(ap) => {
                 *out = affine_to_kms(&ap);

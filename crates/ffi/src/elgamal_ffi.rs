@@ -37,7 +37,10 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
         }
 
         let msg = kms_to_felt(&*message);
-        let pk = kms_to_proj(&*public_key);
+        let pk = match kms_to_proj(&*public_key) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
         let rnd = kms_to_felt(&*random);
         let pfx = kms_to_felt(&*prefix);
 
@@ -81,8 +84,14 @@ pub unsafe extern "C" fn kms_elgamal_decrypt(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let l = kms_to_proj(&*ciphertext_l);
-        let r = kms_to_proj(&*ciphertext_r);
+        let l = match kms_to_proj(&*ciphertext_l) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
+        let r = match kms_to_proj(&*ciphertext_r) {
+            Ok(p) => p,
+            Err(e) => return e,
+        };
         let sk = kms_to_felt(&*private_key);
 
         let cipher = ElGamalCiphertext { l, r };
@@ -189,7 +198,7 @@ mod tests {
 
         // Verify decrypted point matches g^message
         let expected = StarkCurve::mul_generator(&message);
-        let decrypted = kms_to_proj(&out_pt);
+        let decrypted = kms_to_proj(&out_pt).unwrap();
         let exp_affine = StarkCurve::projective_to_affine(&expected).unwrap();
         let dec_affine = StarkCurve::projective_to_affine(&decrypted).unwrap();
         assert_eq!(exp_affine, dec_affine);

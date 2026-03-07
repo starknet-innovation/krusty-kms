@@ -36,20 +36,20 @@ pub fn proj_to_kms(p: &ProjectivePoint) -> KmsProjectivePoint {
     }
 }
 
-pub fn kms_to_proj(k: &KmsProjectivePoint) -> ProjectivePoint {
+pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, i32> {
     let z = kms_to_felt(&k.z);
     if z == Felt::ZERO {
-        return ProjectivePoint::identity();
+        return Ok(ProjectivePoint::identity());
     }
     let x = kms_to_felt(&k.x);
     let y = kms_to_felt(&k.y);
     // Convert projective (X, Y, Z) → affine, avoiding ProjectivePoint::new
     // which changed signature in starknet-types-core 0.2.4.
     // Homogeneous projective: affine = (X/Z, Y/Z).
-    let nz: NonZeroFelt = z.try_into().expect("z is non-zero, checked above");
+    let nz: NonZeroFelt = z.try_into().map_err(|_| KMS_ERR_INVALID_INPUT)?;
     let ax = x.field_div(&nz);
     let ay = y.field_div(&nz);
-    ProjectivePoint::from_affine(ax, ay).expect("roundtrip from valid KmsProjectivePoint")
+    ProjectivePoint::from_affine(ax, ay).map_err(|_| KMS_ERR_INVALID_INPUT)
 }
 
 pub fn affine_to_kms(a: &AffinePoint) -> KmsAffinePoint {

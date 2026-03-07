@@ -109,7 +109,7 @@ mod tests {
     fn test_projective_conversion_roundtrip() {
         let point = krusty_kms_crypto::StarkCurve::generator();
         let kms = helpers::proj_to_kms(&point);
-        let back = helpers::kms_to_proj(&kms);
+        let back = helpers::kms_to_proj(&kms).unwrap();
 
         let a1 = krusty_kms_crypto::StarkCurve::projective_to_affine(&point).unwrap();
         let a2 = krusty_kms_crypto::StarkCurve::projective_to_affine(&back).unwrap();
