@@ -5,7 +5,7 @@ use std::ffi::{c_char, CStr};
 use serde::Serialize;
 use serde_json::Value;
 use starknet_types_core::curve::{AffinePoint, ProjectivePoint};
-use starknet_types_core::felt::Felt;
+use starknet_types_core::felt::{Felt, NonZeroFelt};
 
 use crate::error::*;
 use crate::types::*;
@@ -36,11 +36,20 @@ pub fn proj_to_kms(p: &ProjectivePoint) -> KmsProjectivePoint {
     }
 }
 
-pub fn kms_to_proj(k: &KmsProjectivePoint) -> ProjectivePoint {
+pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, i32> {
+    let z = kms_to_felt(&k.z);
+    if z == Felt::ZERO {
+        return Ok(ProjectivePoint::identity());
+    }
     let x = kms_to_felt(&k.x);
     let y = kms_to_felt(&k.y);
-    let z = kms_to_felt(&k.z);
-    ProjectivePoint::new(x, y, z)
+    // Convert projective (X, Y, Z) → affine, avoiding ProjectivePoint::new
+    // which changed signature in starknet-types-core 0.2.4.
+    // Homogeneous projective: affine = (X/Z, Y/Z).
+    let nz: NonZeroFelt = z.try_into().map_err(|_| KMS_ERR_INVALID_INPUT)?;
+    let ax = x.field_div(&nz);
+    let ay = y.field_div(&nz);
+    ProjectivePoint::from_affine(ax, ay).map_err(|_| KMS_ERR_INVALID_INPUT)
 }
 
 pub fn affine_to_kms(a: &AffinePoint) -> KmsAffinePoint {
