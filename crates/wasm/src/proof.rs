@@ -41,8 +41,6 @@ pub struct WasmFundParams {
     pub current_cipher_l_y: String,
     pub current_cipher_r_x: String,
     pub current_cipher_r_y: String,
-    /// Fee to sender for relayed transactions (defaults to "0")
-    pub fee_to_sender: Option<String>,
     /// Optional auditor public key (hex, concatenated x||y)
     pub auditor_public_key: Option<String>,
 }
@@ -72,15 +70,8 @@ impl WasmFundParams {
             current_cipher_l_y,
             current_cipher_r_x,
             current_cipher_r_y,
-            fee_to_sender: None,
             auditor_public_key: None,
         }
-    }
-
-    #[wasm_bindgen(js_name = "withFeeToSender")]
-    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
-        self.fee_to_sender = Some(fee_to_sender);
-        self
     }
 
     #[wasm_bindgen(js_name = "withAuditor")]
@@ -165,8 +156,6 @@ pub struct WasmTransferParams {
     pub current_cipher_r_y: String,
     /// Bit size for range proof (default: 40)
     pub bit_size: Option<u8>,
-    /// Fee to sender for relayed transactions (defaults to "0")
-    pub fee_to_sender: Option<String>,
     /// Optional auditor public key
     pub auditor_public_key: Option<String>,
 }
@@ -199,7 +188,6 @@ impl WasmTransferParams {
             current_cipher_r_x,
             current_cipher_r_y,
             bit_size: None,
-            fee_to_sender: None,
             auditor_public_key: None,
         }
     }
@@ -207,12 +195,6 @@ impl WasmTransferParams {
     #[wasm_bindgen(js_name = "withBitSize")]
     pub fn with_bit_size(mut self, bit_size: u8) -> Self {
         self.bit_size = Some(bit_size);
-        self
-    }
-
-    #[wasm_bindgen(js_name = "withFeeToSender")]
-    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
-        self.fee_to_sender = Some(fee_to_sender);
         self
     }
 
@@ -470,8 +452,6 @@ pub struct WasmWithdrawParams {
     pub current_cipher_r_y: String,
     /// Bit size for range proof (default: 40)
     pub bit_size: Option<u8>,
-    /// Fee to sender for relayed transactions (defaults to "0")
-    pub fee_to_sender: Option<String>,
     /// Optional auditor public key
     pub auditor_public_key: Option<String>,
 }
@@ -504,7 +484,6 @@ impl WasmWithdrawParams {
             current_cipher_r_x,
             current_cipher_r_y,
             bit_size: None,
-            fee_to_sender: None,
             auditor_public_key: None,
         }
     }
@@ -512,12 +491,6 @@ impl WasmWithdrawParams {
     #[wasm_bindgen(js_name = "withBitSize")]
     pub fn with_bit_size(mut self, bit_size: u8) -> Self {
         self.bit_size = Some(bit_size);
-        self
-    }
-
-    #[wasm_bindgen(js_name = "withFeeToSender")]
-    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
-        self.fee_to_sender = Some(fee_to_sender);
         self
     }
 
@@ -661,8 +634,6 @@ pub struct WasmRagequitParams {
     pub current_cipher_l_y: String,
     pub current_cipher_r_x: String,
     pub current_cipher_r_y: String,
-    /// Fee to sender for relayed transactions (defaults to "0")
-    pub fee_to_sender: Option<String>,
     /// Optional auditor public key
     pub auditor_public_key: Option<String>,
 }
@@ -692,15 +663,8 @@ impl WasmRagequitParams {
             current_cipher_l_y,
             current_cipher_r_x,
             current_cipher_r_y,
-            fee_to_sender: None,
             auditor_public_key: None,
         }
-    }
-
-    #[wasm_bindgen(js_name = "withFeeToSender")]
-    pub fn with_fee_to_sender(mut self, fee_to_sender: String) -> Self {
-        self.fee_to_sender = Some(fee_to_sender);
-        self
     }
 
     #[wasm_bindgen(js_name = "withAuditor")]
@@ -851,20 +815,12 @@ fn convert_fund_params(params: &WasmFundParams) -> WasmResult<FundParams> {
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
-    let fee_to_sender: u128 = params
-        .fee_to_sender
-        .as_deref()
-        .unwrap_or("0")
-        .parse()
-        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
-
     Ok(FundParams {
         amount,
         nonce: parse_felt(&params.nonce)?,
         chain_id: parse_felt(&params.chain_id)?,
         tongo_address: parse_felt(&params.tongo_address)?,
         sender_address: parse_felt(&params.sender_address)?,
-        fee_to_sender,
         auditor_pub_key,
         current_balance,
     })
@@ -892,13 +848,6 @@ fn convert_transfer_params(params: &WasmTransferParams) -> WasmResult<TransferPa
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
-    let fee_to_sender: u128 = params
-        .fee_to_sender
-        .as_deref()
-        .unwrap_or("0")
-        .parse()
-        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
-
     Ok(TransferParams {
         recipient_public_key,
         amount,
@@ -911,7 +860,6 @@ fn convert_transfer_params(params: &WasmTransferParams) -> WasmResult<TransferPa
             .bit_size
             .map(|b| b as usize)
             .unwrap_or(DEFAULT_BIT_SIZE),
-        fee_to_sender,
         auditor_pub_key,
     })
 }
@@ -936,13 +884,6 @@ fn convert_withdraw_params(params: &WasmWithdrawParams) -> WasmResult<WithdrawPa
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
-    let fee_to_sender: u128 = params
-        .fee_to_sender
-        .as_deref()
-        .unwrap_or("0")
-        .parse()
-        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
-
     Ok(WithdrawParams {
         recipient_address: parse_felt(&params.recipient_address)?,
         amount,
@@ -955,7 +896,6 @@ fn convert_withdraw_params(params: &WasmWithdrawParams) -> WasmResult<WithdrawPa
             .bit_size
             .map(|b| b as usize)
             .unwrap_or(DEFAULT_BIT_SIZE),
-        fee_to_sender,
         auditor_key,
     })
 }
@@ -975,13 +915,6 @@ fn convert_ragequit_params(params: &WasmRagequitParams) -> WasmResult<RagequitPa
         .map(|pk| parse_public_key(pk))
         .transpose()?;
 
-    let fee_to_sender: u128 = params
-        .fee_to_sender
-        .as_deref()
-        .unwrap_or("0")
-        .parse()
-        .map_err(|_| WasmError::InvalidAmount("Invalid fee_to_sender".to_string()))?;
-
     Ok(RagequitParams {
         recipient_address: parse_felt(&params.recipient_address)?,
         nonce: parse_felt(&params.nonce)?,
@@ -989,7 +922,6 @@ fn convert_ragequit_params(params: &WasmRagequitParams) -> WasmResult<RagequitPa
         tongo_address: parse_felt(&params.tongo_address)?,
         sender_address: parse_felt(&params.sender_address)?,
         current_balance,
-        fee_to_sender,
         auditor_key,
     })
 }

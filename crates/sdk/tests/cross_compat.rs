@@ -36,7 +36,6 @@ struct FundCase {
     chain_id: &'static str,
     tongo_address: &'static str,
     sender_address: &'static str,
-    fee_to_sender: u128,
 }
 
 struct RolloverCase {
@@ -59,7 +58,6 @@ struct RagequitCase {
     chain_id: &'static str,
     tongo_address: &'static str,
     sender_address: &'static str,
-    fee_to_sender: u128,
 }
 
 struct WithdrawCase {
@@ -73,7 +71,6 @@ struct WithdrawCase {
     chain_id: &'static str,
     tongo_address: &'static str,
     sender_address: &'static str,
-    fee_to_sender: u128,
     bit_size: usize,
 }
 
@@ -88,7 +85,6 @@ struct TransferCase {
     chain_id: &'static str,
     tongo_address: &'static str,
     sender_address: &'static str,
-    fee_to_sender: u128,
     bit_size: usize,
 }
 
@@ -130,7 +126,7 @@ fn generate_cross_compat_vectors() {
     let fund_cases = vec![
         FundCase {
             name: "fund_zero_balance",
-            description: "Fund 100 from zero balance, fee_to_sender=0",
+            description: "Fund 100 from zero balance",
             private_key: "12345",
             amount: 100,
             initial_balance: 0,
@@ -138,11 +134,10 @@ fn generate_cross_compat_vectors() {
             chain_id: "0x534e5f5345504f4c4941",
             tongo_address: "123456789",
             sender_address: "0",
-            fee_to_sender: 0,
         },
         FundCase {
-            name: "fund_with_fee",
-            description: "Fund 500 from zero balance with fee_to_sender=10",
+            name: "fund_different_account",
+            description: "Fund 500 from zero balance with different account",
             private_key: "98765",
             amount: 500,
             initial_balance: 0,
@@ -150,7 +145,6 @@ fn generate_cross_compat_vectors() {
             chain_id: "0x534e5f5345504f4c4941",
             tongo_address: "987654321",
             sender_address: "555",
-            fee_to_sender: 10,
         },
     ];
 
@@ -166,7 +160,7 @@ fn generate_cross_compat_vectors() {
 
     let ragequit_cases = vec![RagequitCase {
         name: "ragequit_full",
-        description: "Full withdrawal of 1000, fee_to_sender=0",
+        description: "Full withdrawal of 1000",
         private_key: "12345",
         amount: 1000,
         send_to: "999888777",
@@ -174,7 +168,6 @@ fn generate_cross_compat_vectors() {
         chain_id: "0x534e5f5345504f4c4941",
         tongo_address: "123456789",
         sender_address: "0",
-        fee_to_sender: 0,
     }];
 
     let mut vectors: Vec<Value> = Vec::new();
@@ -200,7 +193,6 @@ fn generate_cross_compat_vectors() {
             chain_id,
             tongo_address,
             sender_address,
-            fee_to_sender: case.fee_to_sender,
             auditor_pub_key: None,
             current_balance,
         };
@@ -218,9 +210,6 @@ fn generate_cross_compat_vectors() {
                     "chain_id": case.chain_id,
                     "tongo_address": case.tongo_address,
                     "sender_address": case.sender_address,
-                },
-                "relay_data": {
-                    "fee_to_sender": case.fee_to_sender.to_string(),
                 },
             },
             "proof": {
@@ -305,7 +294,6 @@ fn generate_cross_compat_vectors() {
             chain_id,
             tongo_address,
             sender_address,
-            fee_to_sender: case.fee_to_sender,
             current_balance: current_balance.clone(),
             auditor_key: None,
         };
@@ -329,9 +317,6 @@ fn generate_cross_compat_vectors() {
                     "tongo_address": case.tongo_address,
                     "sender_address": case.sender_address,
                 },
-                "relay_data": {
-                    "fee_to_sender": case.fee_to_sender.to_string(),
-                },
             },
             "proof": {
                 "Ax": point_to_json(&proof.a_x),
@@ -346,7 +331,7 @@ fn generate_cross_compat_vectors() {
     // Generate withdraw vectors
     let withdraw_cases = vec![WithdrawCase {
         name: "withdraw_partial",
-        description: "Withdraw 300 from balance of 1000, fee_to_sender=0",
+        description: "Withdraw 300 from balance of 1000",
         private_key: "12345",
         balance: 1000,
         amount: 300,
@@ -355,7 +340,6 @@ fn generate_cross_compat_vectors() {
         chain_id: "0x534e5f5345504f4c4941",
         tongo_address: "123456789",
         sender_address: "0",
-        fee_to_sender: 0,
         bit_size: 32,
     }];
 
@@ -384,7 +368,6 @@ fn generate_cross_compat_vectors() {
             chain_id,
             tongo_address,
             sender_address,
-            fee_to_sender: case.fee_to_sender,
             current_balance: current_balance.clone(),
             bit_size: case.bit_size,
             auditor_key: None,
@@ -408,9 +391,6 @@ fn generate_cross_compat_vectors() {
                     "tongo_address": case.tongo_address,
                     "sender_address": case.sender_address,
                 },
-                "relay_data": {
-                    "fee_to_sender": case.fee_to_sender.to_string(),
-                },
             },
             "proof": {
                 "A_x": point_to_json(&proof.a_x),
@@ -430,7 +410,7 @@ fn generate_cross_compat_vectors() {
     // Generate transfer vectors
     let transfer_cases = vec![TransferCase {
         name: "transfer_basic",
-        description: "Transfer 200 from balance of 1000, fee_to_sender=0",
+        description: "Transfer 200 from balance of 1000",
         private_key: "12345",
         recipient_key: "67890",
         balance: 1000,
@@ -439,7 +419,6 @@ fn generate_cross_compat_vectors() {
         chain_id: "0x534e5f5345504f4c4941",
         tongo_address: "123456789",
         sender_address: "0",
-        fee_to_sender: 0,
         bit_size: 32,
     }];
 
@@ -471,7 +450,6 @@ fn generate_cross_compat_vectors() {
             chain_id,
             tongo_address,
             sender_address,
-            fee_to_sender: case.fee_to_sender,
             current_balance: current_balance.clone(),
             bit_size: case.bit_size,
             auditor_pub_key: None,
@@ -502,9 +480,6 @@ fn generate_cross_compat_vectors() {
                     "chain_id": case.chain_id,
                     "tongo_address": case.tongo_address,
                     "sender_address": case.sender_address,
-                },
-                "relay_data": {
-                    "fee_to_sender": case.fee_to_sender.to_string(),
                 },
             },
             "proof": serde_json::to_value(&proof.proof).unwrap(),
