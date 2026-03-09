@@ -8,17 +8,17 @@ use starknet_types_core::hash::{Poseidon, StarkHash};
 
 // Transaction type prefixes (Cairo short strings).
 const INVOKE_PREFIX: Felt = Felt::from_hex_unchecked("0x696e766f6b65"); // "invoke"
-const DEPLOY_ACCOUNT_PREFIX: Felt =
-    Felt::from_hex_unchecked("0x6465706c6f795f6163636f756e74"); // "deploy_account"
+const DEPLOY_ACCOUNT_PREFIX: Felt = Felt::from_hex_unchecked("0x6465706c6f795f6163636f756e74"); // "deploy_account"
 
 // Resource names (Cairo short strings).
 const L1_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c315f474153"); // "L1_GAS"
 const L2_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c325f474153"); // "L2_GAS"
 
 // Power-of-two constants for resource bounds packing.
-const TWO_POW_128: Felt =
-    Felt::from_hex_unchecked("0x100000000000000000000000000000000");
-const TWO_POW_64: Felt = Felt::from_hex_unchecked("0x10000000000000000");
+// Layout: resource_name (8 bytes) || max_amount (8 bytes) || max_price_per_unit (16 bytes)
+const TWO_POW_192: Felt =
+    Felt::from_hex_unchecked("0x1000000000000000000000000000000000000000000000000");
+const TWO_POW_128: Felt = Felt::from_hex_unchecked("0x100000000000000000000000000000000");
 
 // Transaction version.
 const VERSION_3: Felt = Felt::from_hex_unchecked("0x3");
@@ -46,25 +46,29 @@ pub enum DaMode {
     L2 = 1,
 }
 
+/// Fee-related parameters shared by all V3 transactions.
+#[derive(Debug, Clone)]
+pub struct V3TxFeeConfig<'a> {
+    pub tip: u64,
+    pub l1_gas: &'a ResourceBounds,
+    pub l2_gas: &'a ResourceBounds,
+    pub paymaster_data: &'a [Felt],
+    pub nonce_da_mode: DaMode,
+    pub fee_da_mode: DaMode,
+}
+
 /// Compute the hash of a V3 invoke transaction.
-///
-/// All `Felt` parameters use `starknet_types_core::felt::Felt`.
 pub fn compute_invoke_v3_hash(
     sender_address: &Felt,
     calldata: &[Felt],
     chain_id: &Felt,
     nonce: &Felt,
-    tip: u64,
-    l1_gas: &ResourceBounds,
-    l2_gas: &ResourceBounds,
-    paymaster_data: &[Felt],
     account_deployment_data: &[Felt],
-    nonce_da_mode: DaMode,
-    fee_da_mode: DaMode,
+    fee: &V3TxFeeConfig,
 ) -> Felt {
-    let fee_hash = compute_fee_hash(tip, l1_gas, l2_gas);
-    let paymaster_hash = Poseidon::hash_array(paymaster_data);
-    let da_mode = pack_da_modes(nonce_da_mode, fee_da_mode);
+    let fee_hash = compute_fee_hash(fee.tip, fee.l1_gas, fee.l2_gas);
+    let paymaster_hash = Poseidon::hash_array(fee.paymaster_data);
+    let da_mode = pack_da_modes(fee.nonce_da_mode, fee.fee_da_mode);
     let deployment_data_hash = Poseidon::hash_array(account_deployment_data);
     let calldata_hash = Poseidon::hash_array(calldata);
 
@@ -83,8 +87,6 @@ pub fn compute_invoke_v3_hash(
 }
 
 /// Compute the hash of a V3 deploy-account transaction.
-///
-/// All `Felt` parameters use `starknet_types_core::felt::Felt`.
 pub fn compute_deploy_account_v3_hash(
     contract_address: &Felt,
     class_hash: &Felt,
@@ -92,16 +94,11 @@ pub fn compute_deploy_account_v3_hash(
     salt: &Felt,
     chain_id: &Felt,
     nonce: &Felt,
-    tip: u64,
-    l1_gas: &ResourceBounds,
-    l2_gas: &ResourceBounds,
-    paymaster_data: &[Felt],
-    nonce_da_mode: DaMode,
-    fee_da_mode: DaMode,
+    fee: &V3TxFeeConfig,
 ) -> Felt {
-    let fee_hash = compute_fee_hash(tip, l1_gas, l2_gas);
-    let paymaster_hash = Poseidon::hash_array(paymaster_data);
-    let da_mode = pack_da_modes(nonce_da_mode, fee_da_mode);
+    let fee_hash = compute_fee_hash(fee.tip, fee.l1_gas, fee.l2_gas);
+    let paymaster_hash = Poseidon::hash_array(fee.paymaster_data);
+    let da_mode = pack_da_modes(fee.nonce_da_mode, fee.fee_da_mode);
     let constructor_hash = Poseidon::hash_array(constructor_calldata);
 
     Poseidon::hash_array(&[
@@ -127,10 +124,10 @@ fn compute_fee_hash(tip: u64, l1_gas: &ResourceBounds, l2_gas: &ResourceBounds) 
 }
 
 /// Pack resource bounds into a single Felt:
-/// `resource_name * 2^128 + max_amount * 2^64 + max_price_per_unit`
+/// `resource_name * 2^192 + max_amount * 2^128 + max_price_per_unit`
 fn pack_resource_bounds(resource_name: &Felt, bounds: &ResourceBounds) -> Felt {
-    *resource_name * TWO_POW_128
-        + Felt::from(bounds.max_amount as u128) * TWO_POW_64
+    *resource_name * TWO_POW_192
+        + Felt::from(bounds.max_amount as u128) * TWO_POW_128
         + Felt::from(bounds.max_price_per_unit)
 }
 
@@ -143,6 +140,20 @@ fn pack_da_modes(nonce_da: DaMode, fee_da: DaMode) -> Felt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn default_fee_config<'a>(
+        l1_gas: &'a ResourceBounds,
+        l2_gas: &'a ResourceBounds,
+    ) -> V3TxFeeConfig<'a> {
+        V3TxFeeConfig {
+            tip: 0,
+            l1_gas,
+            l2_gas,
+            paymaster_data: &[],
+            nonce_da_mode: DaMode::L1,
+            fee_da_mode: DaMode::L1,
+        }
+    }
 
     #[test]
     fn test_invoke_hash_deterministic() {
@@ -158,34 +169,10 @@ mod tests {
             max_amount: 5000,
             max_price_per_unit: 500_000,
         };
+        let fee = default_fee_config(&l1_gas, &l2_gas);
 
-        let hash1 = compute_invoke_v3_hash(
-            &sender,
-            &calldata,
-            &chain_id,
-            &nonce,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[],
-            &[],
-            DaMode::L1,
-            DaMode::L1,
-        );
-
-        let hash2 = compute_invoke_v3_hash(
-            &sender,
-            &calldata,
-            &chain_id,
-            &nonce,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[],
-            &[],
-            DaMode::L1,
-            DaMode::L1,
-        );
+        let hash1 = compute_invoke_v3_hash(&sender, &calldata, &chain_id, &nonce, &[], &fee);
+        let hash2 = compute_invoke_v3_hash(&sender, &calldata, &chain_id, &nonce, &[], &fee);
 
         assert_eq!(hash1, hash2);
         assert_ne!(hash1, Felt::ZERO);
@@ -199,19 +186,15 @@ mod tests {
             max_price_per_unit: 1_000_000,
         };
         let l2_gas = ResourceBounds::zero();
+        let fee = default_fee_config(&l1_gas, &l2_gas);
 
         let hash1 = compute_invoke_v3_hash(
             &Felt::from_hex_unchecked("0x111"),
             &[Felt::ONE],
             &chain_id,
             &Felt::ZERO,
-            0,
-            &l1_gas,
-            &l2_gas,
             &[],
-            &[],
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         let hash2 = compute_invoke_v3_hash(
@@ -219,13 +202,8 @@ mod tests {
             &[Felt::ONE],
             &chain_id,
             &Felt::ZERO,
-            0,
-            &l1_gas,
-            &l2_gas,
             &[],
-            &[],
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         assert_ne!(hash1, hash2);
@@ -243,6 +221,7 @@ mod tests {
             max_price_per_unit: 100_000,
         };
         let l2_gas = ResourceBounds::zero();
+        let fee = default_fee_config(&l1_gas, &l2_gas);
 
         let hash1 = compute_deploy_account_v3_hash(
             &address,
@@ -251,12 +230,7 @@ mod tests {
             &salt,
             &chain_id,
             &Felt::ZERO,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[],
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         let hash2 = compute_deploy_account_v3_hash(
@@ -266,12 +240,7 @@ mod tests {
             &salt,
             &chain_id,
             &Felt::ZERO,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[],
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         assert_eq!(hash1, hash2);
@@ -289,20 +258,10 @@ mod tests {
             max_price_per_unit: 100,
         };
         let l2_gas = ResourceBounds::zero();
+        let fee = default_fee_config(&l1_gas, &l2_gas);
 
-        let invoke_hash = compute_invoke_v3_hash(
-            &address,
-            &calldata,
-            &chain_id,
-            &Felt::ZERO,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[],
-            &[],
-            DaMode::L1,
-            DaMode::L1,
-        );
+        let invoke_hash =
+            compute_invoke_v3_hash(&address, &calldata, &chain_id, &Felt::ZERO, &[], &fee);
 
         let deploy_hash = compute_deploy_account_v3_hash(
             &address,
@@ -311,12 +270,7 @@ mod tests {
             &Felt::ZERO,
             &chain_id,
             &Felt::ZERO,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[],
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         assert_ne!(invoke_hash, deploy_hash);
@@ -337,6 +291,40 @@ mod tests {
             },
         );
         assert_ne!(packed, packed_nonzero);
+    }
+
+    #[test]
+    fn test_resource_bounds_packing_injective() {
+        // These two inputs collided with the old (broken) 2^64 shift
+        // because the upper 64 bits of max_price_per_unit overlapped max_amount.
+        let a = pack_resource_bounds(
+            &L1_GAS_NAME,
+            &ResourceBounds {
+                max_amount: 0,
+                max_price_per_unit: 1u128 << 64, // bit 64 set in price
+            },
+        );
+        let b = pack_resource_bounds(
+            &L1_GAS_NAME,
+            &ResourceBounds {
+                max_amount: 1, // bit 64 set via shift
+                max_price_per_unit: 0,
+            },
+        );
+        assert_ne!(a, b, "packing must be injective");
+    }
+
+    #[test]
+    fn test_resource_bounds_packing_layout() {
+        // Verify the packed layout: resource_name(8B) || max_amount(8B) || max_price_per_unit(16B)
+        let packed = pack_resource_bounds(
+            &Felt::ZERO,
+            &ResourceBounds {
+                max_amount: 1,
+                max_price_per_unit: 0,
+            },
+        );
+        assert_eq!(packed, TWO_POW_128, "max_amount=1 should land at bit 128");
     }
 
     #[test]

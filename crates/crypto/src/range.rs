@@ -23,6 +23,12 @@ use starknet_types_core::felt::Felt;
 /// This is useful when you need to know `r` before calling `prove_with_randomness`,
 /// e.g. to compute cipher balance coordinates for prefix hashing.
 pub fn compute_total_randomness(random_values: &[Felt]) -> Result<Felt> {
+    if random_values.len() > 128 {
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "random_values length {} exceeds maximum 128",
+            random_values.len()
+        )));
+    }
     let mut r = Felt::ZERO;
     for (i, r_inn) in random_values.iter().enumerate() {
         let pow = Felt::from(1u128 << i);
@@ -447,5 +453,16 @@ mod tests {
         // compute_total_randomness should give same r
         let r2 = compute_total_randomness(&random_values).unwrap();
         assert_eq!(r, r2);
+    }
+
+    /// Regression: compute_total_randomness must reject >128 elements (would panic on 1u128 << i).
+    #[test]
+    fn test_compute_total_randomness_rejects_oversized() {
+        let values = random_felts(129);
+        let result = compute_total_randomness(&values);
+        assert!(result.is_err());
+        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
+            assert!(msg.contains("exceeds maximum 128"));
+        }
     }
 }
