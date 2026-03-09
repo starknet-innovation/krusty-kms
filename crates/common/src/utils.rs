@@ -38,7 +38,7 @@ pub fn serialize_public_key_hex(x: &Felt, y: &Felt) -> String {
 /// - `0x04` + 128 hex chars
 /// - bare 128 hex chars
 pub fn parse_public_key_hex(hex: &str) -> Result<(Felt, Felt)> {
-    let without_0x = hex.strip_prefix("0x").or_else(|| hex.strip_prefix("0X"));
+    let without_0x = hex.strip_prefix("0x");
 
     // Only strip a leading "04" when it is the SEC1 uncompressed-point tag,
     // i.e. when the total remaining length is 130 (2 + 128).
