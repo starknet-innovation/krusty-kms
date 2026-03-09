@@ -1,6 +1,7 @@
 //! Transaction tracking and receipt waiting.
 
 pub mod builder;
+pub mod hash;
 
 pub use builder::TxBuilder;
 

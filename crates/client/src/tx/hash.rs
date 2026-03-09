@@ -8,17 +8,17 @@ use starknet_types_core::hash::{Poseidon, StarkHash};
 
 // Transaction type prefixes (Cairo short strings).
 const INVOKE_PREFIX: Felt = Felt::from_hex_unchecked("0x696e766f6b65"); // "invoke"
-const DEPLOY_ACCOUNT_PREFIX: Felt =
-    Felt::from_hex_unchecked("0x6465706c6f795f6163636f756e74"); // "deploy_account"
+const DEPLOY_ACCOUNT_PREFIX: Felt = Felt::from_hex_unchecked("0x6465706c6f795f6163636f756e74"); // "deploy_account"
 
 // Resource names (Cairo short strings).
 const L1_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c315f474153"); // "L1_GAS"
 const L2_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c325f474153"); // "L2_GAS"
 
 // Power-of-two constants for resource bounds packing.
-const TWO_POW_128: Felt =
-    Felt::from_hex_unchecked("0x100000000000000000000000000000000");
-const TWO_POW_64: Felt = Felt::from_hex_unchecked("0x10000000000000000");
+// Layout: resource_name (8 bytes) || max_amount (8 bytes) || max_price_per_unit (16 bytes)
+const TWO_POW_192: Felt =
+    Felt::from_hex_unchecked("0x1000000000000000000000000000000000000000000000000");
+const TWO_POW_128: Felt = Felt::from_hex_unchecked("0x100000000000000000000000000000000");
 
 // Transaction version.
 const VERSION_3: Felt = Felt::from_hex_unchecked("0x3");
@@ -127,10 +127,10 @@ fn compute_fee_hash(tip: u64, l1_gas: &ResourceBounds, l2_gas: &ResourceBounds) 
 }
 
 /// Pack resource bounds into a single Felt:
-/// `resource_name * 2^128 + max_amount * 2^64 + max_price_per_unit`
+/// `resource_name * 2^192 + max_amount * 2^128 + max_price_per_unit`
 fn pack_resource_bounds(resource_name: &Felt, bounds: &ResourceBounds) -> Felt {
-    *resource_name * TWO_POW_128
-        + Felt::from(bounds.max_amount as u128) * TWO_POW_64
+    *resource_name * TWO_POW_192
+        + Felt::from(bounds.max_amount as u128) * TWO_POW_128
         + Felt::from(bounds.max_price_per_unit)
 }
 
@@ -337,6 +337,40 @@ mod tests {
             },
         );
         assert_ne!(packed, packed_nonzero);
+    }
+
+    #[test]
+    fn test_resource_bounds_packing_injective() {
+        // These two inputs collided with the old (broken) 2^64 shift
+        // because the upper 64 bits of max_price_per_unit overlapped max_amount.
+        let a = pack_resource_bounds(
+            &L1_GAS_NAME,
+            &ResourceBounds {
+                max_amount: 0,
+                max_price_per_unit: 1u128 << 64, // bit 64 set in price
+            },
+        );
+        let b = pack_resource_bounds(
+            &L1_GAS_NAME,
+            &ResourceBounds {
+                max_amount: 1, // bit 64 set via shift
+                max_price_per_unit: 0,
+            },
+        );
+        assert_ne!(a, b, "packing must be injective");
+    }
+
+    #[test]
+    fn test_resource_bounds_packing_layout() {
+        // Verify the packed layout: resource_name(8B) || max_amount(8B) || max_price_per_unit(16B)
+        let packed = pack_resource_bounds(
+            &Felt::ZERO,
+            &ResourceBounds {
+                max_amount: 1,
+                max_price_per_unit: 0,
+            },
+        );
+        assert_eq!(packed, TWO_POW_128, "max_amount=1 should land at bit 128");
     }
 
     #[test]
