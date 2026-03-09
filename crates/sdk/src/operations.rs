@@ -54,6 +54,7 @@
 //!     nonce: Felt::from(1u64),
 //!     chain_id: Felt::from(0x534e5f5345504f4c4941u128),
 //!     tongo_address: Felt::from(123456u64),
+//!     sender_address: Felt::from(0u64),
 //!     auditor_pub_key: None,
 //!     current_balance,
 //! };
