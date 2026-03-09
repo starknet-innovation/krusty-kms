@@ -178,6 +178,15 @@ fn felt_to_u64(felt: &StarknetRsFelt) -> u64 {
     u64::from_be_bytes(buf)
 }
 
+fn get_felt(felts: &[StarknetRsFelt], index: usize) -> Result<&StarknetRsFelt> {
+    felts.get(index).ok_or_else(|| {
+        KmsError::DeserializationError(format!(
+            "Event data too short: need index {index}, got {} elements",
+            felts.len()
+        ))
+    })
+}
+
 /// Parse AEBalance from event data: 6 felts (4 for u512 ciphertext + 2 for u256 nonce).
 fn parse_ae_balance(felts: &[StarknetRsFelt], offset: usize) -> Result<AEBalance> {
     if felts.len() < offset + 6 {
@@ -498,9 +507,9 @@ fn parse_fund_event(e: &EmittedEvent) -> Result<FundEvent> {
     Ok(FundEvent {
         meta: meta(e),
         to,
-        nonce: felt_to_u64(&e.data[0]),
-        from: rs_felt_to_core(e.data[1]),
-        amount: felt_to_u128(&e.data[2]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
+        from: rs_felt_to_core(*get_felt(&e.data, 1)?),
+        amount: felt_to_u128(get_felt(&e.data, 2)?),
     })
 }
 
@@ -511,8 +520,8 @@ fn parse_outside_fund_event(e: &EmittedEvent) -> Result<OutsideFundEvent> {
     Ok(OutsideFundEvent {
         meta: meta(e),
         to,
-        from: rs_felt_to_core(e.data[0]),
-        amount: felt_to_u128(&e.data[1]),
+        from: rs_felt_to_core(*get_felt(&e.data, 0)?),
+        amount: felt_to_u128(get_felt(&e.data, 1)?),
     })
 }
 
@@ -523,9 +532,9 @@ fn parse_withdraw_event(e: &EmittedEvent) -> Result<WithdrawEvent> {
     Ok(WithdrawEvent {
         meta: meta(e),
         from,
-        nonce: felt_to_u64(&e.data[0]),
-        amount: felt_to_u128(&e.data[1]),
-        to: rs_felt_to_core(e.data[2]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
+        amount: felt_to_u128(get_felt(&e.data, 1)?),
+        to: rs_felt_to_core(*get_felt(&e.data, 2)?),
     })
 }
 
@@ -536,9 +545,9 @@ fn parse_ragequit_event(e: &EmittedEvent) -> Result<RagequitEvent> {
     Ok(RagequitEvent {
         meta: meta(e),
         from,
-        nonce: felt_to_u64(&e.data[0]),
-        amount: felt_to_u128(&e.data[1]),
-        to: rs_felt_to_core(e.data[2]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
+        amount: felt_to_u128(get_felt(&e.data, 1)?),
+        to: rs_felt_to_core(*get_felt(&e.data, 2)?),
     })
 }
 
@@ -549,7 +558,7 @@ fn parse_rollover_event(e: &EmittedEvent) -> Result<RolloverEvent> {
     Ok(RolloverEvent {
         meta: meta(e),
         to,
-        nonce: felt_to_u64(&e.data[0]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
         rollovered: parse_cipher_balance(&e.data, 1)?,
     })
 }
@@ -563,7 +572,7 @@ fn parse_transfer_event(e: &EmittedEvent) -> Result<TransferEvent> {
         meta: meta(e),
         to,
         from,
-        nonce: felt_to_u64(&e.data[0]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
         transfer_balance: parse_cipher_balance(&e.data, 1)?,
         transfer_balance_self: parse_cipher_balance(&e.data, 5)?,
         hint_transfer: parse_ae_balance(&e.data, 9)?,
@@ -578,7 +587,7 @@ fn parse_balance_declared_event(e: &EmittedEvent) -> Result<BalanceDeclaredEvent
     Ok(BalanceDeclaredEvent {
         meta: meta(e),
         from,
-        nonce: felt_to_u64(&e.data[0]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
         auditor_pub_key: parse_point(&e.data, 1)?,
         declared_cipher_balance: parse_cipher_balance(&e.data, 3)?,
         hint: parse_ae_balance(&e.data, 7)?,
@@ -594,7 +603,7 @@ fn parse_transfer_declared_event(e: &EmittedEvent) -> Result<TransferDeclaredEve
         meta: meta(e),
         from,
         to,
-        nonce: felt_to_u64(&e.data[0]),
+        nonce: felt_to_u64(get_felt(&e.data, 0)?),
         auditor_pub_key: parse_point(&e.data, 1)?,
         declared_cipher_balance: parse_cipher_balance(&e.data, 3)?,
         hint: parse_ae_balance(&e.data, 7)?,
@@ -705,5 +714,30 @@ mod tests {
         events.sort_by_key(|e| std::cmp::Reverse(e.block_number()));
         assert_eq!(events[0].block_number(), Some(200));
         assert_eq!(events[1].block_number(), Some(100));
+    }
+
+    /// Regression: parsers must return Err (not panic) on short event data.
+    #[test]
+    fn test_parsers_return_err_on_short_data() {
+        let (gx, gy) = generator_rs();
+        let base = EmittedEvent {
+            from_address: make_felt(0x999),
+            keys: vec![make_felt(0), gx, gy, gx, gy],
+            data: vec![],
+            block_hash: None,
+            block_number: Some(1),
+            transaction_hash: make_felt(0x1),
+            event_index: 0,
+            transaction_index: 0,
+        };
+
+        assert!(parse_fund_event(&base).is_err());
+        assert!(parse_outside_fund_event(&base).is_err());
+        assert!(parse_withdraw_event(&base).is_err());
+        assert!(parse_ragequit_event(&base).is_err());
+        assert!(parse_rollover_event(&base).is_err());
+        assert!(parse_transfer_event(&base).is_err());
+        assert!(parse_balance_declared_event(&base).is_err());
+        assert!(parse_transfer_declared_event(&base).is_err());
     }
 }
