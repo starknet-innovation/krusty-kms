@@ -132,11 +132,6 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
-            Ok(f) => f,
-            Err(_) => return KMS_ERR_INVALID_INPUT,
-        };
-
         let sdk_params = FundParams {
             amount,
             nonce: match parse_felt(&params.nonce) {
@@ -155,7 +150,6 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
                 Ok(f) => f,
                 Err(e) => return e,
             },
-            fee_to_sender,
             auditor_pub_key,
             current_balance,
         };
@@ -246,11 +240,6 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
-            Ok(f) => f,
-            Err(_) => return KMS_ERR_INVALID_INPUT,
-        };
-
         let sdk_params = TransferParams {
             recipient_public_key,
             amount,
@@ -275,7 +264,6 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
                 .bit_size
                 .map(|b| b as usize)
                 .unwrap_or(DEFAULT_BIT_SIZE),
-            fee_to_sender,
             auditor_pub_key,
         };
 
@@ -506,11 +494,6 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
-            Ok(f) => f,
-            Err(_) => return KMS_ERR_INVALID_INPUT,
-        };
-
         let sdk_params = WithdrawParams {
             recipient_address: match parse_felt(&params.recipient_address) {
                 Ok(f) => f,
@@ -538,7 +521,6 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
                 .bit_size
                 .map(|b| b as usize)
                 .unwrap_or(DEFAULT_BIT_SIZE),
-            fee_to_sender,
             auditor_key,
         };
 
@@ -660,11 +642,6 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
             Err(e) => return e,
         };
 
-        let fee_to_sender: u128 = match params.fee_to_sender.as_deref().unwrap_or("0").parse() {
-            Ok(f) => f,
-            Err(_) => return KMS_ERR_INVALID_INPUT,
-        };
-
         let sdk_params = RagequitParams {
             recipient_address: match parse_felt(&params.recipient_address) {
                 Ok(f) => f,
@@ -687,7 +664,6 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
                 Err(e) => return e,
             },
             current_balance,
-            fee_to_sender,
             auditor_key,
         };
 

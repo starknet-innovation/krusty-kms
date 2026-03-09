@@ -54,6 +54,7 @@
 //!     nonce: Felt::from(1u64),
 //!     chain_id: Felt::from(0x534e5f5345504f4c4941u128),
 //!     tongo_address: Felt::from(123456u64),
+//!     sender_address: Felt::from(0u64),
 //!     auditor_pub_key: None,
 //!     current_balance,
 //! };
@@ -105,7 +106,6 @@ pub struct FundParams {
     pub chain_id: Felt,
     pub tongo_address: Felt,
     pub sender_address: Felt,
-    pub fee_to_sender: u128,
     pub auditor_pub_key: Option<ProjectivePoint>,
     pub current_balance: ElGamalCiphertext,
 }
@@ -124,7 +124,6 @@ pub struct TransferParams {
     pub sender_address: Felt,
     pub current_balance: ElGamalCiphertext,
     pub bit_size: usize,
-    pub fee_to_sender: u128,
     pub auditor_pub_key: Option<ProjectivePoint>,
 }
 
@@ -148,8 +147,7 @@ pub struct WithdrawParams {
     pub sender_address: Felt,
     pub current_balance: ElGamalCiphertext,
     pub bit_size: usize,
-    pub fee_to_sender: u128,
-    pub auditor_key: Option<ProjectivePoint>, // Optional auditor public key
+    pub auditor_key: Option<ProjectivePoint>,
 }
 
 /// Ragequit operation parameters.
@@ -161,8 +159,7 @@ pub struct RagequitParams {
     pub tongo_address: Felt,
     pub sender_address: Felt,
     pub current_balance: ElGamalCiphertext,
-    pub fee_to_sender: u128,
-    pub auditor_key: Option<ProjectivePoint>, // Optional auditor public key
+    pub auditor_key: Option<ProjectivePoint>,
 }
 
 /// Execute a fund operation.
@@ -195,12 +192,11 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
     // Compute prefix using Poseidon hash
-    // prefix = poseidon([chain_id, tongo_address, sender_address, fee_to_sender, FUND_CAIRO_STRING, y.x, y.y, amount, nonce])
+    // prefix = poseidon([chain_id, tongo_address, sender_address, FUND_CAIRO_STRING, y.x, y.y, amount, nonce])
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         FUND_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -399,12 +395,11 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     let v2_affine = v2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux2_affine = r_aux2.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Build 30-element prefix matching tongo-sdk prefixTransfer
+    // Build prefix matching tongo-sdk prefixTransfer
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         TRANSFER_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -781,13 +776,12 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let v_affine = v.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r_aux_affine = r_aux.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, WITHDRAW, y.x, y.y, nonce, amount, to,
+    // Compute prefix: [chain_id, tongo_address, sender_address, WITHDRAW, y.x, y.y, nonce, amount, to,
     //                   L0.x, L0.y, R0.x, R0.y, V.x, V.y, R_aux.x, R_aux.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         WITHDRAW_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -978,13 +972,12 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
     let l0_affine = l0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let r0_affine = r0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
-    // Compute prefix: [chain_id, tongo_address, sender_address, fee_to_sender, RAGEQUIT, y.x, y.y, nonce, amount, to,
+    // Compute prefix: [chain_id, tongo_address, sender_address, RAGEQUIT, y.x, y.y, nonce, amount, to,
     //                   L0.x, L0.y, R0.x, R0.y]
     let prefix_inputs = vec![
         params.chain_id,
         params.tongo_address,
         params.sender_address,
-        Felt::from(params.fee_to_sender),
         RAGEQUIT_CAIRO_STRING,
         y_affine.x(),
         y_affine.y(),
@@ -1179,7 +1172,7 @@ mod tests {
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(), // SN_SEPOLIA
             tongo_address: contract_address,
             sender_address: Felt::from(0xCAFEu64),
-            fee_to_sender: 0,
+
             auditor_pub_key: None,
             current_balance,
         };
@@ -1207,7 +1200,7 @@ mod tests {
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: contract_address,
             sender_address: Felt::from(0xCAFEu64),
-            fee_to_sender: 0,
+
             auditor_pub_key: None,
             current_balance,
         };
@@ -1236,7 +1229,7 @@ mod tests {
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
-            fee_to_sender: 0,
+
             auditor_pub_key: None,
         };
 
@@ -1264,7 +1257,7 @@ mod tests {
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
-            fee_to_sender: 0,
+
             auditor_pub_key: None,
         };
 
@@ -1312,7 +1305,7 @@ mod tests {
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 32,
-            fee_to_sender: 0,
+
             auditor_key: None,
         };
 
@@ -1339,7 +1332,7 @@ mod tests {
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 32,
-            fee_to_sender: 0,
+
             auditor_key: None,
         };
 
@@ -1379,7 +1372,7 @@ mod tests {
             chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
             tongo_address: contract_address,
             sender_address: Felt::from(0xCAFEu64),
-            fee_to_sender: 0,
+
             auditor_pub_key: Some(auditor_pub_key),
             current_balance,
         };
@@ -1435,7 +1428,7 @@ mod tests {
             tongo_address: Felt::from(123u64),
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
-            fee_to_sender: 0,
+
             auditor_key: None,
         };
 
@@ -1466,7 +1459,7 @@ mod tests {
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
-            fee_to_sender: 0,
+
             auditor_pub_key: Some(auditor_key),
         };
 
@@ -1498,7 +1491,7 @@ mod tests {
             sender_address: Felt::from(0xCAFEu64),
             current_balance,
             bit_size: 16,
-            fee_to_sender: 0,
+
             auditor_pub_key: None,
         };
 
@@ -1523,7 +1516,7 @@ mod tests {
             chain_id: Felt::from(1u64),
             tongo_address: Felt::from(123u64),
             sender_address: Felt::from(0xCAFEu64),
-            fee_to_sender: 0,
+
             current_balance,
             bit_size: 32,
             auditor_key: None,

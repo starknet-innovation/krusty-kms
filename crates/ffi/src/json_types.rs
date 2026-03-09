@@ -29,8 +29,7 @@ pub struct JsonFundParams {
     pub tongo_address: String,
     pub sender_address: String,
     pub current_cipher: JsonCiphertext,
-    #[serde(default)]
-    pub fee_to_sender: Option<String>,
+
     pub auditor_public_key: Option<String>,
 }
 
@@ -57,8 +56,7 @@ pub struct JsonTransferParams {
     pub sender_address: String,
     pub current_cipher: JsonCiphertext,
     pub bit_size: Option<u8>,
-    #[serde(default)]
-    pub fee_to_sender: Option<String>,
+
     pub auditor_public_key: Option<String>,
 }
 
@@ -123,8 +121,7 @@ pub struct JsonWithdrawParams {
     pub sender_address: String,
     pub current_cipher: JsonCiphertext,
     pub bit_size: Option<u8>,
-    #[serde(default)]
-    pub fee_to_sender: Option<String>,
+
     pub auditor_public_key: Option<String>,
 }
 
@@ -165,8 +162,7 @@ pub struct JsonRagequitParams {
     pub tongo_address: String,
     pub sender_address: String,
     pub current_cipher: JsonCiphertext,
-    #[serde(default)]
-    pub fee_to_sender: Option<String>,
+
     pub auditor_public_key: Option<String>,
 }
 

@@ -254,7 +254,6 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         chain_id,
         tongo_address: tongo_contract_address,
         sender_address: account_address,
-        fee_to_sender: 0,
         auditor_pub_key: auditor_key.clone(),
         current_balance: current_balance.clone(),
     };
@@ -534,8 +533,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tongo_address: tongo_contract_address,
         sender_address: account_address,
         current_balance: current_balance_cipher.clone(),
-        bit_size: 32, // 32-bit range proofs for u32 values
-        fee_to_sender: 0,
+        bit_size: 32,                         // 32-bit range proofs for u32 values
         auditor_pub_key: auditor_key.clone(), // Enable audits (required by contract)
     };
 
@@ -836,8 +834,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
                 l: withdraw_state.balance.l.clone(),
                 r: withdraw_state.balance.r.clone(),
             },
-            bit_size: 32, // 32-bit range proofs
-            fee_to_sender: 0,
+            bit_size: 32,                     // 32-bit range proofs
             auditor_key: auditor_key.clone(), // Include auditor for balance audit
         };
 
@@ -990,7 +987,6 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
             l: ragequit_state.balance.l.clone(),
             r: ragequit_state.balance.r.clone(),
         },
-        fee_to_sender: 0,
         auditor_key: auditor_key.clone(), // Contract requires audit
     };
 
