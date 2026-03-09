@@ -25,7 +25,7 @@ use starknet_types_core::felt::Felt;
 pub fn compute_total_randomness(random_values: &[Felt]) -> Result<Felt> {
     if random_values.len() > 128 {
         return Err(krusty_kms_common::KmsError::CryptoError(format!(
-            "bit_size {} exceeds maximum 128",
+            "random_values length {} exceeds maximum 128",
             random_values.len()
         )));
     }
