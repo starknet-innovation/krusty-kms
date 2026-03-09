@@ -31,12 +31,23 @@ pub fn serialize_public_key_hex(x: &Felt, y: &Felt) -> String {
 }
 
 /// Parse public key from concatenated hex format.
+///
+/// Accepted formats (all yielding 128 hex-digit x||y payload):
+/// - `0x` + 128 hex chars
+/// - `04` + 128 hex chars  (SEC1 uncompressed, no 0x)
+/// - `0x04` + 128 hex chars
+/// - bare 128 hex chars
 pub fn parse_public_key_hex(hex: &str) -> Result<(Felt, Felt)> {
-    let cleaned = hex
-        .strip_prefix("0x")
-        .unwrap_or(hex)
-        .strip_prefix("04")
-        .unwrap_or(hex.strip_prefix("0x").unwrap_or(hex));
+    let without_0x = hex.strip_prefix("0x");
+
+    // Only strip a leading "04" when it is the SEC1 uncompressed-point tag,
+    // i.e. when the total remaining length is 130 (2 + 128).
+    let cleaned = match without_0x {
+        Some(s) if s.starts_with("04") && s.len() == 130 => &s[2..],
+        Some(s) => s,
+        None if hex.starts_with("04") && hex.len() == 130 => &hex[2..],
+        None => hex,
+    };
 
     if cleaned.len() != 128 {
         return Err(KmsError::InvalidPublicKey(format!(
@@ -157,6 +168,59 @@ mod tests {
         let (x2, y2) = parse_public_key_hex(&with_prefix).unwrap();
         assert_eq!(x2, Felt::from(1u64));
         assert_eq!(y2, Felt::from(2u64));
+    }
+
+    #[test]
+    fn test_parse_public_key_hex_x_starts_with_04() {
+        // Regression: x-coordinate legitimately starts with "04".
+        // The old code incorrectly stripped this as a SEC1 prefix.
+        let x_hex = "04".to_string() + &"0".repeat(62); // 64 chars, starts with 04
+        let y_hex = "0".repeat(63) + "2";
+        let full_hex = format!("0x{}{}", x_hex, y_hex);
+
+        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
+        assert_eq!(
+            x,
+            Felt::from_hex(&format!("0x{}", x_hex)).unwrap(),
+            "x-coordinate starting with 04 must not be stripped"
+        );
+        assert_eq!(y, Felt::from(2u64));
+    }
+
+    #[test]
+    fn test_parse_public_key_hex_0x04_prefix() {
+        // SEC1 uncompressed with 0x prefix: 0x04 + 128 hex chars
+        let x_hex = "0".repeat(63) + "1";
+        let y_hex = "0".repeat(63) + "2";
+        let full_hex = format!("0x04{}{}", x_hex, y_hex);
+
+        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
+        assert_eq!(x, Felt::from(1u64));
+        assert_eq!(y, Felt::from(2u64));
+    }
+
+    #[test]
+    fn test_parse_public_key_hex_bare() {
+        // Bare 128 hex chars, no prefix
+        let x_hex = "0".repeat(63) + "1";
+        let y_hex = "0".repeat(63) + "2";
+        let full_hex = format!("{}{}", x_hex, y_hex);
+
+        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
+        assert_eq!(x, Felt::from(1u64));
+        assert_eq!(y, Felt::from(2u64));
+    }
+
+    #[test]
+    fn test_parse_public_key_hex_bare_x_starts_with_04() {
+        // Bare 128 hex chars, no prefix, with x-coordinate starting with "04"
+        let x_hex = "04".to_string() + &"0".repeat(62); // 64 chars total, starts with "04"
+        let y_hex = "0".repeat(63) + "2"; // 64 chars total
+        let full_hex = format!("{}{}", x_hex, y_hex);
+
+        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
+        assert_eq!(x, Felt::from_hex(&x_hex).unwrap());
+        assert_eq!(y, Felt::from(2u64));
     }
 
     #[test]
