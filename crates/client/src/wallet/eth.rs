@@ -9,6 +9,7 @@ use super::WalletExecutor;
 use crate::tx::encode::encode_execute_calldata;
 use crate::tx::hash::{
     compute_deploy_account_v3_hash, compute_invoke_v3_hash, DaMode, ResourceBounds,
+    V3TxFeeConfig,
 };
 use crate::tx::Tx;
 use krusty_kms::account_class::OpenZeppelinEthAccount;
@@ -178,6 +179,14 @@ impl EthWallet {
         let (l1_gas, l2_gas) = mapping_to_hash_bounds(&resource_bounds);
         let address_core = self.address.as_felt();
 
+        let fee = V3TxFeeConfig {
+            tip: 0,
+            l1_gas: &l1_gas,
+            l2_gas: &l2_gas,
+            paymaster_data: &[],
+            nonce_da_mode: DaMode::L1,
+            fee_da_mode: DaMode::L1,
+        };
         let tx_hash = compute_deploy_account_v3_hash(
             &address_core,
             &self.class_hash,
@@ -185,12 +194,7 @@ impl EthWallet {
             &self.salt,
             &chain_id_core,
             &nonce,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[], // paymaster_data
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         // Sign with secp256k1.
@@ -337,18 +341,21 @@ impl EthWallet {
         let (l1_gas, l2_gas) = mapping_to_hash_bounds(&resource_bounds);
         let address_core = self.address.as_felt();
 
+        let fee = V3TxFeeConfig {
+            tip: 0,
+            l1_gas: &l1_gas,
+            l2_gas: &l2_gas,
+            paymaster_data: &[],
+            nonce_da_mode: DaMode::L1,
+            fee_da_mode: DaMode::L1,
+        };
         let tx_hash = compute_invoke_v3_hash(
             &address_core,
             &calldata_core,
             &chain_id_core,
             &nonce_core,
-            0,
-            &l1_gas,
-            &l2_gas,
-            &[], // paymaster_data
             &[], // account_deployment_data
-            DaMode::L1,
-            DaMode::L1,
+            &fee,
         );
 
         // Sign with secp256k1.
