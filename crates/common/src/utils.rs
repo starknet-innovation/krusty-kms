@@ -212,6 +212,18 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_public_key_hex_bare_x_starts_with_04() {
+        // Bare 128 hex chars, no prefix, with x-coordinate starting with "04"
+        let x_hex = "04".to_string() + &"0".repeat(62); // 64 chars total, starts with "04"
+        let y_hex = "0".repeat(63) + "2";               // 64 chars total
+        let full_hex = format!("{}{}", x_hex, y_hex);
+
+        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
+        assert_eq!(x, Felt::from_hex(&x_hex).unwrap());
+        assert_eq!(y, Felt::from(2u64));
+    }
+
+    #[test]
     fn test_parse_public_key_hex_invalid_length() {
         // Too short
         let result = parse_public_key_hex("0x123");
