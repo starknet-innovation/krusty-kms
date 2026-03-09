@@ -215,7 +215,7 @@ mod tests {
     fn test_parse_public_key_hex_bare_x_starts_with_04() {
         // Bare 128 hex chars, no prefix, with x-coordinate starting with "04"
         let x_hex = "04".to_string() + &"0".repeat(62); // 64 chars total, starts with "04"
-        let y_hex = "0".repeat(63) + "2";               // 64 chars total
+        let y_hex = "0".repeat(63) + "2"; // 64 chars total
         let full_hex = format!("{}{}", x_hex, y_hex);
 
         let (x, y) = parse_public_key_hex(&full_hex).unwrap();
