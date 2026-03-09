@@ -16,7 +16,7 @@ parallel = ["rayon"]
 test-utils = []
 
 [dependencies]
-krusty-kms-common = { version = "0.2.2", path = "../common" }
+krusty-kms-common = { version = "0.2.3", path = "../common" }
 starknet-types-core.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
