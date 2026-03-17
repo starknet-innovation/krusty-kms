@@ -1,0 +1,20 @@
+query SubscribeCreateSession($sessionKeyGuid: Felt!) {
+  subscribeCreateSession(sessionKeyGuid: $sessionKeyGuid) {
+    id
+    appID
+    chainID
+    isRevoked
+    expiresAt
+    createdAt
+    updatedAt
+    metadata {
+      os
+      browser
+    }
+    authorization
+    controller {
+      address
+      accountID
+    }
+  }
+}

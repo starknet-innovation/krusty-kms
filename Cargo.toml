@@ -53,3 +53,8 @@ criterion = "0.5.1"
 tokio = "1.43.0"
 zeroize = { version = "1.8", features = ["derive"] }
 async-trait = "0.1"
+
+[patch."https://github.com/cartridge-gg/controller-rs.git"]
+# Carry a minimal local patch so the unpublished controller SDK stays on the
+# secure reqwest 0.12 transport line without changing our public controller API.
+account_sdk = { path = "vendor/controller-rs/account_sdk" }

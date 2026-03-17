@@ -1,0 +1,172 @@
+[package]
+name = "account_sdk"
+edition = "2021"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1.80"
+auto_impl = "1.0"
+cainome = "0.10.1"
+cainome-cairo-serde = "0.4.0"
+ecdsa = "0.16.9"
+futures = "0.3"
+hex = "0.4.3"
+k256 = "0.13.4"
+lazy_static = "1"
+primitive-types = { version = "0.12", default-features = false }
+reqwest = { version = "0.12.28", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "cookies",
+] }
+serde = { version = "1.0.160", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0.96", default-features = false, features = [
+    "alloc",
+    "raw_value",
+] }
+serde_with = { version = "3.9.0", default-features = false, features = [
+    "alloc",
+    "macros",
+] }
+starknet = "0.17.0"
+starknet-crypto = { version = "0.8.1", features = ["pedersen_no_lookup"] }
+starknet-types-core = { version = "=0.2.0", features = ["curve", "hash"] }
+thiserror = "1"
+toml = "0.8"
+u256-literal = "1"
+url = { version = "2.3.1", default-features = false }
+indexmap = { version = "2.2.6", features = ["serde"] }
+num-traits = "0.2.19"
+urlencoding = "2.1.3"
+once_cell = "1.19.0"
+chrono = { version = "0.4", features = ["wasmbind", "serde"] }
+nom = "7.1"
+sha3 = "0.10"
+
+# Webauthn deps
+base64 = { version = "0.22", optional = true }
+base64urlsafedata = { git = "https://github.com/cartridge-gg/webauthn-rs", rev = "a6cea88", optional = true }
+coset = { version = "0.3.4", features = ["std"], optional = true }
+p256 = { version = "0.13", optional = true }
+serde_cbor_2 = { version = "0.12.0-dev", optional = true }
+sha2 = { version = "0.10", optional = true }
+
+# Filestorage deps
+dirs = { version = "5", optional = true }
+
+# GraphQL client deps
+graphql_client = "0.13.0"
+
+# AVNU paymaster integration dependencies (optional, requires nightly Rust due to upstream issues)
+# To enable: cargo test --features avnu-paymaster
+paymaster-rpc = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", optional = true }
+paymaster-starknet = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+paymaster-prices = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+paymaster-relayer = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+paymaster-sponsoring = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+jsonrpsee = { version = "0.24", features = ["server", "client"], optional = true }
+
+# Test infrastructure dependencies (used by tests and avnu-paymaster benchmarks)
+hyper = { version = "0.14.27", features = ["server"], optional = true }
+
+# VRF proof generation - pinned to match vrf/Scarb.lock and vrf/server/Cargo.lock
+stark-vrf = { git = "https://github.com/dojoengine/stark-vrf", rev = "96d6d2a88b1ef46c4a285d0ccc334237205edae3", optional = true }
+starknet-ff = { version = "0.3", optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+hyper = { version = "0.14.27", features = ["server"] }
+rand = "0.8"
+rand_core = { version = "0.6", features = ["getrandom"] }
+tempfile = "3.8"
+testcontainers = "0.23"
+tokio = { version = "1", features = ["full"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["macros", "time"] }
+rand = "0.8"
+
+# Include webauthn dependencies when 'webauthn' feature is enabled
+webauthn-authenticator-rs = { git = "https://github.com/cartridge-gg/webauthn-rs", rev = "a6cea88", features = [
+    "softpasskey",
+], optional = true }
+webauthn-rs-core = { git = "https://github.com/cartridge-gg/webauthn-rs", rev = "a6cea88", optional = true }
+webauthn-rs-proto = { git = "https://github.com/cartridge-gg/webauthn-rs", rev = "a6cea88", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.70"
+serde-wasm-bindgen = "0.6.5"
+wasm-bindgen-futures = "0.4.42"
+wasm-bindgen = "0.2"
+wasm-bindgen-test = "0.3.42"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Storage",
+    "MessageEvent",
+    "Window",
+] }
+chrono = { version = "0.4", features = ["wasmbind", "serde"] }
+
+# Include webauthn dependencies when 'webauthn' feature is enabled
+webauthn-rs-proto = { git = "https://github.com/cartridge-gg/webauthn-rs", rev = "a6cea88", optional = true, features = ["wasm"] }
+starknet-crypto = { version = "0.8.1", features = ["pedersen_no_lookup"] }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.42"
+starknet-crypto = { version = "0.8.1", features = ["pedersen_no_lookup"] }
+primitive-types = { version = "0.12", default-features = false, features = ["serde"] }
+
+[features]
+bench = []
+webauthn = [
+    "base64",
+    "base64urlsafedata",
+    "coset",
+    "p256",
+    "serde_cbor_2",
+    "sha2",
+    "webauthn-authenticator-rs",
+    "webauthn-rs-core",
+    "webauthn-rs-proto",
+    "web-sys/CredentialCreationOptions",
+    "web-sys/CredentialRequestOptions",
+    "web-sys/CredentialsContainer",
+    "web-sys/Navigator",
+    "web-sys/PublicKeyCredential",
+    "web-sys/PublicKeyCredentialCreationOptions",
+]
+filestorage = ["dirs"]
+avnu-paymaster = [
+    "paymaster-rpc",
+    "paymaster-starknet",
+    "paymaster-prices",
+    "paymaster-relayer",
+    "paymaster-sponsoring",
+    "jsonrpsee",
+    "hyper",
+]
+vrf = [
+    "stark-vrf",
+    "starknet-ff",
+    "avnu-paymaster",
+]
+
+[[bin]]
+name = "bench"
+path = "cmd/bench.rs"
+required-features = ["bench"]
+
+[[bench]]
+name = "paymaster_gas"
+harness = false
+required-features = ["avnu-paymaster"]
+
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["--enable-bulk-memory", "--all-features" ]
