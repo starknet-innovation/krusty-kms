@@ -118,14 +118,14 @@ pub unsafe extern "C" fn kms_account_get_state(
         }
 
         match handle::with(h, |acc| {
-            let (bl, bh) = u128_to_pair(acc.state.balance);
-            let (pl, ph) = u128_to_pair(acc.state.pending_balance);
+            let (bl, bh) = u128_to_pair(acc.balance());
+            let (pl, ph) = u128_to_pair(acc.pending_balance());
             *out_state = KmsAccountState {
                 balance_low: bl,
                 balance_high: bh,
                 pending_balance_low: pl,
                 pending_balance_high: ph,
-                nonce: acc.state.nonce,
+                nonce: acc.nonce(),
             };
             Ok(KMS_OK)
         }) {

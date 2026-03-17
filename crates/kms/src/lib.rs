@@ -24,7 +24,8 @@ pub mod mnemonic;
 
 pub use account::{calculate_contract_address, derive_oz_account_address};
 pub use account_class::{
-    AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount, OzDeploymentDescriptor,
+    AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount, OzAccountClassConfig,
+    OzAccountClassSource, OzDeploymentDescriptor, SaltPolicy,
 };
 pub use derivation::{
     derive_keypair, derive_keypair_with_coin_type, derive_nostr_keypair, derive_nostr_private_key,
@@ -33,8 +34,9 @@ pub use derivation::{
     TONGO_COIN_TYPE, TONGO_VIEW_COIN_TYPE,
 };
 pub use eth_signer::EthSigner;
-pub use krusty_kms_common::SecretFelt;
+pub use krusty_kms_common::{
+    AccountState, Address, Amount, AuditProof, ChainId, ElGamalCiphertext, ElGamalProof, KmsError,
+    NetworkPreset, Poe2Proof, PoeProof, ProofOfBit, ProofOfTransfer, Range, Result, SecretFelt,
+    SerializablePoint, Token, TransactionType, Validator,
+};
 pub use mnemonic::{generate_mnemonic, mnemonic_to_seed, validate_mnemonic};
-
-/// Re-export common types
-pub use krusty_kms_common::*;

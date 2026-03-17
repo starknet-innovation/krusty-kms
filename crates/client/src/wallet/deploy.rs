@@ -4,7 +4,7 @@
 //! deployment so that integrators cannot accidentally diverge on salt,
 //! class hash, or constructor calldata.
 
-use krusty_kms::OpenZeppelinAccount;
+use krusty_kms::{OpenZeppelinAccount, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
@@ -33,14 +33,16 @@ pub struct DeployResult {
 ///
 /// 1. Builds an [`OzDeploymentDescriptor`] from `account_class` (same canonical path
 ///    used for address derivation).
-/// 2. Checks if the account is already deployed via [`check_deployed`].
-/// 3. If not, submits a `DEPLOY_ACCOUNT` v3 transaction.
+/// 2. Resolves the deploy salt from `salt_policy`.
+/// 3. Checks if the account is already deployed via [`check_deployed`].
+/// 4. If not, submits a `DEPLOY_ACCOUNT` v3 transaction.
 ///
 /// Provider errors are mapped to typed [`KmsError`] variants.
 pub async fn deploy_oz_account(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,
     account_class: &OpenZeppelinAccount,
+    salt_policy: SaltPolicy,
     chain_id: ChainId,
     network: NetworkPreset,
 ) -> Result<DeployResult> {
@@ -48,7 +50,7 @@ pub async fn deploy_oz_account(
     let public_key_rs = verifying_key.scalar();
     let public_key_core = super::utils::rs_felt_to_core(public_key_rs);
 
-    let descriptor = account_class.deployment_descriptor(&public_key_core)?;
+    let descriptor = account_class.deployment_descriptor(&public_key_core, salt_policy)?;
     let address = Address::from(descriptor.address);
     let address_rs = core_felt_to_rs(descriptor.address);
 
@@ -93,13 +95,14 @@ pub async fn estimate_deploy_fee(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,
     account_class: &OpenZeppelinAccount,
+    salt_policy: SaltPolicy,
     chain_id: ChainId,
 ) -> Result<FeeEstimate> {
     let verifying_key = signing_key.verifying_key();
     let public_key_rs = verifying_key.scalar();
     let public_key_core = super::utils::rs_felt_to_core(public_key_rs);
 
-    let descriptor = account_class.deployment_descriptor(&public_key_core)?;
+    let descriptor = account_class.deployment_descriptor(&public_key_core, salt_policy)?;
 
     let class_hash_rs = core_felt_to_rs(descriptor.class_hash);
     let chain_id_rs = core_felt_to_rs(chain_id.as_felt());

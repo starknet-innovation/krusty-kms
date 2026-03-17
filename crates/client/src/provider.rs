@@ -7,7 +7,7 @@ use url::Url;
 /// Create a Starknet JSON-RPC provider from a URL.
 ///
 /// # Arguments
-/// * `rpc_url` - The RPC endpoint URL (e.g., "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_9/B-Gw-B-hV805x00WY6hXRJc3OMqU-zxQ")
+/// * `rpc_url` - The RPC endpoint URL (e.g., "https://api.cartridge.gg/x/starknet/sepolia")
 ///
 /// # Returns
 /// A configured `JsonRpcClient` that can be used to interact with Starknet.
@@ -24,7 +24,7 @@ mod tests {
 
     #[test]
     fn test_create_provider() {
-        let provider = create_provider("https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_9/B-Gw-B-hV805x00WY6hXRJc3OMqU-zxQ");
+        let provider = create_provider("https://api.cartridge.gg/x/starknet/sepolia");
         assert!(provider.is_ok());
     }
 }

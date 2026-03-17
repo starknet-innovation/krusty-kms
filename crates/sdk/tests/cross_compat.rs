@@ -177,7 +177,7 @@ fn generate_cross_compat_vectors() {
         let private_key = Felt::from_dec_str(case.private_key).unwrap();
         let contract_address = Felt::from_dec_str(case.tongo_address).unwrap();
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        account.state.balance = case.initial_balance;
+        account.set_balance(case.initial_balance);
 
         let nonce = Felt::from_dec_str(case.nonce).unwrap();
         let chain_id = Felt::from_hex_unchecked(case.chain_id);
@@ -248,7 +248,7 @@ fn generate_cross_compat_vectors() {
             "name": case.name,
             "description": case.description,
             "inputs": {
-                "y": point_to_json(&account.keypair.public_key),
+                "y": point_to_json(account.owner_public_key()),
                 "nonce": case.nonce,
                 "prefix_data": {
                     "chain_id": case.chain_id,
@@ -273,7 +273,7 @@ fn generate_cross_compat_vectors() {
         let private_key = Felt::from_dec_str(case.private_key).unwrap();
         let contract_address = Felt::from_dec_str(case.tongo_address).unwrap();
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        account.state.balance = case.amount;
+        account.set_balance(case.amount);
 
         let nonce = Felt::from_dec_str(case.nonce).unwrap();
         let chain_id = Felt::from_hex_unchecked(case.chain_id);
@@ -285,7 +285,7 @@ fn generate_cross_compat_vectors() {
         // This matches ElGamal with randomness r=1
         let g = StarkCurve::generator();
         let g_amount = StarkCurve::mul(&Felt::from(case.amount), Some(&g));
-        let l = StarkCurve::add(&g_amount, &account.keypair.public_key);
+        let l = StarkCurve::add(&g_amount, account.owner_public_key());
         let current_balance = ElGamalCiphertext { l, r: g };
 
         let params = RagequitParams {
@@ -347,7 +347,7 @@ fn generate_cross_compat_vectors() {
         let private_key = Felt::from_dec_str(case.private_key).unwrap();
         let contract_address = Felt::from_dec_str(case.tongo_address).unwrap();
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        account.state.balance = case.balance;
+        account.set_balance(case.balance);
 
         let nonce = Felt::from_dec_str(case.nonce).unwrap();
         let chain_id = Felt::from_hex_unchecked(case.chain_id);
@@ -358,7 +358,7 @@ fn generate_cross_compat_vectors() {
         // Create current balance cipher with randomness r=1
         let g = StarkCurve::generator();
         let g_amount = StarkCurve::mul(&Felt::from(case.balance), Some(&g));
-        let l = StarkCurve::add(&g_amount, &account.keypair.public_key);
+        let l = StarkCurve::add(&g_amount, account.owner_public_key());
         let current_balance = ElGamalCiphertext { l, r: g };
 
         let params = WithdrawParams {
@@ -426,7 +426,7 @@ fn generate_cross_compat_vectors() {
         let private_key = Felt::from_dec_str(case.private_key).unwrap();
         let contract_address = Felt::from_dec_str(case.tongo_address).unwrap();
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        account.state.balance = case.balance;
+        account.set_balance(case.balance);
 
         let recipient_private_key = Felt::from_dec_str(case.recipient_key).unwrap();
         let recipient_pub_key =
@@ -440,7 +440,7 @@ fn generate_cross_compat_vectors() {
         // Create current balance cipher with randomness r=1
         let g = StarkCurve::generator();
         let g_amount = StarkCurve::mul(&Felt::from(case.balance), Some(&g));
-        let l = StarkCurve::add(&g_amount, &account.keypair.public_key);
+        let l = StarkCurve::add(&g_amount, account.owner_public_key());
         let current_balance = ElGamalCiphertext { l, r: g };
 
         let params = TransferParams {
@@ -461,7 +461,7 @@ fn generate_cross_compat_vectors() {
             "name": case.name,
             "description": case.description,
             "inputs": {
-                "from": point_to_json(&account.keypair.public_key),
+                "from": point_to_json(account.owner_public_key()),
                 "to": point_to_json(&recipient_pub_key),
                 "nonce": case.nonce,
                 "currentBalance": cipher_to_json(&current_balance),

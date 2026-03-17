@@ -273,10 +273,10 @@ impl AuditProver {
             al0: SerializablePoint::try_from_projective(&al0)?,
             al1: SerializablePoint::try_from_projective(&al1)?,
             ar1: SerializablePoint::try_from_projective(&ar1)?,
-            sx: format!("{:#x}", sx),
-            sb: format!("{:#x}", sb),
-            sr: format!("{:#x}", sr),
-            c: format!("{:#x}", c),
+            sx,
+            sb,
+            sr,
+            c,
         };
 
         Ok((proof, cipher1))
@@ -311,14 +311,10 @@ impl AuditProver {
         let ar1 = StarkCurve::affine_to_projective(&proof.ar1.to_affine()?);
 
         // Deserialize scalars
-        let sx = Felt::from_hex(&proof.sx)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let sb = Felt::from_hex(&proof.sb)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let sr = Felt::from_hex(&proof.sr)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let c = Felt::from_hex(&proof.c)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
+        let sx = proof.sx;
+        let sb = proof.sb;
+        let sr = proof.sr;
+        let c = proof.c;
 
         // Recompute challenge with full prefix if prefix_data is provided
         let computed_prefix = if let Some(pd) = prefix_data {
@@ -780,7 +776,7 @@ mod tests {
                 .expect("proof generation should succeed");
 
         // Tamper with challenge
-        proof.c = format!("{:#x}", Felt::from(999999u64));
+        proof.c = Felt::from(999999u64);
 
         let is_valid = AuditProver::verify(
             &proof,
@@ -816,7 +812,7 @@ mod tests {
                 .expect("proof generation should succeed");
 
         // Tamper with sx (but keep challenge valid to test equation 1)
-        proof.sx = format!("{:#x}", Felt::from(1u64));
+        proof.sx = Felt::from(1u64);
 
         let is_valid = AuditProver::verify(
             &proof,
@@ -828,40 +824,5 @@ mod tests {
         )
         .expect("verification should succeed");
         assert!(!is_valid, "proof with tampered sx should be invalid");
-    }
-
-    #[test]
-    fn test_audit_verify_invalid_hex() {
-        let private_key = Felt::from(12345u64);
-        let balance = 1000u128;
-
-        let g = StarkCurve::generator();
-        let user_pub_key = StarkCurve::mul(&private_key, Some(&g));
-
-        let r0 = Felt::from(98765u64);
-        let g_b = StarkCurve::mul(&Felt::from(balance), Some(&g));
-        let user_r0 = StarkCurve::mul(&r0, Some(&user_pub_key));
-        let l0 = StarkCurve::add(&g_b, &user_r0);
-        let r0_point = StarkCurve::mul(&r0, Some(&g));
-        let cipher0 = ElGamalCiphertext { l: l0, r: r0_point };
-
-        let auditor_pub_key = StarkCurve::mul_generator(&Felt::from(99999u64));
-
-        let (mut proof, cipher1) =
-            AuditProver::prove(&private_key, balance, &cipher0, &auditor_pub_key, None)
-                .expect("proof generation should succeed");
-
-        // Use invalid hex in sx
-        proof.sx = "invalid_hex".to_string();
-
-        let result = AuditProver::verify(
-            &proof,
-            &user_pub_key,
-            &cipher0,
-            &cipher1,
-            &auditor_pub_key,
-            None,
-        );
-        assert!(result.is_err(), "verification should fail with invalid hex");
     }
 }

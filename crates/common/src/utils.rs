@@ -1,7 +1,9 @@
 //! Utility functions for TONGO protocol.
 
-use crate::{KmsError, Result};
+use crate::{Amount, KmsError, Result};
 use starknet_types_core::felt::Felt;
+
+const STRK_DECIMALS: u8 = 18;
 
 /// Parse a hex string to Felt, handling various formats.
 pub fn parse_hex_to_felt(hex: &str) -> Result<Felt> {
@@ -70,41 +72,113 @@ pub fn parse_public_key_hex(hex: &str) -> Result<(Felt, Felt)> {
 /// Convert STRK (as string) to FRI (base units).
 pub fn strk_to_fri(strk: &str) -> Result<u128> {
     let strk_clean = strk.trim().trim_end_matches("STRK").trim();
-    let strk_float: f64 = strk_clean
-        .parse()
-        .map_err(|_| KmsError::InvalidAmount(format!("Invalid STRK amount: {}", strk)))?;
-
-    if strk_float < 0.0 {
+    if strk_clean.starts_with('-') {
         return Err(KmsError::InvalidAmount(
             "Amount cannot be negative".to_string(),
         ));
     }
 
-    let fri = (strk_float * 1e18) as u128;
-    Ok(fri)
+    Amount::from_human(strk_clean, STRK_DECIMALS).map(|amount| amount.raw())
 }
 
-/// Convert FRI (base units) to STRK (as float).
-pub fn fri_to_strk(fri: u128) -> f64 {
-    fri as f64 / 1e18
+/// Convert FRI (base units) to a precision-safe STRK amount.
+#[must_use]
+pub fn fri_to_strk(fri: u128) -> Amount {
+    Amount::from_raw(fri, STRK_DECIMALS)
 }
 
-/// Convert Tongo units to STRK using rate.
-pub fn tongo_to_strk(tongo_amount: u128, rate: u128) -> f64 {
-    let fri = tongo_amount.saturating_mul(rate);
-    fri_to_strk(fri)
+/// Convert Tongo units to STRK using an exact rate.
+///
+/// # Errors
+/// Returns `KmsError::InvalidAmount` if the rate is zero or the conversion overflows.
+pub fn tongo_to_strk(tongo_amount: u128, rate: u128) -> Result<Amount> {
+    let fri = tongo_amount_to_fri(tongo_amount, rate)?;
+    Ok(fri_to_strk(fri))
 }
 
 /// Convert STRK to Tongo units using rate.
+///
+/// # Errors
+/// Returns `KmsError::InvalidAmount` if the STRK amount is invalid or the rate is zero.
 pub fn strk_to_tongo(strk: &str, rate: u128) -> Result<u128> {
+    validate_rate(rate)?;
     let fri = strk_to_fri(strk)?;
     Ok(fri / rate)
 }
 
 /// Format Tongo balance as STRK with 2 decimal places.
-pub fn format_tongo_balance(tongo_amount: u128, rate: u128) -> String {
-    let strk = tongo_to_strk(tongo_amount, rate);
-    format!("{:.2} STRK", strk)
+///
+/// # Errors
+/// Returns `KmsError::InvalidAmount` if the rate is zero or the conversion overflows.
+pub fn format_tongo_balance(tongo_amount: u128, rate: u128) -> Result<String> {
+    let strk = tongo_to_strk(tongo_amount, rate)?;
+    Ok(format!("{} STRK", format_amount_with_scale(&strk, 2)?))
+}
+
+fn validate_rate(rate: u128) -> Result<()> {
+    if rate == 0 {
+        return Err(KmsError::InvalidAmount(
+            "Rate must be greater than zero".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn tongo_amount_to_fri(tongo_amount: u128, rate: u128) -> Result<u128> {
+    validate_rate(rate)?;
+    tongo_amount
+        .checked_mul(rate)
+        .ok_or_else(|| KmsError::InvalidAmount("Amount overflow".to_string()))
+}
+
+fn format_amount_with_scale(amount: &Amount, scale: u8) -> Result<String> {
+    let decimals = amount.decimals();
+
+    if scale == 0 {
+        let divisor = ten_pow(decimals)?;
+        let rounded = round_div(amount.raw(), divisor)?;
+        return Ok(rounded.to_string());
+    }
+
+    if decimals > scale {
+        let divisor = ten_pow(decimals - scale)?;
+        let rounded = round_div(amount.raw(), divisor)?;
+        return format_scaled_integer(rounded, scale);
+    }
+
+    let multiplier = ten_pow(scale - decimals)?;
+    let scaled = amount
+        .raw()
+        .checked_mul(multiplier)
+        .ok_or_else(|| KmsError::InvalidAmount("Amount overflow".to_string()))?;
+    format_scaled_integer(scaled, scale)
+}
+
+fn round_div(value: u128, divisor: u128) -> Result<u128> {
+    let half = divisor / 2;
+    let adjusted = value
+        .checked_add(half)
+        .ok_or_else(|| KmsError::InvalidAmount("Amount overflow".to_string()))?;
+    Ok(adjusted / divisor)
+}
+
+fn format_scaled_integer(value: u128, scale: u8) -> Result<String> {
+    let factor = ten_pow(scale)?;
+    let integer = value / factor;
+    let fraction = value % factor;
+    Ok(format!(
+        "{}.{:0width$}",
+        integer,
+        fraction,
+        width = usize::from(scale)
+    ))
+}
+
+fn ten_pow(exp: u8) -> Result<u128> {
+    10u128
+        .checked_pow(u32::from(exp))
+        .ok_or_else(|| KmsError::InvalidAmount("Amount overflow".to_string()))
 }
 
 #[cfg(test)]
@@ -237,7 +311,7 @@ mod tests {
     fn test_strk_conversion() {
         assert_eq!(strk_to_fri("1.5").unwrap(), 1_500_000_000_000_000_000);
         assert_eq!(strk_to_fri("1.5 STRK").unwrap(), 1_500_000_000_000_000_000);
-        assert_eq!(fri_to_strk(1_500_000_000_000_000_000), 1.5);
+        assert_eq!(fri_to_strk(1_500_000_000_000_000_000).to_human(), "1.5");
     }
 
     #[test]
@@ -258,17 +332,36 @@ mod tests {
     #[test]
     fn test_tongo_conversion() {
         let rate = 1_000_000_000_000_000_000; // 1e18
-        assert_eq!(tongo_to_strk(100, rate), 100.0);
+        assert_eq!(tongo_to_strk(100, rate).unwrap().to_human(), "100.0");
         assert_eq!(strk_to_tongo("100 STRK", rate).unwrap(), 100);
     }
 
     #[test]
     fn test_format_tongo_balance() {
         let rate = 1_000_000_000_000_000_000u128; // 1e18
-        let formatted = format_tongo_balance(100, rate);
+        let formatted = format_tongo_balance(100, rate).unwrap();
         assert_eq!(formatted, "100.00 STRK");
 
-        let formatted_small = format_tongo_balance(1, rate);
+        let formatted_small = format_tongo_balance(1, rate).unwrap();
         assert_eq!(formatted_small, "1.00 STRK");
+    }
+
+    #[test]
+    fn test_strk_to_tongo_zero_rate() {
+        let result = strk_to_tongo("1 STRK", 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tongo_to_strk_zero_rate() {
+        let result = tongo_to_strk(1, 0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_format_tongo_balance_rounds_exactly() {
+        let rate = 333_333_333_333_333_333u128;
+        let formatted = format_tongo_balance(1, rate).unwrap();
+        assert_eq!(formatted, "0.33 STRK");
     }
 }

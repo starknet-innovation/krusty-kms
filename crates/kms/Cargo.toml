@@ -25,6 +25,7 @@ sha3 = "0.10"
 num-bigint.workspace = true
 num-traits.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 rand.workspace = true
@@ -32,4 +33,3 @@ k256 = { version = "0.13", features = ["ecdsa"] }
 zeroize.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true

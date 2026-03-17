@@ -186,7 +186,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
     }
 
     // Compute public key y = g^x
-    let y = account.keypair.public_key.clone();
+    let y = account.owner_public_key().clone();
 
     // Get affine coordinates for prefix computation
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
@@ -208,14 +208,14 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this fund operation
     let (_, proof) =
-        ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
+        ProofOfExponentiation::prove(account.owner_private_key().expose_secret(), &prefix)?;
 
     // Generate audit if auditor is configured
     let audit = if let Some(ref auditor_key) = params.auditor_pub_key {
         // CRITICAL: The Cairo contract adds the fund amount to balance BEFORE verifying audit
         // So we must prove the balance AFTER funding, not before!
         // See Tongo.cairo:fund() - it calls _add_balance() before _handle_audit_balance()
-        let new_balance = account.state.balance + params.amount;
+        let new_balance = account.balance() + params.amount;
 
         // Compute the new cipher balance after funding
         // The contract adds: cipher = CipherBalanceTrait::new(to, amount, 'fund')
@@ -223,7 +223,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
         let fund_cipher_l = {
             let g_amount =
                 StarkCurve::mul(&Felt::from(params.amount), Some(&StarkCurve::generator()));
-            let y_r = StarkCurve::mul(&FUND_CAIRO_STRING, Some(&account.keypair.public_key));
+            let y_r = StarkCurve::mul(&FUND_CAIRO_STRING, Some(account.owner_public_key()));
             StarkCurve::add(&g_amount, &y_r)
         };
         let fund_cipher_r = StarkCurve::mul(&FUND_CAIRO_STRING, Some(&StarkCurve::generator()));
@@ -241,7 +241,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
             user_pub_key: y.clone(),
         };
         let (audit_proof, audited_balance) = AuditProver::prove(
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             new_balance,
             &new_cipher_balance,
             auditor_key,
@@ -252,7 +252,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
         // The auditor can decrypt this using ECDH with user's public key
         let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
             new_balance,
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             auditor_key,
         )?;
 
@@ -306,17 +306,17 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
     if !account.has_sufficient_balance(params.amount) {
         return Err(KmsError::InsufficientBalance {
-            available: account.state.balance,
+            available: account.balance(),
             required: params.amount,
         });
     }
 
     // Setup variables
-    let x = account.keypair.private_key.expose_secret();
-    let y = account.keypair.public_key.clone();
+    let x = account.owner_private_key().expose_secret();
+    let y = account.owner_public_key().clone();
     let to = &params.recipient_public_key;
     let b = params.amount;
-    let b0 = account.state.balance;
+    let b0 = account.balance();
     let g = StarkCurve::generator();
     let h = StarkCurve::generator_h();
 
@@ -533,11 +533,11 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         a_v: krusty_kms_common::SerializablePoint::try_from_projective(&a_v)?,
         a_v2: krusty_kms_common::SerializablePoint::try_from_projective(&a_v2)?,
         a_bar: krusty_kms_common::SerializablePoint::try_from_projective(&a_bar)?,
-        s_x: format!("{s_x:#x}"),
-        s_r: format!("{s_r:#x}"),
-        s_b: format!("{s_b:#x}"),
-        s_b2: format!("{s_b2:#x}"),
-        s_r2: format!("{s_r2:#x}"),
+        s_x,
+        s_r,
+        s_b,
+        s_b2,
+        s_r2,
         range,
         range2,
     };
@@ -579,7 +579,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
             user_pub_key: y.clone(),
         };
         let (audit_balance_proof, audited_balance) = AuditProver::prove_with_validation(
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             b_left,
             &new_balance_cipher,
             auditor_key,
@@ -589,7 +589,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 
         let (audit_balance_hint_ct, audit_balance_hint_nonce) = encrypt_for_auditor(
             b_left,
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             auditor_key,
         )?;
 
@@ -599,7 +599,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         };
 
         let (audit_transfer_proof, audited_transfer) = AuditProver::prove(
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             b,
             &transfer_cipher_self,
             auditor_key,
@@ -607,7 +607,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
         )?;
 
         let (audit_transfer_hint_ct, audit_transfer_hint_nonce) =
-            encrypt_for_auditor(b, account.keypair.private_key.expose_secret(), auditor_key)?;
+            encrypt_for_auditor(b, account.owner_private_key().expose_secret(), auditor_key)?;
 
         (
             Some(Audit {
@@ -658,7 +658,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
 /// # Cyclomatic Complexity: 1
 pub fn rollover(account: &TongoAccount, params: RolloverParams) -> Result<RolloverProof> {
     // Compute public key y = g^x (same as fund operation)
-    let y = account.keypair.public_key.clone();
+    let y = account.owner_public_key().clone();
 
     // Get affine coordinates for prefix computation
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
@@ -679,12 +679,12 @@ pub fn rollover(account: &TongoAccount, params: RolloverParams) -> Result<Rollov
     // Generate proof of knowledge of private key: y = g^x
     // This proves the account owner authorized this rollover operation
     let (_, proof) =
-        ProofOfExponentiation::prove(account.keypair.private_key.expose_secret(), &prefix)?;
+        ProofOfExponentiation::prove(account.owner_private_key().expose_secret(), &prefix)?;
 
     Ok(RolloverProof {
         y,
         proof,
-        pending_amount: account.state.pending_balance,
+        pending_amount: account.pending_balance(),
     })
 }
 
@@ -719,17 +719,17 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 
     if !account.has_sufficient_balance(params.amount) {
         return Err(KmsError::InsufficientBalance {
-            available: account.state.balance,
+            available: account.balance(),
             required: params.amount,
         });
     }
 
-    let x: &Felt = account.keypair.private_key.expose_secret();
+    let x: &Felt = account.owner_private_key().expose_secret();
     let g = StarkCurve::generator();
     let h = StarkCurve::generator_h();
 
     // Compute y = g^x
-    let y = account.keypair.public_key.clone();
+    let y = account.owner_public_key().clone();
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
     // Extract L0, R0 from current cipherbalance
@@ -742,7 +742,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let neg_r0_x =
         StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
     let g_b = StarkCurve::add(l0, &neg_r0_x);
-    let expected_g_b = StarkCurve::mul(&Felt::from(account.state.balance), Some(&g));
+    let expected_g_b = StarkCurve::mul(&Felt::from(account.balance()), Some(&g));
 
     let g_b_affine = StarkCurve::projective_to_affine(&g_b)?;
     let expected_g_b_affine = StarkCurve::projective_to_affine(&expected_g_b)?;
@@ -754,7 +754,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     }
 
     // Compute leftover balance
-    let left = account.state.balance - params.amount;
+    let left = account.balance() - params.amount;
 
     // Pre-generate random values for range proof to break circular dependency:
     // prefix needs cipher coords -> coords need r -> r comes from range proof -> range proof needs prefix
@@ -874,7 +874,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
             user_pub_key: y.clone(),
         };
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             left,
             &leftover_cipher,
             &auditor_key,
@@ -884,7 +884,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 
         let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
             left,
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             &auditor_key,
         )?;
 
@@ -936,11 +936,11 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
 ///
 /// # Cyclomatic Complexity: 2
 pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<RagequitProof> {
-    let x: &Felt = account.keypair.private_key.expose_secret();
+    let x: &Felt = account.owner_private_key().expose_secret();
     let g = StarkCurve::generator();
 
     // Compute y = g^x
-    let y = account.keypair.public_key.clone();
+    let y = account.owner_public_key().clone();
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 
     // Extract L0, R0 from current cipherbalance
@@ -954,7 +954,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
     let neg_r0_x =
         StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
     let g_b = StarkCurve::add(l0, &neg_r0_x);
-    let expected_g_b = StarkCurve::mul(&Felt::from(account.state.balance), Some(&g));
+    let expected_g_b = StarkCurve::mul(&Felt::from(account.balance()), Some(&g));
 
     let g_b_affine = StarkCurve::projective_to_affine(&g_b)?;
     let expected_g_b_affine = StarkCurve::projective_to_affine(&expected_g_b)?;
@@ -966,7 +966,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
     }
 
     // Full amount is the entire account balance
-    let full_amount = account.state.balance;
+    let full_amount = account.balance();
 
     // Convert current balance cipher points to affine for prefix
     let l0_affine = l0.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
@@ -1033,7 +1033,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
             user_pub_key: y.clone(),
         };
         let (audit_proof, audited_balance) = AuditProver::prove_with_validation(
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             0, // Balance after ragequit is 0
             &new_balance_cipher,
             &auditor_key,
@@ -1044,7 +1044,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
         // Encrypt zero balance for auditor (after ragequit balance is 0)
         let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
             0, // Balance after ragequit is 0
-            account.keypair.private_key.expose_secret(),
+            account.owner_private_key().expose_secret(),
             &auditor_key,
         )?;
 
@@ -1151,7 +1151,7 @@ mod tests {
         let contract_address = Felt::from(123456u64);
         let mut account =
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-        account.state.balance = 1000;
+        account.set_balance(1000);
         account
     }
 
@@ -1268,7 +1268,7 @@ mod tests {
     #[test]
     fn test_rollover() {
         let mut account = create_test_account();
-        account.state.pending_balance = 50;
+        account.set_pending_balance(50);
 
         let params = RolloverParams {
             nonce: Felt::from(1u64),
@@ -1289,7 +1289,7 @@ mod tests {
         // is performed in integration tests with real on-chain state.
         use krusty_kms_crypto::StarkCurve;
         let mut account = create_test_account();
-        account.state.balance = 1000; // Set balance to match cipher
+        account.set_balance(1000); // Set balance to match cipher
         let g = StarkCurve::generator();
         let current_balance = ElGamalCiphertext {
             l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
@@ -1346,11 +1346,11 @@ mod tests {
         let contract_address = Felt::from(123456u64);
         let mut account =
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-        account.state.balance = 0; // Must match the cipher's encrypted value
+        account.set_balance(0); // Must match the cipher's encrypted value
 
         // For audit to work, cipher must be encrypted under owner key (not view key)
-        // because AuditProver uses account.keypair.private_key for verification
-        let owner_pk = &account.keypair.public_key;
+        // because AuditProver uses the owner's public key for verification
+        let owner_pk = account.owner_public_key();
 
         // Create a valid zero balance cipher (L = pk^r, R = g^r where balance = 0)
         // For balance=0: L = g^0 + pk^r = pk^r (since g^0 = identity)
@@ -1388,7 +1388,7 @@ mod tests {
     #[test]
     fn test_rollover_zero_pending() {
         let mut account = create_test_account();
-        account.state.pending_balance = 0;
+        account.set_pending_balance(0);
 
         let params = RolloverParams {
             nonce: Felt::from(1u64),
@@ -1406,14 +1406,14 @@ mod tests {
     fn test_ragequit() {
         use krusty_kms_crypto::StarkCurve;
         let mut account = create_test_account();
-        account.state.balance = 1000;
+        account.set_balance(1000);
 
         let g = StarkCurve::generator();
         // Construct a valid cipher for balance 1000 with some randomness
         // Use the owner key (spend key) rather than view key for this test
         // Ragequit uses owner key for verification
         let random = Felt::from(42u64);
-        let owner_pk = &account.keypair.public_key;
+        let owner_pk = account.owner_public_key();
         let g_b = StarkCurve::mul(&Felt::from(1000u128), Some(&g));
         let pk_r = StarkCurve::mul(&random, Some(owner_pk));
         let l = StarkCurve::add(&g_b, &pk_r);

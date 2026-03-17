@@ -17,7 +17,7 @@ impl NetworkPreset {
     pub fn mainnet() -> Self {
         Self {
             chain_id: ChainId::Mainnet,
-            rpc_url: "https://starknet-mainnet.public.blastapi.io/rpc/v0_7".into(),
+            rpc_url: "https://api.cartridge.gg/x/starknet/mainnet".into(),
             explorer_base_url: "https://voyager.online".into(),
             name: "Starknet Mainnet".into(),
         }
@@ -27,7 +27,7 @@ impl NetworkPreset {
     pub fn sepolia() -> Self {
         Self {
             chain_id: ChainId::Sepolia,
-            rpc_url: "https://starknet-sepolia.public.blastapi.io/rpc/v0_7".into(),
+            rpc_url: "https://api.cartridge.gg/x/starknet/sepolia".into(),
             explorer_base_url: "https://sepolia.voyager.online".into(),
             name: "Starknet Sepolia".into(),
         }

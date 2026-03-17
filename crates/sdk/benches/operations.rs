@@ -28,8 +28,8 @@ fn create_account_with_balance(balance: u128, pending: u128) -> TongoAccount {
     let contract_address = Felt::from(123456u64);
     let mut account =
         TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-    account.state.balance = balance;
-    account.state.pending_balance = pending;
+    account.set_balance(balance);
+    account.set_pending_balance(pending);
     account
 }
 
@@ -200,7 +200,7 @@ fn bench_withdraw(c: &mut Criterion) {
     // L = g^balance + y^randomness
     // R = g^randomness
     let g = StarkCurve::generator();
-    let y = &account.keypair.public_key;
+    let y = account.owner_public_key();
     let randomness = Felt::from(42u64);
     let current_balance = ElGamalCiphertext {
         l: {
@@ -332,7 +332,7 @@ fn bench_complete_flow(c: &mut Criterion) {
                     let _fund_proof = fund(black_box(&account), black_box(fund_params)).unwrap();
 
                     // Update state (simulate on-chain execution)
-                    account.state.pending_balance += amount;
+                    account.set_pending_balance(account.pending_balance() + amount);
 
                     // Rollover
                     let rollover_params = RolloverParams {
@@ -345,8 +345,8 @@ fn bench_complete_flow(c: &mut Criterion) {
                         rollover(black_box(&account), black_box(rollover_params)).unwrap();
 
                     // Update state
-                    account.state.balance += account.state.pending_balance;
-                    account.state.pending_balance = 0;
+                    account.set_balance(account.balance() + account.pending_balance());
+                    account.set_pending_balance(0);
 
                     // Mock updated balance cipher
                     let updated_balance = ElGamalCiphertext {
@@ -371,7 +371,7 @@ fn bench_complete_flow(c: &mut Criterion) {
                         transfer(black_box(&account), black_box(transfer_params)).unwrap();
 
                     // Update state
-                    account.state.balance -= amount / 2;
+                    account.set_balance(account.balance() - (amount / 2));
 
                     // Withdraw
                     let leftover_balance = ElGamalCiphertext {

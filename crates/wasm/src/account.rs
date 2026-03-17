@@ -135,13 +135,13 @@ impl WasmAccount {
     /// Get the contract address as hex string.
     #[wasm_bindgen(js_name = "contractAddress")]
     pub fn contract_address(&self) -> String {
-        format!("{:#x}", self.inner.contract_address)
+        format!("{:#x}", self.inner.contract_address())
     }
 
     /// Get current account state.
     #[wasm_bindgen(js_name = "getState")]
     pub fn get_state(&self) -> WasmAccountState {
-        WasmAccountState::from(self.inner.state.clone())
+        WasmAccountState::from(self.inner.state().clone())
     }
 
     /// Update account state from on-chain data.
@@ -594,8 +594,8 @@ mod tests {
         // First derive a Starknet keypair
         let kp = derive_starknet_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
 
-        // Use the same OZ class hash as the integration test
-        let oz_class_hash = "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564";
+        // Use the latest manifest-backed OZ class hash.
+        let oz_class_hash = "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381";
 
         let address = derive_oz_account_address(&kp.public_key_x, oz_class_hash, None);
         assert!(address.is_ok());

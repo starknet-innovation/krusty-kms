@@ -31,11 +31,10 @@ pub use operations::{
 };
 pub use provider::create_provider;
 pub use staking::{PoolPosition, Staking};
-pub use starknet_rust;
 pub use tx::{Tx, TxBuilder};
 pub use types::{
-    decrypt_cipher_balance, erc20_to_tongo, tongo_to_erc20, AccountState, CipherBalance,
-    DecryptedAccountState,
+    decrypt_cipher_balance_with_limit as decrypt_cipher_balance, erc20_to_tongo, tongo_to_erc20,
+    AccountState, CipherBalance, DecryptedAccountState, DEFAULT_DECRYPT_SEARCH_LIMIT,
 };
 pub use wallet::deploy::{deploy_oz_account, estimate_deploy_fee, DeployResult};
 pub use wallet::{Wallet, WalletExecutor};

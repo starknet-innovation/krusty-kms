@@ -6,8 +6,10 @@ use crate::events::{
     BalanceDeclaredEvent, FundEvent, OutsideFundEvent, RagequitEvent, RolloverEvent, TongoEvent,
     TongoEventReader, TransferDeclaredEvent, TransferEvent, WithdrawEvent,
 };
-use crate::types::{decrypt_cipher_balance, AccountState, CipherBalance, DecryptedAccountState};
-use krusty_kms_common::Result;
+use crate::types::{
+    decrypt_cipher_balance_with_limit, AccountState, CipherBalance, DecryptedAccountState,
+};
+use krusty_kms_common::{Result, SecretFelt};
 use krusty_kms_crypto::StarkCurve;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::curve::ProjectivePoint;
@@ -18,7 +20,7 @@ type CoreFelt = starknet_types_core::felt::Felt;
 
 /// High-level TONGO account combining contract queries, events, and crypto.
 pub struct Account {
-    private_key: Felt,
+    private_key: SecretFelt,
     public_key: ProjectivePoint,
     contract: TongoContract,
     event_reader: TongoEventReader,
@@ -37,7 +39,7 @@ impl Account {
         let event_reader = TongoEventReader::new(provider, contract_address);
 
         Self {
-            private_key,
+            private_key: SecretFelt::new(private_key),
             public_key,
             contract,
             event_reader,
@@ -62,11 +64,19 @@ impl Account {
 
     // ── State queries ───────────────────────────────────────────────────
 
-    /// Get full account state and decrypt it.
-    pub async fn state(&self) -> Result<DecryptedAccountState> {
+    /// Get full account state and decrypt it within a caller-provided balance bound.
+    pub async fn decrypted_state(&self, max_balance: u128) -> Result<DecryptedAccountState> {
         let raw = self.contract.get_state(&self.public_key).await?;
-        let balance = decrypt_cipher_balance(&self.private_key, &raw.balance)?;
-        let pending = decrypt_cipher_balance(&self.private_key, &raw.pending)?;
+        let balance = decrypt_cipher_balance_with_limit(
+            self.private_key.expose_secret(),
+            &raw.balance,
+            max_balance,
+        )?;
+        let pending = decrypt_cipher_balance_with_limit(
+            self.private_key.expose_secret(),
+            &raw.pending,
+            max_balance,
+        )?;
         Ok(DecryptedAccountState {
             balance,
             pending,
@@ -124,9 +134,9 @@ impl Account {
         crate::types::tongo_to_erc20(amount, rate)
     }
 
-    /// Decrypt a cipher balance using this account's private key.
-    pub fn decrypt_balance(&self, cipher: &CipherBalance) -> Result<u128> {
-        decrypt_cipher_balance(&self.private_key, cipher)
+    /// Decrypt a cipher balance using this account's private key and a caller-provided bound.
+    pub fn decrypt_balance(&self, cipher: &CipherBalance, max_balance: u128) -> Result<u128> {
+        decrypt_cipher_balance_with_limit(self.private_key.expose_secret(), cipher, max_balance)
     }
 
     // ── Event queries ───────────────────────────────────────────────────

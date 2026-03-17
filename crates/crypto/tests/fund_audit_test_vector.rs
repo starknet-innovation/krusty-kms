@@ -141,8 +141,8 @@ fn test_fund_with_audit_typescript_vector() {
 
     // Reconstruct points from serialized proof
     let ax_rec = krusty_kms_common::SerializablePoint {
-        x: audit_proof.ax.x.clone(),
-        y: audit_proof.ax.y.clone(),
+        x: audit_proof.ax.x,
+        y: audit_proof.ax.y,
     }
     .to_affine()
     .unwrap()
@@ -150,8 +150,8 @@ fn test_fund_with_audit_typescript_vector() {
     .unwrap();
     let al0_rec: starknet_types_core::curve::ProjectivePoint =
         krusty_kms_common::SerializablePoint {
-            x: audit_proof.al0.x.clone(),
-            y: audit_proof.al0.y.clone(),
+            x: audit_proof.al0.x,
+            y: audit_proof.al0.y,
         }
         .to_affine()
         .unwrap()
@@ -159,8 +159,8 @@ fn test_fund_with_audit_typescript_vector() {
         .unwrap();
     let al1_rec: starknet_types_core::curve::ProjectivePoint =
         krusty_kms_common::SerializablePoint {
-            x: audit_proof.al1.x.clone(),
-            y: audit_proof.al1.y.clone(),
+            x: audit_proof.al1.x,
+            y: audit_proof.al1.y,
         }
         .to_affine()
         .unwrap()
@@ -168,8 +168,8 @@ fn test_fund_with_audit_typescript_vector() {
         .unwrap();
     let ar1_rec: starknet_types_core::curve::ProjectivePoint =
         krusty_kms_common::SerializablePoint {
-            x: audit_proof.ar1.x.clone(),
-            y: audit_proof.ar1.y.clone(),
+            x: audit_proof.ar1.x,
+            y: audit_proof.ar1.y,
         }
         .to_affine()
         .unwrap()
@@ -181,11 +181,7 @@ fn test_fund_with_audit_typescript_vector() {
             .unwrap();
     println!("    recomputed c: {:#x}", c_recomputed);
     println!("    c from proof: {}", audit_proof.c);
-    assert_eq!(
-        format!("{:#x}", c_recomputed),
-        audit_proof.c,
-        "Challenge mismatch!"
-    );
+    assert_eq!(c_recomputed, audit_proof.c, "Challenge mismatch!");
 
     println!("\n  Audited Balance:");
     let ab_l_affine = audited_balance.l.to_affine().unwrap();
@@ -202,14 +198,14 @@ fn test_fund_with_audit_typescript_vector() {
 
     // Verify fund proof - manually reconstruct from serialized format
     let fund_a_affine = krusty_kms_common::SerializablePoint {
-        x: fund_proof.a.x.clone(),
-        y: fund_proof.a.y.clone(),
+        x: fund_proof.a.x,
+        y: fund_proof.a.y,
     }
     .to_affine()
     .unwrap();
     let fund_a_point: starknet_types_core::curve::ProjectivePoint =
         fund_a_affine.try_into().unwrap();
-    let fund_s_felt = Felt::from_hex(&fund_proof.s).unwrap();
+    let fund_s_felt = fund_proof.s;
 
     let fund_prefix_for_verification = poseidon_hash_many(&prefix_inputs);
     let fund_challenge =

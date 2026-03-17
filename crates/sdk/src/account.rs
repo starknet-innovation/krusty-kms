@@ -4,19 +4,20 @@ use krusty_kms::{derive_keypair, derive_view_keypair, TongoKeyPair};
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_common::{AccountState, KmsError, Result, SecretFelt};
 use krusty_kms_crypto::{ElGamal, StarkCurve};
+use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
 /// A TONGO confidential account.
 #[derive(Debug, Clone)]
 pub struct TongoAccount {
     /// The account's keypair
-    pub keypair: TongoKeyPair,
+    keypair: TongoKeyPair,
     /// Optional viewing/decryption keypair (coin type 5353)
-    pub view_keypair: Option<TongoKeyPair>,
+    view_keypair: Option<TongoKeyPair>,
     /// Current account state
-    pub state: AccountState,
+    state: AccountState,
     /// Contract address
-    pub contract_address: Felt,
+    contract_address: Felt,
 }
 
 impl TongoAccount {
@@ -117,6 +118,20 @@ impl TongoAccount {
         self.public_key_hex()
     }
 
+    /// Get the owner (spending) public key.
+    #[must_use]
+    pub fn owner_public_key(&self) -> &ProjectivePoint {
+        &self.keypair.public_key
+    }
+
+    /// Get the viewing public key, if present.
+    #[must_use]
+    pub fn view_public_key(&self) -> Option<&ProjectivePoint> {
+        self.view_keypair
+            .as_ref()
+            .map(|keypair| &keypair.public_key)
+    }
+
     /// Get the viewing public key as a hex string, if present.
     #[must_use]
     pub fn view_public_key_hex(&self) -> Option<String> {
@@ -140,11 +155,56 @@ impl TongoAccount {
         self.view_keypair.is_some()
     }
 
+    /// Get the current contract address.
+    #[must_use]
+    pub fn contract_address(&self) -> Felt {
+        self.contract_address
+    }
+
+    /// Get the current account state.
+    #[must_use]
+    pub fn state(&self) -> &AccountState {
+        &self.state
+    }
+
+    /// Get the available balance.
+    #[must_use]
+    pub fn balance(&self) -> u128 {
+        self.state.balance
+    }
+
+    /// Get the pending balance.
+    #[must_use]
+    pub fn pending_balance(&self) -> u128 {
+        self.state.pending_balance
+    }
+
+    /// Get the current nonce.
+    #[must_use]
+    pub fn nonce(&self) -> u64 {
+        self.state.nonce
+    }
+
     /// Update the account state.
     ///
     /// # Cyclomatic Complexity: 1
     pub fn update_state(&mut self, state: AccountState) {
         self.state = state;
+    }
+
+    /// Update the available balance.
+    pub fn set_balance(&mut self, balance: u128) {
+        self.state.balance = balance;
+    }
+
+    /// Update the pending balance.
+    pub fn set_pending_balance(&mut self, pending_balance: u128) {
+        self.state.pending_balance = pending_balance;
+    }
+
+    /// Update the nonce.
+    pub fn set_nonce(&mut self, nonce: u64) {
+        self.state.nonce = nonce;
     }
 
     /// Check if the account has sufficient available balance.
@@ -163,18 +223,26 @@ impl TongoAccount {
             .saturating_add(self.state.pending_balance)
     }
 
+    #[must_use]
+    pub(crate) fn owner_private_key(&self) -> &SecretFelt {
+        &self.keypair.private_key
+    }
+
+    #[must_use]
+    pub(crate) fn decryption_key(&self) -> &SecretFelt {
+        self.view_keypair
+            .as_ref()
+            .map(|keypair| &keypair.private_key)
+            .unwrap_or(&self.keypair.private_key)
+    }
+
     /// Decrypt an ElGamal ciphertext using the viewing key if available,
     /// otherwise fall back to the owner key. Returns the decrypted point g^m.
     pub fn decrypt_with_view(
         &self,
         ciphertext: &ElGamalCiphertext,
     ) -> Result<starknet_types_core::curve::ProjectivePoint> {
-        let secret = self
-            .view_keypair
-            .as_ref()
-            .map(|k| &k.private_key)
-            .unwrap_or(&self.keypair.private_key);
-        ElGamal::decrypt(ciphertext, secret.expose_secret())
+        ElGamal::decrypt(ciphertext, self.decryption_key().expose_secret())
     }
 }
 
@@ -215,9 +283,9 @@ mod tests {
         let acc = account.unwrap();
 
         assert!(acc.has_view_key());
-        assert_eq!(acc.keypair.private_key, owner_sk);
-        assert_eq!(acc.view_keypair.as_ref().unwrap().private_key, view_sk);
-        assert_eq!(acc.contract_address, contract_address);
+        assert_eq!(acc.owner_private_key(), &SecretFelt::new(owner_sk));
+        assert_eq!(acc.decryption_key(), &SecretFelt::new(view_sk));
+        assert_eq!(acc.contract_address(), contract_address);
     }
 
     #[test]
@@ -225,8 +293,8 @@ mod tests {
         let contract_address = Felt::from(123456u64);
         let account =
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-        let view_sk = &account.view_keypair.as_ref().unwrap().private_key;
-        let owner_sk = &account.keypair.private_key;
+        let view_sk = account.decryption_key();
+        let owner_sk = account.owner_private_key();
         assert_ne!(view_sk, owner_sk);
     }
 
@@ -285,8 +353,8 @@ mod tests {
         let contract_address = Felt::from(123456u64);
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
 
-        assert_eq!(account.state.balance, 0);
-        assert_eq!(account.state.pending_balance, 0);
+        assert_eq!(account.balance(), 0);
+        assert_eq!(account.pending_balance(), 0);
 
         let new_state = AccountState {
             balance: 1000,
@@ -295,9 +363,9 @@ mod tests {
         };
         account.update_state(new_state);
 
-        assert_eq!(account.state.balance, 1000);
-        assert_eq!(account.state.pending_balance, 500);
-        assert_eq!(account.state.nonce, 5);
+        assert_eq!(account.balance(), 1000);
+        assert_eq!(account.pending_balance(), 500);
+        assert_eq!(account.nonce(), 5);
     }
 
     #[test]
@@ -306,7 +374,7 @@ mod tests {
         let mut account =
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
 
-        account.state.balance = 100;
+        account.set_balance(100);
         assert!(account.has_sufficient_balance(50));
         assert!(account.has_sufficient_balance(100));
         assert!(!account.has_sufficient_balance(101));
@@ -318,8 +386,8 @@ mod tests {
         let mut account =
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
 
-        account.state.balance = 100;
-        account.state.pending_balance = 50;
+        account.set_balance(100);
+        account.set_pending_balance(50);
         assert_eq!(account.total_balance(), 150);
     }
 

@@ -3,7 +3,7 @@
 pub mod deploy;
 pub mod utils;
 
-use krusty_kms::AccountClass;
+use krusty_kms::{AccountClass, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
@@ -57,11 +57,13 @@ impl Wallet {
     /// Create a wallet from a `SigningKey`.
     ///
     /// This is the main factory method. It uses the given `AccountClass` to compute
-    /// the expected deployment address from the signing key's public key.
+    /// the expected deployment address from the signing key's public key and the
+    /// explicit `salt_policy`.
     pub fn from_signing_key(
         provider: Arc<JsonRpcClient<HttpTransport>>,
         signing_key: SigningKey,
         account_class: &dyn AccountClass,
+        salt_policy: SaltPolicy,
         chain_id: ChainId,
         network: NetworkPreset,
     ) -> Result<Self> {
@@ -69,7 +71,7 @@ impl Wallet {
         let public_key_rs = verifying_key.scalar();
         let public_key_core = utils::rs_felt_to_core(public_key_rs);
 
-        let address_felt = account_class.calculate_address(&public_key_core)?;
+        let address_felt = account_class.calculate_address(&public_key_core, salt_policy)?;
         let address = Address::from(address_felt);
         let address_rs = core_felt_to_rs(address_felt);
         let chain_id_rs = core_felt_to_rs(chain_id.as_felt());
@@ -98,12 +100,20 @@ impl Wallet {
         provider: Arc<JsonRpcClient<HttpTransport>>,
         private_key: starknet_types_core::felt::Felt,
         account_class: &dyn AccountClass,
+        salt_policy: SaltPolicy,
         chain_id: ChainId,
         network: NetworkPreset,
     ) -> Result<Self> {
         let pk_rs = core_felt_to_rs(private_key);
         let signing_key = SigningKey::from_secret_scalar(pk_rs);
-        Self::from_signing_key(provider, signing_key, account_class, chain_id, network)
+        Self::from_signing_key(
+            provider,
+            signing_key,
+            account_class,
+            salt_policy,
+            chain_id,
+            network,
+        )
     }
 
     /// Check whether the account contract is deployed on-chain.
@@ -171,16 +181,6 @@ impl Wallet {
     /// The chain ID this wallet targets.
     pub fn chain_id(&self) -> ChainId {
         self.chain_id
-    }
-
-    /// The underlying JSON-RPC provider.
-    pub fn provider(&self) -> &Arc<JsonRpcClient<HttpTransport>> {
-        &self.provider
-    }
-
-    /// The underlying `SingleOwnerAccount` (for advanced usage).
-    pub fn account(&self) -> &SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, LocalWallet> {
-        &self.account
     }
 
     /// The network preset.

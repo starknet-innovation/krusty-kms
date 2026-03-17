@@ -45,8 +45,8 @@ impl ProofOfExponentiation {
 
         let proof = PoeProof {
             a: SerializablePoint::try_from_projective(&a)?,
-            s: format!("{:#x}", s),
-            c: format!("{:#x}", c),
+            s,
+            c,
         };
 
         Ok((y, proof))
@@ -69,10 +69,8 @@ impl ProofOfExponentiation {
         // Parse proof components
         let a = proof.a.to_affine()?;
         let a_proj = StarkCurve::affine_to_projective(&a);
-        let s = Felt::from_hex(&proof.s)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let c = Felt::from_hex(&proof.c)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
+        let s = proof.s;
+        let c = proof.c;
 
         // Recompute challenge using Poseidon
         let c_computed = compute_poseidon_challenge(prefix, &[&a_proj])?;
@@ -141,7 +139,7 @@ mod tests {
         let (y, mut proof) = ProofOfExponentiation::prove(&x, &prefix).unwrap();
 
         // Tamper with the proof
-        proof.s = format!("{:#x}", Felt::from(999u64));
+        proof.s = Felt::from(999u64);
 
         let valid = ProofOfExponentiation::verify(&y, &proof, &prefix).unwrap();
         assert!(!valid);
@@ -173,34 +171,6 @@ mod tests {
     }
 
     #[test]
-    fn test_poe_verify_invalid_hex() {
-        let x = Felt::from(100u64);
-        let prefix = Felt::from(42u64);
-
-        let (y, mut proof) = ProofOfExponentiation::prove(&x, &prefix).unwrap();
-
-        // Use invalid hex in s
-        proof.s = "invalid_hex".to_string();
-
-        let result = ProofOfExponentiation::verify(&y, &proof, &prefix);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_poe_verify_invalid_challenge_hex() {
-        let x = Felt::from(100u64);
-        let prefix = Felt::from(42u64);
-
-        let (y, mut proof) = ProofOfExponentiation::prove(&x, &prefix).unwrap();
-
-        // Use invalid hex in c
-        proof.c = "invalid_hex".to_string();
-
-        let result = ProofOfExponentiation::verify(&y, &proof, &prefix);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_poe_verify_tampered_challenge() {
         let x = Felt::from(100u64);
         let prefix = Felt::from(42u64);
@@ -208,7 +178,7 @@ mod tests {
         let (y, mut proof) = ProofOfExponentiation::prove(&x, &prefix).unwrap();
 
         // Tamper with the challenge
-        proof.c = format!("{:#x}", Felt::from(999999u64));
+        proof.c = Felt::from(999999u64);
 
         let valid = ProofOfExponentiation::verify(&y, &proof, &prefix).unwrap();
         assert!(!valid);

@@ -37,8 +37,7 @@ The following components require integration with the live Starknet network:
 The crate supports deriving Starknet account contract addresses using the standard contract address calculation formula:
 
 ```rust
-use krusty_kms::{derive_keypair, derive_oz_account_address};
-use starknet_types_core::felt::Felt;
+use krusty_kms::{derive_keypair, derive_oz_account_address, ChainId, OpenZeppelinAccount};
 
 // Derive a keypair from mnemonic
 let keypair = derive_keypair(mnemonic, index, account_index, None)?;
@@ -47,8 +46,8 @@ let keypair = derive_keypair(mnemonic, index, account_index, None)?;
 let affine = keypair.public_key.to_affine()?;
 let public_key_x = affine.x();
 
-// Calculate the account contract address
-let class_hash = Felt::from_hex("0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564")?;
+// Resolve the latest manifest-backed OZ class hash for Sepolia
+let class_hash = OpenZeppelinAccount::latest(ChainId::Sepolia)?.class_hash();
 let account_address = derive_oz_account_address(&public_key_x, &class_hash, None)?;
 ```
 
@@ -132,13 +131,15 @@ async fn test_fund_operation() {
 
 ## OpenZeppelin Account Class Hash
 
-The tests use the OpenZeppelin account class hash deployed on Sepolia:
+The canonical deployment flow resolves the latest manifest-backed OpenZeppelin
+account class hash for the target network. Today the checked-in latest entry is:
 
 ```
-0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564
+0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381
 ```
 
-This is the same class hash used in the TypeScript reference implementation.
+The older TypeScript parity fixtures in this repo still use their historical
+explicit class hash so those external integration tests remain reproducible.
 
 ## TONGO Contract Address (Sepolia)
 

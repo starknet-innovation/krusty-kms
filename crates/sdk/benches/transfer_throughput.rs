@@ -27,7 +27,7 @@ fn create_test_account() -> TongoAccount {
     let contract_address = Felt::from(123456u64);
     let mut account =
         TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-    account.state.balance = u128::MAX;
+    account.set_balance(u128::MAX);
     account
 }
 

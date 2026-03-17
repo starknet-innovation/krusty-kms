@@ -91,9 +91,9 @@ impl ElGamal {
         Ok(ElGamalProof {
             al: SerializablePoint::try_from_projective(&a_l)?,
             ar: SerializablePoint::try_from_projective(&a_r)?,
-            sb: format!("{:#x}", s_b),
-            sr: format!("{:#x}", s_r),
-            c: format!("{:#x}", c),
+            sb: s_b,
+            sr: s_r,
+            c,
         })
     }
 
@@ -114,12 +114,9 @@ impl ElGamal {
         let a_r = proof.ar.to_affine()?;
         let a_l_proj = StarkCurve::affine_to_projective(&a_l);
         let a_r_proj = StarkCurve::affine_to_projective(&a_r);
-        let s_b = Felt::from_hex(&proof.sb)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let s_r = Felt::from_hex(&proof.sr)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let c = Felt::from_hex(&proof.c)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
+        let s_b = proof.sb;
+        let s_r = proof.sr;
+        let c = proof.c;
 
         // Recompute challenge
         let c_computed = compute_challenge_triple(prefix, l, r, &a_l_proj)?;
@@ -240,7 +237,7 @@ mod tests {
         let mut encryption = ElGamal::encrypt(&message, &pk, &random, &prefix).unwrap();
 
         // Tamper with proof
-        encryption.proof.sb = format!("{:#x}", Felt::from(1u64));
+        encryption.proof.sb = Felt::from(1u64);
 
         let valid = ElGamal::verify(
             &encryption.l,
@@ -264,7 +261,7 @@ mod tests {
         let mut encryption = ElGamal::encrypt(&message, &pk, &random, &prefix).unwrap();
 
         // Tamper with challenge - this should fail challenge verification
-        encryption.proof.c = format!("{:#x}", Felt::from(999999u64));
+        encryption.proof.c = Felt::from(999999u64);
 
         let valid = ElGamal::verify(
             &encryption.l,
@@ -288,7 +285,7 @@ mod tests {
         let mut encryption = ElGamal::encrypt(&message, &pk, &random, &prefix).unwrap();
 
         // Tamper with s_r - this should fail the first equation check
-        encryption.proof.sr = format!("{:#x}", Felt::from(1u64));
+        encryption.proof.sr = Felt::from(1u64);
 
         let valid = ElGamal::verify(
             &encryption.l,
@@ -299,27 +296,6 @@ mod tests {
         )
         .unwrap();
         assert!(!valid);
-    }
-
-    #[test]
-    fn test_elgamal_verify_invalid_hex() {
-        use krusty_kms_common::ElGamalProof;
-
-        let sk = Felt::from(42u64);
-        let pk = StarkCurve::mul_generator(&sk);
-        let prefix = Felt::from(42u64);
-        let g = StarkCurve::generator();
-
-        let invalid_proof = ElGamalProof {
-            al: krusty_kms_common::SerializablePoint::try_from_projective(&g).unwrap(),
-            ar: krusty_kms_common::SerializablePoint::try_from_projective(&g).unwrap(),
-            sb: "invalid_hex".to_string(),
-            sr: "0x1".to_string(),
-            c: "0x1".to_string(),
-        };
-
-        let result = ElGamal::verify(&g, &g, &pk, &invalid_proof, &prefix);
-        assert!(result.is_err());
     }
 
     #[test]

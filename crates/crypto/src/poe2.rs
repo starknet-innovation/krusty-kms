@@ -72,9 +72,9 @@ impl ProofOfExponentiation2 {
 
         let proof = Poe2Proof {
             a: SerializablePoint::try_from_projective(&a)?,
-            s1: format!("{:#x}", s1),
-            s2: format!("{:#x}", s2),
-            c: format!("{:#x}", c),
+            s1,
+            s2,
+            c,
         };
 
         Ok((y, proof))
@@ -106,12 +106,9 @@ impl ProofOfExponentiation2 {
         // Parse proof components
         let a = proof.a.to_affine()?;
         let a_proj = StarkCurve::affine_to_projective(&a);
-        let s1 = Felt::from_hex(&proof.s1)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let s2 = Felt::from_hex(&proof.s2)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-        let c = Felt::from_hex(&proof.c)
-            .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
+        let s1 = proof.s1;
+        let s2 = proof.s2;
+        let c = proof.c;
 
         // Recompute challenge
         let c_computed = compute_challenge_single(prefix, &a_proj)?;
@@ -201,7 +198,7 @@ mod tests {
         let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
 
         // Tamper with the proof
-        proof.s1 = format!("{:#x}", Felt::from(1u64));
+        proof.s1 = Felt::from(1u64);
 
         let valid = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &prefix).unwrap();
         assert!(!valid);
@@ -285,38 +282,6 @@ mod tests {
     }
 
     #[test]
-    fn test_poe2_verify_invalid_hex_s1() {
-        let x1 = Felt::from(100u64);
-        let x2 = Felt::from(200u64);
-        let prefix = Felt::from(999u64);
-
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-
-        let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
-        proof.s1 = "invalid_hex".to_string();
-
-        let result = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &prefix);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_poe2_verify_invalid_hex_s2() {
-        let x1 = Felt::from(100u64);
-        let x2 = Felt::from(200u64);
-        let prefix = Felt::from(999u64);
-
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-
-        let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
-        proof.s2 = "invalid_hex".to_string();
-
-        let result = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &prefix);
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_poe2_verify_invalid_challenge() {
         let x1 = Felt::from(100u64);
         let x2 = Felt::from(200u64);
@@ -326,7 +291,7 @@ mod tests {
         let g2 = StarkCurve::generator_h();
 
         let (y, mut proof) = ProofOfExponentiation2::prove(&x1, &x2, &g1, &g2, &prefix).unwrap();
-        proof.c = format!("{:#x}", Felt::from(999999u64));
+        proof.c = Felt::from(999999u64);
 
         let valid = ProofOfExponentiation2::verify(&y, &g1, &g2, &proof, &prefix).unwrap();
         assert!(!valid);

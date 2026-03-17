@@ -153,7 +153,7 @@ fn generate_prover_vectors() {
         let private_key = Felt::from_dec_str(case.private_key).unwrap();
         let contract_address = Felt::from_dec_str(case.tongo_address).unwrap();
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        account.state.balance = case.initial_balance;
+        account.set_balance(case.initial_balance);
 
         let nonce = Felt::from_dec_str(case.nonce).unwrap();
         let chain_id = Felt::from_hex_unchecked(case.chain_id);
@@ -256,7 +256,7 @@ fn generate_prover_vectors() {
         let private_key = Felt::from_dec_str(case.private_key).unwrap();
         let contract_address = Felt::from_dec_str(case.tongo_address).unwrap();
         let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        account.state.balance = case.amount;
+        account.set_balance(case.amount);
 
         let nonce = Felt::from_dec_str(case.nonce).unwrap();
         let chain_id = Felt::from_hex_unchecked(case.chain_id);
@@ -265,7 +265,7 @@ fn generate_prover_vectors() {
 
         let g = StarkCurve::generator();
         let g_amount = StarkCurve::mul(&Felt::from(case.amount), Some(&g));
-        let l = StarkCurve::add(&g_amount, &account.keypair.public_key);
+        let l = StarkCurve::add(&g_amount, account.owner_public_key());
         let current_balance = ElGamalCiphertext { l, r: g };
 
         let params = RagequitParams {

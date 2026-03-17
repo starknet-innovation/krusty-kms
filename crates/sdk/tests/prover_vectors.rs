@@ -185,7 +185,7 @@ fn test_fund_prover_vectors() {
 
         // Set initial balance
         let initial_balance: u128 = initial_balance_str.parse().unwrap();
-        account.state.balance = initial_balance;
+        account.set_balance(initial_balance);
 
         // Execute fund operation
         let amount: u128 = amount_str.parse().unwrap();
@@ -213,7 +213,8 @@ fn test_fund_prover_vectors() {
         // 1. Check that y matches expected public key
         let expected_y = expected.inputs.y.to_projective();
         assert_eq!(
-            account.keypair.public_key, expected_y,
+            *account.owner_public_key(),
+            expected_y,
             "Public key mismatch in {}",
             vector.name
         );
@@ -283,7 +284,8 @@ fn test_rollover_prover_vectors() {
         // 1. Check that y matches expected public key
         let expected_y = expected.inputs.y.to_projective();
         assert_eq!(
-            account.keypair.public_key, expected_y,
+            *account.owner_public_key(),
+            expected_y,
             "Public key mismatch in {}",
             vector.name
         );
@@ -337,7 +339,7 @@ fn test_ragequit_prover_vectors() {
 
         // Set balance to the amount being withdrawn
         let amount: u128 = amount_str.parse().unwrap();
-        account.state.balance = amount;
+        account.set_balance(amount);
 
         // Execute ragequit operation
         let recipient_address = parse_felt(send_to_str);
@@ -351,7 +353,7 @@ fn test_ragequit_prover_vectors() {
         // We use r=1 for simplicity: L = g^amount + y, R = g
         let g = StarkCurve::generator();
         let g_amount = StarkCurve::mul(&Felt::from(amount), Some(&g));
-        let l = StarkCurve::add(&g_amount, &account.keypair.public_key);
+        let l = StarkCurve::add(&g_amount, account.owner_public_key());
         let current_balance = krusty_kms_common::ElGamalCiphertext {
             l,
             r: g, // R = g^1 (using r=1 as randomness)
@@ -373,7 +375,8 @@ fn test_ragequit_prover_vectors() {
         // 1. Check that y matches expected public key
         let expected_y = expected.inputs.y.to_projective();
         assert_eq!(
-            account.keypair.public_key, expected_y,
+            *account.owner_public_key(),
+            expected_y,
             "Public key mismatch in {}",
             vector.name
         );

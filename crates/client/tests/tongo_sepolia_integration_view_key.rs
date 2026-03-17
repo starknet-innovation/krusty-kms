@@ -18,7 +18,7 @@ use krusty_kms::{
 };
 use krusty_kms_client::{
     build_fund_calls, build_ragequit_call, build_rollover_call, build_transfer_call,
-    build_withdraw_call, create_provider, decrypt_cipher_balance, TongoContract,
+    build_withdraw_call, create_provider, TongoContract,
 };
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_sdk::operations::{
@@ -32,6 +32,19 @@ use starknet_rust::signers::{LocalWallet, SigningKey};
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
 
+const MAX_DECRYPT_BALANCE: u128 = 1_000_000_000_000;
+
+fn decrypt_cipher_balance(
+    private_key: &Felt,
+    cipher: &krusty_kms_client::CipherBalance,
+) -> Result<u128, Box<dyn std::error::Error>> {
+    Ok(krusty_kms_client::decrypt_cipher_balance(
+        private_key,
+        cipher,
+        MAX_DECRYPT_BALANCE,
+    )?)
+}
+
 /// OpenZeppelin account class hash (same as TypeScript)
 const OZ_ACCOUNT_CLASS_HASH: &str =
     "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564";
@@ -41,7 +54,7 @@ const TONGO_CONTRACT_ADDRESS: &str =
     "0x00b4cca30f0f641e01140c1c388f55641f1c3fe5515484e622b6cb91d8cee585";
 
 /// Sepolia RPC URL (fallback if env var not set)
-const SEPOLIA_RPC_URL: &str = "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_9/B-Gw-B-hV805x00WY6hXRJc3OMqU-zxQ";
+const SEPOLIA_RPC_URL: &str = "https://api.cartridge.gg/x/starknet/sepolia";
 
 /// Test mnemonic (SAME as TypeScript test - DO NOT USE IN PRODUCTION)
 const TEST_MNEMONIC: &str =
@@ -208,11 +221,11 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     )?;
 
     // Set the actual state we queried from the blockchain
-    tongo_account_0.state = AccountState {
+    tongo_account_0.update_state(AccountState {
         balance: initial_balance,
         pending_balance: initial_pending,
         nonce: initial_state.nonce.to_biguint().try_into().unwrap_or(0),
-    };
+    });
 
     let mut tongo_account_1 = TongoAccount::from_private_key(
         *tongo_keypair_1.private_key.expose_secret(),
@@ -531,8 +544,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         );
 
         // Update account state for subsequent operations
-        tongo_account_0.state.balance = new_balance;
-        tongo_account_0.state.nonce = new_state.nonce.to_biguint().try_into().unwrap_or(0);
+        tongo_account_0.set_balance(new_balance);
+        tongo_account_0.set_nonce(new_state.nonce.to_biguint().try_into().unwrap_or(0));
     } else {
         println!("   ⏭️  EXECUTE_TX not set - skipping actual transaction execution");
         println!("   💡 To execute transactions, run with:");
@@ -557,8 +570,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("   💡 Sender balance after fund: {}", updated_balance);
 
     // Update account state
-    tongo_account_0.state.balance = updated_balance;
-    tongo_account_0.state.nonce = updated_state.nonce.to_biguint().try_into().unwrap_or(0);
+    tongo_account_0.set_balance(updated_balance);
+    tongo_account_0.set_nonce(updated_state.nonce.to_biguint().try_into().unwrap_or(0));
 
     let transfer_amount: u128 = 1; // Reduced to 1 to work with low balances from previous test runs
 
@@ -716,8 +729,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         );
 
         // Update account state
-        tongo_account_0.state.balance = final_balance;
-        tongo_account_0.state.nonce = final_state.nonce.to_biguint().try_into().unwrap_or(0);
+        tongo_account_0.set_balance(final_balance);
+        tongo_account_0.set_nonce(final_state.nonce.to_biguint().try_into().unwrap_or(0));
     } else {
         println!("   ⏭️  EXECUTE_TX not set - skipping transfer execution");
     }
@@ -757,9 +770,11 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     println!("      Nonce: {}", account1_nonce);
 
     // Update Account 1's state
-    tongo_account_1.state.balance = account1_balance;
-    tongo_account_1.state.pending_balance = account1_pending;
-    tongo_account_1.state.nonce = account1_nonce;
+    tongo_account_1.update_state(AccountState {
+        balance: account1_balance,
+        pending_balance: account1_pending,
+        nonce: account1_nonce,
+    });
 
     // Pass all required parameters to rollover (MUST match TypeScript exactly!)
     let rollover_params = RolloverParams {
@@ -869,9 +884,11 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         );
 
         // Update account state
-        tongo_account_1.state.balance = post_rollover_balance;
-        tongo_account_1.state.pending_balance = post_rollover_pending;
-        tongo_account_1.state.nonce = post_rollover_nonce;
+        tongo_account_1.update_state(AccountState {
+            balance: post_rollover_balance,
+            pending_balance: post_rollover_pending,
+            nonce: post_rollover_nonce,
+        });
     } else {
         println!("   ⏭️  EXECUTE_TX not set - skipping rollover execution");
     }
@@ -900,8 +917,8 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         println!("   ⏭️  Balance too low for withdraw (would leave 0), skipping to ragequit");
     } else {
         // Update Account 1's state
-        tongo_account_1.state.balance = withdraw_balance;
-        tongo_account_1.state.nonce = withdraw_state.nonce.to_biguint().try_into().unwrap_or(0);
+        tongo_account_1.set_balance(withdraw_balance);
+        tongo_account_1.set_nonce(withdraw_state.nonce.to_biguint().try_into().unwrap_or(0));
 
         let withdraw_params = WithdrawParams {
             recipient_address: account_address, // Withdraw to our account
@@ -929,8 +946,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
         // Build withdraw call - include view-only hint for leftover after withdraw
         let leftover_after_withdraw = tongo_account_1
-            .state
-            .balance
+            .balance()
             .saturating_sub(withdraw_proof.amount);
         let (hint_withdraw_ct, hint_withdraw_nonce) = build_view_hint(
             leftover_after_withdraw,
@@ -1037,12 +1053,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
             );
 
             // Update account state
-            tongo_account_1.state.balance = post_withdraw_balance;
-            tongo_account_1.state.nonce = post_withdraw_state
-                .nonce
-                .to_biguint()
-                .try_into()
-                .unwrap_or(0);
+            tongo_account_1.set_balance(post_withdraw_balance);
+            tongo_account_1.set_nonce(
+                post_withdraw_state
+                    .nonce
+                    .to_biguint()
+                    .try_into()
+                    .unwrap_or(0),
+            );
         } else {
             println!("   ⏭️  EXECUTE_TX not set - skipping withdraw execution");
         }
@@ -1052,7 +1070,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     // Step 13: Ragequit operation (Account 1 withdraws ALL remaining balance)
     // -------------------------------------------------------------------------
     println!("\n📍 Step 13: Generating Ragequit proof (Account 1)...");
-    let pre_ragequit_balance = tongo_account_1.state.balance;
+    let pre_ragequit_balance = tongo_account_1.balance();
     println!(
         "   💡 Account 1 balance before ragequit: {}",
         pre_ragequit_balance
@@ -1068,7 +1086,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         tongo_keypair_1.private_key.expose_secret(),
         &ragequit_state.balance,
     )?;
-    tongo_account_1.state.balance = current_balance;
+    tongo_account_1.set_balance(current_balance);
     println!("   💡 Current on-chain balance: {}", current_balance);
 
     // Skip ragequit if balance is already 0
@@ -1191,12 +1209,14 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         );
 
         // Update account state
-        tongo_account_1.state.balance = post_ragequit_balance;
-        tongo_account_1.state.nonce = post_ragequit_state
-            .nonce
-            .to_biguint()
-            .try_into()
-            .unwrap_or(0);
+        tongo_account_1.set_balance(post_ragequit_balance);
+        tongo_account_1.set_nonce(
+            post_ragequit_state
+                .nonce
+                .to_biguint()
+                .try_into()
+                .unwrap_or(0),
+        );
     } else {
         println!("   ⏭️  EXECUTE_TX not set - skipping ragequit execution");
     }

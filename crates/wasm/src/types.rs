@@ -77,13 +77,21 @@ impl WasmPoint {
 
 impl From<krusty_kms_common::SerializablePoint> for WasmPoint {
     fn from(p: krusty_kms_common::SerializablePoint) -> Self {
-        Self { x: p.x, y: p.y }
+        Self {
+            x: format!("{:#x}", p.x),
+            y: format!("{:#x}", p.y),
+        }
     }
 }
 
 impl From<WasmPoint> for krusty_kms_common::SerializablePoint {
     fn from(p: WasmPoint) -> Self {
-        Self { x: p.x, y: p.y }
+        Self {
+            x: krusty_kms_common::utils::parse_hex_to_felt(&p.x)
+                .expect("WasmPoint.x must be a valid felt hex string"),
+            y: krusty_kms_common::utils::parse_hex_to_felt(&p.y)
+                .expect("WasmPoint.y must be a valid felt hex string"),
+        }
     }
 }
 

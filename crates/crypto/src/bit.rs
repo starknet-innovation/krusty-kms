@@ -86,9 +86,9 @@ fn prove_bit_0(
     let proof = ProofOfBit {
         a0: SerializablePoint::try_from_projective(&a0)?,
         a1: SerializablePoint::try_from_projective(&a1)?,
-        c0: format!("{:#x}", c0),
-        s0: format!("{:#x}", s0),
-        s1: format!("{:#x}", s1),
+        c0,
+        s0,
+        s1,
     };
 
     Ok((v, proof))
@@ -127,9 +127,9 @@ fn prove_bit_1(
     let proof = ProofOfBit {
         a0: SerializablePoint::try_from_projective(&a0)?,
         a1: SerializablePoint::try_from_projective(&a1)?,
-        c0: format!("{:#x}", c0),
-        s0: format!("{:#x}", s0),
-        s1: format!("{:#x}", s1),
+        c0,
+        s0,
+        s1,
     };
 
     Ok((v, proof))
@@ -177,12 +177,9 @@ pub fn verify(
     let a0_proj = StarkCurve::affine_to_projective(&a0);
     let a1_proj = StarkCurve::affine_to_projective(&a1);
 
-    let c0 = Felt::from_hex(&proof.c0)
-        .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-    let s0 = Felt::from_hex(&proof.s0)
-        .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
-    let s1 = Felt::from_hex(&proof.s1)
-        .map_err(|e| krusty_kms_common::KmsError::DeserializationError(e.to_string()))?;
+    let c0 = proof.c0;
+    let s0 = proof.s0;
+    let s1 = proof.s1;
 
     // Recompute challenge: c = H(prefix, V, A0, A1)
     let c = compute_poseidon_challenge(prefix, &[v, &a0_proj, &a1_proj])?;
@@ -282,7 +279,7 @@ mod tests {
         let (v, mut proof) = prove(0, &random, &g1, &g2, &prefix).unwrap();
 
         // Tamper with c0
-        proof.c0 = format!("{:#x}", Felt::from(999999u64));
+        proof.c0 = Felt::from(999999u64);
 
         let valid = verify(&v, &g1, &g2, &proof, &prefix).unwrap();
         assert!(!valid);
@@ -298,7 +295,7 @@ mod tests {
         let (v, mut proof) = prove(0, &random, &g1, &g2, &prefix).unwrap();
 
         // Tamper with s0
-        proof.s0 = format!("{:#x}", Felt::from(999999u64));
+        proof.s0 = Felt::from(999999u64);
 
         let valid = verify(&v, &g1, &g2, &proof, &prefix).unwrap();
         assert!(!valid);
@@ -314,58 +311,10 @@ mod tests {
         let (v, mut proof) = prove(1, &random, &g1, &g2, &prefix).unwrap();
 
         // Tamper with s1
-        proof.s1 = format!("{:#x}", Felt::from(999999u64));
+        proof.s1 = Felt::from(999999u64);
 
         let valid = verify(&v, &g1, &g2, &proof, &prefix).unwrap();
         assert!(!valid);
-    }
-
-    #[test]
-    fn test_verify_invalid_c0_hex() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let random = Felt::from(12345u64);
-        let prefix = Felt::from(42u64);
-
-        let (v, mut proof) = prove(0, &random, &g1, &g2, &prefix).unwrap();
-
-        // Use invalid hex for c0
-        proof.c0 = "invalid_hex".to_string();
-
-        let result = verify(&v, &g1, &g2, &proof, &prefix);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_verify_invalid_s0_hex() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let random = Felt::from(12345u64);
-        let prefix = Felt::from(42u64);
-
-        let (v, mut proof) = prove(0, &random, &g1, &g2, &prefix).unwrap();
-
-        // Use invalid hex for s0
-        proof.s0 = "invalid_hex".to_string();
-
-        let result = verify(&v, &g1, &g2, &proof, &prefix);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_verify_invalid_s1_hex() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let random = Felt::from(12345u64);
-        let prefix = Felt::from(42u64);
-
-        let (v, mut proof) = prove(0, &random, &g1, &g2, &prefix).unwrap();
-
-        // Use invalid hex for s1
-        proof.s1 = "invalid_hex".to_string();
-
-        let result = verify(&v, &g1, &g2, &proof, &prefix);
-        assert!(result.is_err());
     }
 
     #[test]

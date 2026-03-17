@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn insert_and_with() {
         let h = insert(test_account()).unwrap();
-        let bal = with(h, |acc| Ok(acc.state.balance)).unwrap();
+        let bal = with(h, |acc| Ok(acc.balance())).unwrap();
         assert_eq!(bal, 0);
     }
 
@@ -86,11 +86,11 @@ mod tests {
     fn with_mut_updates() {
         let h = insert(test_account()).unwrap();
         with_mut(h, |acc| {
-            acc.state.balance = 999;
+            acc.set_balance(999);
             Ok(())
         })
         .unwrap();
-        let bal = with(h, |acc| Ok(acc.state.balance)).unwrap();
+        let bal = with(h, |acc| Ok(acc.balance())).unwrap();
         assert_eq!(bal, 999);
     }
 

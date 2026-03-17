@@ -35,11 +35,12 @@ pub use audit::{AuditPrefixData, AuditProver};
 pub use curve::StarkCurve;
 pub use elgamal::{ElGamal, ElGamalEncryption};
 pub use hash::poseidon_hash_many;
+pub use krusty_kms_common::{
+    AccountState, AuditProof, ElGamalCiphertext, ElGamalProof, KmsError, Poe2Proof, PoeProof,
+    ProofOfBit, ProofOfTransfer, Range, Result, SecretFelt, SerializablePoint, TransactionType,
+};
 pub use poe::ProofOfExponentiation;
 pub use poe2::ProofOfExponentiation2;
 #[cfg(feature = "test-utils")]
 pub use random::{clear_deterministic_rng, set_deterministic_rng};
 pub use random::{fill_random_bytes, random_felt, random_felts};
-
-/// Re-export common types
-pub use krusty_kms_common::*;

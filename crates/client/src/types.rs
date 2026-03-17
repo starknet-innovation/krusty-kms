@@ -1,8 +1,11 @@
 //! Types for interacting with TONGO contracts on Starknet.
 
-use krusty_kms_common::Result;
+use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
+
+/// Default discrete-log search limit retained for legacy helpers.
+pub const DEFAULT_DECRYPT_SEARCH_LIMIT: u128 = 1_000_000;
 
 /// Cipher balance stored on-chain (ElGamal ciphertext).
 #[derive(Debug, Clone)]
@@ -44,18 +47,30 @@ pub struct DecryptedAccountState {
 /// We can decrypt by computing: m = L / R^x, where x is the private key.
 ///
 /// # Cyclomatic Complexity: 3
-pub fn decrypt_cipher_balance(private_key: &Felt, cipher: &CipherBalance) -> Result<u128> {
+pub fn decrypt_cipher_balance_with_limit(
+    private_key: &Felt,
+    cipher: &CipherBalance,
+    max_balance: u128,
+) -> Result<u128> {
     // Calculate R^x (scalar multiplication)
     let r_x = multiply_point(&cipher.r, private_key)?;
 
     // Calculate L - R^x to get g^m
     let g_m = subtract_points(&cipher.l, &r_x)?;
 
-    // Perform discrete log to recover m
-    // For small values (typical balances), we use brute force
-    let balance = discrete_log_brute_force(&g_m)?;
+    // Perform discrete log to recover m within the declared balance bound.
+    let balance = discrete_log_brute_force(&g_m, max_balance)?;
 
     Ok(balance)
+}
+
+/// Decrypt a cipher balance using a conservative default search bound.
+#[deprecated(
+    since = "0.3.0",
+    note = "Use decrypt_cipher_balance_with_limit to make the discrete-log search bound explicit"
+)]
+pub fn decrypt_cipher_balance(private_key: &Felt, cipher: &CipherBalance) -> Result<u128> {
+    decrypt_cipher_balance_with_limit(private_key, cipher, DEFAULT_DECRYPT_SEARCH_LIMIT)
 }
 
 /// Multiply a point by a scalar.
@@ -97,11 +112,10 @@ fn subtract_points(a: &ProjectivePoint, b: &ProjectivePoint) -> Result<Projectiv
 
 /// Recover the discrete log m from g^m using brute force.
 ///
-/// This works for small values (up to ~10^12), which is sufficient for
-/// typical TONGO balances.
+/// This works for caller-bounded small values.
 ///
 /// # Cyclomatic Complexity: 3
-fn discrete_log_brute_force(g_m: &ProjectivePoint) -> Result<u128> {
+fn discrete_log_brute_force(g_m: &ProjectivePoint, max_search: u128) -> Result<u128> {
     // Use the standard Stark curve generator from krusty-kms-crypto
     let generator = krusty_kms_crypto::StarkCurve::generator();
 
@@ -110,25 +124,18 @@ fn discrete_log_brute_force(g_m: &ProjectivePoint) -> Result<u128> {
         return Ok(0);
     }
 
-    // Brute force search up to MAX_SEARCH
-    const MAX_SEARCH: u128 = 1_000_000_000_000; // 1 trillion
     let mut current = generator.clone();
 
-    for i in 1..=MAX_SEARCH {
+    for i in 1..=max_search {
         if points_equal(&current, g_m) {
             return Ok(i);
         }
         current = &current + &generator;
-
-        // Early exit if we've gone past reasonable balance values
-        if i > 1_000_000 && i % 1_000_000 == 0 {
-            // Check every million after the first million
-        }
     }
 
-    Err(krusty_kms_common::KmsError::CryptoError(
-        "Failed to recover balance (discrete log not found within search limit)".to_string(),
-    ))
+    Err(KmsError::CryptoError(format!(
+        "Failed to recover balance within search limit of {max_search}"
+    )))
 }
 
 /// Check if two points are equal.
@@ -184,7 +191,7 @@ mod tests {
 
         let cipher = CipherBalance { l: y_r, r: r_point };
 
-        let decrypted = decrypt_cipher_balance(&private_key, &cipher).unwrap();
+        let decrypted = decrypt_cipher_balance_with_limit(&private_key, &cipher, 1_000).unwrap();
         assert_eq!(decrypted, 0);
     }
 
@@ -305,7 +312,7 @@ mod tests {
         let g = ProjectivePoint::from_affine(g_x, g_y).unwrap();
 
         // Test discrete log for small value (1)
-        let result = discrete_log_brute_force(&g).unwrap();
+        let result = discrete_log_brute_force(&g, 1).unwrap();
         assert_eq!(result, 1);
     }
 
@@ -322,7 +329,7 @@ mod tests {
         // Compute 5*g
         let five_g = multiply_point(&g, &Felt::from(5u64)).unwrap();
 
-        let result = discrete_log_brute_force(&five_g).unwrap();
+        let result = discrete_log_brute_force(&five_g, 10).unwrap();
         assert_eq!(result, 5);
     }
 
@@ -351,7 +358,7 @@ mod tests {
 
         let cipher = CipherBalance { l, r: r_point };
 
-        let decrypted = decrypt_cipher_balance(&private_key, &cipher).unwrap();
+        let decrypted = decrypt_cipher_balance_with_limit(&private_key, &cipher, 1_000).unwrap();
         assert_eq!(decrypted, 5);
     }
 
