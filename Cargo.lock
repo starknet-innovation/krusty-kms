@@ -1737,6 +1737,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sha3",
+ "starknet-crypto",
  "starknet-types-core",
  "thiserror 1.0.69",
  "zeroize",
@@ -1832,6 +1833,46 @@ dependencies = [
  "starknet-types-core",
  "thiserror 1.0.69",
  "zeroize",
+]
+
+[[package]]
+name = "krusty-kms-domain"
+version = "0.3.0"
+dependencies = [
+ "hex",
+ "krusty-kms-common",
+ "serde",
+ "serde_json",
+ "starknet-types-core",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "krusty-kms-gateway"
+version = "0.3.0"
+dependencies = [
+ "async-trait",
+ "krusty-kms",
+ "krusty-kms-client",
+ "krusty-kms-common",
+ "krusty-kms-domain",
+ "num-bigint",
+ "starknet-rust",
+ "starknet-types-core",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
+name = "krusty-kms-oracle"
+version = "0.3.0"
+dependencies = [
+ "async-trait",
+ "krusty-kms-common",
+ "krusty-kms-domain",
+ "krusty-kms-gateway",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

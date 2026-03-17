@@ -30,6 +30,7 @@ hex.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 k256 = { version = "0.13", features = ["ecdsa"] }
+starknet-crypto = "0.8"
 zeroize.workspace = true
 
 [dev-dependencies]

@@ -14,10 +14,17 @@ Krusty provides BIP-39/44 key derivation for Stark and Ethereum curves, zero-kno
 
 ```
 krusty-kms-common     Shared types: Address, Amount, ChainId, Token, error definitions
+krusty-kms-domain     Pure integration contracts: canonical hex, typed requests, statuses,
+                      cache policy, and gateway-facing errors for TUI/oracle work
+krusty-kms-gateway    Long-lived runtime gateway: canonical derive/check/deploy/sign/query flows,
+                      operation tracking, cache metadata, and replaceable secret/RPC boundaries
+krusty-kms-oracle     Versioned stdio JSONL transport: request/response protocol on top of the
+                      gateway surface for local TUIs and app integrations, with golden fixtures
 krusty-kms-crypto     Cryptographic primitives: ElGamal encryption, Pedersen commitments,
                       range proofs, ZK proof generation and verification
 krusty-kms            Key management: BIP-39 mnemonics, BIP-44 HD derivation (Stark +
-                      secp256k1), account class abstractions (OZ, Argent, Braavos, OZ Eth)
+                      secp256k1), account class abstractions (OZ, Argent, Braavos, OZ Eth),
+                      plus deterministic Stark and Nostr signing helpers
 krusty-kms-sdk        TONGO protocol operations: fund, transfer, withdraw, rollover,
                       ragequit for confidential balances
 krusty-kms-client     Starknet RPC client: Wallet and EthWallet execution, ERC-20 token

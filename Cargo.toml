@@ -2,6 +2,9 @@
 resolver = "2"
 members = [
     "crates/common",
+    "crates/domain",
+    "crates/gateway",
+    "crates/oracle",
     "crates/kms",
     "crates/crypto",
     "crates/client",
@@ -15,6 +18,9 @@ members = [
 ]
 default-members = [
     "crates/common",
+    "crates/domain",
+    "crates/gateway",
+    "crates/oracle",
     "crates/kms",
     "crates/crypto",
     "crates/client",

@@ -1,0 +1,24 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "id": "req-derive",
+  "command": "derive_account",
+  "params": {
+    "secret": "wallet-1",
+    "key_domain": "StarknetAccount",
+    "chain_id": "Sepolia",
+    "path": {
+      "coin_type": 9004,
+      "account_index": 0,
+      "address_index": 0
+    },
+    "account_class": {
+      "kind": "OpenZeppelin",
+      "class_hash": null,
+      "source_label": null
+    },
+    "salt_policy": "PublicKey"
+  }
+}

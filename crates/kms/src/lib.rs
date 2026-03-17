@@ -21,6 +21,8 @@ pub mod account_class;
 pub mod derivation;
 pub mod eth_signer;
 pub mod mnemonic;
+pub mod nostr_signing;
+pub mod stark_signing;
 
 pub use account::{calculate_contract_address, derive_oz_account_address};
 pub use account_class::{
@@ -39,3 +41,7 @@ pub use krusty_kms_common::{
     SerializablePoint, Token, TransactionType, Validator,
 };
 pub use mnemonic::{generate_mnemonic, mnemonic_to_seed, validate_mnemonic};
+pub use nostr_signing::{
+    nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
+};
+pub use stark_signing::{sign_stark_hash, stark_public_key, StarkSignature};
