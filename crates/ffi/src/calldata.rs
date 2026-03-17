@@ -796,7 +796,7 @@ pub unsafe extern "C" fn kms_encode_ragequit_calls(
 mod tests {
     use super::*;
     use crate::account::{
-        kms_account_create_from_keys, kms_account_destroy, kms_account_update_state,
+        kms_account_create_from_private_key, kms_account_destroy, kms_account_update_state,
     };
     use crate::error::KMS_OK;
     use crate::helpers::{felt_hex_fixed, felt_to_kms};
@@ -871,18 +871,11 @@ mod tests {
         let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap(); // SN_SEPOLIA
         let contract_addr_kms = felt_to_kms(&contract_address);
         let owner_private_key = Felt::from(42u64);
-        let view_private_key = Felt::from(123u64);
         let owner_key_kms = felt_to_kms(&owner_private_key);
-        let view_key_kms = felt_to_kms(&view_private_key);
 
         let mut handle: KmsAccountHandle = 0;
         let rc = unsafe {
-            kms_account_create_from_keys(
-                &owner_key_kms,
-                &view_key_kms,
-                &contract_addr_kms,
-                &mut handle,
-            )
+            kms_account_create_from_private_key(&owner_key_kms, &contract_addr_kms, &mut handle)
         };
         assert_eq!(rc, KMS_OK);
 

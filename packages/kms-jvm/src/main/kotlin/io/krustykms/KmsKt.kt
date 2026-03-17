@@ -18,7 +18,6 @@ fun versionString(): String = Kms.getVersionString()
 fun coinTypes(): Map<String, Int> = mapOf(
     "tongo" to Kms.tongoCoinType(),
     "starknet" to Kms.starknetCoinType(),
-    "tongoView" to Kms.tongoViewCoinType(),
     "nostr" to Kms.nostrCoinType(),
 )
 
@@ -41,20 +40,6 @@ fun deriveKeypair(
     coinType: Int,
     passphrase: String = "",
 ): TongoKeyPair = Kms.deriveKeypair(mnemonic, index, accountIndex, coinType, passphrase)
-
-fun deriveViewPrivateKey(
-    mnemonic: String,
-    index: Int,
-    accountIndex: Int,
-    passphrase: String = "",
-): Felt = Kms.deriveViewPrivateKey(mnemonic, index, accountIndex, passphrase)
-
-fun deriveViewKeypair(
-    mnemonic: String,
-    index: Int,
-    accountIndex: Int,
-    passphrase: String = "",
-): TongoKeyPair = Kms.deriveViewKeypair(mnemonic, index, accountIndex, passphrase)
 
 fun deriveNostrPrivateKey(
     mnemonic: String,
@@ -82,11 +67,10 @@ fun accountCreateFromMnemonic(
     passphrase: String = "",
 ): AccountHandle = Kms.accountCreateFromMnemonic(mnemonic, index, accountIndex, contractAddress, passphrase)
 
-fun accountCreateFromKeys(
-    ownerKey: Felt,
-    viewKey: Felt,
+fun accountCreateFromPrivateKey(
+    privateKey: Felt,
     contractAddress: Felt,
-): AccountHandle = Kms.accountCreateFromKeys(ownerKey, viewKey, contractAddress)
+): AccountHandle = Kms.accountCreateFromPrivateKey(privateKey, contractAddress)
 
 fun accountGetState(handle: AccountHandle): AccountState = Kms.accountGetState(handle)
 

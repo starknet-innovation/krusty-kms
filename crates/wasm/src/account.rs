@@ -54,10 +54,6 @@ impl WasmAccount {
     }
 
     /// Create a new account from a private key.
-    ///
-    /// Note: This creates an account without a separate viewing key.
-    /// For full dual-key support, use `fromMnemonic` or `fromKeys`.
-    ///
     /// # Arguments
     /// * `private_key` - Private key as hex string (0x-prefixed)
     /// * `contract_address` - TONGO contract address (hex string)
@@ -78,50 +74,10 @@ impl WasmAccount {
         Ok(Self { inner })
     }
 
-    /// Create a new account from explicit owner and viewing private keys.
-    ///
-    /// This is the recommended method for wallets that store keys separately.
-    ///
-    /// # Arguments
-    /// * `owner_private_key` - Spending/signing key (hex)
-    /// * `view_private_key` - Decryption/viewing key (hex)
-    /// * `contract_address` - TONGO contract address (hex)
-    #[wasm_bindgen(js_name = "fromKeys")]
-    pub fn from_keys(
-        owner_private_key: &str,
-        view_private_key: &str,
-        contract_address: &str,
-    ) -> Result<WasmAccount, JsValue> {
-        let owner_sk = parse_felt(owner_private_key)?;
-        let view_sk = parse_felt(view_private_key)?;
-        let contract_felt = parse_felt(contract_address)?;
-
-        let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_keys(
-            owner_sk,
-            view_sk,
-            contract_felt,
-        ))
-        .map_err(JsValue::from)?;
-
-        Ok(Self { inner })
-    }
-
     /// Get the owner (spending) public key as hex string.
     #[wasm_bindgen(js_name = "ownerPublicKeyHex")]
     pub fn owner_public_key_hex(&self) -> Result<String, JsValue> {
         from_sdk_result(self.inner.owner_public_key_hex()).map_err(JsValue::from)
-    }
-
-    /// Get the viewing public key as hex string, if available.
-    #[wasm_bindgen(js_name = "viewPublicKeyHex")]
-    pub fn view_public_key_hex(&self) -> Option<String> {
-        self.inner.view_public_key_hex()
-    }
-
-    /// Check if this account has a separate viewing key.
-    #[wasm_bindgen(js_name = "hasViewKey")]
-    pub fn has_view_key(&self) -> bool {
-        self.inner.has_view_key()
     }
 
     /// Get the private key as hex string.
@@ -163,11 +119,10 @@ impl WasmAccount {
         self.inner.total_balance().to_string()
     }
 
-    /// Decrypt an ElGamal ciphertext using the account's decryption key.
+    /// Decrypt an ElGamal ciphertext using the account key.
     ///
-    /// Uses the viewing key if available, otherwise falls back to owner key.
-    /// Returns the decrypted point as g^m. The caller must perform discrete log
-    /// recovery to obtain the actual value m.
+    /// Returns the decrypted point as `g^m`. The caller must perform discrete
+    /// log recovery to obtain the actual value `m`.
     ///
     /// # Arguments
     /// * `ciphertext` - The ciphertext to decrypt
@@ -191,7 +146,7 @@ impl WasmAccount {
 
         // Decrypt to get g^m
         let decrypted_point =
-            from_sdk_result(self.inner.decrypt_with_view(&cipher)).map_err(JsValue::from)?;
+            from_sdk_result(self.inner.decrypt(&cipher)).map_err(JsValue::from)?;
 
         let affine = decrypted_point
             .to_affine()
@@ -235,7 +190,7 @@ impl WasmAccount {
 
         // Decrypt to get g^m
         let decrypted_point =
-            from_sdk_result(self.inner.decrypt_with_view(&cipher)).map_err(JsValue::from)?;
+            from_sdk_result(self.inner.decrypt(&cipher)).map_err(JsValue::from)?;
 
         // Try to convert to affine - if it fails, it's the identity (balance = 0)
         if decrypted_point.to_affine().is_err() {
@@ -312,34 +267,6 @@ pub fn derive_keypair(
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
     let kp = from_sdk_result(krusty_kms::derive_keypair(
-        mnemonic,
-        address_index,
-        account_index,
-        passphrase.as_deref(),
-    ))
-    .map_err(JsValue::from)?;
-
-    let affine = kp
-        .public_key
-        .to_affine()
-        .map_err(|_| JsValue::from_str("Invalid public key point"))?;
-
-    Ok(WasmKeypair {
-        private_key: format!("{:#x}", kp.private_key),
-        public_key_x: format!("{:#x}", affine.x()),
-        public_key_y: format!("{:#x}", affine.y()),
-    })
-}
-
-/// Derive the viewing keypair from mnemonic.
-#[wasm_bindgen(js_name = "deriveViewKeypair")]
-pub fn derive_view_keypair(
-    mnemonic: &str,
-    address_index: u32,
-    account_index: u32,
-    passphrase: Option<String>,
-) -> Result<WasmKeypair, JsValue> {
-    let kp = from_sdk_result(krusty_kms::derive_view_keypair(
         mnemonic,
         address_index,
         account_index,
@@ -447,12 +374,6 @@ pub fn get_tongo_coin_type() -> u32 {
     krusty_kms::TONGO_COIN_TYPE
 }
 
-/// Get the TONGO view coin type constant (5353).
-#[wasm_bindgen(js_name = "getTongoViewCoinType")]
-pub fn get_tongo_view_coin_type() -> u32 {
-    krusty_kms::TONGO_VIEW_COIN_TYPE
-}
-
 /// Get the Nostr coin type constant (1237).
 #[wasm_bindgen(js_name = "getNostrCoinType")]
 pub fn get_nostr_coin_type() -> u32 {
@@ -522,9 +443,7 @@ mod tests {
         assert!(account.is_ok());
 
         let acc = account.unwrap();
-        assert!(acc.has_view_key());
         assert!(acc.owner_public_key_hex().is_ok());
-        assert!(acc.view_public_key_hex().is_some());
     }
 
     #[wasm_bindgen_test]
@@ -533,21 +452,6 @@ mod tests {
         let private_key = "0x2a"; // 42 in hex
         let account = WasmAccount::from_private_key(private_key, contract);
         assert!(account.is_ok());
-
-        let acc = account.unwrap();
-        assert!(!acc.has_view_key());
-    }
-
-    #[wasm_bindgen_test]
-    fn test_account_from_keys() {
-        let contract = "0x1234";
-        let owner_sk = "0x2a";
-        let view_sk = "0x7b"; // 123 in hex
-        let account = WasmAccount::from_keys(owner_sk, view_sk, contract);
-        assert!(account.is_ok());
-
-        let acc = account.unwrap();
-        assert!(acc.has_view_key());
     }
 
     #[wasm_bindgen_test]
@@ -608,7 +512,6 @@ mod tests {
     fn test_coin_type_constants() {
         assert_eq!(get_starknet_coin_type(), 9004);
         assert_eq!(get_tongo_coin_type(), 5454);
-        assert_eq!(get_tongo_view_coin_type(), 5353);
         assert_eq!(get_nostr_coin_type(), 1237);
     }
 

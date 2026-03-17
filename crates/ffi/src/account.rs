@@ -69,28 +69,22 @@ pub unsafe extern "C" fn kms_account_create_from_mnemonic(
     .unwrap_or(KMS_ERR_INTERNAL)
 }
 
-/// Create a `TongoAccount` from explicit owner + view private keys.
+/// Create a `TongoAccount` from a private key.
 #[no_mangle]
-pub unsafe extern "C" fn kms_account_create_from_keys(
-    owner_key: *const KmsFelt,
-    view_key: *const KmsFelt,
+pub unsafe extern "C" fn kms_account_create_from_private_key(
+    private_key: *const KmsFelt,
     contract_address: *const KmsFelt,
     out_handle: *mut KmsAccountHandle,
 ) -> i32 {
     catch_unwind(|| {
-        if owner_key.is_null()
-            || view_key.is_null()
-            || contract_address.is_null()
-            || out_handle.is_null()
-        {
+        if private_key.is_null() || contract_address.is_null() || out_handle.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
 
-        let ok = kms_to_felt(&*owner_key);
-        let vk = kms_to_felt(&*view_key);
+        let sk = kms_to_felt(&*private_key);
         let addr = kms_to_felt(&*contract_address);
 
-        let account = match TongoAccount::from_keys(ok, vk, addr) {
+        let account = match TongoAccount::from_private_key(sk, addr) {
             Ok(a) => a,
             Err(_) => return KMS_ERR_CRYPTO,
         };
@@ -249,13 +243,12 @@ mod tests {
     }
 
     #[test]
-    fn test_account_from_keys() {
-        let owner = felt_to_kms(&Felt::from(42u64));
-        let view = felt_to_kms(&Felt::from(123u64));
+    fn test_account_from_private_key() {
+        let private_key = felt_to_kms(&Felt::from(42u64));
         let addr = felt_to_kms(&Felt::from(456u64));
         let mut h: KmsAccountHandle = 0;
 
-        let rc = unsafe { kms_account_create_from_keys(&owner, &view, &addr, &mut h) };
+        let rc = unsafe { kms_account_create_from_private_key(&private_key, &addr, &mut h) };
         assert_eq!(rc, KMS_OK);
         assert_ne!(h, 0);
 

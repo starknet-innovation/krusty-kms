@@ -407,49 +407,6 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveKeypair(
     return arr;
 }
 
-JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveViewPrivateKey(
-    JNIEnv *env, jclass cls, jstring mnemonic, jint index,
-    jint accountIndex, jstring passphrase) {
-    (void)cls;
-    const char *m = (*env)->GetStringUTFChars(env, mnemonic, NULL);
-    const char *pp = (*env)->GetStringUTFChars(env, passphrase, NULL);
-
-    KmsFelt felt;
-    int32_t rc = kms_derive_view_private_key(
-        m, (uint32_t)index, (uint32_t)accountIndex, pp, &felt);
-
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-
-    if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
-    return felt_to_jbytearray(env, &felt);
-}
-
-JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveViewKeypair(
-    JNIEnv *env, jclass cls, jstring mnemonic, jint index,
-    jint accountIndex, jstring passphrase) {
-    (void)cls;
-    const char *m = (*env)->GetStringUTFChars(env, mnemonic, NULL);
-    const char *pp = (*env)->GetStringUTFChars(env, passphrase, NULL);
-
-    KmsTongoKeyPair kp;
-    int32_t rc = kms_derive_view_keypair(
-        m, (uint32_t)index, (uint32_t)accountIndex, pp, &kp);
-
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-
-    if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
-
-    jbyteArray arr = (*env)->NewByteArray(env, 128);
-    if (arr == NULL) return NULL;
-    (*env)->SetByteArrayRegion(env, arr, 0, 32, (const jbyte *)kp.private_key.bytes);
-    (*env)->SetByteArrayRegion(env, arr, 32, 32, (const jbyte *)kp.public_key.x.bytes);
-    (*env)->SetByteArrayRegion(env, arr, 64, 32, (const jbyte *)kp.public_key.y.bytes);
-    (*env)->SetByteArrayRegion(env, arr, 96, 32, (const jbyte *)kp.public_key.z.bytes);
-    return arr;
-}
-
 JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveNostrPrivateKey(
     JNIEnv *env, jclass cls, jstring mnemonic, jint index,
     jint accountIndex, jstring passphrase) {
@@ -561,11 +518,6 @@ JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeStarknet(JNIEnv *env,
     return (jint)kms_get_coin_type_starknet();
 }
 
-JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeTongoView(JNIEnv *env, jclass cls) {
-    (void)env; (void)cls;
-    return (jint)kms_get_coin_type_tongo_view();
-}
-
 JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_coinTypeNostr(JNIEnv *env, jclass cls) {
     (void)env; (void)cls;
     return (jint)kms_get_coin_type_nostr();
@@ -613,17 +565,16 @@ JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromMnemonic(
     return (jlong)handle;
 }
 
-JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromKeys(
-    JNIEnv *env, jclass cls, jbyteArray ownerKey, jbyteArray viewKey,
+JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromPrivateKey(
+    JNIEnv *env, jclass cls, jbyteArray privateKey,
     jbyteArray contractAddress) {
     (void)cls;
-    KmsFelt cOwner, cView, cAddr;
-    jbytearray_to_felt(env, ownerKey, &cOwner);
-    jbytearray_to_felt(env, viewKey, &cView);
+    KmsFelt cPrivateKey, cAddr;
+    jbytearray_to_felt(env, privateKey, &cPrivateKey);
     jbytearray_to_felt(env, contractAddress, &cAddr);
     KmsAccountHandle handle = 0;
 
-    int32_t rc = kms_account_create_from_keys(&cOwner, &cView, &cAddr, &handle);
+    int32_t rc = kms_account_create_from_private_key(&cPrivateKey, &cAddr, &handle);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return 0; }
     return (jlong)handle;
 }

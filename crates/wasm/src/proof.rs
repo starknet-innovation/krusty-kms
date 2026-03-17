@@ -137,7 +137,7 @@ pub fn generate_fund_proof(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmTransferParams {
-    /// Recipient's public key (viewing key for dual-key wallets)
+    /// Recipient's TONGO public key
     pub recipient_public_key: String,
     /// Amount to transfer
     pub amount: String,

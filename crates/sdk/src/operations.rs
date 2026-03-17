@@ -113,9 +113,7 @@ pub struct FundParams {
 /// Transfer operation parameters.
 #[derive(Clone)]
 pub struct TransferParams {
-    /// The recipient's public key. For dual-key wallets, pass the recipient's
-    /// viewing public key so the recipient can decrypt without exposing their
-    /// ownership/spending key.
+    /// The recipient's TONGO public key used to encrypt the transfer payload.
     pub recipient_public_key: ProjectivePoint,
     pub amount: u128,
     pub nonce: Felt,
@@ -1155,6 +1153,26 @@ mod tests {
         account
     }
 
+    fn encrypt_balance_for_account(
+        account: &TongoAccount,
+        balance: u128,
+        random: Felt,
+    ) -> ElGamalCiphertext {
+        let g = StarkCurve::generator();
+        let pk_r = StarkCurve::mul(&random, Some(account.owner_public_key()));
+        let r = StarkCurve::mul(&random, Some(&g));
+
+        if balance == 0 {
+            return ElGamalCiphertext { l: pk_r, r };
+        }
+
+        let g_b = StarkCurve::mul(&Felt::from(balance), Some(&g));
+        ElGamalCiphertext {
+            l: StarkCurve::add(&g_b, &pk_r),
+            r,
+        }
+    }
+
     #[test]
     fn test_fund() {
         let account = create_test_account();
@@ -1287,14 +1305,9 @@ mod tests {
     fn test_withdraw() {
         // Note: This test is simplified. Comprehensive withdraw testing
         // is performed in integration tests with real on-chain state.
-        use krusty_kms_crypto::StarkCurve;
         let mut account = create_test_account();
         account.set_balance(1000); // Set balance to match cipher
-        let g = StarkCurve::generator();
-        let current_balance = ElGamalCiphertext {
-            l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
-            r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
-        };
+        let current_balance = encrypt_balance_for_account(&account, 1000, Felt::from(42u64));
 
         let params = WithdrawParams {
             recipient_address: Felt::from(999u64),
@@ -1348,20 +1361,8 @@ mod tests {
             TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
         account.set_balance(0); // Must match the cipher's encrypted value
 
-        // For audit to work, cipher must be encrypted under owner key (not view key)
-        // because AuditProver uses the owner's public key for verification
-        let owner_pk = account.owner_public_key();
-
-        // Create a valid zero balance cipher (L = pk^r, R = g^r where balance = 0)
-        // For balance=0: L = g^0 + pk^r = pk^r (since g^0 = identity)
-        let g = StarkCurve::generator();
         let random = Felt::from(12345u64);
-        let r_point = StarkCurve::mul(&random, Some(&g));
-        let pk_r = StarkCurve::mul(&random, Some(owner_pk));
-        let current_balance = ElGamalCiphertext {
-            l: pk_r,
-            r: r_point,
-        };
+        let current_balance = encrypt_balance_for_account(&account, 0, random);
 
         // Create an auditor public key
         let auditor_pub_key = StarkCurve::mul_generator(&Felt::from(9999u64));
@@ -1404,22 +1405,11 @@ mod tests {
 
     #[test]
     fn test_ragequit() {
-        use krusty_kms_crypto::StarkCurve;
         let mut account = create_test_account();
         account.set_balance(1000);
 
-        let g = StarkCurve::generator();
-        // Construct a valid cipher for balance 1000 with some randomness
-        // Use the owner key (spend key) rather than view key for this test
-        // Ragequit uses owner key for verification
         let random = Felt::from(42u64);
-        let owner_pk = account.owner_public_key();
-        let g_b = StarkCurve::mul(&Felt::from(1000u128), Some(&g));
-        let pk_r = StarkCurve::mul(&random, Some(owner_pk));
-        let l = StarkCurve::add(&g_b, &pk_r);
-        let r = StarkCurve::mul(&random, Some(&g));
-
-        let current_balance = ElGamalCiphertext { l, r };
+        let current_balance = encrypt_balance_for_account(&account, 1000, random);
 
         let params = RagequitParams {
             recipient_address: Felt::from(999u64),

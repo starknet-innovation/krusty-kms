@@ -1,6 +1,6 @@
 //! TONGO account management.
 
-use krusty_kms::{derive_keypair, derive_view_keypair, TongoKeyPair};
+use krusty_kms::{derive_keypair, TongoKeyPair};
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_common::{AccountState, KmsError, Result, SecretFelt};
 use krusty_kms_crypto::{ElGamal, StarkCurve};
@@ -12,8 +12,6 @@ use starknet_types_core::felt::Felt;
 pub struct TongoAccount {
     /// The account's keypair
     keypair: TongoKeyPair,
-    /// Optional viewing/decryption keypair (coin type 5353)
-    view_keypair: Option<TongoKeyPair>,
     /// Current account state
     state: AccountState,
     /// Contract address
@@ -39,16 +37,9 @@ impl TongoAccount {
         passphrase: Option<&str>,
     ) -> Result<Self> {
         let keypair = derive_keypair(mnemonic, index, account_index, passphrase)?;
-        let view_keypair = Some(derive_view_keypair(
-            mnemonic,
-            index,
-            account_index,
-            passphrase,
-        )?);
 
         Ok(Self {
             keypair,
-            view_keypair,
             state: AccountState::default(),
             contract_address,
         })
@@ -67,33 +58,6 @@ impl TongoAccount {
 
         Ok(Self {
             keypair,
-            view_keypair: None,
-            state: AccountState::default(),
-            contract_address,
-        })
-    }
-
-    /// Create a TONGO account from explicit owner and viewing private keys.
-    ///
-    /// This is useful for wallets that store the viewing key separately and
-    /// want to initialize an account without a mnemonic.
-    pub fn from_keys(
-        owner_private_key: Felt,
-        view_private_key: Felt,
-        contract_address: Felt,
-    ) -> Result<Self> {
-        let owner_public_key = StarkCurve::mul_generator(&owner_private_key);
-        let view_public_key = StarkCurve::mul_generator(&view_private_key);
-
-        Ok(Self {
-            keypair: TongoKeyPair {
-                private_key: SecretFelt::new(owner_private_key),
-                public_key: owner_public_key,
-            },
-            view_keypair: Some(TongoKeyPair {
-                private_key: SecretFelt::new(view_private_key),
-                public_key: view_public_key,
-            }),
             state: AccountState::default(),
             contract_address,
         })
@@ -124,35 +88,10 @@ impl TongoAccount {
         &self.keypair.public_key
     }
 
-    /// Get the viewing public key, if present.
-    #[must_use]
-    pub fn view_public_key(&self) -> Option<&ProjectivePoint> {
-        self.view_keypair
-            .as_ref()
-            .map(|keypair| &keypair.public_key)
-    }
-
-    /// Get the viewing public key as a hex string, if present.
-    #[must_use]
-    pub fn view_public_key_hex(&self) -> Option<String> {
-        let kp = self.view_keypair.as_ref()?;
-        let affine = kp.public_key.to_affine().ok()?;
-        Some(krusty_kms_common::utils::serialize_public_key_hex(
-            &affine.x(),
-            &affine.y(),
-        ))
-    }
-
     /// Get the private key as a hex string.
     #[must_use]
     pub fn private_key_hex(&self) -> String {
         format!("{:#x}", self.keypair.private_key)
-    }
-
-    /// Check if the account has a separate viewing key.
-    #[must_use]
-    pub fn has_view_key(&self) -> bool {
-        self.view_keypair.is_some()
     }
 
     /// Get the current contract address.
@@ -228,21 +167,12 @@ impl TongoAccount {
         &self.keypair.private_key
     }
 
-    #[must_use]
-    pub(crate) fn decryption_key(&self) -> &SecretFelt {
-        self.view_keypair
-            .as_ref()
-            .map(|keypair| &keypair.private_key)
-            .unwrap_or(&self.keypair.private_key)
-    }
-
-    /// Decrypt an ElGamal ciphertext using the viewing key if available,
-    /// otherwise fall back to the owner key. Returns the decrypted point g^m.
-    pub fn decrypt_with_view(
+    /// Decrypt an ElGamal ciphertext with the account key and return the point `g^m`.
+    pub fn decrypt(
         &self,
         ciphertext: &ElGamalCiphertext,
     ) -> Result<starknet_types_core::curve::ProjectivePoint> {
-        ElGamal::decrypt(ciphertext, self.decryption_key().expose_secret())
+        ElGamal::decrypt(ciphertext, self.owner_private_key().expose_secret())
     }
 }
 
@@ -258,8 +188,7 @@ mod tests {
         let contract_address = Felt::from(123456u64);
         let account = TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None);
         assert!(account.is_ok());
-        let acc = account.unwrap();
-        assert!(acc.has_view_key());
+        assert!(account.unwrap().owner_public_key_hex().is_ok());
     }
 
     #[test]
@@ -269,33 +198,8 @@ mod tests {
         let account = TongoAccount::from_private_key(private_key, contract_address);
         assert!(account.is_ok());
         let acc = account.unwrap();
-        assert!(!acc.has_view_key());
-    }
-
-    #[test]
-    fn test_account_from_keys() {
-        let owner_sk = Felt::from(42u64);
-        let view_sk = Felt::from(123u64);
-        let contract_address = Felt::from(456u64);
-
-        let account = TongoAccount::from_keys(owner_sk, view_sk, contract_address);
-        assert!(account.is_ok());
-        let acc = account.unwrap();
-
-        assert!(acc.has_view_key());
-        assert_eq!(acc.owner_private_key(), &SecretFelt::new(owner_sk));
-        assert_eq!(acc.decryption_key(), &SecretFelt::new(view_sk));
+        assert_eq!(acc.owner_private_key(), &SecretFelt::new(private_key));
         assert_eq!(acc.contract_address(), contract_address);
-    }
-
-    #[test]
-    fn test_dual_keys_different_coin_types() {
-        let contract_address = Felt::from(123456u64);
-        let account =
-            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-        let view_sk = account.decryption_key();
-        let owner_sk = account.owner_private_key();
-        assert_ne!(view_sk, owner_sk);
     }
 
     #[test]
@@ -317,25 +221,6 @@ mod tests {
         let public_pk = account.public_key_hex();
         // owner_public_key_hex should be the same as public_key_hex
         assert_eq!(owner_pk.unwrap(), public_pk.unwrap());
-    }
-
-    #[test]
-    fn test_view_public_key_hex() {
-        let contract_address = Felt::from(123456u64);
-        let account =
-            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
-        let view_pk = account.view_public_key_hex();
-        assert!(view_pk.is_some());
-        assert!(view_pk.unwrap().starts_with("0x"));
-    }
-
-    #[test]
-    fn test_view_public_key_hex_none() {
-        // Account without view key
-        let private_key = Felt::from(42u64);
-        let contract_address = Felt::from(123456u64);
-        let account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
-        assert!(account.view_public_key_hex().is_none());
     }
 
     #[test]
@@ -392,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn test_decrypt_with_view() {
+    fn test_decrypt() {
         let private_key = Felt::from(42u64);
         let contract_address = Felt::from(123456u64);
         let account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
@@ -408,29 +293,9 @@ mod tests {
             r: r_point, // R = g^r
         };
 
-        let result = account.decrypt_with_view(&cipher);
+        let result = account.decrypt(&cipher);
         assert!(result.is_ok());
         // Decrypted should be identity point (g^0 = point at infinity)
         // or the generator if there's a bug with g^0
-    }
-
-    #[test]
-    fn test_decrypt_with_view_uses_view_key() {
-        let owner_sk = Felt::from(42u64);
-        let view_sk = Felt::from(123u64);
-        let contract_address = Felt::from(456u64);
-        let account = TongoAccount::from_keys(owner_sk, view_sk, contract_address).unwrap();
-
-        // Encrypt using the VIEW public key
-        let view_pk = StarkCurve::mul_generator(&view_sk);
-        let r = Felt::from(99u64);
-        let r_point = StarkCurve::mul_generator(&r);
-        let y_r = StarkCurve::mul(&r, Some(&view_pk));
-
-        let cipher = ElGamalCiphertext { l: y_r, r: r_point };
-
-        // Should decrypt successfully using view key
-        let result = account.decrypt_with_view(&cipher);
-        assert!(result.is_ok());
     }
 }

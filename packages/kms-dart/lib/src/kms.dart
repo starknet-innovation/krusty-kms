@@ -351,49 +351,6 @@ class Kms {
     }
   }
 
-  Felt deriveViewPrivateKey(
-    String mnemonic, {
-    required int index,
-    required int accountIndex,
-    String passphrase = '',
-  }) {
-    final pMnemonic = mnemonic.toNativeUtf8(allocator: calloc);
-    final pPassphrase = passphrase.toNativeUtf8(allocator: calloc);
-    final pOut = calloc<c.KmsFelt>();
-    try {
-      _check(_bindings.deriveViewPrivateKey(
-          pMnemonic.cast(), index, accountIndex, pPassphrase.cast(), pOut));
-      return _feltFromC(pOut.ref);
-    } finally {
-      calloc.free(pMnemonic);
-      calloc.free(pPassphrase);
-      calloc.free(pOut);
-    }
-  }
-
-  TongoKeyPair deriveViewKeypair(
-    String mnemonic, {
-    required int index,
-    required int accountIndex,
-    String passphrase = '',
-  }) {
-    final pMnemonic = mnemonic.toNativeUtf8(allocator: calloc);
-    final pPassphrase = passphrase.toNativeUtf8(allocator: calloc);
-    final pOut = calloc<c.KmsTongoKeyPair>();
-    try {
-      _check(_bindings.deriveViewKeypair(
-          pMnemonic.cast(), index, accountIndex, pPassphrase.cast(), pOut));
-      return TongoKeyPair(
-        _feltFromC(pOut.ref.privateKey),
-        _projectiveFromC(pOut.ref.publicKey),
-      );
-    } finally {
-      calloc.free(pMnemonic);
-      calloc.free(pPassphrase);
-      calloc.free(pOut);
-    }
-  }
-
   Uint8List deriveNostrPrivateKey(
     String mnemonic, {
     required int index,
@@ -503,7 +460,6 @@ class Kms {
   Map<String, int> get coinTypes => {
         'tongo': _bindings.getCoinTypeTongo(),
         'starknet': _bindings.getCoinTypeStarknet(),
-        'tongo_view': _bindings.getCoinTypeTongoView(),
         'nostr': _bindings.getCoinTypeNostr(),
       };
 
@@ -548,21 +504,18 @@ class Kms {
     }
   }
 
-  AccountHandle accountCreateFromKeys(
-    Felt ownerKey,
-    Felt viewKey,
+  AccountHandle accountCreateFromPrivateKey(
+    Felt privateKey,
     Felt contractAddress,
   ) {
-    final pOwner = _feltToC(ownerKey, calloc);
-    final pView = _feltToC(viewKey, calloc);
+    final pPrivateKey = _feltToC(privateKey, calloc);
     final pAddr = _feltToC(contractAddress, calloc);
     final pHandle = calloc<Uint64>();
     try {
-      _check(_bindings.accountCreateFromKeys(pOwner, pView, pAddr, pHandle));
+      _check(_bindings.accountCreateFromPrivateKey(pPrivateKey, pAddr, pHandle));
       return AccountHandle(pHandle.value);
     } finally {
-      calloc.free(pOwner);
-      calloc.free(pView);
+      calloc.free(pPrivateKey);
       calloc.free(pAddr);
       calloc.free(pHandle);
     }

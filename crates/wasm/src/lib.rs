@@ -42,7 +42,7 @@
 //!
 //! - Private keys are never exposed to JavaScript except through explicit export
 //! - All cryptographic operations happen in WASM (Rust)
-//! - Use the viewing key for balance decryption to avoid exposing the spending key
+//! - TONGO accounts use a single account key for proof generation and decryption
 //! - Proofs are generated client-side, maintaining privacy
 
 #![allow(clippy::new_without_default)]
@@ -56,8 +56,8 @@ use wasm_bindgen::prelude::*;
 
 // Re-export main types for convenience
 pub use account::{
-    derive_keypair, derive_nostr_keypair, derive_view_keypair, generate_mnemonic,
-    get_nostr_coin_type, validate_mnemonic, WasmAccount,
+    derive_keypair, derive_nostr_keypair, generate_mnemonic, get_nostr_coin_type,
+    validate_mnemonic, WasmAccount,
 };
 pub use error::WasmError;
 pub use proof::{

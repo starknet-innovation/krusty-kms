@@ -19,7 +19,7 @@ krusty-kms-crypto     Cryptographic primitives: ElGamal encryption, Pedersen com
 krusty-kms            Key management: BIP-39 mnemonics, BIP-44 HD derivation (Stark +
                       secp256k1), account class abstractions (OZ, Argent, Braavos, OZ Eth)
 krusty-kms-sdk        TONGO protocol operations: fund, transfer, withdraw, rollover,
-                      ragequit — with dual-key (owner + view) confidential balances
+                      ragequit for confidential balances
 krusty-kms-client     Starknet RPC client: Wallet and EthWallet execution, ERC-20 token
                       interactions, STRK staking delegation, Vesu money market, transaction
                       batching and tracking

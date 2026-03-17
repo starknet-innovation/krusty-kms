@@ -44,8 +44,8 @@ pub mod types;
 // ABI version
 // ---------------------------------------------------------------------------
 
-const ABI_MAJOR: u32 = 1;
-const ABI_MINOR: u32 = 1;
+const ABI_MAJOR: u32 = 2;
+const ABI_MINOR: u32 = 0;
 
 // ---------------------------------------------------------------------------
 // Re-export types for downstream use
@@ -163,7 +163,6 @@ mod tests {
     fn test_coin_types() {
         assert_eq!(coin_type::kms_get_coin_type_tongo(), 5454);
         assert_eq!(coin_type::kms_get_coin_type_starknet(), 9004);
-        assert_eq!(coin_type::kms_get_coin_type_tongo_view(), 5353);
         assert_eq!(coin_type::kms_get_coin_type_nostr(), 1237);
     }
 
@@ -173,8 +172,8 @@ mod tests {
         let mut minor = 0u32;
         let rc = unsafe { kms_get_abi_version(&mut major, &mut minor) };
         assert_eq!(rc, KMS_OK);
-        assert_eq!(major, 1);
-        assert_eq!(minor, 1);
+        assert_eq!(major, 2);
+        assert_eq!(minor, 0);
     }
 
     #[test]

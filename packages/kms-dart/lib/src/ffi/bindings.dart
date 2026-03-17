@@ -86,16 +86,6 @@ typedef _DeriveKeypairWithCoinTypeDart = int Function(Pointer<Utf8> mnemonic,
     int index, int accountIndex, int coinType, Pointer<Utf8> passphrase,
     Pointer<KmsTongoKeyPair> out);
 
-typedef _DeriveViewPrivateKeyC = Int32 Function(Pointer<Utf8> mnemonic,
-    Uint32 index, Uint32 accountIndex, Pointer<Utf8> passphrase, Pointer<KmsFelt> out);
-typedef _DeriveViewPrivateKeyDart = int Function(Pointer<Utf8> mnemonic,
-    int index, int accountIndex, Pointer<Utf8> passphrase, Pointer<KmsFelt> out);
-
-typedef _DeriveViewKeypairC = Int32 Function(Pointer<Utf8> mnemonic,
-    Uint32 index, Uint32 accountIndex, Pointer<Utf8> passphrase, Pointer<KmsTongoKeyPair> out);
-typedef _DeriveViewKeypairDart = int Function(Pointer<Utf8> mnemonic,
-    int index, int accountIndex, Pointer<Utf8> passphrase, Pointer<KmsTongoKeyPair> out);
-
 typedef _DeriveNostrPrivateKeyC = Int32 Function(Pointer<Utf8> mnemonic,
     Uint32 index, Uint32 accountIndex, Pointer<Utf8> passphrase, Pointer<Uint8> out);
 typedef _DeriveNostrPrivateKeyDart = int Function(Pointer<Utf8> mnemonic,
@@ -146,11 +136,11 @@ typedef _AccountCreateFromMnemonicDart = int Function(Pointer<Utf8> mnemonic,
     int index, int accountIndex, Pointer<KmsFelt> contractAddress,
     Pointer<Utf8> passphrase, Pointer<Uint64> outHandle);
 
-typedef _AccountCreateFromKeysC = Int32 Function(Pointer<KmsFelt> ownerKey,
-    Pointer<KmsFelt> viewKey, Pointer<KmsFelt> contractAddress,
+typedef _AccountCreateFromPrivateKeyC = Int32 Function(Pointer<KmsFelt> privateKey,
+    Pointer<KmsFelt> contractAddress,
     Pointer<Uint64> outHandle);
-typedef _AccountCreateFromKeysDart = int Function(Pointer<KmsFelt> ownerKey,
-    Pointer<KmsFelt> viewKey, Pointer<KmsFelt> contractAddress,
+typedef _AccountCreateFromPrivateKeyDart = int Function(Pointer<KmsFelt> privateKey,
+    Pointer<KmsFelt> contractAddress,
     Pointer<Uint64> outHandle);
 
 typedef _AccountGetStateC = Int32 Function(
@@ -244,8 +234,6 @@ class KmsBindings {
   // Derivation
   late final _DerivePrivateKeyWithCoinTypeDart derivePrivateKeyWithCoinType;
   late final _DeriveKeypairWithCoinTypeDart deriveKeypairWithCoinType;
-  late final _DeriveViewPrivateKeyDart deriveViewPrivateKey;
-  late final _DeriveViewKeypairDart deriveViewKeypair;
   late final _DeriveNostrPrivateKeyDart deriveNostrPrivateKey;
   late final _DeriveNostrKeypairDart deriveNostrKeypair;
 
@@ -256,7 +244,6 @@ class KmsBindings {
   // Coin types
   late final _GetCoinTypeDart getCoinTypeTongo;
   late final _GetCoinTypeDart getCoinTypeStarknet;
-  late final _GetCoinTypeDart getCoinTypeTongoView;
   late final _GetCoinTypeDart getCoinTypeNostr;
 
   // Error
@@ -265,7 +252,7 @@ class KmsBindings {
 
   // Account management
   late final _AccountCreateFromMnemonicDart accountCreateFromMnemonic;
-  late final _AccountCreateFromKeysDart accountCreateFromKeys;
+  late final _AccountCreateFromPrivateKeyDart accountCreateFromPrivateKey;
   late final _AccountGetStateDart accountGetState;
   late final _AccountUpdateStateDart accountUpdateState;
   late final _AccountDestroyDart accountDestroy;
@@ -341,12 +328,6 @@ class KmsBindings {
     deriveKeypairWithCoinType =
         lib.lookupFunction<_DeriveKeypairWithCoinTypeC, _DeriveKeypairWithCoinTypeDart>(
             'kms_derive_keypair_with_coin_type');
-    deriveViewPrivateKey =
-        lib.lookupFunction<_DeriveViewPrivateKeyC, _DeriveViewPrivateKeyDart>(
-            'kms_derive_view_private_key');
-    deriveViewKeypair =
-        lib.lookupFunction<_DeriveViewKeypairC, _DeriveViewKeypairDart>(
-            'kms_derive_view_keypair');
     deriveNostrPrivateKey =
         lib.lookupFunction<_DeriveNostrPrivateKeyC, _DeriveNostrPrivateKeyDart>(
             'kms_derive_nostr_private_key');
@@ -367,8 +348,6 @@ class KmsBindings {
         lib.lookupFunction<_GetCoinTypeC, _GetCoinTypeDart>('kms_get_coin_type_tongo');
     getCoinTypeStarknet =
         lib.lookupFunction<_GetCoinTypeC, _GetCoinTypeDart>('kms_get_coin_type_starknet');
-    getCoinTypeTongoView =
-        lib.lookupFunction<_GetCoinTypeC, _GetCoinTypeDart>('kms_get_coin_type_tongo_view');
     getCoinTypeNostr =
         lib.lookupFunction<_GetCoinTypeC, _GetCoinTypeDart>('kms_get_coin_type_nostr');
 
@@ -381,9 +360,9 @@ class KmsBindings {
     accountCreateFromMnemonic =
         lib.lookupFunction<_AccountCreateFromMnemonicC, _AccountCreateFromMnemonicDart>(
             'kms_account_create_from_mnemonic');
-    accountCreateFromKeys =
-        lib.lookupFunction<_AccountCreateFromKeysC, _AccountCreateFromKeysDart>(
-            'kms_account_create_from_keys');
+    accountCreateFromPrivateKey =
+        lib.lookupFunction<_AccountCreateFromPrivateKeyC, _AccountCreateFromPrivateKeyDart>(
+            'kms_account_create_from_private_key');
     accountGetState =
         lib.lookupFunction<_AccountGetStateC, _AccountGetStateDart>(
             'kms_account_get_state');

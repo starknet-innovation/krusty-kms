@@ -34,8 +34,6 @@ public final class KmsNative {
     // Key derivation
     public static native byte[] derivePrivateKey(String mnemonic, int index, int accountIndex, int coinType, String passphrase);
     public static native byte[] deriveKeypair(String mnemonic, int index, int accountIndex, int coinType, String passphrase);
-    public static native byte[] deriveViewPrivateKey(String mnemonic, int index, int accountIndex, String passphrase);
-    public static native byte[] deriveViewKeypair(String mnemonic, int index, int accountIndex, String passphrase);
     public static native byte[] deriveNostrPrivateKey(String mnemonic, int index, int accountIndex, String passphrase);
     public static native byte[] deriveNostrKeypair(String mnemonic, int index, int accountIndex, String passphrase);
 
@@ -46,7 +44,6 @@ public final class KmsNative {
     // Coin types
     public static native int coinTypeTongo();
     public static native int coinTypeStarknet();
-    public static native int coinTypeTongoView();
     public static native int coinTypeNostr();
 
     // Error
@@ -55,7 +52,7 @@ public final class KmsNative {
 
     // Account management
     public static native long accountCreateFromMnemonic(String mnemonic, int index, int accountIndex, byte[] contractAddress, String passphrase);
-    public static native long accountCreateFromKeys(byte[] ownerKey, byte[] viewKey, byte[] contractAddress);
+    public static native long accountCreateFromPrivateKey(byte[] privateKey, byte[] contractAddress);
     public static native long[] accountGetState(long handle);
     public static native void accountUpdateState(long handle, long balanceLow, long balanceHigh, long pendingBalanceLow, long pendingBalanceHigh, long nonce);
     public static native void accountDestroy(long handle);

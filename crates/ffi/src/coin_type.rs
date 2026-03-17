@@ -11,11 +11,6 @@ pub extern "C" fn kms_get_coin_type_starknet() -> u32 {
 }
 
 #[no_mangle]
-pub extern "C" fn kms_get_coin_type_tongo_view() -> u32 {
-    krusty_kms::TONGO_VIEW_COIN_TYPE
-}
-
-#[no_mangle]
 pub extern "C" fn kms_get_coin_type_nostr() -> u32 {
     krusty_kms::NOSTR_COIN_TYPE
 }

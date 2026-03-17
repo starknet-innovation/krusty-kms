@@ -150,7 +150,6 @@ public struct EthSignature: Equatable {
 public enum CoinTypes {
     public static let tongo = Int(kms_get_coin_type_tongo())
     public static let starknet = Int(kms_get_coin_type_starknet())
-    public static let tongoView = Int(kms_get_coin_type_tongo_view())
     public static let nostr = Int(kms_get_coin_type_nostr())
 }
 
@@ -326,38 +325,6 @@ public enum Kms {
         return TongoKeyPair(cValue: out)
     }
 
-    public static func deriveViewPrivateKey(
-        mnemonic: String,
-        index: UInt32,
-        accountIndex: UInt32,
-        passphrase: String = ""
-    ) throws -> Felt {
-        var out = KmsFelt()
-        let rc = mnemonic.withCString { m in
-            passphrase.withCString { p in
-                kms_derive_view_private_key(m, index, accountIndex, p, &out)
-            }
-        }
-        try check(rc)
-        return Felt(cValue: out)
-    }
-
-    public static func deriveViewKeypair(
-        mnemonic: String,
-        index: UInt32,
-        accountIndex: UInt32,
-        passphrase: String = ""
-    ) throws -> TongoKeyPair {
-        var out = KmsTongoKeyPair()
-        let rc = mnemonic.withCString { m in
-            passphrase.withCString { p in
-                kms_derive_view_keypair(m, index, accountIndex, p, &out)
-            }
-        }
-        try check(rc)
-        return TongoKeyPair(cValue: out)
-    }
-
     public static func deriveNostrPrivateKey(
         mnemonic: String,
         index: UInt32,
@@ -459,16 +426,14 @@ public enum Kms {
         return AccountHandle(rawValue: handle)
     }
 
-    public static func accountCreateFromKeys(
-        ownerKey: Felt,
-        viewKey: Felt,
+    public static func accountCreateFromPrivateKey(
+        privateKey: Felt,
         contractAddress: Felt
     ) throws -> AccountHandle {
-        var cOwner = ownerKey.toCValue()
-        var cView = viewKey.toCValue()
+        var cPrivateKey = privateKey.toCValue()
         var cAddr = contractAddress.toCValue()
         var handle: KmsAccountHandle = 0
-        try check(kms_account_create_from_keys(&cOwner, &cView, &cAddr, &handle))
+        try check(kms_account_create_from_private_key(&cPrivateKey, &cAddr, &handle))
         return AccountHandle(rawValue: handle)
     }
 

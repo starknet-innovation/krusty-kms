@@ -24,16 +24,6 @@ pub const TONGO_COIN_TYPE: u32 = 5454;
 /// Starknet coin type for BIP-44 derivation path (SNIP-44).
 pub const STARKNET_COIN_TYPE: u32 = 9004;
 
-/// TONGO viewing/decryption coin type for BIP-44 derivation path.
-///
-/// This enables a dual-key model:
-/// - Ownership/Spending key: `TONGO_COIN_TYPE` (5454)
-/// - Viewing/Decryption key: `TONGO_VIEW_COIN_TYPE` (5353)
-///
-/// The viewing key can be used by wallets to decrypt balances and memos
-/// without exposing the ownership/spending private key for read-only flows.
-pub const TONGO_VIEW_COIN_TYPE: u32 = 5353;
-
 /// Nostr coin type for BIP-44 derivation path (SLIP-44 standard).
 ///
 /// Nostr uses secp256k1 keys directly (no grinding required).
@@ -129,32 +119,6 @@ pub fn derive_private_key(
     derive_private_key_with_coin_type(mnemonic, index, account_index, TONGO_COIN_TYPE, passphrase)
 }
 
-/// Derive a TONGO viewing private key from a mnemonic.
-///
-/// # Derivation Path
-/// `m/44'/5353'/account_index'/0/index`
-///
-/// # Errors
-///
-/// Returns [`KmsError`] if:
-/// - Mnemonic is invalid (`InvalidMnemonic`)
-/// - Key derivation fails (`CryptoError`)
-/// - Key grinding fails (invalid curve point)
-pub fn derive_view_private_key(
-    mnemonic: &str,
-    index: u32,
-    account_index: u32,
-    passphrase: Option<&str>,
-) -> Result<Felt> {
-    derive_private_key_with_coin_type(
-        mnemonic,
-        index,
-        account_index,
-        TONGO_VIEW_COIN_TYPE,
-        passphrase,
-    )
-}
-
 /// Derive a keypair from a mnemonic with a custom coin type.
 ///
 /// # Errors
@@ -198,32 +162,6 @@ pub fn derive_keypair(
     passphrase: Option<&str>,
 ) -> Result<TongoKeyPair> {
     derive_keypair_with_coin_type(mnemonic, index, account_index, TONGO_COIN_TYPE, passphrase)
-}
-
-/// Derive a TONGO viewing keypair from a mnemonic.
-///
-/// # Derivation Path
-/// `m/44'/5353'/account_index'/0/index`
-///
-/// # Errors
-///
-/// Returns [`KmsError`] if:
-/// - Mnemonic is invalid (`InvalidMnemonic`)
-/// - Key derivation fails (`CryptoError`)
-/// - Public key generation fails (point at infinity)
-pub fn derive_view_keypair(
-    mnemonic: &str,
-    index: u32,
-    account_index: u32,
-    passphrase: Option<&str>,
-) -> Result<TongoKeyPair> {
-    derive_keypair_with_coin_type(
-        mnemonic,
-        index,
-        account_index,
-        TONGO_VIEW_COIN_TYPE,
-        passphrase,
-    )
 }
 
 /// A Nostr keypair (raw secp256k1 private key as bytes).
@@ -532,32 +470,6 @@ mod tests {
     }
 
     #[test]
-    fn test_view_key_uses_different_coin_type() {
-        let owner = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let view = derive_view_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_ne!(owner.private_key, view.private_key);
-    }
-
-    #[test]
-    fn test_derive_view_private_key() {
-        let result = derive_view_private_key(TEST_MNEMONIC, 0, 0, None);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_derive_view_keypair() {
-        let keypair = derive_view_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_ne!(keypair.private_key, Felt::ZERO);
-    }
-
-    #[test]
-    fn test_view_keypair_deterministic() {
-        let keypair1 = derive_view_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair2 = derive_view_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_eq!(keypair1.private_key, keypair2.private_key);
-    }
-
-    #[test]
     fn test_passphrase_changes_keys() {
         let without_passphrase = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
         let with_passphrase = derive_keypair(TEST_MNEMONIC, 0, 0, Some("test_passphrase")).unwrap();
@@ -592,20 +504,6 @@ mod tests {
     fn test_invalid_mnemonic() {
         let result = derive_keypair("invalid mnemonic words that are not valid", 0, 0, None);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_different_view_key_indices() {
-        let view0 = derive_view_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let view1 = derive_view_keypair(TEST_MNEMONIC, 1, 0, None).unwrap();
-        assert_ne!(view0.private_key, view1.private_key);
-    }
-
-    #[test]
-    fn test_different_view_key_accounts() {
-        let view_acc0 = derive_view_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let view_acc1 = derive_view_keypair(TEST_MNEMONIC, 0, 1, None).unwrap();
-        assert_ne!(view_acc0.private_key, view_acc1.private_key);
     }
 
     #[test]

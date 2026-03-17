@@ -12,8 +12,8 @@ extern "C" {
 /* ABI version                                                             */
 /* ====================================================================== */
 
-#define KMS_ABI_VERSION_MAJOR 1
-#define KMS_ABI_VERSION_MINOR 2
+#define KMS_ABI_VERSION_MAJOR 2
+#define KMS_ABI_VERSION_MINOR 0
 
 /* ====================================================================== */
 /* Error codes (positive integers, matching Rust)                          */
@@ -129,8 +129,6 @@ int32_t kms_mnemonic_to_seed(const char* phrase, const char* passphrase, uint8_t
 
 int32_t kms_derive_private_key_with_coin_type(const char* mnemonic, uint32_t index, uint32_t account_index, uint32_t coin_type, const char* passphrase, KmsFelt* out);
 int32_t kms_derive_keypair_with_coin_type(const char* mnemonic, uint32_t index, uint32_t account_index, uint32_t coin_type, const char* passphrase, KmsTongoKeyPair* out);
-int32_t kms_derive_view_private_key(const char* mnemonic, uint32_t index, uint32_t account_index, const char* passphrase, KmsFelt* out);
-int32_t kms_derive_view_keypair(const char* mnemonic, uint32_t index, uint32_t account_index, const char* passphrase, KmsTongoKeyPair* out);
 int32_t kms_derive_nostr_private_key(const char* mnemonic, uint32_t index, uint32_t account_index, const char* passphrase, uint8_t out[32]);
 int32_t kms_derive_nostr_keypair(const char* mnemonic, uint32_t index, uint32_t account_index, const char* passphrase, KmsNostrKeyPair* out);
 
@@ -147,7 +145,6 @@ int32_t kms_derive_oz_account_address(const KmsFelt* public_key_x, const KmsFelt
 
 uint32_t kms_get_coin_type_tongo(void);
 uint32_t kms_get_coin_type_starknet(void);
-uint32_t kms_get_coin_type_tongo_view(void);
 uint32_t kms_get_coin_type_nostr(void);
 
 /* ====================================================================== */
@@ -162,7 +159,7 @@ const char* kms_error_message(int32_t code);
 /* ====================================================================== */
 
 int32_t kms_account_create_from_mnemonic(const char* mnemonic, uint32_t index, uint32_t account_index, const KmsFelt* contract_address, const char* passphrase, KmsAccountHandle* out_handle);
-int32_t kms_account_create_from_keys(const KmsFelt* owner_key, const KmsFelt* view_key, const KmsFelt* contract_address, KmsAccountHandle* out_handle);
+int32_t kms_account_create_from_private_key(const KmsFelt* private_key, const KmsFelt* contract_address, KmsAccountHandle* out_handle);
 int32_t kms_account_get_state(KmsAccountHandle handle, KmsAccountState* out_state);
 int32_t kms_account_update_state(KmsAccountHandle handle, const KmsAccountState* state);
 int32_t kms_account_destroy(KmsAccountHandle handle);

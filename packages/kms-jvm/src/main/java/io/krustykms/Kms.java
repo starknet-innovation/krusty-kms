@@ -114,17 +114,6 @@ public final class Kms {
         return tongoKeyPairFromBytes(raw);
     }
 
-    public static Felt deriveViewPrivateKey(
-            String mnemonic, int index, int accountIndex, String passphrase) {
-        return new Felt(KmsNative.deriveViewPrivateKey(mnemonic, index, accountIndex, passphrase));
-    }
-
-    public static TongoKeyPair deriveViewKeypair(
-            String mnemonic, int index, int accountIndex, String passphrase) {
-        byte[] raw = KmsNative.deriveViewKeypair(mnemonic, index, accountIndex, passphrase);
-        return tongoKeyPairFromBytes(raw);
-    }
-
     public static byte[] deriveNostrPrivateKey(
             String mnemonic, int index, int accountIndex, String passphrase) {
         return KmsNative.deriveNostrPrivateKey(mnemonic, index, accountIndex, passphrase);
@@ -167,10 +156,6 @@ public final class Kms {
         return KmsNative.coinTypeStarknet();
     }
 
-    public static int tongoViewCoinType() {
-        return KmsNative.coinTypeTongoView();
-    }
-
     public static int nostrCoinType() {
         return KmsNative.coinTypeNostr();
     }
@@ -199,10 +184,10 @@ public final class Kms {
         return new AccountHandle(handle);
     }
 
-    public static AccountHandle accountCreateFromKeys(
-            Felt ownerKey, Felt viewKey, Felt contractAddress) {
-        long handle = KmsNative.accountCreateFromKeys(
-            ownerKey.bytes(), viewKey.bytes(), contractAddress.bytes());
+    public static AccountHandle accountCreateFromPrivateKey(
+            Felt privateKey, Felt contractAddress) {
+        long handle = KmsNative.accountCreateFromPrivateKey(
+            privateKey.bytes(), contractAddress.bytes());
         return new AccountHandle(handle);
     }
 

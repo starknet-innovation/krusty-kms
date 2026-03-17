@@ -184,10 +184,10 @@ void main() {
       kms = Kms.instance;
     });
 
-    test('getAbiVersion returns (1, 2)', () {
+    test('getAbiVersion returns (2, 0)', () {
       final (major, minor) = kms.getAbiVersion();
-      expect(major, equals(1));
-      expect(minor, equals(2));
+      expect(major, equals(2));
+      expect(minor, equals(0));
     });
 
     test('getVersionString is non-empty', () {
@@ -272,7 +272,6 @@ void main() {
       final ct = kms.coinTypes;
       expect(ct.containsKey('tongo'), isTrue);
       expect(ct.containsKey('starknet'), isTrue);
-      expect(ct.containsKey('tongo_view'), isTrue);
       expect(ct.containsKey('nostr'), isTrue);
     });
 

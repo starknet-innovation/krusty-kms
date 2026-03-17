@@ -7,17 +7,10 @@
 //! - Rollover operations (activate pending balance)
 //! - Withdraw operations (exit to public balance)
 //!
-//! # Dual-Key Model (Owner + View)
-//!
-//! For improved wallet security, this SDK supports a dual-key model where
-//! two keys are derived from different BIP-44 coin types:
-//! - Ownership/Spending key: coin type 5454 (authorizes operations and proofs)
-//! - Viewing/Decryption key: coin type 5353 (decrypts balances/memos only)
-//!
-//! Contracts remain unchanged; all on-chain proofs continue to use the
-//! ownership key. For transfers, pass the recipient's viewing public key in
-//! `TransferParams::recipient_public_key` to allow recipients to decrypt
-//! without exposing their spending key.
+//! All TONGO account operations in this SDK use a single account key derived
+//! from coin type 5454. For transfers, pass the recipient's TONGO public key in
+//! `TransferParams::recipient_public_key` so the recipient can decrypt the
+//! confidential payload with their account key.
 
 pub mod account;
 pub mod crypto;
@@ -29,11 +22,10 @@ pub use crypto::{decrypt_as_auditor, encrypt_for_auditor};
 pub use krusty_kms::{
     calculate_contract_address, derive_keypair, derive_keypair_with_coin_type,
     derive_nostr_keypair, derive_nostr_private_key, derive_oz_account_address, derive_private_key,
-    derive_private_key_with_coin_type, derive_view_keypair, derive_view_private_key,
-    generate_mnemonic, mnemonic_to_seed, validate_mnemonic, AccountClass, ArgentAccount,
-    BraavosAccount, EthSigner, NostrKeyPair, OpenZeppelinAccount, OzAccountClassConfig,
-    OzAccountClassSource, OzDeploymentDescriptor, SaltPolicy, TongoKeyPair, NOSTR_COIN_TYPE,
-    STARKNET_COIN_TYPE, TONGO_COIN_TYPE, TONGO_VIEW_COIN_TYPE,
+    derive_private_key_with_coin_type, generate_mnemonic, mnemonic_to_seed, validate_mnemonic,
+    AccountClass, ArgentAccount, BraavosAccount, EthSigner, NostrKeyPair, OpenZeppelinAccount,
+    OzAccountClassConfig, OzAccountClassSource, OzDeploymentDescriptor, SaltPolicy, TongoKeyPair,
+    NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
 };
 pub use krusty_kms_common::{
     AccountState, AuditProof, ElGamalCiphertext, ElGamalProof, KmsError, Poe2Proof, PoeProof,

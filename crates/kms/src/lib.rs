@@ -29,9 +29,8 @@ pub use account_class::{
 };
 pub use derivation::{
     derive_keypair, derive_keypair_with_coin_type, derive_nostr_keypair, derive_nostr_private_key,
-    derive_private_key, derive_private_key_with_coin_type, derive_view_keypair,
-    derive_view_private_key, NostrKeyPair, TongoKeyPair, NOSTR_COIN_TYPE, STARKNET_COIN_TYPE,
-    TONGO_COIN_TYPE, TONGO_VIEW_COIN_TYPE,
+    derive_private_key, derive_private_key_with_coin_type, NostrKeyPair, TongoKeyPair,
+    NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
 };
 pub use eth_signer::EthSigner;
 pub use krusty_kms_common::{

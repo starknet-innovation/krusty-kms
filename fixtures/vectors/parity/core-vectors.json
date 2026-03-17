@@ -66,26 +66,6 @@
       }
     },
     {
-      "id": "kms-derive-view-private",
-      "op": "kms.derive_view_private_key",
-      "inputs": {
-        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
-        "index": 0,
-        "account_index": 0,
-        "passphrase": ""
-      }
-    },
-    {
-      "id": "kms-derive-view-keypair",
-      "op": "kms.derive_view_keypair",
-      "inputs": {
-        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
-        "index": 0,
-        "account_index": 0,
-        "passphrase": ""
-      }
-    },
-    {
       "id": "kms-derive-nostr-private",
       "op": "kms.derive_nostr_private_key",
       "inputs": {
