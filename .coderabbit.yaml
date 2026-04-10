@@ -1,0 +1,167 @@
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  collapse_walkthrough: false
+  changed_files_summary: true
+  auto_review:
+    enabled: true
+    drafts: false
+    labels:
+      - "coderabbit"
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 0
+  path_instructions:
+    - path: "crates/crypto/**/*.rs"
+      instructions: >
+        This crate implements ElGamal encryption, Pedersen commitments, range proofs,
+        and ZK proof generation/verification. Review with cryptographic rigor:
+        flag non-constant-time comparisons on secret data, uses of standard HashMap/HashSet
+        on secret-derived keys (timing side-channel), unwrap/expect on fallible crypto
+        operations, and any path where secret material could be logged, serialized to
+        user-facing errors, or returned in Debug output. Reject new public API surface
+        that exposes internal proof structure or intermediate cryptographic state.
+
+    - path: "crates/kms/**/*.rs"
+      instructions: >
+        This crate handles BIP-39 mnemonics, BIP-44 HD derivation for Stark and secp256k1
+        curves, and account class abstractions. Flag any code that stores private keys
+        or seed material in heap-allocated Strings (use zeroizing types), logs derivation
+        paths together with key material, or exposes private keys through Debug/Display
+        implementations. Verify that derivation index arithmetic cannot overflow and that
+        mnemonic validation rejects malformed input before further processing.
+
+    - path: "crates/sdk/**/*.rs"
+      instructions: >
+        This crate implements Tongo protocol operations (fund, transfer, withdraw,
+        rollover, ragequit) with dual-key confidential balances. Flag state transitions
+        that are not idempotent, balance computations that could overflow or underflow,
+        missing validation of proof inputs before ZK circuit execution, and any path
+        where view-key material could leak into owner-key operations or vice versa.
+
+    - path: "crates/client/**/*.rs"
+      instructions: >
+        This crate provides async Starknet RPC interactions: wallet execution, ERC-20
+        tokens, and transaction batching. Flag private
+        keys or signatures appearing in log output, RPC request/response bodies, or error
+        messages. Flag unbounded retries, missing timeouts on network calls, and any
+        assumption about transaction ordering that breaks under reorgs. Verify that chain
+        ID and network parameters are validated before signing.
+
+    - path: "crates/common/**/*.rs"
+      instructions: >
+        This crate defines Address, Amount, ChainId, Token, and shared error types used
+        across the entire workspace. Treat every public type and trait as a long-term
+        commitment. Flag additions to the public surface that lack clear motivation,
+        breaking changes to existing types, and representation leaks (e.g., exposing
+        internal field layout through public fields instead of accessor methods).
+
+    - path: "crates/ffi/**/*.rs"
+      instructions: >
+        This crate exports the C ABI shared library (libkms). Flag any unsafe block
+        without a SAFETY comment, null pointer dereferences on caller-provided pointers,
+        buffer overflows in output parameters, panics that could unwind across the FFI
+        boundary (must catch_unwind), ABI-breaking changes to existing exported functions
+        or struct layouts, and missing error code propagation. Every new exported symbol
+        must have a corresponding entry in packages/kms-c/include/kms.h.
+
+    - path: "packages/kms-c/include/**"
+      instructions: >
+        This header defines the stable C ABI contract consumed by all language bindings.
+        Flag any change to existing struct layouts, function signatures, or error code
+        values as a breaking change requiring explicit justification. New additions must
+        match the naming convention (kms_ prefix, snake_case) and include documentation
+        comments.
+
+    - path: "crates/wasm/**/*.rs"
+      instructions: >
+        Flag panics that could reach the WASM boundary (use Result), allocations that
+        could cause OOM in constrained browser environments, and synchronous blocking
+        calls. Verify that no private key material is exposed through JsValue serialization
+        or console logging.
+
+    - path: "crates/experimental/**/*.rs"
+      instructions: >
+        Experimental code has more latitude for iteration but must still uphold
+        memory safety, secret hygiene, and basic error handling. Flag any path where
+        experimental code could affect stable crates through shared state or public
+        re-exports.
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+      requirements: >
+        Use imperative mood with a conventional prefix (feat/fix/refactor/docs/test/chore)
+        and a scope naming the affected crate or package
+        (e.g., "feat(kms): add BIP-85 derivation" or "fix(client): handle RPC timeout").
+        Keep under 70 characters.
+    description:
+      mode: "warning"
+    issue_assessment:
+      mode: "warning"
+    custom_checks:
+      - name: "Secret Material Hygiene"
+        mode: "error"
+        instructions: >
+          Fail if any changed file contains patterns that risk leaking secret material:
+          Debug/Display implementations on types holding private keys, seeds, or mnemonics;
+          log/tracing macros that interpolate key material; error messages that include
+          raw key bytes or mnemonic words; serialization of secret fields without explicit
+          redaction. Private keys, seeds, mnemonics, and entropy buffers must never appear
+          in logs, error messages, Debug output, or serialized forms. Pass only when all
+          secret-bearing types use opaque formatting and zeroizing storage where available.
+
+      - name: "FFI & ABI Safety"
+        mode: "error"
+        instructions: >
+          For changes under crates/ffi or packages/kms-c/include: (1) Fail if any
+          existing exported function signature, struct layout, or error code value is
+          modified without a corresponding ABI version bump in kms.h
+          (KMS_ABI_VERSION_MAJOR or KMS_ABI_VERSION_MINOR); new additions that do not
+          alter existing symbols are permitted without a version bump. (2) Fail if any
+          extern "C" function can panic across the FFI boundary without catch_unwind,
+          if any unsafe block lacks a SAFETY comment, or if caller-provided pointers
+          are dereferenced without null checks.
+
+      - name: "Information Hiding"
+        mode: "warning"
+        instructions: >
+          Flag when a change exposes previously private types, fields, or functions as
+          public without clear justification in the PR description. Internal representation
+          choices (data structures, caching, concurrency strategies, storage details) must
+          not become user-facing. Every new pub item in a crate's lib.rs is a long-term
+          commitment and requires explicit motivation.
+
+      - name: "Test Requirements"
+        mode: "warning"
+        instructions: >
+          Flag PRs that add new behavior or fix bugs without corresponding tests.
+          Bug fixes require a regression test. New features require happy-path, edge-case,
+          and failure-mode tests. New abstractions (traits, interfaces, modules) should
+          have laws or property-based tests where feasible. Pure reformatting and
+          documentation PRs are exempt.
+
+      - name: "PR Discipline"
+        mode: "warning"
+        instructions: >
+          Flag source files exceeding 350 lines (hard-stop concern at 500 lines) and
+          functions exceeding 40 lines, unless the PR description contains an explicit
+          justification. Flag PRs changing more than 400 lines or touching more than
+          10 files without a stated reason for the larger scope. Flag PRs that mix
+          unrelated formatting changes, import reordering, or drive-by refactors with
+          behavioral changes. Formatting-only changes must be isolated in their own
+          commit or PR. The diff should be reviewable in a single conceptual pass.
+
+  tools:
+    opengrep:
+      enabled: true
+    trufflehog:
+      enabled: true
+
+chat:
+  auto_reply: true

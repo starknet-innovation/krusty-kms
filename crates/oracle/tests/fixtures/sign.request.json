@@ -1,0 +1,18 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "id": "req-sign",
+  "command": "sign",
+  "params": {
+    "kind": "nostr_event",
+    "secret": "nostr-secret",
+    "derivation_path": {
+      "coin_type": 1237,
+      "account_index": 0,
+      "address_index": 7
+    },
+    "event_id": "6c3fd336b5457a0f2b74959f177a5c5e7f9ab75cdb4ab7a3ec7aaf1e2a3d2b13"
+  }
+}

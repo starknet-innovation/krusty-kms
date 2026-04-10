@@ -1,0 +1,295 @@
+{
+  "name": "core-parity-v1",
+  "cases": [
+    {
+      "id": "kms-coin-types",
+      "op": "kms.coin_types",
+      "inputs": {}
+    },
+    {
+      "id": "kms-felt-roundtrip",
+      "op": "kms.felt_roundtrip_hex",
+      "inputs": {
+        "hex": "0x2a"
+      }
+    },
+    {
+      "id": "kms-pedersen",
+      "op": "kms.pedersen_hash",
+      "inputs": {
+        "left": "0x03d937c035c878245caf64531a5756109c53068da139362728feb561405371cb",
+        "right": "0x0208a0a10250e382e1e4bbe2880906c2791bf6275695e02fbbc6aeff9cd8b31a"
+      }
+    },
+    {
+      "id": "kms-poseidon-many",
+      "op": "kms.poseidon_hash_many",
+      "inputs": {
+        "values": ["0x1", "0x2", "0x3", "0x4"]
+      }
+    },
+    {
+      "id": "kms-validate-mnemonic-ok",
+      "op": "kms.validate_mnemonic",
+      "inputs": {
+        "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+      }
+    },
+    {
+      "id": "kms-mnemonic-to-seed",
+      "op": "kms.mnemonic_to_seed",
+      "inputs": {
+        "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        "passphrase": "TREZOR"
+      }
+    },
+    {
+      "id": "kms-derive-private-starknet",
+      "op": "kms.derive_private_key_with_coin_type",
+      "inputs": {
+        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+        "index": 0,
+        "account_index": 0,
+        "coin_type": 9004,
+        "passphrase": ""
+      }
+    },
+    {
+      "id": "kms-derive-keypair-tongo",
+      "op": "kms.derive_keypair_with_coin_type",
+      "inputs": {
+        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+        "index": 0,
+        "account_index": 0,
+        "coin_type": 5454,
+        "passphrase": ""
+      }
+    },
+    {
+      "id": "kms-derive-nostr-private",
+      "op": "kms.derive_nostr_private_key",
+      "inputs": {
+        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+        "index": 0,
+        "account_index": 0,
+        "passphrase": ""
+      }
+    },
+    {
+      "id": "kms-derive-nostr-keypair",
+      "op": "kms.derive_nostr_keypair",
+      "inputs": {
+        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+        "index": 0,
+        "account_index": 0,
+        "passphrase": ""
+      }
+    },
+    {
+      "id": "kms-calculate-contract-address",
+      "op": "kms.calculate_contract_address",
+      "inputs": {
+        "salt": "0x0",
+        "class_hash": "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564",
+        "constructor_calldata": [
+          "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e"
+        ],
+        "deployer": "0x0"
+      }
+    },
+    {
+      "id": "kms-derive-oz-address",
+      "op": "kms.derive_oz_account_address",
+      "inputs": {
+        "public_key_x": "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e",
+        "class_hash": "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564",
+        "salt": "0x0"
+      }
+    },
+    {
+      "id": "she-scalar-add",
+      "op": "she.scalar_add",
+      "inputs": {
+        "a": "0x123",
+        "b": "0x456"
+      }
+    },
+    {
+      "id": "she-scalar-mul",
+      "op": "she.scalar_mul",
+      "inputs": {
+        "a": "0x777",
+        "b": "0x888"
+      }
+    },
+    {
+      "id": "she-reduce-scalar",
+      "op": "she.reduce_scalar",
+      "inputs": {
+        "a": "0x0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d30"
+      }
+    },
+    {
+      "id": "she-curve-mul-generator",
+      "op": "she.curve_mul_generator",
+      "inputs": {
+        "scalar": "0x2a"
+      }
+    },
+    {
+      "id": "she-poe-prove-verify",
+      "op": "she.poe_prove_verify",
+      "inputs": {
+        "x": "0x64",
+        "prefix": "0x2a"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "stream": "she-poe"
+      }
+    },
+    {
+      "id": "she-poe2-prove-verify",
+      "op": "she.poe2_prove_verify",
+      "inputs": {
+        "x1": "0x64",
+        "x2": "0xc8",
+        "prefix": "0x3e7"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x2222222222222222222222222222222222222222222222222222222222222222",
+        "stream": "she-poe2"
+      }
+    },
+    {
+      "id": "she-elgamal-evd",
+      "op": "she.elgamal_encrypt_verify_decrypt",
+      "inputs": {
+        "message": "0xa",
+        "private_key": "0x2a",
+        "randomness": "0x3e7",
+        "prefix": "0x2a"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x3333333333333333333333333333333333333333333333333333333333333333",
+        "stream": "she-elgamal"
+      }
+    },
+    {
+      "id": "she-bit-prove-verify",
+      "op": "she.bit_prove_verify",
+      "inputs": {
+        "bit": 1,
+        "random": "0x3039",
+        "prefix": "0x2a"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x4444444444444444444444444444444444444444444444444444444444444444",
+        "stream": "she-bit"
+      }
+    },
+    {
+      "id": "she-range-prove-verify",
+      "op": "she.range_prove_verify",
+      "inputs": {
+        "value": "7",
+        "bit_size": 8,
+        "prefix": "0x2a"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x5555555555555555555555555555555555555555555555555555555555555555",
+        "stream": "she-range"
+      }
+    },
+    {
+      "id": "she-audit-prove-verify",
+      "op": "she.audit_prove_verify",
+      "inputs": {
+        "private_key": "0x3039",
+        "balance": "1000",
+        "cipher_random": "0x181cd",
+        "auditor_private_key": "0x1869f"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x6666666666666666666666666666666666666666666666666666666666666666",
+        "stream": "she-audit"
+      }
+    },
+    {
+      "id": "tongo-audit-hint-roundtrip",
+      "op": "tongo.audit_hint_roundtrip",
+      "inputs": {
+        "balance": "1000000000000000000",
+        "user_private_key": "0x2a",
+        "auditor_private_key": "0x7b"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x7777777777777777777777777777777777777777777777777777777777777777",
+        "stream": "tongo-audit-hint"
+      }
+    },
+    {
+      "id": "tongo-account-from-mnemonic",
+      "op": "tongo.account_from_mnemonic",
+      "inputs": {
+        "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+        "index": 0,
+        "account_index": 0,
+        "contract_address": "0x1e240",
+        "passphrase": ""
+      }
+    },
+    {
+      "id": "nostr-derive-public",
+      "op": "nostr.derive_public_key",
+      "inputs": {
+        "secret_hex": "0x1c0b9a6c83c6b0cbe8eebf5a4e3e4c1e6b6a2f9c1a7b0c6d4f9e1b2c3d4e5f6a"
+      }
+    },
+    {
+      "id": "nostr-encrypt-decrypt-roundtrip",
+      "op": "nostr.encrypt_decrypt_roundtrip",
+      "inputs": {
+        "sender_sk_hex": "0x1c0b9a6c83c6b0cbe8eebf5a4e3e4c1e6b6a2f9c1a7b0c6d4f9e1b2c3d4e5f6a",
+        "receiver_sk_hex": "0x2d1c0a9b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e0f",
+        "plaintext": "hello parity"
+      },
+      "rng": {
+        "mode": "deterministic",
+        "seed_hex": "0x8888888888888888888888888888888888888888888888888888888888888888",
+        "stream": "nostr-encrypt"
+      }
+    },
+    {
+      "id": "starknet-selector",
+      "op": "starknet.selector_from_name",
+      "inputs": {
+        "name": "fund"
+      }
+    },
+    {
+      "id": "starknet-serialize-projective",
+      "op": "starknet.serialize_projective_point",
+      "inputs": {
+        "point": {
+          "x": "0x1ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca",
+          "y": "0x5668060aa49730b7be4801df46ec62de53ecd11abe43a32873000c36e8dc1f"
+        }
+      }
+    },
+    {
+      "id": "starknet-u128-u256-roundtrip",
+      "op": "starknet.u128_u256_roundtrip",
+      "inputs": {
+        "value": "12345678901234567890"
+      }
+    }
+  ]
+}

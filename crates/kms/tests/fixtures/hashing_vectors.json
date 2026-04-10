@@ -1,0 +1,47 @@
+{
+  "vectors": {
+    "pedersen": [
+      {
+        "name": "pedersen-two-elements",
+        "a": "0x1",
+        "b": "0x2",
+        "expected": "0x5bb9440e27889a364bcb678b1f679ecd1347acdedcbf36e83494f857cc58026"
+      }
+    ],
+    "pedersen_many": [
+      {
+        "name": "compute-hash-on-elements-three",
+        "inputs": ["0x1", "0x2", "0x3"],
+        "expected": "0xf9d95fbf356fbeda26538c92f7040abe51bf142350f73c9ee5ba7c660bae71"
+      },
+      {
+        "name": "compute-hash-on-elements-empty",
+        "inputs": [],
+        "expected": "0x49ee3eba8c1600700ee1b87eb599f16716b0b1022947733551fde4050ca6804"
+      }
+    ],
+    "poseidon": [
+      {
+        "name": "poseidon-two-elements",
+        "a": "0x1",
+        "b": "0x2",
+        "expected": "0x5d44a3decb2b2e0cc71071f7b802f45dd792d064f0fc7316c46514f70f9891a"
+      }
+    ],
+    "poseidon_many": [
+      {
+        "name": "poseidon-three-elements",
+        "inputs": ["0x1", "0x2", "0x3"],
+        "expected": "0x2f0d8840bcf3bc629598d8a6cc80cb7c0d9e52d93dab244bbf9cd0dca0ad082"
+      }
+    ],
+    "starknet_keccak": [
+      {
+        "name": "keccak-transfer",
+        "input": "transfer",
+        "encoding": "utf8",
+        "expected": "0x83afd3f4caedc6eebf44246fe54e38c95e3179a5ec9ea81740eca5b482d12e"
+      }
+    ]
+  }
+}

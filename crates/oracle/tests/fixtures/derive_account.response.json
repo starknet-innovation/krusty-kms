@@ -1,0 +1,48 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "id": "req-derive",
+  "status": "ok",
+  "result": {
+    "kind": "derive_account",
+    "value": {
+      "operation": {
+        "id": "derive-1",
+        "kind": "DeriveAccount",
+        "state": "Completed",
+        "provenance": {
+          "chain_id": "Sepolia",
+          "key_domain": "StarknetAccount",
+          "derivation_path": {
+            "coin_type": 9004,
+            "account_index": 0,
+            "address_index": 0
+          },
+          "class_hash": "0x0000000000000000000000000000000000000000000000000000000000000789"
+        }
+      },
+      "value": {
+        "address": "0x0000000000000000000000000000000000000000000000000000000000000123",
+        "public_key": "0x0000000000000000000000000000000000000000000000000000000000000456",
+        "class_hash": "0x0000000000000000000000000000000000000000000000000000000000000789",
+        "salt": "0x0000000000000000000000000000000000000000000000000000000000000456",
+        "constructor_calldata": [
+          "0x0000000000000000000000000000000000000000000000000000000000000456"
+        ],
+        "deployer_address": "0x0000000000000000000000000000000000000000000000000000000000000000",
+        "provenance": {
+          "chain_id": "Sepolia",
+          "key_domain": "StarknetAccount",
+          "derivation_path": {
+            "coin_type": 9004,
+            "account_index": 0,
+            "address_index": 0
+          },
+          "class_hash": "0x0000000000000000000000000000000000000000000000000000000000000789"
+        }
+      }
+    }
+  }
+}

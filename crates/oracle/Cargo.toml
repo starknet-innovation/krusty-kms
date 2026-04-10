@@ -1,0 +1,27 @@
+[package]
+name = "krusty-kms-oracle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Versioned stdio oracle transport for krusty-kms gateways"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish = false
+
+[dependencies]
+krusty-kms-domain = { version = "0.3.0", path = "../domain" }
+krusty-kms-gateway = { version = "0.3.0", path = "../gateway" }
+async-trait.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "rt", "sync"] }
+
+[dev-dependencies]
+krusty-kms-common = { version = "0.3.0", path = "../common" }
+tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread", "sync"] }
+
+[lints]
+workspace = true

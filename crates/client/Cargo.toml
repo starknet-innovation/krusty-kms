@@ -1,0 +1,40 @@
+[package]
+name = "krusty-kms-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Focused Starknet wallet, deployment, and Tongo protocol client for krusty-kms"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+krusty-kms-common = { version = "0.3.0", path = "../common" }
+krusty-kms-wallet-api = { version = "0.3.0", path = "../wallet-api" }
+krusty-kms = { version = "0.3.0", path = "../kms" }
+krusty-kms-sdk = { version = "0.3.0", path = "../sdk" }
+krusty-kms-crypto = { version = "0.3.0", path = "../crypto" }
+starknet-types-core.workspace = true
+starknet-rust = "0.18.0"
+tokio = { workspace = true, features = ["time", "sync", "macros"] }
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+thiserror.workspace = true
+url = "2.5"
+bs58 = "0.5"
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+[lints]
+workspace = true

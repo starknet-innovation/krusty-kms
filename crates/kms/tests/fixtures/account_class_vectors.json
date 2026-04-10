@@ -1,0 +1,31 @@
+{
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "derivation_path": "m/44'/9004'/0'/0/0",
+  "public_key": "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e",
+  "vectors": [
+    {
+      "name": "argent-v040-default",
+      "account_type": "argent",
+      "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
+      "constructor_calldata": ["0x0", "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e", "0x0"],
+      "salt": "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e",
+      "expected_address": "0x4db16c995cadf1869fa49bd8f4ba5c136cc50d8300b4cacf17e55ea9f79eb92"
+    },
+    {
+      "name": "braavos-v100-default",
+      "account_type": "braavos",
+      "class_hash": "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201",
+      "constructor_calldata": ["0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e"],
+      "salt": "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e",
+      "expected_address": "0x34fd655998ec844bfefc97364c2528c1b6e59162c844f13d7548ea40a010475"
+    },
+    {
+      "name": "oz-v300-default",
+      "account_type": "oz",
+      "class_hash": "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381",
+      "constructor_calldata": ["0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e"],
+      "salt": "0x0",
+      "expected_address": "0x208361e3911b1d93a704400b88e7e53a89171fce64dbb48f8479e4f44b398d9"
+    }
+  ]
+}

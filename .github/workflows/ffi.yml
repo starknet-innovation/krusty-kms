@@ -1,0 +1,22 @@
+name: FFI
+
+on:
+  push:
+    paths:
+      - "crates/ffi/**"
+      - "packages/kms-c/**"
+      - ".github/workflows/ffi.yml"
+  pull_request:
+    paths:
+      - "crates/ffi/**"
+      - "packages/kms-c/**"
+      - ".github/workflows/ffi.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build -p krusty-kms-cabi
+      - run: cargo test -p krusty-kms-cabi

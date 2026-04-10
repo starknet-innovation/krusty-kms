@@ -1,0 +1,60 @@
+{
+  "description": "Transaction hash parity vectors for cross-language validation (starknet.js v6)",
+  "spec_version": "0.7.1",
+  "vectors": {
+    "invoke_v1": [
+      {
+        "name": "simple-invoke-v1",
+        "sender_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "calldata": ["0x1", "0x2", "0x3"],
+        "max_fee": "0x186a0",
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x7",
+        "expected_hash": "0x046bcbbb5860d2448da26c61160d7eca1cf6c8db00108ed6cbfd8a78f60ae777"
+      }
+    ],
+    "invoke_v3": [
+      {
+        "name": "simple-invoke-v3",
+        "sender_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "calldata": ["0x1", "0x2", "0x3"],
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x7",
+        "tip": "0x0",
+        "l1_gas": { "max_amount": "0x186a0", "max_price_per_unit": "0x5af3107a4000" },
+        "l2_gas": { "max_amount": "0x0", "max_price_per_unit": "0x0" },
+        "l1_data_gas": { "max_amount": "0x0", "max_price_per_unit": "0x0" },
+        "paymaster_data": [],
+        "nonce_da_mode": 0,
+        "fee_da_mode": 0,
+        "account_deployment_data": [],
+        "expected_hash": "0x055778074309dc353bde43aeb4c30d3254ed05aea296483a6989d03dc6829a59"
+      }
+    ],
+    "deploy_account_v1": [
+      {
+        "name": "simple-deploy-v1",
+        "contract_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
+        "constructor_calldata": ["0x048495fca9753cb0f4035eb4d2e2c1a22cc6d36fe4b73e17d9d6848333ff03a9"],
+        "salt": "0x048495fca9753cb0f4035eb4d2e2c1a22cc6d36fe4b73e17d9d6848333ff03a9",
+        "max_fee": "0x186a0",
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x0",
+        "expected_hash": "0x047aa6f8a8c145bdce522732cb8f8a4758332f1c161a3bd553f4e1f5c368513f"
+      }
+    ],
+    "declare_v2": [
+      {
+        "name": "simple-declare-v2",
+        "sender_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
+        "max_fee": "0x186a0",
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x1",
+        "compiled_class_hash": "0x01a7820094feaf82d53f53f214b81292d717e7bb9a92bb2488092cd306f3993f",
+        "expected_hash": "0x031ddb429acac7e7df4cfec7f43073ae0dc894e55c1a8e578b09af6ec8e5310f"
+      }
+    ]
+  }
+}

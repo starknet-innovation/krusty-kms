@@ -1,0 +1,41 @@
+[package]
+name = "qb-game"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Computer Quarterback - A lying prover game with cryptographic commitments"
+publish = false
+keywords = ["cryptography", "game", "commitments", "zero-knowledge"]
+categories = ["cryptography", "games"]
+
+[features]
+default = []
+
+[dependencies]
+# Internal crates
+krusty-kms-common = { path = "../../../common" }
+krusty-kms-crypto = { path = "../../../crypto", default-features = false }
+
+# Starknet types
+starknet-types-core.workspace = true
+
+# Cryptography
+sha2.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

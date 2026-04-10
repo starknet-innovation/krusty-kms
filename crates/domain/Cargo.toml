@@ -1,0 +1,28 @@
+[package]
+name = "krusty-kms-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Pure typed integration contracts for krusty-kms gateways and clients"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+krusty-kms-common = { version = "0.3.0", path = "../common" }
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+starknet-types-core.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

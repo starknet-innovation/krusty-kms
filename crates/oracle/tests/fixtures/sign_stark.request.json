@@ -1,0 +1,21 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "id": "req-sign-stark",
+  "command": "sign",
+  "params": {
+    "kind": "stark_hash",
+    "secret": "stark-secret",
+    "key_domain": "StarknetAccount",
+    "derivation_path": {
+      "coin_type": 9004,
+      "account_index": 0,
+      "address_index": 3
+    },
+    "chain_id": "Sepolia",
+    "domain": "TransactionHash",
+    "hash": "0x0000000000000000000000000000000000000000000000000000000000001234"
+  }
+}

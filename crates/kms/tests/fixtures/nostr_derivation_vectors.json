@@ -1,0 +1,13 @@
+{
+  "vectors": [
+    {
+      "name": "nostr-slip44-1237-index-0-account-0",
+      "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+      "coin_type": 1237,
+      "index": 0,
+      "account_index": 0,
+      "expected_private_key_hex": "382ee34266a8482e0fd51f085ea4f114c10f90ba27a54cd6dd020c6da291df72",
+      "expected_public_key_xonly_hex": "29eb921dd3b259edf2e9f2dfdbe2bf7fcebbc2ee8ad4cada7bfa4a13ffa430e9"
+    }
+  ]
+}

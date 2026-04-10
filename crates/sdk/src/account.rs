@@ -1,0 +1,304 @@
+//! Tongo account management.
+
+use krusty_kms::{derive_keypair, TongoKeyPair};
+use krusty_kms_common::ElGamalCiphertext;
+use krusty_kms_common::{AccountState, KmsError, Result, SecretFelt};
+use krusty_kms_crypto::{ElGamal, StarkCurve};
+use starknet_types_core::curve::ProjectivePoint;
+use starknet_types_core::felt::Felt;
+
+/// A Tongo confidential account.
+#[derive(Debug, Clone)]
+pub struct TongoAccount {
+    /// The account's keypair
+    keypair: TongoKeyPair,
+    /// Current account state
+    state: AccountState,
+    /// Contract address
+    contract_address: Felt,
+}
+
+impl TongoAccount {
+    /// Create a new Tongo account from a mnemonic.
+    ///
+    /// # Arguments
+    /// * `mnemonic` - BIP-39 mnemonic phrase
+    /// * `index` - Address index
+    /// * `account_index` - Account index
+    /// * `contract_address` - Tongo contract address
+    /// * `passphrase` - Optional passphrase
+    ///
+    /// # Cyclomatic Complexity: 1
+    pub fn from_mnemonic(
+        mnemonic: &str,
+        index: u32,
+        account_index: u32,
+        contract_address: Felt,
+        passphrase: Option<&str>,
+    ) -> Result<Self> {
+        let keypair = derive_keypair(mnemonic, index, account_index, passphrase)?;
+
+        Ok(Self {
+            keypair,
+            state: AccountState::default(),
+            contract_address,
+        })
+    }
+
+    /// Create a Tongo account from a private key.
+    ///
+    /// # Cyclomatic Complexity: 1
+    pub fn from_private_key(private_key: Felt, contract_address: Felt) -> Result<Self> {
+        let public_key = StarkCurve::mul_generator(&private_key);
+
+        let keypair = TongoKeyPair {
+            private_key: SecretFelt::new(private_key),
+            public_key,
+        };
+
+        Ok(Self {
+            keypair,
+            state: AccountState::default(),
+            contract_address,
+        })
+    }
+
+    /// Get the public key as a hex string.
+    pub fn public_key_hex(&self) -> Result<String> {
+        let affine = self
+            .keypair
+            .public_key
+            .to_affine()
+            .map_err(|_| KmsError::PointAtInfinity)?;
+
+        Ok(krusty_kms_common::utils::serialize_public_key_hex(
+            &affine.x(),
+            &affine.y(),
+        ))
+    }
+
+    /// Get the owner (spending) public key as a hex string.
+    pub fn owner_public_key_hex(&self) -> Result<String> {
+        self.public_key_hex()
+    }
+
+    /// Get the owner (spending) public key.
+    #[must_use]
+    pub fn owner_public_key(&self) -> &ProjectivePoint {
+        &self.keypair.public_key
+    }
+
+    /// Get the current contract address.
+    #[must_use]
+    pub fn contract_address(&self) -> Felt {
+        self.contract_address
+    }
+
+    /// Get the current account state.
+    #[must_use]
+    pub fn state(&self) -> &AccountState {
+        &self.state
+    }
+
+    /// Get the available balance.
+    #[must_use]
+    pub fn balance(&self) -> u128 {
+        self.state.balance
+    }
+
+    /// Get the pending balance.
+    #[must_use]
+    pub fn pending_balance(&self) -> u128 {
+        self.state.pending_balance
+    }
+
+    /// Get the current nonce.
+    #[must_use]
+    pub fn nonce(&self) -> u64 {
+        self.state.nonce
+    }
+
+    /// Update the account state.
+    ///
+    /// # Cyclomatic Complexity: 1
+    pub fn update_state(&mut self, state: AccountState) {
+        self.state = state;
+    }
+
+    /// Update the available balance.
+    pub fn set_balance(&mut self, balance: u128) {
+        self.state.balance = balance;
+    }
+
+    /// Update the pending balance.
+    pub fn set_pending_balance(&mut self, pending_balance: u128) {
+        self.state.pending_balance = pending_balance;
+    }
+
+    /// Update the nonce.
+    pub fn set_nonce(&mut self, nonce: u64) {
+        self.state.nonce = nonce;
+    }
+
+    /// Check if the account has sufficient available balance.
+    ///
+    /// # Cyclomatic Complexity: 1
+    #[must_use]
+    pub fn has_sufficient_balance(&self, amount: u128) -> bool {
+        self.state.balance >= amount
+    }
+
+    /// Get the total balance (available + pending).
+    ///
+    /// # Errors
+    /// Returns `KmsError::InvalidAmount` if the two `u128` balance components
+    /// cannot be represented exactly as one `u128` total.
+    pub fn total_balance(&self) -> Result<u128> {
+        self.state
+            .balance
+            .checked_add(self.state.pending_balance)
+            .ok_or_else(|| KmsError::InvalidAmount("account total balance overflow".to_string()))
+    }
+
+    #[must_use]
+    pub(crate) fn owner_private_key(&self) -> &SecretFelt {
+        &self.keypair.private_key
+    }
+
+    /// Decrypt an ElGamal ciphertext with the account key and return the point `g^m`.
+    pub fn decrypt(
+        &self,
+        ciphertext: &ElGamalCiphertext,
+    ) -> Result<starknet_types_core::curve::ProjectivePoint> {
+        ElGamal::decrypt(ciphertext, self.owner_private_key().expose_secret())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_MNEMONIC: &str =
+        "habit hope tip crystal because grunt nation idea electric witness alert like";
+
+    #[test]
+    fn test_account_from_mnemonic() {
+        let contract_address = Felt::from(123456u64);
+        let account = TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None);
+        assert!(account.is_ok());
+        assert!(account.unwrap().owner_public_key_hex().is_ok());
+    }
+
+    #[test]
+    fn test_account_from_private_key() {
+        let private_key = Felt::from(42u64);
+        let contract_address = Felt::from(123456u64);
+        let account = TongoAccount::from_private_key(private_key, contract_address);
+        assert!(account.is_ok());
+        let acc = account.unwrap();
+        assert_eq!(acc.owner_private_key(), &SecretFelt::new(private_key));
+        assert_eq!(acc.contract_address(), contract_address);
+    }
+
+    #[test]
+    fn test_public_key_hex() {
+        let contract_address = Felt::from(123456u64);
+        let account =
+            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+        let public_key = account.public_key_hex();
+        assert!(public_key.is_ok());
+        assert!(public_key.unwrap().starts_with("0x"));
+    }
+
+    #[test]
+    fn test_owner_public_key_hex() {
+        let contract_address = Felt::from(123456u64);
+        let account =
+            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+        let owner_pk = account.owner_public_key_hex();
+        let public_pk = account.public_key_hex();
+        // owner_public_key_hex should be the same as public_key_hex
+        assert_eq!(owner_pk.unwrap(), public_pk.unwrap());
+    }
+
+    #[test]
+    fn test_update_state() {
+        let private_key = Felt::from(42u64);
+        let contract_address = Felt::from(123456u64);
+        let mut account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
+
+        assert_eq!(account.balance(), 0);
+        assert_eq!(account.pending_balance(), 0);
+
+        let new_state = AccountState {
+            balance: 1000,
+            pending_balance: 500,
+            nonce: 5,
+        };
+        account.update_state(new_state);
+
+        assert_eq!(account.balance(), 1000);
+        assert_eq!(account.pending_balance(), 500);
+        assert_eq!(account.nonce(), 5);
+    }
+
+    #[test]
+    fn test_balance_check() {
+        let contract_address = Felt::from(123456u64);
+        let mut account =
+            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+
+        account.set_balance(100);
+        assert!(account.has_sufficient_balance(50));
+        assert!(account.has_sufficient_balance(100));
+        assert!(!account.has_sufficient_balance(101));
+    }
+
+    #[test]
+    fn test_total_balance() {
+        let contract_address = Felt::from(123456u64);
+        let mut account =
+            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+
+        account.set_balance(100);
+        account.set_pending_balance(50);
+        assert_eq!(account.total_balance().unwrap(), 150);
+    }
+
+    #[test]
+    fn test_total_balance_overflow_is_rejected() {
+        let contract_address = Felt::from(123456u64);
+        let mut account =
+            TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+
+        account.set_balance(u128::MAX);
+        account.set_pending_balance(1);
+        assert!(matches!(
+            account.total_balance(),
+            Err(KmsError::InvalidAmount(_))
+        ));
+    }
+
+    #[test]
+    fn test_decrypt() {
+        let private_key = Felt::from(42u64);
+        let contract_address = Felt::from(123456u64);
+        let account = TongoAccount::from_private_key(private_key, contract_address).unwrap();
+
+        // Create a valid cipher (encrypting 0 for simplicity)
+        let y = StarkCurve::mul_generator(&private_key);
+        let r = Felt::from(99u64);
+        let r_point = StarkCurve::mul_generator(&r);
+        let y_r = StarkCurve::mul(&r, Some(&y));
+
+        let cipher = ElGamalCiphertext {
+            l: y_r,     // L = y^r (encrypts 0)
+            r: r_point, // R = g^r
+        };
+
+        let result = account.decrypt(&cipher);
+        assert!(result.is_ok());
+        // Decrypted should be identity point (g^0 = point at infinity)
+        // or the generator if there's a bug with g^0
+    }
+}

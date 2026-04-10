@@ -1,0 +1,31 @@
+[package]
+name = "krusty-kms-cabi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "kms"
+crate-type = ["cdylib"]
+
+[dependencies]
+krusty-kms = { path = "../kms" }
+krusty-kms-crypto = { path = "../crypto", default-features = false }
+krusty-kms-common = { path = "../common" }
+krusty-kms-sdk = { path = "../sdk", default-features = false }
+starknet-types-core = { workspace = true }
+starknet-crypto = "0.8"
+bip39 = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha3 = "0.10"
+zeroize = { workspace = true }
+
+[lints.clippy]
+# This crate is itself the raw-pointer boundary, so `&raw` conversions do not
+# improve readability at the ABI call sites.
+borrow_as_ptr = "allow"
+dbg_macro = "deny"
+todo = "deny"

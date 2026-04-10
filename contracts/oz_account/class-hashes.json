@@ -1,0 +1,26 @@
+{
+  "manifest_version": 1,
+  "package": "openzeppelin_presets",
+  "contract_name": "AccountUpgradeable",
+  "latest_version": "3.0.0",
+  "constructor": {
+    "signature": "constructor(ref self: ContractState, public_key: felt252)",
+    "salt_policy": "explicit"
+  },
+  "versions": {
+    "3.0.0": {
+      "source": {
+        "docs": "https://docs.openzeppelin.com/contracts-cairo/3.x/api/account#AccountUpgradeable",
+        "package": "https://scarbs.xyz/packages/openzeppelin_presets"
+      },
+      "networks": {
+        "SN_MAIN": {
+          "declared_class_hash": "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381"
+        },
+        "SN_SEPOLIA": {
+          "declared_class_hash": "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381"
+        }
+      }
+    }
+  }
+}

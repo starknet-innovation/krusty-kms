@@ -1,0 +1,26 @@
+[package]
+name = "krusty-kms-controller"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Cartridge Controller wallet integration for krusty-kms"
+# Cannot publish: `account_sdk` has no crates.io release.
+publish = false
+
+[dependencies]
+krusty-kms-common = { path = "../common" }
+krusty-kms-wallet-api = { path = "../wallet-api" }
+starknet-types-core.workspace = true
+starknet-rust = "0.18.0"
+tokio = { workspace = true, features = ["sync"] }
+async-trait.workspace = true
+url = "2.5"
+
+# Cartridge Controller SDK (git-only, not on crates.io)
+account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.9.4" }
+starknet = "0.17.0"
+
+[lints]
+workspace = true

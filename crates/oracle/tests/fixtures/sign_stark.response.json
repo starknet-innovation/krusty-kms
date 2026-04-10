@@ -1,0 +1,34 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 0
+  },
+  "id": "req-sign-stark",
+  "status": "ok",
+  "result": {
+    "kind": "sign",
+    "value": {
+      "operation": {
+        "id": "sign-stark-1",
+        "kind": "Sign",
+        "state": "Completed",
+        "provenance": {
+          "chain_id": "Sepolia",
+          "key_domain": "StarknetAccount",
+          "derivation_path": {
+            "coin_type": 9004,
+            "account_index": 0,
+            "address_index": 3
+          },
+          "class_hash": null
+        }
+      },
+      "value": {
+        "format": "stark_ecdsa",
+        "public_key": "0x0000000000000000000000000000000000000000000000000000000000000456",
+        "signature_r": "0x0000000000000000000000000000000000000000000000000000000000000111",
+        "signature_s": "0x0000000000000000000000000000000000000000000000000000000000000222"
+      }
+    }
+  }
+}

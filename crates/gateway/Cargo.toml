@@ -1,0 +1,34 @@
+[package]
+name = "krusty-kms-gateway"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Long-lived gateway runtime for krusty-kms TUIs and apps"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+krusty-kms-domain = { version = "0.3.0", path = "../domain" }
+krusty-kms-common = { version = "0.3.0", path = "../common" }
+krusty-kms = { version = "0.3.0", path = "../kms" }
+async-trait.workspace = true
+num-bigint.workspace = true
+starknet-rust = "0.18.0"
+starknet-types-core.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+zeroize.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+
+[lints]
+workspace = true

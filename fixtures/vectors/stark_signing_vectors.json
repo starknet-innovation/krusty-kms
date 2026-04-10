@@ -1,0 +1,12 @@
+{
+  "vectors": [
+    {
+      "name": "stark-rfc6979-signing-starknet-account-key",
+      "private_key": "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df",
+      "message_hash": "0x1234",
+      "expected_public_key": "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e",
+      "expected_r": "0x1ebfea28f72d8a35102201e093d7c380aabbc89cf38e64333a71b70e27092d8",
+      "expected_s": "0x25e5d6d5a3bc0298f3b22f4c3fe411bfa533b817fbcca7167bb06438e8572e4"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "kms-cross-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "tsx src/verify-rust-proofs.ts",
+    "verify:wasm": "tsx src/verify-wasm-bindings.ts",
+    "verify:tx-hashes": "tsx src/generate-tx-hash-vectors.ts",
+    "test": "npm run verify"
+  },
+  "dependencies": {
+    "@fatsolutions/tongo-sdk": "1.3.2",
+    "starknet": "^6.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

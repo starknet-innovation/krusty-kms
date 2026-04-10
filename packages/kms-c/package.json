@@ -1,0 +1,10 @@
+{
+  "name": "@krusty-kms/kms-c",
+  "version": "0.1.0",
+  "private": true,
+  "description": "C header distribution for Krusty KMS ABI",
+  "files": [
+    "include/kms.h",
+    "README.md"
+  ]
+}

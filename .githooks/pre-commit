@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+
+# Auto-format Rust workspace before committing
+if command -v cargo >/dev/null 2>&1; then
+    if ! cargo fmt --all -- --check 2>/dev/null; then
+        echo "Running cargo fmt..."
+        cargo fmt --all
+        echo "Formatted. Please review and re-stage the changes."
+        exit 1
+    fi
+fi

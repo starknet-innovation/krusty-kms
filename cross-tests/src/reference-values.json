@@ -1,0 +1,74 @@
+{
+  "description": "Reference values computed with starknet.js v6, shared with Rust test vectors",
+  "pedersen": {
+    "hash_a_b": {
+      "inputs": ["0x1", "0x2"],
+      "expected": "0x5bb9440e27889a364bcb678b1f679ecd1347acdedcbf36e83494f857cc58026"
+    },
+    "hash_on_elements": {
+      "inputs": ["0x1", "0x2", "0x3"],
+      "expected": "0x30e480bed5fe53fa909cc0f8c4d99b8f9f2c016be4c41e13a4848797979c662"
+    }
+  },
+  "poseidon": {
+    "hash_a_b": {
+      "inputs": ["0x1", "0x2"],
+      "expected": "0x371cb6995ea5e7effcd2e174de264b5b407027a75a231a70c2c8571b8736571"
+    },
+    "hash_on_elements": {
+      "inputs": ["0x1", "0x2", "0x3"],
+      "expected": "0x2f0d8840bcf3bc629598d8a6cc80cb7c0d9e52d93dab244bbf9cd0dca0ad71d"
+    }
+  },
+  "keccak": {
+    "starknet_keccak": {
+      "input": "transfer",
+      "expected": "0x83afd3f4caedc6eebf44246fe54e38c95e3179a5ec9ea81740eca5b482d12e"
+    },
+    "selector_from_name": {
+      "input": "transfer",
+      "expected": "0x83afd3f4caedc6eebf44246fe54e38c95e3179a5ec9ea81740eca5b482d12e"
+    }
+  },
+  "stark_key": {
+    "private_key": "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df",
+    "expected_public_key": "0x2c45e12b14958ec898ef2e08e2e80a407e83ab26dce85a228e17208c5b9a633"
+  },
+  "stark_sign": {
+    "private_key": "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df",
+    "message_hash": "0x1234",
+    "expected_r": "",
+    "expected_s": "",
+    "_note": "r and s are computed at runtime and pinned on first successful run"
+  },
+  "contract_address": {
+    "oz_account": {
+      "salt": "0x0",
+      "class_hash": "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381",
+      "deployer": "0x0",
+      "calldata_description": "[publicKey]",
+      "expected": ""
+    },
+    "argent_account": {
+      "salt_description": "publicKey",
+      "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
+      "deployer": "0x0",
+      "calldata_description": "[0, publicKey, 0]",
+      "expected": ""
+    }
+  },
+  "short_string": {
+    "encode": {
+      "input": "hello",
+      "expected": "0x68656c6c6f"
+    },
+    "decode": {
+      "input": "0x68656c6c6f",
+      "expected": "hello"
+    }
+  },
+  "grind_key": {
+    "seed": "0x86F3E7293141F20A8BAFF320E8EE4ACCB9D4A4BF2B4D295E8CEE784DB46E0519",
+    "expected": "0x5c8c8774c22571bbd9d2088ab7a290f4b33b6e59a900307a14923cfec0d1d4f"
+  }
+}

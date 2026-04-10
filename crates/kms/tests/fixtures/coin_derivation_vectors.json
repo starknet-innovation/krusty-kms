@@ -1,0 +1,20 @@
+{
+  "mnemonic": "habit hope tip crystal because grunt nation idea electric witness alert like",
+  "passphrase": "",
+  "vectors": [
+    {
+      "name": "starknet-coin-9004-index-0-account-0",
+      "coin_type": 9004,
+      "index": 0,
+      "account_index": 0,
+      "expected_private_key": "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df"
+    },
+    {
+      "name": "tongo-coin-5454-index-0-account-0",
+      "coin_type": 5454,
+      "index": 0,
+      "account_index": 0,
+      "expected_private_key": "0x181c51e06caf24a03c8757ad3af64660fc71e32f9ee0187ca153bd32867c04e"
+    }
+  ]
+}

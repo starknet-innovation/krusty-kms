@@ -1,0 +1,11 @@
+{
+  "vectors": [
+    {
+      "name": "nostr-event-signing-reference",
+      "private_key_hex": "1dce8d2ec6184cca9433f8f7b2702d9014936627ce0f50926f471e52946d0f4c",
+      "event_id_hex": "6c3fd336b5457a0f2b74959f177a5c5e7f9ab75cdb4ab7a3ec7aaf1e2a3d2b13",
+      "expected_public_key_hex": "8acd37f229c778743c7ca4dd1427fbc3dc3391f2f6831d7bd69916d59c8634d6",
+      "expected_signature_hex": "3cc203d1af18adeb633d1ec784edb639aef8c4d809a488e7b7cf92262bb768147e554b80614e0bc77c2d73e21d661008f6e908a26a41f7d03481b2b80a7cdc0a"
+    }
+  ]
+}
