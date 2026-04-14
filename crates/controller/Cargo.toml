@@ -19,7 +19,7 @@ async-trait.workspace = true
 url = "2.5"
 
 # Cartridge Controller SDK (git-only, not on crates.io)
-account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.9.4" }
+account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.9.6" }
 starknet = "0.17.0"
 
 [lints]

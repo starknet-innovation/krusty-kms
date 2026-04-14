@@ -1,0 +1,13 @@
+# Advisories from transitive dependencies of `account_sdk` (git-only, in
+# krusty-kms-controller which is publish = false).  These cannot be updated
+# until upstream cartridge-gg/controller-rs upgrades its dependency stack.
+
+[advisories]
+ignore = [
+    "RUSTSEC-2024-0421", # idna 0.3  – Punycode label acceptance (via reqwest 0.11 → cookie_store)
+    "RUSTSEC-2024-0388", # derivative – unmaintained (via ark-ff → ruint → alloy-primitives)
+    "RUSTSEC-2024-0436", # paste      – unmaintained (via ark-ff → ruint → alloy-primitives)
+    "RUSTSEC-2024-0370", # proc-macro-error – unmaintained (via cainome-rs-macro)
+    "RUSTSEC-2025-0134", # rustls-pemfile   – unmaintained (via reqwest 0.11)
+    "RUSTSEC-2025-0048", # tsify-next       – unmaintained (direct dep of account_sdk)
+]
