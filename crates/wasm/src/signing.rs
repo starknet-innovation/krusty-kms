@@ -220,7 +220,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_sign_stark_hash_rejects_invalid_private_key() {
-        let err = sign_stark_hash("bad", TEST_STARK_HASH).unwrap_err();
+        let err = sign_stark_hash("not-hex", TEST_STARK_HASH).unwrap_err();
         let msg = js_error_message(err);
         assert!(msg.contains("Invalid private key hex"));
     }
