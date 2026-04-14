@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "account_sdk"
 version = "0.1.0"
-source = "git+https://github.com/cartridge-gg/controller-rs.git?tag=v0.9.4#cc79095c94f1e259d738c3103e9911afdd8d5a5f"
+source = "git+https://github.com/cartridge-gg/controller-rs.git?tag=v0.9.6#addbf83150a9f9385d6a1e0f554914092748824d"
 dependencies = [
  "alloy-primitives",
  "alloy-signer",

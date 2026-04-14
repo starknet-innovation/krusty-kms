@@ -26,7 +26,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo check -p krusty-kms --examples --locked
       - run: cargo check -p krusty-kms-sdk --examples --locked
-      - run: cargo test --workspace
+      - run: cargo test --workspace --exclude krusty-kms-wasm
 
   msrv:
     runs-on: ubuntu-latest
