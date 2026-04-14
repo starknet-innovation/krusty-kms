@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "aes",
  "bip39",
@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-cabi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "bip39",
  "hex",
@@ -2293,7 +2293,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-client"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "bs58",
@@ -2314,7 +2314,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-common"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "hex",
  "num-bigint",
@@ -2329,7 +2329,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-controller"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "account_sdk",
  "async-trait",
@@ -2344,10 +2344,11 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-crypto"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "criterion",
  "getrandom 0.2.17",
+ "getrandom 0.3.4",
  "hex",
  "krusty-kms-common",
  "num-bigint",
@@ -2368,7 +2369,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-domain"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "hex",
  "krusty-kms-common",
@@ -2380,7 +2381,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-gateway"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "krusty-kms",
@@ -2395,7 +2396,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-oracle"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
@@ -2407,7 +2408,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-sdk"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "chacha20poly1305",
  "criterion",
@@ -2426,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-wallet-api"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
@@ -2436,10 +2437,11 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-wasm"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.17",
+ "getrandom 0.3.4",
  "hex",
  "js-sys",
  "krusty-kms",
@@ -2556,7 +2558,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "mental-poker"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "criterion",
  "getrandom 0.2.17",
@@ -2579,10 +2581,11 @@ dependencies = [
 
 [[package]]
 name = "mental-poker-wasm"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.17",
+ "getrandom 0.3.4",
  "hex",
  "js-sys",
  "krusty-kms-common",
@@ -3012,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "qb-game"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "hex",
  "krusty-kms-common",
