@@ -186,7 +186,7 @@ pub fn simulate_play(
     }
 
     let detection_prob = detection_probability(lie_magnitude);
-    let random_value: f64 = rand::thread_rng().gen();
+    let random_value: f64 = rand::rng().random();
     let was_caught = random_value < detection_prob;
 
     if was_caught {

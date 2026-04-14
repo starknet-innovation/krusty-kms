@@ -3,7 +3,7 @@
 //! This module provides efficient random Felt generation, with support for
 //! batch generation to amortize the overhead of creating thread-local RNGs.
 
-use rand::RngCore;
+use rand_core::TryRngCore;
 use starknet_types_core::felt::Felt;
 #[cfg(feature = "test-utils")]
 use std::sync::{LazyLock, Mutex};
@@ -120,8 +120,9 @@ pub fn fill_random_bytes(out: &mut [u8]) {
         drop(guard);
     }
 
-    let mut rng = rand::thread_rng();
-    rng.fill_bytes(out);
+    rand::rngs::OsRng
+        .try_fill_bytes(out)
+        .expect("OS entropy source unavailable");
 }
 
 /// Generate a single random Felt.

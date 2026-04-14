@@ -580,7 +580,7 @@ impl Permutation {
     pub fn random(n: usize) -> Self {
         use rand::seq::SliceRandom;
         let mut indices: Vec<usize> = (0..n).collect();
-        indices.shuffle(&mut rand::thread_rng());
+        indices.shuffle(&mut rand::rng());
         Self { indices }
     }
 

@@ -50,6 +50,7 @@ starknet-types-core.workspace = true
 
 # Crypto
 rand.workspace = true
+rand_core.workspace = true
 getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
