@@ -16,7 +16,10 @@ use rand_core::TryRngCore;
 ///
 /// Returns [`KmsError`] if:
 /// - Invalid word count (not 12, 15, 18, 21, or 24) (`InvalidMnemonic`)
-/// - Entropy generation fails (`InvalidMnemonic`)
+///
+/// # Panics
+///
+/// Panics if OS entropy is unavailable (catastrophic, non-recoverable).
 ///
 /// # Cyclomatic Complexity: 2 (early return for invalid input)
 pub fn generate_mnemonic(word_count: usize) -> Result<String> {
