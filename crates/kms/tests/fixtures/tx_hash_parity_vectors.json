@@ -1,6 +1,6 @@
 {
-  "description": "Transaction hash parity vectors for cross-language validation (starknet.js v6)",
-  "spec_version": "0.7.1",
+  "description": "Transaction hash parity vectors for cross-language validation (starknet@10.0.2)",
+  "spec_version": "0.10.1",
   "vectors": {
     "invoke_v1": [
       {
@@ -28,7 +28,41 @@
         "nonce_da_mode": 0,
         "fee_da_mode": 0,
         "account_deployment_data": [],
-        "expected_hash": "0x055778074309dc353bde43aeb4c30d3254ed05aea296483a6989d03dc6829a59"
+        "expected_hash": "0x078c6352e1c60908a16ed8e00f9472b525de821f842af4dbe7ba3ecefa549af6"
+      },
+      {
+        "name": "empty-proof-facts-invoke-v3",
+        "sender_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "calldata": ["0x1", "0x2", "0x3"],
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x7",
+        "tip": "0x0",
+        "l1_gas": { "max_amount": "0x186a0", "max_price_per_unit": "0x5af3107a4000" },
+        "l2_gas": { "max_amount": "0x0", "max_price_per_unit": "0x0" },
+        "l1_data_gas": { "max_amount": "0x0", "max_price_per_unit": "0x0" },
+        "paymaster_data": [],
+        "nonce_da_mode": 0,
+        "fee_da_mode": 0,
+        "account_deployment_data": [],
+        "proof_facts": [],
+        "expected_hash": "0x078c6352e1c60908a16ed8e00f9472b525de821f842af4dbe7ba3ecefa549af6"
+      },
+      {
+        "name": "proof-facts-invoke-v3",
+        "sender_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "calldata": ["0x1", "0x2", "0x3"],
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x7",
+        "tip": "0x0",
+        "l1_gas": { "max_amount": "0x186a0", "max_price_per_unit": "0x5af3107a4000" },
+        "l2_gas": { "max_amount": "0x0", "max_price_per_unit": "0x0" },
+        "l1_data_gas": { "max_amount": "0x0", "max_price_per_unit": "0x0" },
+        "paymaster_data": [],
+        "nonce_da_mode": 0,
+        "fee_da_mode": 0,
+        "account_deployment_data": [],
+        "proof_facts": ["0x123", "0x456", "0x789"],
+        "expected_hash": "0x0015f5114c744e730be573a540456ad0a05d5f72964143b9839c57abc5ee7b31"
       }
     ],
     "deploy_account_v1": [

@@ -51,6 +51,7 @@ struct InvokeV3 {
     nonce_da_mode: u8,
     fee_da_mode: u8,
     account_deployment_data: Vec<String>,
+    proof_facts: Option<Vec<String>>,
     expected_hash: String,
 }
 
@@ -148,20 +149,37 @@ fn generate_tx_hash_parity_vectors() {
         let l1 = resource_bounds(&v.l1_gas);
         let l2 = resource_bounds(&v.l2_gas);
         let l1d = resource_bounds(&v.l1_data_gas);
-        let h = krusty_kms::compute_invoke_v3_hash(
-            &felt(&v.sender_address),
-            &felts(&v.calldata),
-            &felt(&v.chain_id),
-            &felt(&v.nonce),
-            &felts(&v.account_deployment_data),
-            u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
-            &l1,
-            &l2,
-            &l1d,
-            &felts(&v.paymaster_data),
-            da_mode(v.nonce_da_mode),
-            da_mode(v.fee_da_mode),
-        );
+        let h = match &v.proof_facts {
+            Some(proof_facts) => krusty_kms::compute_invoke_v3_hash_with_proof_facts(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+                &felts(proof_facts),
+            ),
+            None => krusty_kms::compute_invoke_v3_hash(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+            ),
+        };
         println!("{}: {:#066x}", v.name, h);
     }
 
@@ -221,20 +239,37 @@ fn tx_hash_parity_vectors_match() {
         let l1 = resource_bounds(&v.l1_gas);
         let l2 = resource_bounds(&v.l2_gas);
         let l1d = resource_bounds(&v.l1_data_gas);
-        let computed = krusty_kms::compute_invoke_v3_hash(
-            &felt(&v.sender_address),
-            &felts(&v.calldata),
-            &felt(&v.chain_id),
-            &felt(&v.nonce),
-            &felts(&v.account_deployment_data),
-            u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
-            &l1,
-            &l2,
-            &l1d,
-            &felts(&v.paymaster_data),
-            da_mode(v.nonce_da_mode),
-            da_mode(v.fee_da_mode),
-        );
+        let computed = match &v.proof_facts {
+            Some(proof_facts) => krusty_kms::compute_invoke_v3_hash_with_proof_facts(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+                &felts(proof_facts),
+            ),
+            None => krusty_kms::compute_invoke_v3_hash(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+            ),
+        };
         assert_eq!(
             computed,
             felt(&v.expected_hash),

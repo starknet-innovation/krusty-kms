@@ -1,7 +1,7 @@
 /**
  * Cross-language transaction hash parity verification.
  *
- * Computes transaction hashes using starknet.js v6 for the same inputs
+ * Computes transaction hashes using starknet@10.0.2 for the same inputs
  * defined in `crates/kms/tests/fixtures/tx_hash_parity_vectors.json`.
  *
  * Run with:
@@ -11,7 +11,7 @@
  * diverge, one of the implementations has a bug.
  */
 
-import { hash, constants } from "starknet";
+import { hash, v2hash, constants } from "starknet-10";
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -57,6 +57,7 @@ interface InvokeV3Vector {
   nonce_da_mode: number;
   fee_da_mode: number;
   account_deployment_data: string[];
+  proof_facts?: string[];
   expected_hash: string;
 }
 
@@ -102,8 +103,8 @@ let passed = 0;
 let failed = 0;
 
 function assertEqual(testName: string, actual: string, expected: string): void {
-  const normActual = actual.toLowerCase();
-  const normExpected = expected.toLowerCase();
+  const normActual = normalizeHex(actual);
+  const normExpected = normalizeHex(expected);
   if (normActual === normExpected) {
     console.log(`  PASS ${testName}`);
     passed++;
@@ -115,6 +116,20 @@ function assertEqual(testName: string, actual: string, expected: string): void {
   }
 }
 
+function normalizeHex(value: string): string {
+  if (!value.startsWith("0x") && !value.startsWith("0X")) {
+    return value.toLowerCase();
+  }
+  return `0x${BigInt(value).toString(16)}`;
+}
+
+function gasBounds(gas: GasBounds) {
+  return {
+    max_amount: BigInt(gas.max_amount),
+    max_price_per_unit: BigInt(gas.max_price_per_unit),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -122,7 +137,7 @@ function assertEqual(testName: string, actual: string, expected: string): void {
 function main() {
   const fixture: Fixture = JSON.parse(readFileSync(FIXTURE_PATH, "utf-8"));
 
-  console.log("Transaction hash parity verification (starknet.js v6)\n");
+  console.log("Transaction hash parity verification (starknet@10.0.2)\n");
   console.log(`Fixture: ${fixture.description}`);
   console.log(`Spec version: ${fixture.spec_version}\n`);
 
@@ -131,14 +146,14 @@ function main() {
   // -------------------------------------------------------------------------
   console.log("Invoke V1:");
   for (const v of fixture.vectors.invoke_v1) {
-    const computed = hash.calculateInvokeTransactionHash({
-      senderAddress: v.sender_address,
-      version: "0x1",
-      compiledCalldata: v.calldata,
-      maxFee: v.max_fee,
-      chainId: v.chain_id as constants.StarknetChainId,
-      nonce: v.nonce,
-    });
+    const computed = v2hash.calculateTransactionHash(
+      v.sender_address,
+      "0x1",
+      v.calldata,
+      v.max_fee,
+      v.chain_id as constants.StarknetChainId,
+      v.nonce
+    );
     assertEqual(v.name, computed, v.expected_hash);
   }
 
@@ -147,7 +162,7 @@ function main() {
   // -------------------------------------------------------------------------
   console.log("Invoke V3:");
   for (const v of fixture.vectors.invoke_v3) {
-    const computed = hash.calculateInvokeTransactionHash({
+    const args: any = {
       senderAddress: v.sender_address,
       version: "0x3",
       compiledCalldata: v.calldata,
@@ -157,22 +172,17 @@ function main() {
       nonceDataAvailabilityMode: v.nonce_da_mode,
       feeDataAvailabilityMode: v.fee_da_mode,
       resourceBounds: {
-        l1_gas: {
-          max_amount: v.l1_gas.max_amount,
-          max_price_per_unit: v.l1_gas.max_price_per_unit,
-        },
-        l2_gas: {
-          max_amount: v.l2_gas.max_amount,
-          max_price_per_unit: v.l2_gas.max_price_per_unit,
-        },
-        l1_data_gas: {
-          max_amount: v.l1_data_gas.max_amount,
-          max_price_per_unit: v.l1_data_gas.max_price_per_unit,
-        },
+        l1_gas: gasBounds(v.l1_gas),
+        l2_gas: gasBounds(v.l2_gas),
+        l1_data_gas: gasBounds(v.l1_data_gas),
       },
       tip: v.tip,
       paymasterData: v.paymaster_data,
-    });
+    };
+    if (v.proof_facts !== undefined) {
+      args.proofFacts = v.proof_facts;
+    }
+    const computed = hash.calculateInvokeTransactionHash(args);
     assertEqual(v.name, computed, v.expected_hash);
   }
 
@@ -181,16 +191,16 @@ function main() {
   // -------------------------------------------------------------------------
   console.log("Deploy Account V1:");
   for (const v of fixture.vectors.deploy_account_v1) {
-    const computed = hash.calculateDeployAccountTransactionHash({
-      contractAddress: v.contract_address,
-      classHash: v.class_hash,
-      constructorCalldata: v.constructor_calldata,
-      salt: v.salt,
-      version: "0x1",
-      maxFee: v.max_fee,
-      chainId: v.chain_id as constants.StarknetChainId,
-      nonce: v.nonce,
-    });
+    const computed = v2hash.calculateDeployAccountTransactionHash(
+      v.contract_address,
+      v.class_hash,
+      v.constructor_calldata,
+      v.salt,
+      "0x1",
+      v.max_fee,
+      v.chain_id as constants.StarknetChainId,
+      v.nonce
+    );
     assertEqual(v.name, computed, v.expected_hash);
   }
 
@@ -199,15 +209,15 @@ function main() {
   // -------------------------------------------------------------------------
   console.log("Declare V2:");
   for (const v of fixture.vectors.declare_v2) {
-    const computed = hash.calculateDeclareTransactionHash({
-      senderAddress: v.sender_address,
-      version: "0x2",
-      classHash: v.class_hash,
-      maxFee: v.max_fee,
-      chainId: v.chain_id as constants.StarknetChainId,
-      nonce: v.nonce,
-      compiledClassHash: v.compiled_class_hash,
-    });
+    const computed = v2hash.calculateDeclareTransactionHash(
+      v.class_hash,
+      v.sender_address,
+      "0x2",
+      v.max_fee,
+      v.chain_id as constants.StarknetChainId,
+      v.nonce,
+      v.compiled_class_hash
+    );
     assertEqual(v.name, computed, v.expected_hash);
   }
 
