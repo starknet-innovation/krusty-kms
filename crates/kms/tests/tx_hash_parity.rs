@@ -22,7 +22,9 @@ struct Vectors {
     invoke_v1: Vec<InvokeV1>,
     invoke_v3: Vec<InvokeV3>,
     deploy_account_v1: Vec<DeployAccountV1>,
+    deploy_account_v3: Vec<DeployAccountV3>,
     declare_v2: Vec<DeclareV2>,
+    declare_v3: Vec<DeclareV3>,
 }
 
 #[derive(Deserialize)]
@@ -51,6 +53,7 @@ struct InvokeV3 {
     nonce_da_mode: u8,
     fee_da_mode: u8,
     account_deployment_data: Vec<String>,
+    proof_facts: Option<Vec<String>>,
     expected_hash: String,
 }
 
@@ -68,6 +71,25 @@ struct DeployAccountV1 {
 }
 
 #[derive(Deserialize)]
+struct DeployAccountV3 {
+    name: String,
+    contract_address: String,
+    class_hash: String,
+    constructor_calldata: Vec<String>,
+    salt: String,
+    chain_id: String,
+    nonce: String,
+    tip: String,
+    l1_gas: GasBounds,
+    l2_gas: GasBounds,
+    l1_data_gas: GasBounds,
+    paymaster_data: Vec<String>,
+    nonce_da_mode: u8,
+    fee_da_mode: u8,
+    expected_hash: String,
+}
+
+#[derive(Deserialize)]
 struct DeclareV2 {
     name: String,
     sender_address: String,
@@ -76,6 +98,25 @@ struct DeclareV2 {
     chain_id: String,
     nonce: String,
     compiled_class_hash: String,
+    expected_hash: String,
+}
+
+#[derive(Deserialize)]
+struct DeclareV3 {
+    name: String,
+    sender_address: String,
+    class_hash: String,
+    compiled_class_hash: String,
+    chain_id: String,
+    nonce: String,
+    tip: String,
+    l1_gas: GasBounds,
+    l2_gas: GasBounds,
+    l1_data_gas: GasBounds,
+    paymaster_data: Vec<String>,
+    nonce_da_mode: u8,
+    fee_da_mode: u8,
+    account_deployment_data: Vec<String>,
     expected_hash: String,
 }
 
@@ -117,6 +158,10 @@ fn resource_bounds(gb: &GasBounds) -> ResourceBounds {
     }
 }
 
+fn tip(hex: &str) -> u64 {
+    u64::from_str_radix(hex.trim_start_matches("0x"), 16).expect("bad tip")
+}
+
 fn load_fixture() -> Fixture {
     let json = include_str!("fixtures/tx_hash_parity_vectors.json");
     serde_json::from_str(json).expect("bad fixture JSON")
@@ -148,20 +193,37 @@ fn generate_tx_hash_parity_vectors() {
         let l1 = resource_bounds(&v.l1_gas);
         let l2 = resource_bounds(&v.l2_gas);
         let l1d = resource_bounds(&v.l1_data_gas);
-        let h = krusty_kms::compute_invoke_v3_hash(
-            &felt(&v.sender_address),
-            &felts(&v.calldata),
-            &felt(&v.chain_id),
-            &felt(&v.nonce),
-            &felts(&v.account_deployment_data),
-            u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
-            &l1,
-            &l2,
-            &l1d,
-            &felts(&v.paymaster_data),
-            da_mode(v.nonce_da_mode),
-            da_mode(v.fee_da_mode),
-        );
+        let h = match &v.proof_facts {
+            Some(proof_facts) => krusty_kms::compute_invoke_v3_hash_with_proof_facts(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                tip(&v.tip),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+                &felts(proof_facts),
+            ),
+            None => krusty_kms::compute_invoke_v3_hash(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                tip(&v.tip),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+            ),
+        };
         println!("{}: {:#066x}", v.name, h);
     }
 
@@ -179,6 +241,29 @@ fn generate_tx_hash_parity_vectors() {
         println!("{}: {:#066x}", v.name, h);
     }
 
+    println!("\n=== Deploy Account V3 ===");
+    for v in &fixture.vectors.deploy_account_v3 {
+        let l1 = resource_bounds(&v.l1_gas);
+        let l2 = resource_bounds(&v.l2_gas);
+        let l1d = resource_bounds(&v.l1_data_gas);
+        let h = krusty_kms::compute_deploy_account_v3_hash(
+            &felt(&v.contract_address),
+            &felt(&v.class_hash),
+            &felts(&v.constructor_calldata),
+            &felt(&v.salt),
+            &felt(&v.chain_id),
+            &felt(&v.nonce),
+            tip(&v.tip),
+            &l1,
+            &l2,
+            &l1d,
+            &felts(&v.paymaster_data),
+            da_mode(v.nonce_da_mode),
+            da_mode(v.fee_da_mode),
+        );
+        println!("{}: {:#066x}", v.name, h);
+    }
+
     println!("\n=== Declare V2 ===");
     for v in &fixture.vectors.declare_v2 {
         let h = krusty_kms::compute_declare_v2_hash(
@@ -188,6 +273,29 @@ fn generate_tx_hash_parity_vectors() {
             &felt(&v.chain_id),
             &felt(&v.nonce),
             &felt(&v.compiled_class_hash),
+        );
+        println!("{}: {:#066x}", v.name, h);
+    }
+
+    println!("\n=== Declare V3 ===");
+    for v in &fixture.vectors.declare_v3 {
+        let l1 = resource_bounds(&v.l1_gas);
+        let l2 = resource_bounds(&v.l2_gas);
+        let l1d = resource_bounds(&v.l1_data_gas);
+        let h = krusty_kms::compute_declare_v3_hash(
+            &felt(&v.sender_address),
+            &felt(&v.class_hash),
+            &felt(&v.compiled_class_hash),
+            &felt(&v.chain_id),
+            &felt(&v.nonce),
+            tip(&v.tip),
+            &l1,
+            &l2,
+            &l1d,
+            &felts(&v.paymaster_data),
+            da_mode(v.nonce_da_mode),
+            da_mode(v.fee_da_mode),
+            &felts(&v.account_deployment_data),
         );
         println!("{}: {:#066x}", v.name, h);
     }
@@ -221,20 +329,37 @@ fn tx_hash_parity_vectors_match() {
         let l1 = resource_bounds(&v.l1_gas);
         let l2 = resource_bounds(&v.l2_gas);
         let l1d = resource_bounds(&v.l1_data_gas);
-        let computed = krusty_kms::compute_invoke_v3_hash(
-            &felt(&v.sender_address),
-            &felts(&v.calldata),
-            &felt(&v.chain_id),
-            &felt(&v.nonce),
-            &felts(&v.account_deployment_data),
-            u64::from_str_radix(v.tip.trim_start_matches("0x"), 16).unwrap(),
-            &l1,
-            &l2,
-            &l1d,
-            &felts(&v.paymaster_data),
-            da_mode(v.nonce_da_mode),
-            da_mode(v.fee_da_mode),
-        );
+        let computed = match &v.proof_facts {
+            Some(proof_facts) => krusty_kms::compute_invoke_v3_hash_with_proof_facts(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                tip(&v.tip),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+                &felts(proof_facts),
+            ),
+            None => krusty_kms::compute_invoke_v3_hash(
+                &felt(&v.sender_address),
+                &felts(&v.calldata),
+                &felt(&v.chain_id),
+                &felt(&v.nonce),
+                &felts(&v.account_deployment_data),
+                tip(&v.tip),
+                &l1,
+                &l2,
+                &l1d,
+                &felts(&v.paymaster_data),
+                da_mode(v.nonce_da_mode),
+                da_mode(v.fee_da_mode),
+            ),
+        };
         assert_eq!(
             computed,
             felt(&v.expected_hash),
@@ -261,6 +386,33 @@ fn tx_hash_parity_vectors_match() {
         );
     }
 
+    for v in &fixture.vectors.deploy_account_v3 {
+        let l1 = resource_bounds(&v.l1_gas);
+        let l2 = resource_bounds(&v.l2_gas);
+        let l1d = resource_bounds(&v.l1_data_gas);
+        let computed = krusty_kms::compute_deploy_account_v3_hash(
+            &felt(&v.contract_address),
+            &felt(&v.class_hash),
+            &felts(&v.constructor_calldata),
+            &felt(&v.salt),
+            &felt(&v.chain_id),
+            &felt(&v.nonce),
+            tip(&v.tip),
+            &l1,
+            &l2,
+            &l1d,
+            &felts(&v.paymaster_data),
+            da_mode(v.nonce_da_mode),
+            da_mode(v.fee_da_mode),
+        );
+        assert_eq!(
+            computed,
+            felt(&v.expected_hash),
+            "deploy_account_v3 `{}` mismatch",
+            v.name,
+        );
+    }
+
     for v in &fixture.vectors.declare_v2 {
         let computed = krusty_kms::compute_declare_v2_hash(
             &felt(&v.sender_address),
@@ -274,6 +426,33 @@ fn tx_hash_parity_vectors_match() {
             computed,
             felt(&v.expected_hash),
             "declare_v2 `{}` mismatch",
+            v.name,
+        );
+    }
+
+    for v in &fixture.vectors.declare_v3 {
+        let l1 = resource_bounds(&v.l1_gas);
+        let l2 = resource_bounds(&v.l2_gas);
+        let l1d = resource_bounds(&v.l1_data_gas);
+        let computed = krusty_kms::compute_declare_v3_hash(
+            &felt(&v.sender_address),
+            &felt(&v.class_hash),
+            &felt(&v.compiled_class_hash),
+            &felt(&v.chain_id),
+            &felt(&v.nonce),
+            tip(&v.tip),
+            &l1,
+            &l2,
+            &l1d,
+            &felts(&v.paymaster_data),
+            da_mode(v.nonce_da_mode),
+            da_mode(v.fee_da_mode),
+            &felts(&v.account_deployment_data),
+        );
+        assert_eq!(
+            computed,
+            felt(&v.expected_hash),
+            "declare_v3 `{}` mismatch",
             v.name,
         );
     }

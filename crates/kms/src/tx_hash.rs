@@ -24,7 +24,7 @@ const DECLARE_PREFIX: Felt = Felt::from_hex_unchecked("0x6465636c617265"); // "d
 
 const L1_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c315f474153"); // "L1_GAS"
 const L2_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c325f474153"); // "L2_GAS"
-const L1_DATA_GAS_NAME: Felt = Felt::from_hex_unchecked("0x4c315f444154415f474153"); // "L1_DATA_GAS"
+const L1_DATA_NAME: Felt = Felt::from_hex_unchecked("0x4c315f44415441"); // "L1_DATA"
 
 // ---------------------------------------------------------------------------
 // Packing constants
@@ -199,12 +199,66 @@ pub fn compute_invoke_v3_hash(
     nonce_da_mode: DaMode,
     fee_da_mode: DaMode,
 ) -> Felt {
+    compute_invoke_v3_hash_with_proof_facts(
+        sender_address,
+        calldata,
+        chain_id,
+        nonce,
+        account_deployment_data,
+        tip,
+        l1_gas,
+        l2_gas,
+        l1_data_gas,
+        paymaster_data,
+        nonce_da_mode,
+        fee_da_mode,
+        &[],
+    )
+}
+
+/// Compute the hash of a V3 invoke transaction carrying optional proof facts.
+///
+/// `proof_facts` follows the `starknet@10.0.2` invoke-v3 preimage: when the
+/// slice is non-empty, `Poseidon(proof_facts)` is appended after the calldata
+/// hash. An empty slice is identical to [`compute_invoke_v3_hash`].
+#[allow(clippy::too_many_arguments)]
+pub fn compute_invoke_v3_hash_with_proof_facts(
+    sender_address: &Felt,
+    calldata: &[Felt],
+    chain_id: &Felt,
+    nonce: &Felt,
+    account_deployment_data: &[Felt],
+    tip: u64,
+    l1_gas: &ResourceBounds,
+    l2_gas: &ResourceBounds,
+    l1_data_gas: &ResourceBounds,
+    paymaster_data: &[Felt],
+    nonce_da_mode: DaMode,
+    fee_da_mode: DaMode,
+    proof_facts: &[Felt],
+) -> Felt {
     let fee_hash = compute_fee_hash(tip, l1_gas, l2_gas, l1_data_gas);
     let paymaster_hash = Poseidon::hash_array(paymaster_data);
     let da_mode = pack_da_modes(nonce_da_mode, fee_da_mode);
     let deployment_data_hash = Poseidon::hash_array(account_deployment_data);
     let calldata_hash = Poseidon::hash_array(calldata);
 
+    if proof_facts.is_empty() {
+        return Poseidon::hash_array(&[
+            INVOKE_PREFIX,
+            VERSION_3,
+            *sender_address,
+            fee_hash,
+            paymaster_hash,
+            *chain_id,
+            *nonce,
+            da_mode,
+            deployment_data_hash,
+            calldata_hash,
+        ]);
+    }
+
+    let proof_facts_hash = Poseidon::hash_array(proof_facts);
     Poseidon::hash_array(&[
         INVOKE_PREFIX,
         VERSION_3,
@@ -216,6 +270,7 @@ pub fn compute_invoke_v3_hash(
         da_mode,
         deployment_data_hash,
         calldata_hash,
+        proof_facts_hash,
     ])
 }
 
@@ -277,7 +332,6 @@ pub fn compute_declare_v3_hash(
     let paymaster_hash = Poseidon::hash_array(paymaster_data);
     let da_mode = pack_da_modes(nonce_da_mode, fee_da_mode);
     let deployment_data_hash = Poseidon::hash_array(account_deployment_data);
-    let calldata_hash = Poseidon::hash_array(&[]); // empty for declare
 
     Poseidon::hash_array(&[
         DECLARE_PREFIX,
@@ -289,7 +343,6 @@ pub fn compute_declare_v3_hash(
         *nonce,
         da_mode,
         deployment_data_hash,
-        calldata_hash,
         *class_hash,
         *compiled_class_hash,
     ])
@@ -308,7 +361,7 @@ fn compute_fee_hash(
 ) -> Felt {
     let l1_packed = pack_resource_bounds(&L1_GAS_NAME, l1_gas);
     let l2_packed = pack_resource_bounds(&L2_GAS_NAME, l2_gas);
-    let l1_data_packed = pack_resource_bounds(&L1_DATA_GAS_NAME, l1_data_gas);
+    let l1_data_packed = pack_resource_bounds(&L1_DATA_NAME, l1_data_gas);
     Poseidon::hash_array(&[
         Felt::from(tip as u128),
         l1_packed,
@@ -326,9 +379,9 @@ fn pack_resource_bounds(resource_name: &Felt, bounds: &ResourceBounds) -> Felt {
 }
 
 /// Pack data availability modes into a single Felt:
-/// `(fee_da_mode << 32) + nonce_da_mode`
+/// `(nonce_da_mode << 32) + fee_da_mode`
 fn pack_da_modes(nonce_da: DaMode, fee_da: DaMode) -> Felt {
-    Felt::from(((fee_da as u64) << 32) + nonce_da as u64)
+    Felt::from(((nonce_da as u64) << 32) + fee_da as u64)
 }
 
 // ===========================================================================
@@ -676,6 +729,105 @@ mod tests {
         assert_ne!(h1, h2);
     }
 
+    #[test]
+    fn test_invoke_v3_empty_proof_facts_matches_non_proof_hash() {
+        let sender = Felt::from_hex_unchecked("0x123");
+        let calldata = vec![Felt::from_hex_unchecked("0x456")];
+        let nonce = Felt::ZERO;
+        let l1_gas = ResourceBounds {
+            max_amount: 1000,
+            max_price_per_unit: 1_000_000,
+        };
+        let l2_gas = ResourceBounds {
+            max_amount: 5000,
+            max_price_per_unit: 500_000,
+        };
+
+        let without_proof = compute_invoke_v3_hash(
+            &sender,
+            &calldata,
+            &SN_SEPOLIA,
+            &nonce,
+            &[],
+            0,
+            &l1_gas,
+            &l2_gas,
+            &ResourceBounds::zero(),
+            &[],
+            DaMode::L1,
+            DaMode::L1,
+        );
+        let empty_proof = compute_invoke_v3_hash_with_proof_facts(
+            &sender,
+            &calldata,
+            &SN_SEPOLIA,
+            &nonce,
+            &[],
+            0,
+            &l1_gas,
+            &l2_gas,
+            &ResourceBounds::zero(),
+            &[],
+            DaMode::L1,
+            DaMode::L1,
+            &[],
+        );
+
+        assert_eq!(without_proof, empty_proof);
+    }
+
+    #[test]
+    fn test_invoke_v3_non_empty_proof_facts_change_hash() {
+        let sender = Felt::from_hex_unchecked("0x123");
+        let calldata = vec![Felt::from_hex_unchecked("0x456")];
+        let nonce = Felt::ZERO;
+        let l1_gas = ResourceBounds {
+            max_amount: 1000,
+            max_price_per_unit: 1_000_000,
+        };
+        let l2_gas = ResourceBounds {
+            max_amount: 5000,
+            max_price_per_unit: 500_000,
+        };
+        let proof_facts = vec![
+            Felt::from_hex_unchecked("0xabc"),
+            Felt::from_hex_unchecked("0xdef"),
+        ];
+
+        let without_proof = compute_invoke_v3_hash(
+            &sender,
+            &calldata,
+            &SN_SEPOLIA,
+            &nonce,
+            &[],
+            0,
+            &l1_gas,
+            &l2_gas,
+            &ResourceBounds::zero(),
+            &[],
+            DaMode::L1,
+            DaMode::L1,
+        );
+        let with_proof = compute_invoke_v3_hash_with_proof_facts(
+            &sender,
+            &calldata,
+            &SN_SEPOLIA,
+            &nonce,
+            &[],
+            0,
+            &l1_gas,
+            &l2_gas,
+            &ResourceBounds::zero(),
+            &[],
+            DaMode::L1,
+            DaMode::L1,
+            &proof_facts,
+        );
+
+        assert_ne!(without_proof, with_proof);
+        assert_ne!(with_proof, Felt::ZERO);
+    }
+
     // -----------------------------------------------------------------------
     // V3 Deploy Account
     // -----------------------------------------------------------------------
@@ -945,10 +1097,10 @@ mod tests {
         assert_eq!(l1_l1, Felt::ZERO);
 
         let l1_l2 = pack_da_modes(DaMode::L1, DaMode::L2);
-        assert_eq!(l1_l2, Felt::from(4294967296u64)); // 2^32
+        assert_eq!(l1_l2, Felt::ONE);
 
         let l2_l1 = pack_da_modes(DaMode::L2, DaMode::L1);
-        assert_eq!(l2_l1, Felt::ONE);
+        assert_eq!(l2_l1, Felt::from(4294967296u64)); // 2^32
     }
 
     // -----------------------------------------------------------------------
