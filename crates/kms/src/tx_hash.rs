@@ -243,8 +243,23 @@ pub fn compute_invoke_v3_hash_with_proof_facts(
     let deployment_data_hash = Poseidon::hash_array(account_deployment_data);
     let calldata_hash = Poseidon::hash_array(calldata);
 
-    let mut elements = Vec::with_capacity(10 + usize::from(!proof_facts.is_empty()));
-    elements.extend_from_slice(&[
+    if proof_facts.is_empty() {
+        return Poseidon::hash_array(&[
+            INVOKE_PREFIX,
+            VERSION_3,
+            *sender_address,
+            fee_hash,
+            paymaster_hash,
+            *chain_id,
+            *nonce,
+            da_mode,
+            deployment_data_hash,
+            calldata_hash,
+        ]);
+    }
+
+    let proof_facts_hash = Poseidon::hash_array(proof_facts);
+    Poseidon::hash_array(&[
         INVOKE_PREFIX,
         VERSION_3,
         *sender_address,
@@ -255,13 +270,8 @@ pub fn compute_invoke_v3_hash_with_proof_facts(
         da_mode,
         deployment_data_hash,
         calldata_hash,
-    ]);
-
-    if !proof_facts.is_empty() {
-        elements.push(Poseidon::hash_array(proof_facts));
-    }
-
-    Poseidon::hash_array(&elements)
+        proof_facts_hash,
+    ])
 }
 
 /// Compute the hash of a V3 deploy-account transaction.
@@ -322,7 +332,6 @@ pub fn compute_declare_v3_hash(
     let paymaster_hash = Poseidon::hash_array(paymaster_data);
     let da_mode = pack_da_modes(nonce_da_mode, fee_da_mode);
     let deployment_data_hash = Poseidon::hash_array(account_deployment_data);
-    let calldata_hash = Poseidon::hash_array(&[]); // empty for declare
 
     Poseidon::hash_array(&[
         DECLARE_PREFIX,
@@ -334,7 +343,6 @@ pub fn compute_declare_v3_hash(
         *nonce,
         da_mode,
         deployment_data_hash,
-        calldata_hash,
         *class_hash,
         *compiled_class_hash,
     ])

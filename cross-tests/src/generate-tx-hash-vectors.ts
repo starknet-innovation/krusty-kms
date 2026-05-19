@@ -73,6 +73,24 @@ interface DeployAccountV1Vector {
   expected_hash: string;
 }
 
+interface DeployAccountV3Vector {
+  name: string;
+  contract_address: string;
+  class_hash: string;
+  constructor_calldata: string[];
+  salt: string;
+  chain_id: string;
+  nonce: string;
+  tip: string;
+  l1_gas: GasBounds;
+  l2_gas: GasBounds;
+  l1_data_gas: GasBounds;
+  paymaster_data: string[];
+  nonce_da_mode: number;
+  fee_da_mode: number;
+  expected_hash: string;
+}
+
 interface DeclareV2Vector {
   name: string;
   sender_address: string;
@@ -84,6 +102,24 @@ interface DeclareV2Vector {
   expected_hash: string;
 }
 
+interface DeclareV3Vector {
+  name: string;
+  sender_address: string;
+  class_hash: string;
+  compiled_class_hash: string;
+  chain_id: string;
+  nonce: string;
+  tip: string;
+  l1_gas: GasBounds;
+  l2_gas: GasBounds;
+  l1_data_gas: GasBounds;
+  paymaster_data: string[];
+  nonce_da_mode: number;
+  fee_da_mode: number;
+  account_deployment_data: string[];
+  expected_hash: string;
+}
+
 interface Fixture {
   description: string;
   spec_version: string;
@@ -91,7 +127,9 @@ interface Fixture {
     invoke_v1: InvokeV1Vector[];
     invoke_v3: InvokeV3Vector[];
     deploy_account_v1: DeployAccountV1Vector[];
+    deploy_account_v3: DeployAccountV3Vector[];
     declare_v2: DeclareV2Vector[];
+    declare_v3: DeclareV3Vector[];
   };
 }
 
@@ -205,6 +243,32 @@ function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Deploy Account V3
+  // -------------------------------------------------------------------------
+  console.log("Deploy Account V3:");
+  for (const v of fixture.vectors.deploy_account_v3) {
+    const computed = hash.calculateDeployAccountTransactionHash({
+      contractAddress: v.contract_address,
+      classHash: v.class_hash,
+      compiledConstructorCalldata: v.constructor_calldata,
+      salt: v.salt,
+      version: "0x3",
+      chainId: v.chain_id as constants.StarknetChainId,
+      nonce: v.nonce,
+      nonceDataAvailabilityMode: v.nonce_da_mode,
+      feeDataAvailabilityMode: v.fee_da_mode,
+      resourceBounds: {
+        l1_gas: gasBounds(v.l1_gas),
+        l2_gas: gasBounds(v.l2_gas),
+        l1_data_gas: gasBounds(v.l1_data_gas),
+      },
+      tip: v.tip,
+      paymasterData: v.paymaster_data,
+    });
+    assertEqual(v.name, computed, v.expected_hash);
+  }
+
+  // -------------------------------------------------------------------------
   // Declare V2
   // -------------------------------------------------------------------------
   console.log("Declare V2:");
@@ -218,6 +282,32 @@ function main() {
       v.nonce,
       v.compiled_class_hash
     );
+    assertEqual(v.name, computed, v.expected_hash);
+  }
+
+  // -------------------------------------------------------------------------
+  // Declare V3
+  // -------------------------------------------------------------------------
+  console.log("Declare V3:");
+  for (const v of fixture.vectors.declare_v3) {
+    const computed = hash.calculateDeclareTransactionHash({
+      classHash: v.class_hash,
+      compiledClassHash: v.compiled_class_hash,
+      senderAddress: v.sender_address,
+      version: "0x3",
+      chainId: v.chain_id as constants.StarknetChainId,
+      nonce: v.nonce,
+      accountDeploymentData: v.account_deployment_data,
+      nonceDataAvailabilityMode: v.nonce_da_mode,
+      feeDataAvailabilityMode: v.fee_da_mode,
+      resourceBounds: {
+        l1_gas: gasBounds(v.l1_gas),
+        l2_gas: gasBounds(v.l2_gas),
+        l1_data_gas: gasBounds(v.l1_data_gas),
+      },
+      tip: v.tip,
+      paymasterData: v.paymaster_data,
+    });
     assertEqual(v.name, computed, v.expected_hash);
   }
 

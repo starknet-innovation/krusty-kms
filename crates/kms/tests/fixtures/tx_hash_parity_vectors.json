@@ -78,6 +78,29 @@
         "expected_hash": "0x047aa6f8a8c145bdce522732cb8f8a4758332f1c161a3bd553f4e1f5c368513f"
       }
     ],
+    "deploy_account_v3": [
+      {
+        "name": "simple-deploy-v3",
+        "contract_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
+        "constructor_calldata": [
+          "0x048495fca9753cb0f4035eb4d2e2c1a22cc6d36fe4b73e17d9d6848333ff03a9",
+          "0x1",
+          "0x2"
+        ],
+        "salt": "0x048495fca9753cb0f4035eb4d2e2c1a22cc6d36fe4b73e17d9d6848333ff03a9",
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x2",
+        "tip": "0x5",
+        "l1_gas": { "max_amount": "0x1234", "max_price_per_unit": "0x5af3107a4001" },
+        "l2_gas": { "max_amount": "0x45", "max_price_per_unit": "0x89" },
+        "l1_data_gas": { "max_amount": "0x67", "max_price_per_unit": "0xab" },
+        "paymaster_data": ["0x11", "0x22"],
+        "nonce_da_mode": 1,
+        "fee_da_mode": 0,
+        "expected_hash": "0x0a1cacd975b4789468618730bb2b6196aa8897c751a55862760c48d38211461"
+      }
+    ],
     "declare_v2": [
       {
         "name": "simple-declare-v2",
@@ -88,6 +111,25 @@
         "nonce": "0x1",
         "compiled_class_hash": "0x01a7820094feaf82d53f53f214b81292d717e7bb9a92bb2488092cd306f3993f",
         "expected_hash": "0x031ddb429acac7e7df4cfec7f43073ae0dc894e55c1a8e578b09af6ec8e5310f"
+      }
+    ],
+    "declare_v3": [
+      {
+        "name": "simple-declare-v3",
+        "sender_address": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
+        "compiled_class_hash": "0x01a7820094feaf82d53f53f214b81292d717e7bb9a92bb2488092cd306f3993f",
+        "chain_id": "0x534e5f5345504f4c4941",
+        "nonce": "0x3",
+        "tip": "0x5",
+        "l1_gas": { "max_amount": "0x1234", "max_price_per_unit": "0x5af3107a4001" },
+        "l2_gas": { "max_amount": "0x45", "max_price_per_unit": "0x89" },
+        "l1_data_gas": { "max_amount": "0x67", "max_price_per_unit": "0xab" },
+        "paymaster_data": ["0x11", "0x22"],
+        "nonce_da_mode": 1,
+        "fee_da_mode": 0,
+        "account_deployment_data": ["0xaa", "0xbb"],
+        "expected_hash": "0x02aa53ce829437e32669093d8ba86e7292a91099a1732d23cf6589a949fd8cd2"
       }
     ]
   }

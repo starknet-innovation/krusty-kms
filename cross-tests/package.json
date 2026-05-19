@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "verify": "tsx src/verify-rust-proofs.ts",
     "verify:wasm": "tsx src/verify-wasm-bindings.ts",
