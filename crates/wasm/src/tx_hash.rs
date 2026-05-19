@@ -128,7 +128,7 @@ pub fn compute_invoke_transaction_hash_v3(
     let tip_val = parse_tip(tip)?;
     let pm_data = parse_felts(&paymaster_data)?;
     let acct_deploy_data = parse_felts(&account_deployment_data)?;
-    let proof_facts = match proof_facts {
+    let parsed_proof_facts = match proof_facts {
         Some(values) => parse_felts(&values)?,
         None => Vec::new(),
     };
@@ -157,7 +157,7 @@ pub fn compute_invoke_transaction_hash_v3(
         &pm_data,
         nonce_da,
         fee_da,
-        &proof_facts,
+        &parsed_proof_facts,
     );
     Ok(format!("{:#x}", hash))
 }
