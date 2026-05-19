@@ -23,10 +23,10 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 # Internal crates
-krusty-kms-sdk = { version = "0.3.0", path = "../sdk", default-features = false }
-krusty-kms-common = { version = "0.3.0", path = "../common" }
-krusty-kms-crypto = { version = "0.3.0", path = "../crypto", default-features = false }
-krusty-kms = { version = "0.3.0", path = "../kms", default-features = false }
+krusty-kms-sdk = { version = "0.4.0", path = "../sdk", default-features = false }
+krusty-kms-common = { version = "0.4.0", path = "../common" }
+krusty-kms-crypto = { version = "0.4.0", path = "../crypto", default-features = false }
+krusty-kms = { version = "0.4.0", path = "../kms", default-features = false }
 
 # WASM bindings
 wasm-bindgen = "0.2"

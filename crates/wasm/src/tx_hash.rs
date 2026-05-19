@@ -363,13 +363,6 @@ mod tests {
         assert!(parse_felt("0x0").is_ok());
     }
 
-    #[cfg(target_arch = "wasm32")]
-    #[test]
-    fn test_parse_felt_invalid() {
-        assert!(parse_felt("not_hex").is_err());
-        assert!(parse_felt("").is_err());
-    }
-
     #[test]
     fn test_parse_felts() {
         let inputs = vec!["0x1".to_string(), "0x2".to_string(), "0x3".to_string()];
@@ -382,11 +375,6 @@ mod tests {
     fn test_da_mode_from_u8() {
         assert!(da_mode_from_u8(0).is_ok());
         assert!(da_mode_from_u8(1).is_ok());
-        #[cfg(target_arch = "wasm32")]
-        {
-            assert!(da_mode_from_u8(2).is_err());
-            assert!(da_mode_from_u8(255).is_err());
-        }
     }
 
     #[test]
@@ -394,10 +382,6 @@ mod tests {
         assert_eq!(parse_tip("0").unwrap(), 0);
         assert_eq!(parse_tip("100").unwrap(), 100);
         assert_eq!(parse_tip("0xff").unwrap(), 255);
-        #[cfg(target_arch = "wasm32")]
-        {
-            assert!(parse_tip("not_a_number").is_err());
-        }
     }
 
     #[test]
@@ -529,6 +513,23 @@ mod wasm_tests {
             proof_facts,
         )
         .unwrap()
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_felt_rejects_invalid_input() {
+        assert!(parse_felt("not_hex").is_err());
+        assert!(parse_felt("").is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn da_mode_from_u8_rejects_out_of_range() {
+        assert!(da_mode_from_u8(2).is_err());
+        assert!(da_mode_from_u8(255).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_tip_rejects_invalid_input() {
+        assert!(parse_tip("not_a_number").is_err());
     }
 
     #[wasm_bindgen_test]

@@ -98,7 +98,7 @@
         "paymaster_data": ["0x11", "0x22"],
         "nonce_da_mode": 1,
         "fee_da_mode": 0,
-        "expected_hash": "0x0a1cacd975b4789468618730bb2b6196aa8897c751a55862760c48d38211461"
+        "expected_hash": "0x00a1cacd975b4789468618730bb2b6196aa8897c751a55862760c48d38211461"
       }
     ],
     "declare_v2": [
