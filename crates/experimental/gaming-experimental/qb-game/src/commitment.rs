@@ -8,7 +8,7 @@
 //! - Hiding: Cannot determine play from commitment without salt
 //! - Binding: Cannot open to a different play (hash collision resistant)
 
-use rand::RngCore;
+use rand_core::TryRngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -60,7 +60,9 @@ impl CommitmentOpening {
     /// Create a new opening with a random salt.
     pub fn new_random(play_index: u8) -> Self {
         let mut salt = [0u8; SALT_LEN];
-        rand::thread_rng().fill_bytes(&mut salt);
+        rand_core::OsRng
+            .try_fill_bytes(&mut salt)
+            .expect("OS entropy source unavailable");
         Self { play_index, salt }
     }
 

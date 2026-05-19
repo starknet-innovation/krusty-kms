@@ -2,7 +2,7 @@
 
 use bip39::Mnemonic;
 use krusty_kms_common::{KmsError, Result};
-use rand::Rng;
+use rand_core::TryRngCore;
 
 /// Generate a new BIP-39 mnemonic phrase.
 ///
@@ -16,7 +16,10 @@ use rand::Rng;
 ///
 /// Returns [`KmsError`] if:
 /// - Invalid word count (not 12, 15, 18, 21, or 24) (`InvalidMnemonic`)
-/// - Entropy generation fails (`InvalidMnemonic`)
+///
+/// # Panics
+///
+/// Panics if OS entropy is unavailable (catastrophic, non-recoverable).
 ///
 /// # Cyclomatic Complexity: 2 (early return for invalid input)
 pub fn generate_mnemonic(word_count: usize) -> Result<String> {
@@ -34,8 +37,10 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
         }
     };
 
-    let mut rng = rand::thread_rng();
-    let entropy: Vec<u8> = (0..entropy_size).map(|_| rng.gen()).collect();
+    let mut entropy = vec![0u8; entropy_size];
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut entropy)
+        .expect("OS entropy source unavailable");
 
     let mnemonic = Mnemonic::from_entropy(&entropy)
         .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;

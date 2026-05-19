@@ -295,7 +295,7 @@ verifier of an invalid shuffle except with negligible probability.
 The current implementation does not use constant-time operations for scalar arithmetic. This is inherited from `starknet-types-core`. For production use in adversarial environments, consider timing-safe implementations.
 
 ### Random Number Generation
-Uses `rand::thread_rng()` via `krusty_kms_crypto::scalar::random_felt()`. Ensure this is cryptographically secure in the deployment environment.
+Uses `OsRng` via `krusty_kms_crypto::scalar::random_felt()`. Ensure this is cryptographically secure in the deployment environment.
 
 ### Side Channels
 Point operations may leak information through memory access patterns. Consider this for high-security applications.

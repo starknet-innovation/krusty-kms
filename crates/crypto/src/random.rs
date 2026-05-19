@@ -1,9 +1,9 @@
 //! Random value generation utilities for cryptographic operations.
 //!
-//! This module provides efficient random Felt generation, with support for
-//! batch generation to amortize the overhead of creating thread-local RNGs.
+//! This module provides random Felt generation using OS-level entropy (`OsRng`),
+//! including single and batch generation.
 
-use rand::RngCore;
+use rand_core::TryRngCore;
 use starknet_types_core::felt::Felt;
 #[cfg(feature = "test-utils")]
 use std::sync::{LazyLock, Mutex};
@@ -120,24 +120,21 @@ pub fn fill_random_bytes(out: &mut [u8]) {
         drop(guard);
     }
 
-    let mut rng = rand::thread_rng();
-    rng.fill_bytes(out);
+    rand::rngs::OsRng
+        .try_fill_bytes(out)
+        .expect("OS entropy source unavailable");
 }
 
-/// Generate a single random Felt.
-///
-/// Creates a new thread-local RNG for this operation. For generating multiple
-/// random values, prefer [`random_felts`] to amortize RNG overhead.
+/// Generate a single random Felt from OS entropy.
 pub fn random_felt() -> Felt {
     let mut bytes = [0u8; 32];
     fill_random_bytes(&mut bytes);
     Felt::from_bytes_be(&bytes)
 }
 
-/// Generate multiple random Felts efficiently by reusing the RNG.
+/// Generate multiple random Felts.
 ///
-/// This is more efficient than calling [`random_felt`] multiple times because
-/// it creates the thread-local RNG only once.
+/// Convenience wrapper over [`random_felt`] for generating multiple values.
 ///
 /// # Arguments
 /// * `count` - Number of random Felts to generate

@@ -119,11 +119,13 @@ pub fn get_build_info() -> JsValue {
 /// Generate a random field element.
 #[wasm_bindgen(js_name = "randomFelt")]
 pub fn random_felt() -> String {
-    use rand::Rng;
+    use rand_core::TryRngCore;
     use starknet_types_core::felt::Felt;
 
-    let mut rng = rand::thread_rng();
-    let bytes: [u8; 32] = rng.gen();
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng
+        .try_fill_bytes(&mut bytes)
+        .expect("OS entropy source unavailable");
     let felt = Felt::from_bytes_be(&bytes);
     format!("{:#x}", felt)
 }
