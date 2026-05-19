@@ -5,7 +5,7 @@
 //! account, and declare transactions (v1/v2/v3), plus SNIP-12 typed data
 //! message hashing.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 
@@ -36,7 +36,7 @@ fn da_mode_from_u8(val: u8) -> Result<krusty_kms::tx_hash::DaMode, JsValue> {
 // Serde structs for deserialising resource bounds from JS objects
 // ---------------------------------------------------------------------------
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ResourceBoundsInput {
     #[serde(alias = "l1Gas")]
     l1_gas: ResourceBoundInput,
@@ -46,7 +46,7 @@ struct ResourceBoundsInput {
     l1_data_gas: Option<ResourceBoundInput>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ResourceBoundInput {
     #[serde(alias = "maxAmount")]
     max_amount: String,
@@ -119,6 +119,7 @@ pub fn compute_invoke_transaction_hash_v3(
     nonce_data_availability_mode: u8,
     fee_data_availability_mode: u8,
     account_deployment_data: Vec<String>,
+    proof_facts: Option<Vec<String>>,
 ) -> Result<String, JsValue> {
     let sender = parse_felt(sender_address)?;
     let cd = parse_felts(&calldata)?;
@@ -127,6 +128,10 @@ pub fn compute_invoke_transaction_hash_v3(
     let tip_val = parse_tip(tip)?;
     let pm_data = parse_felts(&paymaster_data)?;
     let acct_deploy_data = parse_felts(&account_deployment_data)?;
+    let parsed_proof_facts = match proof_facts {
+        Some(values) => parse_felts(&values)?,
+        None => Vec::new(),
+    };
     let nonce_da = da_mode_from_u8(nonce_data_availability_mode)?;
     let fee_da = da_mode_from_u8(fee_data_availability_mode)?;
 
@@ -139,7 +144,7 @@ pub fn compute_invoke_transaction_hash_v3(
         None => krusty_kms::tx_hash::ResourceBounds::zero(),
     };
 
-    let hash = krusty_kms::tx_hash::compute_invoke_v3_hash(
+    let hash = krusty_kms::tx_hash::compute_invoke_v3_hash_with_proof_facts(
         &sender,
         &cd,
         &chain,
@@ -152,6 +157,7 @@ pub fn compute_invoke_transaction_hash_v3(
         &pm_data,
         nonce_da,
         fee_da,
+        &parsed_proof_facts,
     );
     Ok(format!("{:#x}", hash))
 }
@@ -358,12 +364,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_felt_invalid() {
-        assert!(parse_felt("not_hex").is_err());
-        assert!(parse_felt("").is_err());
-    }
-
-    #[test]
     fn test_parse_felts() {
         let inputs = vec!["0x1".to_string(), "0x2".to_string(), "0x3".to_string()];
         let result = parse_felts(&inputs);
@@ -375,8 +375,6 @@ mod tests {
     fn test_da_mode_from_u8() {
         assert!(da_mode_from_u8(0).is_ok());
         assert!(da_mode_from_u8(1).is_ok());
-        assert!(da_mode_from_u8(2).is_err());
-        assert!(da_mode_from_u8(255).is_err());
     }
 
     #[test]
@@ -384,7 +382,6 @@ mod tests {
         assert_eq!(parse_tip("0").unwrap(), 0);
         assert_eq!(parse_tip("100").unwrap(), 100);
         assert_eq!(parse_tip("0xff").unwrap(), 255);
-        assert!(parse_tip("not_a_number").is_err());
     }
 
     #[test]
@@ -475,5 +472,81 @@ mod tests {
         let rb = input.to_resource_bounds().unwrap();
         assert_eq!(rb.max_amount, 1000);
         assert_eq!(rb.max_price_per_unit, 500);
+    }
+}
+
+#[cfg(all(test, target_arch = "wasm32"))]
+mod wasm_tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    fn resource_bounds() -> JsValue {
+        serde_wasm_bindgen::to_value(&ResourceBoundsInput {
+            l1_gas: ResourceBoundInput {
+                max_amount: "0x186a0".to_string(),
+                max_price_per_unit: "0x5af3107a4000".to_string(),
+            },
+            l2_gas: ResourceBoundInput {
+                max_amount: "0x0".to_string(),
+                max_price_per_unit: "0x0".to_string(),
+            },
+            l1_data_gas: Some(ResourceBoundInput {
+                max_amount: "0x0".to_string(),
+                max_price_per_unit: "0x0".to_string(),
+            }),
+        })
+        .unwrap()
+    }
+
+    fn compute_v3(proof_facts: Option<Vec<String>>) -> String {
+        compute_invoke_transaction_hash_v3(
+            "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            vec!["0x1".to_string(), "0x2".to_string(), "0x3".to_string()],
+            "0x534e5f5345504f4c4941",
+            "0x7",
+            "0x0",
+            resource_bounds(),
+            vec![],
+            0,
+            0,
+            vec![],
+            proof_facts,
+        )
+        .unwrap()
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_felt_rejects_invalid_input() {
+        assert!(parse_felt("not_hex").is_err());
+        assert!(parse_felt("").is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn da_mode_from_u8_rejects_out_of_range() {
+        assert!(da_mode_from_u8(2).is_err());
+        assert!(da_mode_from_u8(255).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn parse_tip_rejects_invalid_input() {
+        assert!(parse_tip("not_a_number").is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn invoke_v3_empty_proof_facts_match_omitted_proof_facts() {
+        assert_eq!(compute_v3(None), compute_v3(Some(vec![])));
+    }
+
+    #[wasm_bindgen_test]
+    fn invoke_v3_proof_facts_match_starknet_js_10_0_2_vector() {
+        let hash = compute_v3(Some(vec![
+            "0x123".to_string(),
+            "0x456".to_string(),
+            "0x789".to_string(),
+        ]));
+        assert_eq!(
+            hash,
+            "0x15f5114c744e730be573a540456ad0a05d5f72964143b9839c57abc5ee7b31"
+        );
     }
 }

@@ -78,6 +78,27 @@ crates/sdk/examples/tongo_proof_generation.rs
 cd crates/wasm && wasm-pack build --target web
 ```
 
+`computeInvokeTransactionHashV3` accepts an optional final `proofFacts`
+argument for proof-carrying invoke-v3 transactions:
+
+```ts
+const txHash = computeInvokeTransactionHashV3(
+  senderAddress,
+  compiledCalldata,
+  chainId,
+  nonce,
+  tip,
+  resourceBounds,
+  paymasterData,
+  nonceDataAvailabilityMode,
+  feeDataAvailabilityMode,
+  accountDeploymentData,
+  proofFacts
+);
+```
+
+Omit `proofFacts` or pass `[]` for the standard invoke-v3 hash.
+
 ## License
 
 MIT OR Apache-2.0

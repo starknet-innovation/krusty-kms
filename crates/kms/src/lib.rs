@@ -43,7 +43,7 @@ pub use nostr_signing::{
 pub use stark_signing::{sign_stark_hash, stark_public_key, StarkSignature};
 pub use tx_hash::{
     compute_declare_v2_hash, compute_declare_v3_hash, compute_deploy_account_v1_hash,
-    compute_deploy_account_v3_hash, compute_invoke_v1_hash, compute_invoke_v3_hash, DaMode,
-    ResourceBounds,
+    compute_deploy_account_v3_hash, compute_invoke_v1_hash, compute_invoke_v3_hash,
+    compute_invoke_v3_hash_with_proof_facts, DaMode, ResourceBounds,
 };
 pub use typed_data::compute_typed_data_message_hash;
