@@ -1,0 +1,171 @@
+[package]
+name = "account_sdk"
+edition.workspace = true
+version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+auto_impl = "1.0"
+cainome.workspace = true
+cainome-cairo-serde.workspace = true
+ecdsa = { workspace = true }
+futures.workspace = true
+hex.workspace = true
+k256 = "0.13.4"
+lazy_static.workspace = true
+primitive-types.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_with.workspace = true
+starknet.workspace = true
+starknet-crypto.workspace = true
+starknet-types-core.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+u256-literal.workspace = true
+url.workspace = true
+indexmap.workspace = true
+num-traits.workspace = true
+tsify-next = "0.5.4"
+urlencoding = "2.1.3"
+once_cell.workspace = true
+chrono = { workspace = true }
+nom = "7.1"
+
+# Webauthn deps
+base64 = { workspace = true, optional = true }
+base64urlsafedata = { workspace = true, optional = true }
+coset = { workspace = true, optional = true }
+p256 = { workspace = true, optional = true }
+serde_cbor_2 = { version = "0.12.0-dev", optional = true }
+sha2 = { workspace = true, optional = true }
+
+# Filestorage deps
+dirs = { version = "5", optional = true }
+
+# GraphQL client deps
+graphql_client.workspace = true
+
+# AVNU paymaster integration dependencies (optional, requires nightly Rust due to upstream issues)
+# To enable: cargo test --features avnu-paymaster
+paymaster-rpc = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", optional = true }
+paymaster-starknet = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+paymaster-prices = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+paymaster-relayer = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+paymaster-sponsoring = { git = "https://github.com/cartridge-gg/paymaster", rev = "892f266a7521899b15021e5456c7f0fdc189e1ae", features = ["testing"], optional = true }
+jsonrpsee = { version = "0.24", features = ["server", "client"], optional = true }
+
+# Test infrastructure dependencies (used by tests and avnu-paymaster benchmarks)
+hyper = { version = "0.14.27", features = ["server"], optional = true }
+
+# VRF proof generation - pinned to match vrf/Scarb.lock and vrf/server/Cargo.lock
+stark-vrf = { git = "https://github.com/dojoengine/stark-vrf", rev = "96d6d2a88b1ef46c4a285d0ccc334237205edae3", optional = true }
+starknet-ff = { version = "0.3", optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+hyper = { version = "0.14.27", features = ["server"] }
+rand = "0.8"
+rand_core = { version = "0.6", features = ["getrandom"] }
+tempfile = "3.8"
+testcontainers = "0.23"
+tokio = { version = "1", features = ["full"] }
+
+[build-dependencies]
+cainome.workspace = true
+starknet.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+sha2.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio.workspace = true
+alloy-primitives = "0.8"
+alloy-signer.workspace = true
+rand = "0.8"
+
+# Include webauthn dependencies when 'webauthn' feature is enabled
+webauthn-authenticator-rs = { workspace = true, features = [
+    "softpasskey",
+], optional = true }
+webauthn-rs-core = { workspace = true, optional = true }
+webauthn-rs-proto = { workspace = true, optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3.70"
+serde-wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-test = "0.3.42"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Storage",
+    "MessageEvent",
+    "Window",
+] }
+chrono = { workspace = true, features = ["wasmbind"] }
+
+# Include webauthn dependencies when 'webauthn' feature is enabled
+webauthn-rs-proto = { workspace = true, optional = true, features = ["wasm"] }
+starknet-crypto = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3.42"
+starknet-crypto = { workspace = true }
+primitive-types = { workspace = true, features = ["serde"] }
+
+[features]
+bench = []
+webauthn = [
+    "base64",
+    "base64urlsafedata",
+    "coset",
+    "p256",
+    "serde_cbor_2",
+    "sha2",
+    "webauthn-authenticator-rs",
+    "webauthn-rs-core",
+    "webauthn-rs-proto",
+    "web-sys/CredentialCreationOptions",
+    "web-sys/CredentialRequestOptions",
+    "web-sys/CredentialsContainer",
+    "web-sys/Navigator",
+    "web-sys/PublicKeyCredential",
+    "web-sys/PublicKeyCredentialCreationOptions",
+]
+filestorage = ["dirs"]
+avnu-paymaster = [
+    "paymaster-rpc",
+    "paymaster-starknet",
+    "paymaster-prices",
+    "paymaster-relayer",
+    "paymaster-sponsoring",
+    "jsonrpsee",
+    "hyper",
+]
+vrf = [
+    "stark-vrf",
+    "starknet-ff",
+    "avnu-paymaster",
+]
+
+[[bin]]
+name = "bench"
+path = "cmd/bench.rs"
+required-features = ["bench"]
+
+[[bench]]
+name = "paymaster_gas"
+harness = false
+required-features = ["avnu-paymaster"]
+
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["--enable-bulk-memory", "--all-features" ]

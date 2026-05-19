@@ -18,8 +18,9 @@ tokio = { workspace = true, features = ["sync"] }
 async-trait.workspace = true
 url = "2.5"
 
-# Cartridge Controller SDK (git-only, not on crates.io)
-account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.9.6" }
+# Cartridge Controller SDK (git-only, not on crates.io). Vendored so its HTTP
+# stack can stay on a patched rustls-webpki line.
+account_sdk = { path = "../../vendor/controller-rs/account_sdk" }
 starknet = "0.17.0"
 
 [lints]

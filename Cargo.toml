@@ -17,6 +17,7 @@ members = [
     "crates/experimental/gaming-experimental/qb-game",
     "crates/ffi",
 ]
+exclude = ["vendor/controller-rs"]
 default-members = [
     "crates/common",
     "crates/wallet-api",
@@ -52,7 +53,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.138"
 hex = "0.4.3"
 thiserror = "1.0.69"
-rand = "0.8.5"
+rand = "0.8.6"
 rand_core = "0.6.4"
 rayon = "1.10.0"
 proptest = "1.6.0"
