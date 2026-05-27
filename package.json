@@ -1,0 +1,32 @@
+{
+  "name": "krusty-kms-wasm",
+  "type": "module",
+  "collaborators": [
+    "Krusty KMS Contributors"
+  ],
+  "description": "WASM bindings for krusty-kms account and protocol utilities",
+  "version": "0.4.2",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/starknet-innovation/kms"
+  },
+  "files": [
+    "krusty_kms_wasm_bg.wasm",
+    "krusty_kms_wasm.js",
+    "krusty_kms_wasm.d.ts",
+    "krusty_kms_wasm_bg.wasm.d.ts"
+  ],
+  "main": "krusty_kms_wasm.js",
+  "homepage": "https://github.com/starknet-innovation/kms",
+  "types": "krusty_kms_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "keywords": [
+    "cryptography",
+    "kms",
+    "starknet",
+    "encryption"
+  ]
+}
