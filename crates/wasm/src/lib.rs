@@ -13,6 +13,7 @@ pub mod error;
 pub mod hashing;
 pub mod proof;
 pub mod signing;
+pub mod strk20;
 pub mod tx_hash;
 pub mod types;
 pub mod utils;
