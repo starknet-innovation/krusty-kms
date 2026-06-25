@@ -113,6 +113,7 @@ impl From<krusty_kms_common::KmsError> for WasmError {
             krusty_kms_common::KmsError::InsufficientFeeBalance(s) => Self::InternalError(s),
             krusty_kms_common::KmsError::InvalidClassHash(s) => Self::InternalError(s),
             krusty_kms_common::KmsError::ContractNotFound(s) => Self::InternalError(s),
+            krusty_kms_common::KmsError::MultisigError(s) => Self::InternalError(s),
         }
     }
 }

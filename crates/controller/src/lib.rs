@@ -7,13 +7,21 @@
 //! This crate is separated from `krusty-kms-client` because `account_sdk`
 //! is only available as a git dependency and cannot be published to crates.io.
 
+#[cfg(feature = "sdk")]
 mod convert;
+#[cfg(feature = "sdk")]
 mod error;
+#[cfg(feature = "sdk")]
 mod policy;
+#[cfg(feature = "sdk")]
 mod tx_builder;
+#[cfg(feature = "sdk")]
 mod wallet;
 
 pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
+#[cfg(feature = "sdk")]
 pub use policy::{erc20_policies, staking_policies, FeeMode, SessionPolicy};
+#[cfg(feature = "sdk")]
 pub use tx_builder::TxBuilder;
+#[cfg(feature = "sdk")]
 pub use wallet::ControllerWallet;

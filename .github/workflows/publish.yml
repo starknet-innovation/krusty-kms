@@ -13,6 +13,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      CARGO_HTTP_MULTIPLEXING: "false"
+      CARGO_NET_RETRY: "10"
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,7 +26,7 @@ jobs:
           if cargo search krusty-kms-common --limit 1 | grep -q "\"$VERSION\""; then
             echo "krusty-kms-common@$VERSION already published, skipping"
           else
-            cargo publish -p krusty-kms-common --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cargo publish -p krusty-kms-common
           fi
       - name: Publish krusty-kms-crypto
         run: |
@@ -30,7 +34,7 @@ jobs:
           if cargo search krusty-kms-crypto --limit 1 | grep -q "\"$VERSION\""; then
             echo "krusty-kms-crypto@$VERSION already published, skipping"
           else
-            cargo publish -p krusty-kms-crypto --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cargo publish -p krusty-kms-crypto
           fi
       - name: Publish krusty-kms
         run: |
@@ -38,7 +42,7 @@ jobs:
           if cargo search krusty-kms --limit 1 | grep -q "\"$VERSION\""; then
             echo "krusty-kms@$VERSION already published, skipping"
           else
-            cargo publish -p krusty-kms --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cargo publish -p krusty-kms
           fi
       - name: Publish krusty-kms-sdk
         run: |
@@ -46,7 +50,7 @@ jobs:
           if cargo search krusty-kms-sdk --limit 1 | grep -q "\"$VERSION\""; then
             echo "krusty-kms-sdk@$VERSION already published, skipping"
           else
-            cargo publish -p krusty-kms-sdk --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cargo publish -p krusty-kms-sdk
           fi
       - name: Publish krusty-kms-client
         run: |
@@ -54,7 +58,7 @@ jobs:
           if cargo search krusty-kms-client --limit 1 | grep -q "\"$VERSION\""; then
             echo "krusty-kms-client@$VERSION already published, skipping"
           else
-            cargo publish -p krusty-kms-client --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cargo publish -p krusty-kms-client
           fi
       - name: Publish krusty-kms-wasm
         run: |
@@ -62,5 +66,5 @@ jobs:
           if cargo search krusty-kms-wasm --limit 1 | grep -q "\"$VERSION\""; then
             echo "krusty-kms-wasm@$VERSION already published, skipping"
           else
-            cargo publish -p krusty-kms-wasm --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+            cargo publish -p krusty-kms-wasm
           fi

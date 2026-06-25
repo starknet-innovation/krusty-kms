@@ -49,7 +49,6 @@ jobs:
           cargo package --locked --workspace
           --exclude krusty-kms-oracle
           --exclude krusty-kms-wasm
-          --exclude krusty-kms-controller
           --exclude krusty-kms-cabi
           --exclude mental-poker
           --exclude mental-poker-wasm
