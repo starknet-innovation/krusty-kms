@@ -30,6 +30,10 @@ serde_json.workspace = true
 hex.workspace = true
 thiserror.workspace = true
 url = "2.5"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+async-nats = "0.49.1"
+bytes = "1"
+futures-util = "0.3"
 bs58 = "0.5"
 async-trait.workspace = true
 

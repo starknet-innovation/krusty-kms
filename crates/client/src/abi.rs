@@ -44,6 +44,48 @@ pub mod pool {
         LazyLock::new(|| selector("contract_parameters"));
 }
 
+/// OpenZeppelin Cairo multisig ABI selectors.
+pub mod multisig {
+    use super::*;
+
+    pub static GET_QUORUM: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("get_quorum"));
+    pub static IS_SIGNER: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("is_signer"));
+    pub static GET_SIGNERS: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("get_signers"));
+    pub static IS_CONFIRMED: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("is_confirmed"));
+    pub static IS_CONFIRMED_BY: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("is_confirmed_by"));
+    pub static IS_EXECUTED: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("is_executed"));
+    pub static GET_SUBMITTED_BLOCK: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("get_submitted_block"));
+    pub static GET_TRANSACTION_STATE: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("get_transaction_state"));
+    pub static GET_TRANSACTION_CONFIRMATIONS: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("get_transaction_confirmations"));
+    pub static HASH_TRANSACTION: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("hash_transaction"));
+    pub static HASH_TRANSACTION_BATCH: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("hash_transaction_batch"));
+    pub static ADD_SIGNERS: LazyLock<StarknetRsFelt> = LazyLock::new(|| selector("add_signers"));
+    pub static REMOVE_SIGNERS: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("remove_signers"));
+    pub static REPLACE_SIGNER: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("replace_signer"));
+    pub static CHANGE_QUORUM: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("change_quorum"));
+    pub static SUBMIT_TRANSACTION: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("submit_transaction"));
+    pub static SUBMIT_TRANSACTION_BATCH: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("submit_transaction_batch"));
+    pub static CONFIRM_TRANSACTION: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("confirm_transaction"));
+    pub static REVOKE_CONFIRMATION: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("revoke_confirmation"));
+    pub static EXECUTE_TRANSACTION: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("execute_transaction"));
+    pub static EXECUTE_TRANSACTION_BATCH: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("execute_transaction_batch"));
+}
+
 /// Tongo contract ABI selectors.
 pub mod tongo {
     use super::*;
@@ -124,5 +166,13 @@ mod tests {
         assert_ne!(*tongo_events::RAGEQUIT_EVENT, StarknetRsFelt::ZERO);
         assert_ne!(*tongo_events::BALANCE_DECLARED_EVENT, StarknetRsFelt::ZERO);
         assert_ne!(*tongo_events::TRANSFER_DECLARED_EVENT, StarknetRsFelt::ZERO);
+    }
+
+    #[test]
+    fn test_multisig_selectors_non_zero() {
+        assert_ne!(*multisig::SUBMIT_TRANSACTION_BATCH, StarknetRsFelt::ZERO);
+        assert_ne!(*multisig::CONFIRM_TRANSACTION, StarknetRsFelt::ZERO);
+        assert_ne!(*multisig::EXECUTE_TRANSACTION_BATCH, StarknetRsFelt::ZERO);
+        assert_ne!(*multisig::GET_TRANSACTION_STATE, StarknetRsFelt::ZERO);
     }
 }

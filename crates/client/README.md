@@ -9,6 +9,7 @@ This crate’s public API focuses on:
 - provider construction
 - wallet execution and transaction tracking
 - OpenZeppelin account deployment helpers
+- OpenZeppelin multisig call builders and trusted coordination messages
 - Tongo account/contract access
 - Tongo call builders and balance decryption
 
@@ -54,6 +55,23 @@ account class hash for the target network. Today the checked-in latest entry is:
 
 The older TypeScript parity fixtures in this repo still use their historical
 explicit class hash so those external integration tests remain reproducible.
+
+## OpenZeppelin Multisig
+
+The client exposes `Multisig` for OpenZeppelin Cairo multisig contracts:
+
+- `populate_submit_batch`, `populate_confirm`, `populate_revoke`, and
+  `populate_execute_batch` build exact `IMultisig` calls.
+- `hash_transaction_batch` computes the same Pedersen transaction ID as the
+  contract.
+- `MultisigCoordinator` defines the trusted pub/sub boundary used to distribute
+  proposals and signer status.
+- `NatsMultisigCoordinator` provides the standard live pub/sub backend; the HTTP
+  coordinator is available for simple retained-message services.
+
+See [`docs/oz-multisig-coordination.md`](../../docs/oz-multisig-coordination.md),
+[`docs/oz-multisig-wallet-guide.md`](../../docs/oz-multisig-wallet-guide.md),
+and `cargo run -p krusty-kms-client --example oz_multisig_coordination`.
 
 ## Tongo Contract Address (Sepolia)
 

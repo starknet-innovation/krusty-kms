@@ -977,6 +977,7 @@ pub(crate) fn map_kms_error(error: KmsError) -> GatewayError {
         | KmsError::StarknetCryptoError(message)
         | KmsError::InvalidProof(message)
         | KmsError::StakingError(message)
+        | KmsError::MultisigError(message)
         | KmsError::ControllerError(message) => {
             GatewayError::new(GatewayErrorCode::InvalidRequest, false, Some(message))
         }

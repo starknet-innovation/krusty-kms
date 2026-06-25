@@ -9,6 +9,7 @@ pub mod discovery;
 #[allow(dead_code)]
 mod erc20;
 mod events;
+pub mod multisig;
 mod operations;
 mod provider;
 mod serialization;
@@ -28,6 +29,12 @@ pub use events::{
 };
 pub use krusty_kms_common::{KmsError, Result};
 pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
+pub use multisig::{
+    hash_transaction, hash_transaction_batch, HttpMultisigCoordinator, InMemoryMultisigCoordinator,
+    Multisig, MultisigCall, MultisigCoordinationMessage, MultisigCoordinator,
+    MultisigExecutionNotice, MultisigMessageStream, MultisigProposal, MultisigSignerNotice,
+    MultisigTopic, MultisigTransactionState, NatsMultisigCoordinator,
+};
 pub use operations::{
     build_erc20_approve, build_fund_calls, build_outside_fund_calls, build_ragequit_call,
     build_rollover_call, build_transfer_call, build_withdraw_call,

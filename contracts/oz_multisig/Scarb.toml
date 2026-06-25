@@ -1,0 +1,17 @@
+[package]
+name = "oz_multisig"
+version = "0.1.0"
+edition = "2024_07"
+cairo-version = "2.14.0"
+description = "Pinned OpenZeppelin Multisig wallet wrapper for krusty-kms"
+
+[dependencies]
+starknet = ">=2.14.0"
+openzeppelin_governance = "3.0.0"
+
+[lib]
+
+[[target.starknet-contract]]
+allowed-libfuncs-list.name = "experimental"
+sierra = true
+casm = false

@@ -8,6 +8,7 @@ pub mod encryption;
 pub mod eth_signer;
 pub mod keystore;
 pub mod mnemonic;
+pub mod multisig;
 pub mod nostr_signing;
 pub mod stark_signing;
 pub mod strk20;
@@ -38,6 +39,7 @@ pub use encryption::{
 pub use eth_signer::EthSigner;
 pub use keystore::{decrypt_ethers_keystore, decrypt_keystore, encrypt_keystore};
 pub use mnemonic::{generate_mnemonic, mnemonic_to_seed, validate_mnemonic};
+pub use multisig::{OpenZeppelinMultisig, OzMultisigDeploymentDescriptor};
 pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
 };

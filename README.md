@@ -69,8 +69,14 @@ crates/kms/examples/key_derivation.rs
 crates/kms/examples/stark_sign.rs
 crates/kms/examples/nostr_sign.rs
 crates/kms/examples/oz_address.rs
+crates/kms/examples/oz_multisig_address.rs
+crates/client/examples/oz_multisig_coordination.rs
 crates/sdk/examples/tongo_proof_generation.rs
 ```
+
+OpenZeppelin multisig wallet integration, devnet tests, and the CLI-style
+transaction lifecycle are documented in
+[`docs/oz-multisig-wallet-guide.md`](docs/oz-multisig-wallet-guide.md).
 
 ### WASM
 

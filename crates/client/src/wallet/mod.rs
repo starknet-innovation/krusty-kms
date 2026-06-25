@@ -75,6 +75,37 @@ impl Wallet {
         })
     }
 
+    /// Create a wallet for an already-deployed account at a known address.
+    ///
+    /// This constructor is useful for devnet predeployed accounts, imported
+    /// accounts, and external deployment flows where the account address is
+    /// known and should not be recomputed from a local [`AccountClass`].
+    pub fn from_signing_key_at_address(
+        provider: Arc<JsonRpcClient<HttpTransport>>,
+        signing_key: SigningKey,
+        address: Address,
+        chain_id: ChainId,
+        network: NetworkPreset,
+    ) -> Self {
+        let signer = LocalWallet::from(signing_key);
+        let account = SingleOwnerAccount::new(
+            provider.clone(),
+            signer,
+            core_felt_to_rs(address.as_felt()),
+            core_felt_to_rs(chain_id.as_felt()),
+            ExecutionEncoding::New,
+        );
+
+        Self {
+            provider,
+            account,
+            address,
+            chain_id,
+            network,
+            deployed_cache: RwLock::new(None),
+        }
+    }
+
     /// Convenience: create from a private key Felt.
     pub fn from_private_key(
         provider: Arc<JsonRpcClient<HttpTransport>>,
@@ -94,6 +125,19 @@ impl Wallet {
             chain_id,
             network,
         )
+    }
+
+    /// Convenience: create from a private key and known account address.
+    pub fn from_private_key_at_address(
+        provider: Arc<JsonRpcClient<HttpTransport>>,
+        private_key: starknet_types_core::felt::Felt,
+        address: Address,
+        chain_id: ChainId,
+        network: NetworkPreset,
+    ) -> Self {
+        let pk_rs = core_felt_to_rs(private_key);
+        let signing_key = SigningKey::from_secret_scalar(pk_rs);
+        Self::from_signing_key_at_address(provider, signing_key, address, chain_id, network)
     }
 
     /// Check whether the account contract is deployed on-chain.
