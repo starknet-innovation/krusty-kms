@@ -9,6 +9,8 @@ on:
       - "!crates/experimental/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - ".github/workflows/publish.yml"
+      - ".github/scripts/publish-crate.sh"
 
 jobs:
   publish:
@@ -21,50 +23,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Publish krusty-kms-common
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="krusty-kms-common") | .version')
-          if cargo search krusty-kms-common --limit 1 | grep -q "\"$VERSION\""; then
-            echo "krusty-kms-common@$VERSION already published, skipping"
-          else
-            cargo publish -p krusty-kms-common
-          fi
+        run: .github/scripts/publish-crate.sh krusty-kms-common
+      - name: Publish krusty-kms-wallet-api
+        run: .github/scripts/publish-crate.sh krusty-kms-wallet-api
+      - name: Publish krusty-kms-domain
+        run: .github/scripts/publish-crate.sh krusty-kms-domain
       - name: Publish krusty-kms-crypto
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="krusty-kms-crypto") | .version')
-          if cargo search krusty-kms-crypto --limit 1 | grep -q "\"$VERSION\""; then
-            echo "krusty-kms-crypto@$VERSION already published, skipping"
-          else
-            cargo publish -p krusty-kms-crypto
-          fi
+        run: .github/scripts/publish-crate.sh krusty-kms-crypto
       - name: Publish krusty-kms
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="krusty-kms") | .version')
-          if cargo search krusty-kms --limit 1 | grep -q "\"$VERSION\""; then
-            echo "krusty-kms@$VERSION already published, skipping"
-          else
-            cargo publish -p krusty-kms
-          fi
+        run: .github/scripts/publish-crate.sh krusty-kms
       - name: Publish krusty-kms-sdk
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="krusty-kms-sdk") | .version')
-          if cargo search krusty-kms-sdk --limit 1 | grep -q "\"$VERSION\""; then
-            echo "krusty-kms-sdk@$VERSION already published, skipping"
-          else
-            cargo publish -p krusty-kms-sdk
-          fi
+        run: .github/scripts/publish-crate.sh krusty-kms-sdk
       - name: Publish krusty-kms-client
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="krusty-kms-client") | .version')
-          if cargo search krusty-kms-client --limit 1 | grep -q "\"$VERSION\""; then
-            echo "krusty-kms-client@$VERSION already published, skipping"
-          else
-            cargo publish -p krusty-kms-client
-          fi
-      - name: Publish krusty-kms-wasm
-        run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="krusty-kms-wasm") | .version')
-          if cargo search krusty-kms-wasm --limit 1 | grep -q "\"$VERSION\""; then
-            echo "krusty-kms-wasm@$VERSION already published, skipping"
-          else
-            cargo publish -p krusty-kms-wasm
-          fi
+        run: .github/scripts/publish-crate.sh krusty-kms-client
+      - name: Publish krusty-kms-gateway
+        run: .github/scripts/publish-crate.sh krusty-kms-gateway
