@@ -256,14 +256,7 @@ fn encode_value(
             })?;
             Ok(vec![if b { Felt::ONE } else { Felt::ZERO }])
         }
-        "shortstring" => {
-            let s = value.as_str().ok_or_else(|| {
-                krusty_kms_common::KmsError::SerializationError(
-                    "Expected string for shortstring".to_string(),
-                )
-            })?;
-            Ok(vec![Felt::from_bytes_be_slice(s.as_bytes())])
-        }
+        "shortstring" => Ok(vec![parse_short_string(value)?]),
         "string" => {
             let s = value.as_str().ok_or_else(|| {
                 krusty_kms_common::KmsError::SerializationError("Expected string value".to_string())
@@ -335,6 +328,39 @@ fn encode_enum_value(
     }
 
     Ok(vec![Poseidon::hash_array(&elements)])
+}
+
+/// Encode a SNIP-12 (revision 1) `shortstring` value, matching starknet.js and
+/// starknet.py `parse_felt`: a numeric value — an integer, a decimal string, or
+/// a `0x`-prefixed hex string — is the felt itself; any other string is encoded
+/// as a short string (its ASCII bytes read as a felt).
+///
+/// This is why a `StarknetDomain` `version`/`revision` of `"1"` encodes as the
+/// felt `1`, not the short string `'1'` (`0x31`). Encoding those as short
+/// strings yields a domain separator no SNIP-12 verifier / `is_valid_signature`
+/// agrees with. Only lowercase `0x` is treated as hex, mirroring the reference.
+fn parse_short_string(value: &serde_json::Value) -> Result<Felt> {
+    match value {
+        serde_json::Value::Number(_) => parse_felt_from_json(value),
+        serde_json::Value::String(s) => {
+            if s.starts_with("0x") {
+                Felt::from_hex(s).map_err(|e| {
+                    krusty_kms_common::KmsError::SerializationError(format!("Invalid hex felt: {e}"))
+                })
+            } else if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) {
+                Felt::from_dec_str(s).map_err(|e| {
+                    krusty_kms_common::KmsError::SerializationError(format!(
+                        "Invalid decimal felt: {e}"
+                    ))
+                })
+            } else {
+                Ok(Felt::from_bytes_be_slice(s.as_bytes()))
+            }
+        }
+        _ => Err(krusty_kms_common::KmsError::SerializationError(format!(
+            "Expected string or number for shortstring, got: {value}"
+        ))),
+    }
 }
 
 /// Parse a felt from a JSON value (hex string, decimal string, or number).
@@ -630,6 +656,53 @@ mod tests {
         assert_eq!(
             Felt::from_bytes_be_slice(b"StarkNet Message"),
             Felt::from_hex("0x537461726b4e6574204d657373616765").unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_shortstring_parse_felt_semantics() {
+        // SNIP-12 rev-1 `shortstring` = starknet.js/starknet.py `parse_felt`:
+        // numeric strings are the felt itself; other text is a short string.
+        let types = HashMap::new();
+        let one = encode_value("shortstring", &serde_json::json!("1"), &types).unwrap();
+        assert_eq!(one, vec![Felt::ONE], "numeric '1' must encode as felt 1, not 0x31");
+        let hex = encode_value("shortstring", &serde_json::json!("0x10"), &types).unwrap();
+        assert_eq!(hex, vec![Felt::from(0x10u64)]);
+        let num = encode_value("shortstring", &serde_json::json!(5), &types).unwrap();
+        assert_eq!(num, vec![Felt::from(5u64)]);
+        let text = encode_value("shortstring", &serde_json::json!("SN_MAIN"), &types).unwrap();
+        assert_eq!(text, vec![Felt::from_bytes_be_slice(b"SN_MAIN")]);
+    }
+
+    #[test]
+    fn test_message_hash_matches_starknet_js_reference() {
+        // Golden vector cross-checked against starknet.py `TypedData.message_hash`
+        // (which matches starknet.js and on-chain is_valid_signature). Guards both
+        // fixes: the short-string prefix AND parse_felt shortstring encoding
+        // (domain version/revision "1" -> felt 1).
+        let json = serde_json::json!({
+            "types": {
+                "StarknetDomain": [
+                    { "name": "name", "type": "shortstring" },
+                    { "name": "version", "type": "shortstring" },
+                    { "name": "chainId", "type": "shortstring" },
+                    { "name": "revision", "type": "shortstring" }
+                ],
+                "Message": [ { "name": "contents", "type": "felt" } ]
+            },
+            "primaryType": "Message",
+            "domain": { "name": "strkd", "version": "1", "chainId": "SN_SEPOLIA", "revision": "1" },
+            "message": { "contents": "0x1" }
+        });
+        let account =
+            Felt::from_hex("0x02000ba5ba904aed0858233e8f782bbc07fd31298824074e05a871f28642342c")
+                .unwrap();
+        let hash =
+            compute_typed_data_message_hash(&json.to_string(), &account).expect("should compute");
+        assert_eq!(
+            hash,
+            Felt::from_hex("0x68b4250d022dce3e45e64683935b0e0f8bf95e3dbf17eb9839e255578ddc061")
+                .unwrap(),
         );
     }
 
