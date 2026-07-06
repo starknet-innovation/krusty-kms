@@ -41,7 +41,13 @@ pub fn compute_typed_data_message_hash(
         &typed_data.types,
     )?;
 
-    let prefix = starknet_keccak(b"StarkNet Message");
+    // SNIP-12 prefixes the message hash with the short-string encoding of
+    // "StarkNet Message" (the ASCII bytes read as a felt) — NOT its hash. This
+    // is the felt `0x537461726b4e6574204d657373616765`, the same constant Cairo
+    // accounts use in `is_valid_signature` and that starknet.js
+    // `typedData.getMessageHash` uses. Hashing the string (e.g. via
+    // starknet_keccak) yields a digest no SNIP-12 verifier will accept.
+    let prefix = Felt::from_bytes_be_slice(b"StarkNet Message");
 
     Ok(Poseidon::hash_array(&[
         prefix,
@@ -614,6 +620,59 @@ mod tests {
         let types = HashMap::new();
         let result = encode_value("string", &val, &types).unwrap();
         assert_eq!(result, vec![starknet_keccak(b"hello world")]);
+    }
+
+    #[test]
+    fn test_message_prefix_is_snip12_short_string() {
+        // The SNIP-12 message prefix is the short-string 'StarkNet Message',
+        // i.e. the ASCII bytes read as a felt — not any hash of them. This is
+        // the constant Cairo `is_valid_signature` and starknet.js expect.
+        assert_eq!(
+            Felt::from_bytes_be_slice(b"StarkNet Message"),
+            Felt::from_hex("0x537461726b4e6574204d657373616765").unwrap(),
+        );
+    }
+
+    #[test]
+    fn test_message_hash_uses_short_string_prefix_not_keccak() {
+        // Guards the fix: the top-level hash must compose the short-string
+        // prefix (what every SNIP-12 verifier uses), and must NOT equal the
+        // old keccak-prefixed digest, which no on-chain account would accept.
+        let json = serde_json::json!({
+            "types": {
+                "StarknetDomain": [
+                    { "name": "name", "type": "shortstring" },
+                    { "name": "version", "type": "shortstring" },
+                    { "name": "chainId", "type": "shortstring" },
+                    { "name": "revision", "type": "shortstring" }
+                ],
+                "Example": [ { "name": "value", "type": "felt" } ]
+            },
+            "primaryType": "Example",
+            "domain": { "name": "StarkNet", "version": "1", "chainId": "SN_SEPOLIA", "revision": "1" },
+            "message": { "value": "0x1" }
+        });
+        let account = Felt::from(0x1234u64);
+        let td: TypedData = serde_json::from_str(&json.to_string()).unwrap();
+        let domain_hash = struct_hash("StarknetDomain", &td.domain, &td.types).unwrap();
+        let message_hash = struct_hash(&td.primary_type, &td.message, &td.types).unwrap();
+
+        let expected = Poseidon::hash_array(&[
+            Felt::from_bytes_be_slice(b"StarkNet Message"),
+            domain_hash,
+            account,
+            message_hash,
+        ]);
+        let old_buggy = Poseidon::hash_array(&[
+            starknet_keccak(b"StarkNet Message"),
+            domain_hash,
+            account,
+            message_hash,
+        ]);
+
+        let got = compute_typed_data_message_hash(&json.to_string(), &account).unwrap();
+        assert_eq!(got, expected, "must use the short-string prefix");
+        assert_ne!(got, old_buggy, "must not regress to the keccak prefix");
     }
 
     #[test]
