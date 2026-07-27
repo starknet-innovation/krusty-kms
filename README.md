@@ -85,6 +85,31 @@ transaction lifecycle are documented in
 cd crates/wasm && wasm-pack build --target web
 ```
 
+### JavaScript / TypeScript
+
+Install the published browser-oriented ESM package:
+
+```bash
+npm install @starknetfoundation/krusty-kms-wasm
+```
+
+Initialize it before calling its exports:
+
+```ts
+import init, {
+  getVersion,
+  poseidonHash,
+} from "@starknetfoundation/krusty-kms-wasm";
+
+await init();
+
+console.log(getVersion());
+console.log(poseidonHash("0x1", "0x2"));
+```
+
+See the [npm package](https://www.npmjs.com/package/@starknetfoundation/krusty-kms-wasm)
+for the generated API documentation.
+
 `computeInvokeTransactionHashV3` accepts an optional final `proofFacts`
 argument for proof-carrying invoke-v3 transactions:
 
