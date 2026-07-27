@@ -345,7 +345,9 @@ fn parse_short_string(value: &serde_json::Value) -> Result<Felt> {
         serde_json::Value::String(s) => {
             if s.starts_with("0x") {
                 Felt::from_hex(s).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!("Invalid hex felt: {e}"))
+                    krusty_kms_common::KmsError::SerializationError(format!(
+                        "Invalid hex felt: {e}"
+                    ))
                 })
             } else if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) {
                 Felt::from_dec_str(s).map_err(|e| {
@@ -665,7 +667,11 @@ mod tests {
         // numeric strings are the felt itself; other text is a short string.
         let types = HashMap::new();
         let one = encode_value("shortstring", &serde_json::json!("1"), &types).unwrap();
-        assert_eq!(one, vec![Felt::ONE], "numeric '1' must encode as felt 1, not 0x31");
+        assert_eq!(
+            one,
+            vec![Felt::ONE],
+            "numeric '1' must encode as felt 1, not 0x31"
+        );
         let hex = encode_value("shortstring", &serde_json::json!("0x10"), &types).unwrap();
         assert_eq!(hex, vec![Felt::from(0x10u64)]);
         let num = encode_value("shortstring", &serde_json::json!(5), &types).unwrap();
