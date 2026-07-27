@@ -83,7 +83,7 @@ jobs:
           fetch-depth: 0
       - name: Check version bump for changed crates
         run: |
-          CRATES=("common" "wallet-api" "domain" "gateway" "crypto" "kms" "sdk" "client")
+          CRATES=("common" "wallet-api" "domain" "gateway" "crypto" "kms" "sdk" "client" "wasm")
           FAILED=0
           for crate in "${CRATES[@]}"; do
             # Check if source files in this crate changed vs the base branch

@@ -37,6 +37,7 @@ echo ""
 wasm-pack build \
     $BUILD_MODE \
     --target web \
+    --scope starknetfoundation \
     --out-dir pkg
 
 echo ""

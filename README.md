@@ -49,6 +49,7 @@ qb-game               Experimental game crate
 | `packages/kms-jvm` | Java/Kotlin | JNI |
 | `packages/kms-dart` | Dart | dart:ffi |
 | `packages/kms-c` | C | Header distribution |
+| `@starknetfoundation/krusty-kms-wasm` | JavaScript/TypeScript | npm / wasm-pack |
 
 ## Quick Start
 

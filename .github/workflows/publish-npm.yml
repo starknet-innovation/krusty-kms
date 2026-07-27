@@ -1,0 +1,44 @@
+name: Publish WASM package to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/common/**"
+      - "crates/crypto/**"
+      - "crates/kms/**"
+      - "crates/sdk/**"
+      - "crates/wasm/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/scripts/publish-npm.sh"
+      - ".github/workflows/publish-npm.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - name: Build @starknetfoundation/krusty-kms-wasm
+        run: >
+          wasm-pack build --release --target web --scope starknetfoundation
+          --out-dir pkg
+        working-directory: crates/wasm
+      - name: Inspect npm package
+        run: npm pack --dry-run
+        working-directory: crates/wasm/pkg
+      - name: Publish npm package
+        run: bash .github/scripts/publish-npm.sh crates/wasm/pkg

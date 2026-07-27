@@ -6,10 +6,12 @@ rust-version.workspace = true
 authors.workspace = true
 license = "MIT OR Apache-2.0"
 description = "WASM bindings for krusty-kms account and protocol utilities"
-repository.workspace = true
-homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
+# This crate is distributed through npm as a wasm-pack package. Keep the Rust
+# crate private while using the repository URL in the generated npm metadata.
+repository = "git+https://github.com/starknet-innovation/krusty-kms.git"
+homepage = "https://github.com/starknet-innovation/krusty-kms"
 publish = false
 
 [package.metadata.wasm-pack.profile.release]
