@@ -496,12 +496,12 @@ pub fn derive_braavos_account_address(
 /// The calculated contract address as hex string
 #[wasm_bindgen(js_name = "calculateContractAddress")]
 pub fn calculate_contract_address(
-    salt: &str,
+    address_salt: &str,
     class_hash: &str,
     constructor_calldata: Vec<String>,
     deployer_address: &str,
 ) -> Result<String, JsValue> {
-    let salt_felt = parse_felt(salt)?;
+    let salt_felt = parse_felt(address_salt)?;
     let class_hash_felt = parse_felt(class_hash)?;
     let deployer_felt = parse_felt(deployer_address)?;
     let calldata: Vec<Felt> = constructor_calldata
@@ -830,11 +830,12 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_calculate_contract_address() {
-        let salt = "0x1";
+        let address_salt = format!("0x{:x}", usize::from(true));
         let class_hash = "0xdeadbeef";
         let calldata = vec!["0x1".to_string(), "0x2".to_string()];
         let deployer = "0x0";
-        let addr = calculate_contract_address(salt, class_hash, calldata, deployer).unwrap();
+        let addr =
+            calculate_contract_address(&address_salt, class_hash, calldata, deployer).unwrap();
         assert!(addr.starts_with("0x"));
         assert_ne!(addr, "0x0");
     }

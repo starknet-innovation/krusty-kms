@@ -192,18 +192,24 @@ mod tests {
 
     const TEST_SCRYPT_N: u32 = 1024;
 
+    fn test_password(offset: u8) -> String {
+        (0..12)
+            .map(|index| char::from(b'a' + index + offset))
+            .collect()
+    }
+
     #[wasm_bindgen_test]
     fn test_encrypt_decrypt_private_key_roundtrip() {
         let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-        let password = "hunter2";
+        let password = test_password(0);
 
-        let encrypted = encrypt_private_key(private_key, password, TEST_SCRYPT_N).unwrap();
+        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
 
         let decrypted = decrypt_private_key(
             &encrypted.nonce,
             &encrypted.salt,
             &encrypted.encrypted_key,
-            password,
+            &password,
             TEST_SCRYPT_N,
         )
         .unwrap();
@@ -226,10 +232,10 @@ mod tests {
     #[wasm_bindgen_test]
     fn test_encrypt_decrypt_keystore_roundtrip() {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-        let password = "test-password";
+        let password = test_password(0);
 
-        let keystore_json = encrypt_keystore(mnemonic, password, TEST_SCRYPT_N).unwrap();
-        let decrypted = decrypt_keystore(&keystore_json, password).unwrap();
+        let keystore_json = encrypt_keystore(mnemonic, &password, TEST_SCRYPT_N).unwrap();
+        let decrypted = decrypt_keystore(&keystore_json, &password).unwrap();
 
         assert_eq!(decrypted, mnemonic);
     }

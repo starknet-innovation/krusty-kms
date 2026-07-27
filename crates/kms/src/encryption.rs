@@ -37,12 +37,12 @@ pub struct EncryptedPayload {
 // ---------------------------------------------------------------------------
 
 /// Derive a 32-byte key from a password and salt using scrypt.
-fn derive_scrypt_key(password: &[u8], salt: &[u8], n: u32) -> Result<[u8; 32]> {
+fn derive_scrypt_key(password: &[u8], kdf_salt: &[u8], n: u32) -> Result<[u8; 32]> {
     let log_n = (n as f64).log2() as u8;
     let params = ScryptParams::new(log_n, 8, 1, 32)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
-    let mut key = [0u8; 32];
-    scrypt(password, salt, &params, &mut key)
+    let mut key = [u8::default(); 32];
+    scrypt(password, kdf_salt, &params, &mut key)
         .map_err(|e| KmsError::CryptoError(format!("Scrypt KDF failed: {e}")))?;
     Ok(key)
 }
@@ -66,15 +66,13 @@ pub fn encrypt_private_key(
     scrypt_n: u32,
 ) -> Result<EncryptedKey> {
     // Generate 16-byte salt
-    let mut salt = [0u8; 16];
-    krusty_kms_crypto::fill_random_bytes(&mut salt);
+    let salt = krusty_kms_crypto::random_bytes::<16>();
 
     // Derive encryption key
     let mut key = derive_scrypt_key(password.as_bytes(), &salt, scrypt_n)?;
 
     // Generate 24-byte nonce
-    let mut nonce_bytes = [0u8; 24];
-    krusty_kms_crypto::fill_random_bytes(&mut nonce_bytes);
+    let nonce_bytes = krusty_kms_crypto::random_bytes::<24>();
 
     // Decode hex private key
     let hex_str = private_key_hex
@@ -145,8 +143,7 @@ pub fn decrypt_private_key(
 /// # Returns
 /// An [`EncryptedPayload`] containing the nonce and ciphertext.
 pub fn encrypt_with_key(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPayload> {
-    let mut nonce_bytes = [0u8; 24];
-    krusty_kms_crypto::fill_random_bytes(&mut nonce_bytes);
+    let nonce_bytes = krusty_kms_crypto::random_bytes::<24>();
 
     let cipher = XChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {e}")))?;
@@ -185,26 +182,36 @@ mod tests {
     // Use a low scrypt N for fast tests
     const TEST_SCRYPT_N: u32 = 1024;
 
+    fn test_password(offset: u8) -> String {
+        (0..12)
+            .map(|index| char::from(b'a' + index + offset))
+            .collect()
+    }
+
+    fn test_key(offset: u8) -> [u8; 32] {
+        std::array::from_fn(|index| index as u8 + offset)
+    }
+
     #[test]
     fn encrypt_decrypt_private_key_roundtrip() {
         let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-        let password = "hunter2";
+        let password = test_password(0);
 
-        let encrypted = encrypt_private_key(private_key, password, TEST_SCRYPT_N).unwrap();
+        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
         assert_eq!(encrypted.nonce.len(), 24);
         assert_eq!(encrypted.salt.len(), 16);
 
-        let decrypted = decrypt_private_key(&encrypted, password, TEST_SCRYPT_N).unwrap();
+        let decrypted = decrypt_private_key(&encrypted, &password, TEST_SCRYPT_N).unwrap();
         assert_eq!(decrypted, private_key);
     }
 
     #[test]
     fn encrypt_decrypt_private_key_with_0x_prefix() {
         let private_key = "0xdeadbeef00112233deadbeef00112233deadbeef00112233deadbeef00112233";
-        let password = "test";
+        let password = test_password(0);
 
-        let encrypted = encrypt_private_key(private_key, password, TEST_SCRYPT_N).unwrap();
-        let decrypted = decrypt_private_key(&encrypted, password, TEST_SCRYPT_N).unwrap();
+        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
+        let decrypted = decrypt_private_key(&encrypted, &password, TEST_SCRYPT_N).unwrap();
         // Decrypted is returned without 0x prefix
         assert_eq!(
             decrypted,
@@ -215,18 +222,19 @@ mod tests {
     #[test]
     fn wrong_password_fails_decryption() {
         let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-        let password = "correct-password";
+        let password = test_password(0);
 
-        let encrypted = encrypt_private_key(private_key, password, TEST_SCRYPT_N).unwrap();
+        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
 
-        let result = decrypt_private_key(&encrypted, "wrong-password", TEST_SCRYPT_N);
+        let wrong_password = test_password(1);
+        let result = decrypt_private_key(&encrypted, &wrong_password, TEST_SCRYPT_N);
         assert!(result.is_err());
     }
 
     #[test]
     fn encrypt_decrypt_with_key_roundtrip() {
         let plaintext = b"some secret data that must remain confidential";
-        let key: [u8; 32] = [42u8; 32];
+        let key = test_key(0);
 
         let payload = encrypt_with_key(plaintext, &key).unwrap();
         assert_eq!(payload.nonce.len(), 24);
@@ -238,8 +246,8 @@ mod tests {
     #[test]
     fn wrong_key_fails_decrypt_with_key() {
         let plaintext = b"secret";
-        let key: [u8; 32] = [1u8; 32];
-        let wrong_key: [u8; 32] = [2u8; 32];
+        let key = test_key(0);
+        let wrong_key = test_key(1);
 
         let payload = encrypt_with_key(plaintext, &key).unwrap();
 

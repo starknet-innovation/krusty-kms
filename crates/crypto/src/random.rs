@@ -1,9 +1,8 @@
 //! Random value generation utilities for cryptographic operations.
 //!
-//! This module provides random Felt generation using OS-level entropy (`OsRng`),
+//! This module provides random Felt generation using OS-level entropy,
 //! including single and batch generation.
 
-use rand_core::TryRngCore;
 use starknet_types_core::felt::Felt;
 #[cfg(feature = "test-utils")]
 use std::sync::{LazyLock, Mutex};
@@ -51,7 +50,7 @@ impl DeterministicRngState {
             seed,
             stream: stream.to_vec(),
             counter: 0,
-            block: [0u8; 32],
+            block: [u8::default(); 32],
             block_offset: 32,
         }
     }
@@ -120,15 +119,22 @@ pub fn fill_random_bytes(out: &mut [u8]) {
         drop(guard);
     }
 
-    rand::rngs::OsRng
-        .try_fill_bytes(out)
-        .expect("OS entropy source unavailable");
+    getrandom::fill(out).expect("OS entropy source unavailable");
+}
+
+/// Generate a fixed-size byte array from the configured cryptographic RNG.
+///
+/// When the `test-utils` feature enables deterministic parity randomness, this
+/// uses that source; otherwise it uses OS entropy.
+pub fn random_bytes<const N: usize>() -> [u8; N] {
+    let mut bytes = [u8::default(); N];
+    fill_random_bytes(&mut bytes);
+    bytes
 }
 
 /// Generate a single random Felt from OS entropy.
 pub fn random_felt() -> Felt {
-    let mut bytes = [0u8; 32];
-    fill_random_bytes(&mut bytes);
+    let bytes = random_bytes::<32>();
     Felt::from_bytes_be(&bytes)
 }
 
@@ -173,5 +179,10 @@ mod tests {
     fn test_random_felts_empty() {
         let values = random_felts(0);
         assert_eq!(values.len(), 0);
+    }
+
+    #[test]
+    fn test_random_bytes_has_requested_length() {
+        assert_eq!(random_bytes::<24>().len(), 24);
     }
 }
