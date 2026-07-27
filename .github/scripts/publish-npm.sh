@@ -20,7 +20,7 @@ if npm view "$package_spec" version --registry=https://registry.npmjs.org >"$reg
   exit 0
 fi
 
-if ! rg -qi '(E404|404 Not Found)' "$registry_output"; then
+if ! grep -Eqi '(E404|404 Not Found)' "$registry_output"; then
   cat "$registry_output"
   rm -f "$registry_output"
   echo "::error::could not determine whether $package_spec is already published"
