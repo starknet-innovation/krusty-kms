@@ -29,4 +29,5 @@ fi
 
 rm -f "$registry_output"
 echo "Publishing $package_spec"
+cd "$package_dir"
 npm publish --access public --registry=https://registry.npmjs.org
