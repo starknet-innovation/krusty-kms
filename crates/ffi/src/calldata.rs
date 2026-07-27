@@ -80,7 +80,7 @@ fn decode_hex_bytes<const N: usize>(hex_data: &str) -> Result<[u8; N], i32> {
     if bytes.len() != N {
         return Err(KMS_ERR_INVALID_INPUT);
     }
-    let mut out = [0u8; N];
+    let mut out = [u8::default(); N];
     out.copy_from_slice(&bytes);
     Ok(out)
 }
@@ -977,6 +977,10 @@ mod tests {
         (format!("{:#x}", affine.x()), format!("{:#x}", affine.y()))
     }
 
+    fn test_bytes<const N: usize>() -> [u8; N] {
+        std::array::from_fn(|index| index as u8)
+    }
+
     fn sample_audit_json() -> String {
         let (x, y) = generator_xy_hex();
         serde_json::json!({
@@ -984,8 +988,8 @@ mod tests {
                 "l": {"x": x.clone(), "y": y.clone()},
                 "r": {"x": x.clone(), "y": y.clone()}
             },
-            "hint_ciphertext": hex::encode([0u8; 64]),
-            "hint_nonce": hex::encode([0u8; 24]),
+            "hint_ciphertext": hex::encode(test_bytes::<64>()),
+            "hint_nonce": hex::encode(test_bytes::<24>()),
             "proof": {
                 "Ax": {"x": x.clone(), "y": y.clone()},
                 "AL0": {"x": x.clone(), "y": y.clone()},
@@ -1041,8 +1045,8 @@ mod tests {
             "erc20_address": "0x2",
             "rate": "2",
             "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode([0u8; 64]),
-            "hint_nonce_hex": hex::encode([0u8; 24])
+            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
+            "hint_nonce_hex": hex::encode(test_bytes::<24>())
         })
         .to_string();
 
@@ -1085,8 +1089,8 @@ mod tests {
         let encode_params = json!({
             "tongo_address": felt_hex_fixed(&account.contract_address),
             "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode([0u8; 64]),
-            "hint_nonce_hex": hex::encode([0u8; 24]),
+            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
+            "hint_nonce_hex": hex::encode(test_bytes::<24>()),
         })
         .to_string();
         let encoded_json =
@@ -1135,8 +1139,8 @@ mod tests {
         let encode_params = json!({
             "tongo_address": felt_hex_fixed(&account.contract_address),
             "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode([0u8; 64]),
-            "hint_nonce_hex": hex::encode([0u8; 24]),
+            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
+            "hint_nonce_hex": hex::encode(test_bytes::<24>()),
         })
         .to_string();
         let encoded_json =
@@ -1182,8 +1186,8 @@ mod tests {
         let encode_params = json!({
             "tongo_address": felt_hex_fixed(&account.contract_address),
             "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode([0u8; 64]),
-            "hint_nonce_hex": hex::encode([0u8; 24]),
+            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
+            "hint_nonce_hex": hex::encode(test_bytes::<24>()),
         })
         .to_string();
         let encoded_json =

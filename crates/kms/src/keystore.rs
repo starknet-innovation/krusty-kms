@@ -41,8 +41,7 @@ type Aes128Ctr = ctr::Ctr128BE<Aes128>;
 /// * `scrypt_n` - Scrypt cost parameter N (must be a power of 2)
 pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result<String> {
     // Generate 16-byte salt
-    let mut salt = [0u8; 16];
-    krusty_kms_crypto::fill_random_bytes(&mut salt);
+    let salt = krusty_kms_crypto::random_bytes::<16>();
 
     // Derive encryption key
     let mut key = derive_scrypt_key(password.as_bytes(), &salt, scrypt_n)?;
@@ -272,12 +271,12 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 // ---------------------------------------------------------------------------
 
 /// Derive a 32-byte key from a password and salt using scrypt (r=8, p=1).
-fn derive_scrypt_key(password: &[u8], salt: &[u8], n: u32) -> Result<[u8; 32]> {
+fn derive_scrypt_key(password: &[u8], kdf_salt: &[u8], n: u32) -> Result<[u8; 32]> {
     let log_n = (n as f64).log2() as u8;
     let params = ScryptParams::new(log_n, 8, 1, 32)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
-    let mut key = [0u8; 32];
-    scrypt(password, salt, &params, &mut key)
+    let mut key = [u8::default(); 32];
+    scrypt(password, kdf_salt, &params, &mut key)
         .map_err(|e| KmsError::CryptoError(format!("Scrypt KDF failed: {e}")))?;
     Ok(key)
 }
@@ -288,12 +287,18 @@ mod tests {
 
     const TEST_SCRYPT_N: u32 = 1024;
 
+    fn test_password(offset: u8) -> String {
+        (0..12)
+            .map(|index| char::from(b'a' + index + offset))
+            .collect()
+    }
+
     #[test]
     fn encrypt_decrypt_keystore_roundtrip() {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-        let password = "test-password";
+        let password = test_password(0);
 
-        let keystore_json = encrypt_keystore(mnemonic, password, TEST_SCRYPT_N).unwrap();
+        let keystore_json = encrypt_keystore(mnemonic, &password, TEST_SCRYPT_N).unwrap();
 
         // Verify it's valid JSON
         let parsed: serde_json::Value = serde_json::from_str(&keystore_json).unwrap();
@@ -302,18 +307,19 @@ mod tests {
         assert_eq!(parsed["crypto"]["kdf"], "scrypt");
         assert_eq!(parsed["crypto"]["kdfparams"]["n"], TEST_SCRYPT_N);
 
-        let decrypted = decrypt_keystore(&keystore_json, password).unwrap();
+        let decrypted = decrypt_keystore(&keystore_json, &password).unwrap();
         assert_eq!(decrypted, mnemonic);
     }
 
     #[test]
     fn decrypt_keystore_wrong_password_fails() {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
-        let password = "correct-password";
+        let password = test_password(0);
 
-        let keystore_json = encrypt_keystore(mnemonic, password, TEST_SCRYPT_N).unwrap();
+        let keystore_json = encrypt_keystore(mnemonic, &password, TEST_SCRYPT_N).unwrap();
 
-        let result = decrypt_keystore(&keystore_json, "wrong-password");
+        let wrong_password = test_password(1);
+        let result = decrypt_keystore(&keystore_json, &wrong_password);
         assert!(result.is_err());
     }
 
@@ -324,7 +330,7 @@ mod tests {
         let private_key_bytes =
             hex::decode("4c0883a69102937d6231471b5dbb6204fe512961708279f696ae35e0c2a1b5ce")
                 .unwrap();
-        let password = "testpassword";
+        let password = test_password(0);
         // Deterministic salt and IV for the test vector
         let salt = vec![0xab; 32];
         let iv = vec![0xcd; 16];
@@ -371,7 +377,7 @@ mod tests {
         let keystore_json = serde_json::to_string(&keystore).unwrap();
 
         // Decrypt and verify
-        let decrypted = decrypt_ethers_keystore(&keystore_json, password).unwrap();
+        let decrypted = decrypt_ethers_keystore(&keystore_json, &password).unwrap();
         assert_eq!(
             decrypted,
             "4c0883a69102937d6231471b5dbb6204fe512961708279f696ae35e0c2a1b5ce"
@@ -383,7 +389,7 @@ mod tests {
         // Minimal valid keystore with wrong password
         let salt = vec![0xab; 32];
         let iv = vec![0xcd; 16];
-        let password = "correct";
+        let password = test_password(0);
 
         let log_n = (TEST_SCRYPT_N as f64).log2() as u8;
         let params = ScryptParams::new(log_n, 8, 1, 32).unwrap();
@@ -416,7 +422,8 @@ mod tests {
 
         let keystore_json = serde_json::to_string(&keystore).unwrap();
 
-        let result = decrypt_ethers_keystore(&keystore_json, "wrong");
+        let wrong_password = test_password(1);
+        let result = decrypt_ethers_keystore(&keystore_json, &wrong_password);
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("MAC verification failed"));

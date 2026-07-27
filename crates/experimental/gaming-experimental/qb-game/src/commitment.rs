@@ -8,7 +8,6 @@
 //! - Hiding: Cannot determine play from commitment without salt
 //! - Binding: Cannot open to a different play (hash collision resistant)
 
-use rand_core::TryRngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -59,10 +58,7 @@ pub struct CommitmentOpening {
 impl CommitmentOpening {
     /// Create a new opening with a random salt.
     pub fn new_random(play_index: u8) -> Self {
-        let mut salt = [0u8; SALT_LEN];
-        rand_core::OsRng
-            .try_fill_bytes(&mut salt)
-            .expect("OS entropy source unavailable");
+        let salt = krusty_kms_crypto::random_bytes::<SALT_LEN>();
         Self { play_index, salt }
     }
 

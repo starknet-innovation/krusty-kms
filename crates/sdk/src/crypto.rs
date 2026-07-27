@@ -50,7 +50,7 @@ pub fn derive_shared_secret(
     hasher.update(affine.x().to_bytes_be());
 
     let hash_result = hasher.finalize();
-    let mut key = [0u8; 32];
+    let mut key = [u8::default(); 32];
     key.copy_from_slice(&hash_result);
 
     Ok(key)
@@ -71,8 +71,7 @@ pub fn encrypt_audit_hint(
     shared_secret: &[u8; 32],
 ) -> Result<([u8; 64], [u8; 24])> {
     // Generate a random 24-byte nonce
-    let mut nonce_bytes = [0u8; 24];
-    krusty_kms_crypto::fill_random_bytes(&mut nonce_bytes);
+    let nonce_bytes = krusty_kms_crypto::random_bytes::<24>();
 
     // Create the cipher
     let cipher = XChaCha20Poly1305::new_from_slice(shared_secret)

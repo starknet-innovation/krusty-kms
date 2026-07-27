@@ -21,6 +21,9 @@ on:
       - "cross-tests/**"
       - ".github/workflows/cross-compat.yml"
 
+permissions:
+  contents: read
+
 jobs:
   cross-compat:
     name: Verify Rust proofs with TypeScript SDK
@@ -29,10 +32,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

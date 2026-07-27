@@ -1574,8 +1574,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "proptest",
- "rand 0.9.4",
- "rand_core 0.9.5",
  "rayon",
  "serde",
  "serde_json",

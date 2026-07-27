@@ -27,12 +27,12 @@ impl WasmAccountState {
     pub fn new(
         balance: String,
         pending_balance: String,
-        nonce: u64,
+        transaction_nonce: u64,
     ) -> Result<WasmAccountState, JsValue> {
         let state = Self {
             balance,
             pending_balance,
-            nonce,
+            nonce: transaction_nonce,
         };
         state.validate().map_err(JsValue::from)?;
         Ok(state)

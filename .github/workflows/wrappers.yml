@@ -10,6 +10,10 @@ on:
       - "packages/**"
       - ".github/workflows/wrappers.yml"
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -19,7 +23,7 @@ jobs:
       dart: ${{ steps.filter.outputs.dart }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3
         id: filter
         with:
           filters: |
@@ -57,7 +61,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70 # v3
         with:
           gradle-version: "8.10"
       - run: gradle classes
@@ -71,7 +75,7 @@ jobs:
         working-directory: packages/kms-dart
     steps:
       - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
+      - uses: dart-lang/setup-dart@65eb853c7ba17dde3be364c3d2858773e7144260 # v1
       - run: dart pub get
       - run: dart analyze
       - run: dart test
