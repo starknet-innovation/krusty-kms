@@ -50,11 +50,19 @@ pub fn derive_strk20_viewing_key(
     chain_id: &str,
     pool_address: &str,
 ) -> Result<Felt> {
-    if chain_id.is_empty() || pool_address.is_empty() {
-        return Err(KmsError::CryptoError(
-            "STRK20 chain id and pool address are required".to_string(),
-        ));
-    }
+    let canonical_scope = |value: &str, label: &str| -> Result<String> {
+        let felt = Felt::from_hex(value)
+            .map_err(|_| KmsError::CryptoError(format!("STRK20 {label} must be canonical hex")))?;
+        let canonical = format!("{felt:#x}");
+        if felt == Felt::ZERO || value != canonical {
+            return Err(KmsError::CryptoError(format!(
+                "STRK20 {label} must be canonical non-zero hex"
+            )));
+        }
+        Ok(canonical)
+    };
+    let chain_id = canonical_scope(chain_id, "chain id")?;
+    let pool_address = canonical_scope(pool_address, "pool address")?;
     let message = format!("{chain_id}:{pool_address}");
     let message_hash = starknet_keccak(message.as_bytes());
     let signature = sign_stark_hash(private_key, &message_hash)?;
@@ -136,5 +144,14 @@ mod tests {
         let pk = Felt::from_hex("0xabc").unwrap();
         assert!(derive_strk20_viewing_key(&pk, "", "0x2").is_err());
         assert!(derive_strk20_viewing_key(&pk, "0x1", "").is_err());
+    }
+
+    #[test]
+    fn viewing_key_rejects_noncanonical_scope() {
+        let pk = Felt::from_hex("0xabc").unwrap();
+        assert!(derive_strk20_viewing_key(&pk, "0x01", "0x2").is_err());
+        assert!(derive_strk20_viewing_key(&pk, "0x1", "0x02").is_err());
+        assert!(derive_strk20_viewing_key(&pk, "not-hex", "0x2").is_err());
+        assert!(derive_strk20_viewing_key(&pk, "0x1", "0x0").is_err());
     }
 }

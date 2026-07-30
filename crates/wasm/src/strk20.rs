@@ -45,5 +45,6 @@ mod tests {
     #[wasm_bindgen_test]
     fn derive_viewing_key_rejects_bad_hex() {
         assert!(derive_strk20_viewing_key("not-hex", "0x1", "0x2").is_err());
+        assert!(derive_strk20_viewing_key("0x1", "0x01", "0x2").is_err());
     }
 }
