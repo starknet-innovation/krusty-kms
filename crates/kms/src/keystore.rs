@@ -16,6 +16,14 @@ use crate::encryption::{decrypt_with_key, encrypt_with_key, scrypt_log_n};
 
 type Aes128Ctr = ctr::Ctr128BE<Aes128>;
 
+fn parse_u32_kdf_param(value: Option<u64>, field: &str) -> Result<u32> {
+    let n = value
+        .ok_or_else(|| KmsError::DeserializationError(format!("Missing kdfparams.{field}")))?;
+    u32::try_from(n).map_err(|_| {
+        KmsError::DeserializationError(format!("kdfparams.{field} exceeds u32 range (got {n})"))
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Native keystore (version 1)
 // ---------------------------------------------------------------------------
@@ -102,10 +110,7 @@ pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String> {
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid salt hex: {e}")))?;
 
-    let n = crypto["kdfparams"]["n"]
-        .as_u64()
-        .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.n".to_string()))?
-        as u32;
+    let n = parse_u32_kdf_param(crypto["kdfparams"]["n"].as_u64(), "n")?;
 
     let nonce = hex::decode(
         crypto["nonce"]
@@ -193,20 +198,11 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid salt hex: {e}")))?;
 
-    let n = crypto["kdfparams"]["n"]
-        .as_u64()
-        .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.n".to_string()))?
-        as u32;
+    let n = parse_u32_kdf_param(crypto["kdfparams"]["n"].as_u64(), "n")?;
 
-    let r = crypto["kdfparams"]["r"]
-        .as_u64()
-        .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.r".to_string()))?
-        as u32;
+    let r = parse_u32_kdf_param(crypto["kdfparams"]["r"].as_u64(), "r")?;
 
-    let p = crypto["kdfparams"]["p"]
-        .as_u64()
-        .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.p".to_string()))?
-        as u32;
+    let p = parse_u32_kdf_param(crypto["kdfparams"]["p"].as_u64(), "p")?;
 
     let dklen = crypto["kdfparams"]["dklen"]
         .as_u64()

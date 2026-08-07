@@ -294,6 +294,24 @@ where
                     writer.write_all(b"\n").await?;
                     writer.flush().await?;
                 }
+                Some(LimitedLine::InvalidUtf8) => {
+                    let response = OracleResponse {
+                        version: ProtocolVersion::V1_0,
+                        id: None,
+                        outcome: OracleOutcome::Error {
+                            error: GatewayError::new(
+                                GatewayErrorCode::InvalidRequest,
+                                false,
+                                Some("request line is not valid UTF-8".to_string()),
+                            ),
+                        },
+                    };
+                    let encoded = serde_json::to_vec(&response)
+                        .expect("oracle responses must always be serializable");
+                    writer.write_all(&encoded).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                }
                 Some(LimitedLine::Complete(line)) => {
                     if line.trim().is_empty() {
                         continue;
@@ -316,12 +334,15 @@ where
 enum LimitedLine {
     Complete(String),
     TooLong,
+    InvalidUtf8,
 }
 
 /// Read one newline-delimited line without exceeding `max_bytes` of payload.
 ///
 /// On overflow, discards input through the next newline (or EOF) and returns
 /// [`LimitedLine::TooLong`] without retaining the oversized body.
+/// Non-UTF-8 payloads are rejected as [`LimitedLine::InvalidUtf8`] (no lossy
+/// substitution that could mutate JSON/secret IDs).
 async fn read_line_limited<R>(
     reader: &mut R,
     max_bytes: usize,
@@ -341,9 +362,7 @@ where
             if discarded {
                 return Ok(Some(LimitedLine::TooLong));
             }
-            return Ok(Some(LimitedLine::Complete(
-                String::from_utf8_lossy(&buf).into_owned(),
-            )));
+            return Ok(Some(decode_line_utf8(buf)));
         }
 
         if let Some(pos) = available.iter().position(|&b| b == b'\n') {
@@ -362,9 +381,7 @@ where
             if buf.last() == Some(&b'\r') {
                 buf.pop();
             }
-            return Ok(Some(LimitedLine::Complete(
-                String::from_utf8_lossy(&buf).into_owned(),
-            )));
+            return Ok(Some(decode_line_utf8(buf)));
         }
 
         // No newline in this buffer fill.
@@ -384,6 +401,13 @@ where
         buf.extend_from_slice(available);
         let n = available.len();
         reader.consume(n);
+    }
+}
+
+fn decode_line_utf8(buf: Vec<u8>) -> LimitedLine {
+    match String::from_utf8(buf) {
+        Ok(s) => LimitedLine::Complete(s),
+        Err(_) => LimitedLine::InvalidUtf8,
     }
 }
 
@@ -422,7 +446,7 @@ mod tests {
     use super::*;
     use krusty_kms_common::ChainId;
     use krusty_kms_domain::{
-        AccountClassKind, AccountClassSpec, CacheMetadata, CachePolicy, CacheStatus,
+        AccountClassKind, AccountClassSpec, CacheMetadata, CachePolicy, CacheStatus, DeployMode,
         DeploymentState, DerivationPath, FeltHex, HexBytes, KeyDomain, OperationId, OperationKind,
         OperationState, OperationStatus, Provenance, QueryMode, RawMessagePayload, RequestId,
         SaltPolicySpec, SecretRef, SignResult, SnapshotBlockMetadata, TokenBalanceSnapshot,
@@ -816,8 +840,39 @@ mod tests {
         }
     }
 
+    static CONFIRM_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Serializes tests that depend on (or must not see) `KRUSTY_ORACLE_REQUIRE_CONFIRM`.
+    struct ConfirmEnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl ConfirmEnvGuard {
+        fn acquire() -> Self {
+            let guard = Self {
+                _lock: CONFIRM_ENV_LOCK.lock().unwrap(),
+            };
+            // Clear any leftover value from a panicked peer before continuing.
+            std::env::remove_var("KRUSTY_ORACLE_REQUIRE_CONFIRM");
+            guard
+        }
+
+        fn require_confirm() -> Self {
+            let guard = Self::acquire();
+            std::env::set_var("KRUSTY_ORACLE_REQUIRE_CONFIRM", "1");
+            guard
+        }
+    }
+
+    impl Drop for ConfirmEnvGuard {
+        fn drop(&mut self) {
+            std::env::remove_var("KRUSTY_ORACLE_REQUIRE_CONFIRM");
+        }
+    }
+
     #[tokio::test]
     async fn sign_command_dispatches_domain_payloads() {
+        let _env = ConfirmEnvGuard::acquire();
         let oracle = StdioOracle::new(FakeHandler::new());
         let response = oracle
             .handle_request(OracleRequest {
@@ -851,6 +906,7 @@ mod tests {
 
     #[tokio::test]
     async fn sign_command_supports_raw_nostr_payloads() {
+        let _env = ConfirmEnvGuard::acquire();
         let oracle = StdioOracle::new(FakeHandler::new());
         let response = oracle
             .handle_request(OracleRequest {
@@ -884,6 +940,7 @@ mod tests {
 
     #[tokio::test]
     async fn sign_command_supports_stark_result_shape() {
+        let _env = ConfirmEnvGuard::acquire();
         let oracle = StdioOracle::new(FakeHandler::new());
         let response = oracle
             .handle_request(OracleRequest {
@@ -955,5 +1012,76 @@ mod tests {
             },
             other => panic!("unexpected response: {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn confirm_gate_rejects_privileged_ops_without_confirm() {
+        let _env = ConfirmEnvGuard::require_confirm();
+
+        let oracle = StdioOracle::new(FakeHandler::new());
+        let response = oracle
+            .handle_request(OracleRequest {
+                version: ProtocolVersion::V1_0,
+                id: RequestId::new("req-confirm-sign").unwrap(),
+                confirm: false,
+                command: OracleCommand::Sign(sample_stark_sign_request()),
+            })
+            .await;
+
+        match response.outcome {
+            OracleOutcome::Error { error } => {
+                assert_eq!(error.code, GatewayErrorCode::InvalidRequest);
+                assert!(
+                    error
+                        .message
+                        .as_deref()
+                        .unwrap_or("")
+                        .contains("confirm=true"),
+                    "unexpected message: {:?}",
+                    error.message
+                );
+            }
+            other => panic!("expected confirm rejection, got {other:?}"),
+        }
+
+        let deploy = oracle
+            .handle_request(OracleRequest {
+                version: ProtocolVersion::V1_0,
+                id: RequestId::new("req-confirm-deploy").unwrap(),
+                confirm: false,
+                command: OracleCommand::DeployAccount(DeployAccountRequest {
+                    derivation: sample_derivation_request(),
+                    mode: DeployMode::SubmitOnly,
+                }),
+            })
+            .await;
+        assert!(matches!(deploy.outcome, OracleOutcome::Error { .. }));
+
+        // Non-privileged commands remain allowed without confirm.
+        let info = oracle
+            .handle_request(OracleRequest {
+                version: ProtocolVersion::V1_0,
+                id: RequestId::new("req-confirm-info").unwrap(),
+                confirm: false,
+                command: OracleCommand::GetProtocolInfo,
+            })
+            .await;
+        assert!(matches!(info.outcome, OracleOutcome::Ok { .. }));
+    }
+
+    #[tokio::test]
+    async fn confirm_gate_allows_privileged_ops_with_confirm() {
+        let _env = ConfirmEnvGuard::require_confirm();
+
+        let oracle = StdioOracle::new(FakeHandler::new());
+        let response = oracle
+            .handle_request(OracleRequest {
+                version: ProtocolVersion::V1_0,
+                id: RequestId::new("req-confirm-ok").unwrap(),
+                confirm: true,
+                command: OracleCommand::Sign(sample_stark_sign_request()),
+            })
+            .await;
+        assert!(matches!(response.outcome, OracleOutcome::Ok { .. }));
     }
 }

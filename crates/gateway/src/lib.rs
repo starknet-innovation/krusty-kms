@@ -1928,4 +1928,49 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn class_hash_allowlist_accepts_known_open_zeppelin_hash() {
+        let known = OpenZeppelinAccount::latest(ChainId::Sepolia)
+            .unwrap()
+            .class_hash();
+        assert!(enforce_class_hash_allowlist(
+            known,
+            AccountClassKind::OpenZeppelin,
+            ChainId::Sepolia,
+            false,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn class_hash_allowlist_rejects_unknown_hash() {
+        let err = enforce_class_hash_allowlist(
+            Felt::from_hex("0xdeadbeef").unwrap(),
+            AccountClassKind::OpenZeppelin,
+            ChainId::Sepolia,
+            false,
+        )
+        .expect_err("unknown hash must be rejected");
+        assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+        assert!(
+            err.message
+                .as_deref()
+                .unwrap_or("")
+                .contains("allow_unlisted_class_hash=true"),
+            "unexpected message: {:?}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn class_hash_allowlist_override_allows_unknown_hash() {
+        assert!(enforce_class_hash_allowlist(
+            Felt::from_hex("0xdeadbeef").unwrap(),
+            AccountClassKind::OpenZeppelin,
+            ChainId::Sepolia,
+            true,
+        )
+        .is_ok());
+    }
 }

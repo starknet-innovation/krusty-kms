@@ -1288,8 +1288,7 @@ mod tests {
             Err(error) => {
                 let message = error.to_string();
                 assert!(
-                    message.contains("storedBalance")
-                        || message.contains("encryption of balance"),
+                    message.contains("storedBalance") || message.contains("encryption of balance"),
                     "unexpected error: {message}"
                 );
             }

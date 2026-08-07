@@ -9,29 +9,24 @@ use starknet_types_core::felt::Felt;
 use std::fmt;
 use wasm_bindgen::prelude::*;
 
-fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> String {
-    match (Felt::from_hex(public_key_x), Felt::from_hex(public_key_y)) {
-        (Ok(x), Ok(y)) => krusty_kms_common::utils::serialize_public_key_hex(&x, &y),
-        _ => {
-            let x = public_key_x
-                .trim_start_matches("0x")
-                .trim_start_matches("0X");
-            let y = public_key_y
-                .trim_start_matches("0x")
-                .trim_start_matches("0X");
-            format!("0x{:0>64}{:0>64}", x, y)
-        }
-    }
+fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> Result<String, JsValue> {
+    let x = Felt::from_hex(public_key_x)
+        .map_err(|_| JsValue::from_str("invalid public_key_x: expected felt hex"))?;
+    let y = Felt::from_hex(public_key_y)
+        .map_err(|_| JsValue::from_str("invalid public_key_y: expected felt hex"))?;
+    Ok(krusty_kms_common::utils::serialize_public_key_hex(&x, &y))
 }
 
-fn padded_felt_hex(value: &str) -> String {
-    match Felt::from_hex(value) {
-        Ok(felt) => format!("{:#066x}", felt),
-        Err(_) => {
-            let body = value.trim_start_matches("0x").trim_start_matches("0X");
-            format!("0x{:0>64}", body)
-        }
-    }
+fn padded_felt_hex(value: &str) -> Result<String, JsValue> {
+    let felt = Felt::from_hex(value)
+        .map_err(|_| JsValue::from_str("invalid public key felt: expected felt hex"))?;
+    Ok(format!("{:#066x}", felt))
+}
+
+fn require_felt_hex(value: &str, field: &str) -> Result<(), JsValue> {
+    Felt::from_hex(value)
+        .map(|_| ())
+        .map_err(|_| JsValue::from_str(&format!("invalid {field}: expected felt hex")))
 }
 
 /// Account state returned from on-chain queries.
@@ -243,19 +238,25 @@ impl fmt::Debug for WasmKeypair {
 #[wasm_bindgen]
 impl WasmKeypair {
     #[wasm_bindgen(constructor)]
-    pub fn new(private_key: String, public_key_x: String, public_key_y: String) -> Self {
-        Self {
+    pub fn new(
+        private_key: String,
+        public_key_x: String,
+        public_key_y: String,
+    ) -> Result<WasmKeypair, JsValue> {
+        require_felt_hex(&public_key_x, "public_key_x")?;
+        require_felt_hex(&public_key_y, "public_key_y")?;
+        Ok(Self {
             private_key,
             public_key_x,
             public_key_y,
-        }
+        })
     }
 
     /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
     ///
     /// Compatible with `deserializePublicKey`.
     #[wasm_bindgen(js_name = "publicKeyHex")]
-    pub fn public_key_hex(&self) -> String {
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
         padded_public_key_hex(&self.public_key_x, &self.public_key_y)
     }
 }
@@ -305,16 +306,20 @@ impl fmt::Debug for WasmStarkXOnlyKeypair {
 #[wasm_bindgen]
 impl WasmStarkXOnlyKeypair {
     #[wasm_bindgen(constructor)]
-    pub fn new(private_key: String, public_key_x: String) -> Self {
-        Self {
+    pub fn new(
+        private_key: String,
+        public_key_x: String,
+    ) -> Result<WasmStarkXOnlyKeypair, JsValue> {
+        require_felt_hex(&public_key_x, "public_key_x")?;
+        Ok(Self {
             private_key,
             public_key_x,
-        }
+        })
     }
 
     /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
     #[wasm_bindgen(js_name = "publicKeyHex")]
-    pub fn public_key_hex(&self) -> String {
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
         padded_felt_hex(&self.public_key_x)
     }
 }
@@ -332,13 +337,14 @@ pub struct WasmStarkXOnlyPublicKey {
 #[wasm_bindgen]
 impl WasmStarkXOnlyPublicKey {
     #[wasm_bindgen(constructor)]
-    pub fn new(public_key_x: String) -> Self {
-        Self { public_key_x }
+    pub fn new(public_key_x: String) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
+        require_felt_hex(&public_key_x, "public_key_x")?;
+        Ok(Self { public_key_x })
     }
 
     /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
     #[wasm_bindgen(js_name = "publicKeyHex")]
-    pub fn public_key_hex(&self) -> String {
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
         padded_felt_hex(&self.public_key_x)
     }
 }
@@ -346,18 +352,20 @@ impl WasmStarkXOnlyPublicKey {
 #[wasm_bindgen]
 impl WasmPublicKey {
     #[wasm_bindgen(constructor)]
-    pub fn new(public_key_x: String, public_key_y: String) -> Self {
-        Self {
+    pub fn new(public_key_x: String, public_key_y: String) -> Result<WasmPublicKey, JsValue> {
+        require_felt_hex(&public_key_x, "public_key_x")?;
+        require_felt_hex(&public_key_y, "public_key_y")?;
+        Ok(Self {
             public_key_x,
             public_key_y,
-        }
+        })
     }
 
     /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
     ///
     /// Compatible with `deserializePublicKey`.
     #[wasm_bindgen(js_name = "publicKeyHex")]
-    pub fn public_key_hex(&self) -> String {
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
         padded_public_key_hex(&self.public_key_x, &self.public_key_y)
     }
 }

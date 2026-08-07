@@ -45,21 +45,33 @@ class Kms {
     calloc.free(ptr);
   }
 
-  Pointer<Utf8> _toNativeUtf8(String value) =>
-      value.toNativeUtf8(allocator: calloc);
+  /// Allocate a NUL-terminated UTF-8 buffer and remember its full byte length
+  /// (including terminator), so wipe covers embedded NULs in the payload.
+  ({Pointer<Utf8> ptr, int byteLength}) _toNativeUtf8Secret(String value) {
+    final ptr = value.toNativeUtf8(allocator: calloc);
+    return (ptr: ptr, byteLength: _utf8ByteLength(value) + 1);
+  }
 
-  /// Wipe and free a NUL-terminated native UTF-8 buffer.
-  ///
-  /// Length is taken from the native buffer (strlen) so we do not allocate a
-  /// second Dart-heap copy of the secret via `utf8.encode`.
-  void _freeUtf8Secret(Pointer<Utf8> ptr) {
-    if (ptr.address == 0) return;
-    final bytes = ptr.cast<Uint8>();
-    var len = 0;
-    while (bytes[len] != 0) {
-      len++;
+  /// UTF-8 byte length of [value] without allocating a second secret copy.
+  int _utf8ByteLength(String value) {
+    var n = 0;
+    for (final rune in value.runes) {
+      if (rune <= 0x7F) {
+        n += 1;
+      } else if (rune <= 0x7FF) {
+        n += 2;
+      } else if (rune <= 0xFFFF) {
+        n += 3;
+      } else {
+        n += 4;
+      }
     }
-    _secureFree(ptr, len + 1);
+    return n;
+  }
+
+  void _freeUtf8Secret(Pointer<Utf8> ptr, int byteLength) {
+    if (ptr.address == 0) return;
+    _secureFree(ptr, byteLength);
   }
 
   String _dynamicString(int Function(Pointer<Uint8> out, int outLen, Pointer<Size> written) fn) {
@@ -333,22 +345,22 @@ class Kms {
   }
 
   void validateMnemonic(String phrase) {
-    final pPhrase = _toNativeUtf8(phrase);
+    final phraseNative = _toNativeUtf8Secret(phrase);
     try {
-      _check(_bindings.validateMnemonic(pPhrase.cast()));
+      _check(_bindings.validateMnemonic(phraseNative.ptr.cast()));
     } finally {
-      _freeUtf8Secret(pPhrase);
+      _freeUtf8Secret(phraseNative.ptr, phraseNative.byteLength);
     }
   }
 
   Uint8List mnemonicToSeed(String phrase, {String passphrase = ''}) {
-    final pPhrase = _toNativeUtf8(phrase);
-    final pPassphrase = _toNativeUtf8(passphrase);
+    final phraseNative = _toNativeUtf8Secret(phrase);
+    final passphraseNative = _toNativeUtf8Secret(passphrase);
     final pOut = calloc<Uint8>(64);
     final pWritten = calloc<Size>();
     try {
       _check(_bindings.mnemonicToSeed(
-          pPhrase.cast(), pPassphrase.cast(), pOut, 64, pWritten));
+          phraseNative.ptr.cast(), passphraseNative.ptr.cast(), pOut, 64, pWritten));
       final len = pWritten.value;
       final result = Uint8List(len);
       for (var i = 0; i < len; i++) {
@@ -356,8 +368,8 @@ class Kms {
       }
       return result;
     } finally {
-      _freeUtf8Secret(pPhrase);
-      _freeUtf8Secret(pPassphrase);
+      _freeUtf8Secret(phraseNative.ptr, phraseNative.byteLength);
+      _freeUtf8Secret(passphraseNative.ptr, passphraseNative.byteLength);
       _secureFree(pOut, 64);
       calloc.free(pWritten);
     }
@@ -374,16 +386,16 @@ class Kms {
     required int coinType,
     String passphrase = '',
   }) {
-    final pMnemonic = _toNativeUtf8(mnemonic);
-    final pPassphrase = _toNativeUtf8(passphrase);
+    final mnemonicNative = _toNativeUtf8Secret(mnemonic);
+    final passphraseNative = _toNativeUtf8Secret(passphrase);
     final pOut = calloc<c.KmsFelt>();
     try {
       _check(_bindings.derivePrivateKeyWithCoinType(
-          pMnemonic.cast(), index, accountIndex, coinType, pPassphrase.cast(), pOut));
+          mnemonicNative.ptr.cast(), index, accountIndex, coinType, passphraseNative.ptr.cast(), pOut));
       return _feltFromC(pOut.ref);
     } finally {
-      _freeUtf8Secret(pMnemonic);
-      _freeUtf8Secret(pPassphrase);
+      _freeUtf8Secret(mnemonicNative.ptr, mnemonicNative.byteLength);
+      _freeUtf8Secret(passphraseNative.ptr, passphraseNative.byteLength);
       _secureFree(pOut, sizeOf<c.KmsFelt>());
     }
   }
@@ -395,19 +407,19 @@ class Kms {
     required int coinType,
     String passphrase = '',
   }) {
-    final pMnemonic = _toNativeUtf8(mnemonic);
-    final pPassphrase = _toNativeUtf8(passphrase);
+    final mnemonicNative = _toNativeUtf8Secret(mnemonic);
+    final passphraseNative = _toNativeUtf8Secret(passphrase);
     final pOut = calloc<c.KmsTongoKeyPair>();
     try {
       _check(_bindings.deriveKeypairWithCoinType(
-          pMnemonic.cast(), index, accountIndex, coinType, pPassphrase.cast(), pOut));
+          mnemonicNative.ptr.cast(), index, accountIndex, coinType, passphraseNative.ptr.cast(), pOut));
       return TongoKeyPair(
         _feltFromC(pOut.ref.privateKey),
         _projectiveFromC(pOut.ref.publicKey),
       );
     } finally {
-      _freeUtf8Secret(pMnemonic);
-      _freeUtf8Secret(pPassphrase);
+      _freeUtf8Secret(mnemonicNative.ptr, mnemonicNative.byteLength);
+      _freeUtf8Secret(passphraseNative.ptr, passphraseNative.byteLength);
       _secureFree(pOut, sizeOf<c.KmsTongoKeyPair>());
     }
   }
@@ -418,21 +430,21 @@ class Kms {
     required int accountIndex,
     String passphrase = '',
   }) {
-    final pMnemonic = _toNativeUtf8(mnemonic);
-    final pPassphrase = _toNativeUtf8(passphrase);
+    final mnemonicNative = _toNativeUtf8Secret(mnemonic);
+    final passphraseNative = _toNativeUtf8Secret(passphrase);
     // ABI: kms_derive_nostr_private_key always writes exactly 32 bytes.
     final pOut = calloc<Uint8>(32);
     try {
       _check(_bindings.deriveNostrPrivateKey(
-          pMnemonic.cast(), index, accountIndex, pPassphrase.cast(), pOut));
+          mnemonicNative.ptr.cast(), index, accountIndex, passphraseNative.ptr.cast(), pOut));
       final result = Uint8List(32);
       for (var i = 0; i < 32; i++) {
         result[i] = pOut[i];
       }
       return result;
     } finally {
-      _freeUtf8Secret(pMnemonic);
-      _freeUtf8Secret(pPassphrase);
+      _freeUtf8Secret(mnemonicNative.ptr, mnemonicNative.byteLength);
+      _freeUtf8Secret(passphraseNative.ptr, passphraseNative.byteLength);
       _secureFree(pOut, 32);
     }
   }
@@ -443,12 +455,12 @@ class Kms {
     required int accountIndex,
     String passphrase = '',
   }) {
-    final pMnemonic = _toNativeUtf8(mnemonic);
-    final pPassphrase = _toNativeUtf8(passphrase);
+    final mnemonicNative = _toNativeUtf8Secret(mnemonic);
+    final passphraseNative = _toNativeUtf8Secret(passphrase);
     final pOut = calloc<c.KmsNostrKeyPair>();
     try {
       _check(_bindings.deriveNostrKeypair(
-          pMnemonic.cast(), index, accountIndex, pPassphrase.cast(), pOut));
+          mnemonicNative.ptr.cast(), index, accountIndex, passphraseNative.ptr.cast(), pOut));
       final privKey = Uint8List(32);
       final pubKey = Uint8List(32);
       for (var i = 0; i < 32; i++) {
@@ -457,8 +469,8 @@ class Kms {
       }
       return NostrKeyPair(privKey, pubKey);
     } finally {
-      _freeUtf8Secret(pMnemonic);
-      _freeUtf8Secret(pPassphrase);
+      _freeUtf8Secret(mnemonicNative.ptr, mnemonicNative.byteLength);
+      _freeUtf8Secret(passphraseNative.ptr, passphraseNative.byteLength);
       _secureFree(pOut, sizeOf<c.KmsNostrKeyPair>());
     }
   }
@@ -550,17 +562,17 @@ class Kms {
     required Felt contractAddress,
     String passphrase = '',
   }) {
-    final pMnemonic = _toNativeUtf8(mnemonic);
-    final pPassphrase = _toNativeUtf8(passphrase);
+    final mnemonicNative = _toNativeUtf8Secret(mnemonic);
+    final passphraseNative = _toNativeUtf8Secret(passphrase);
     final pAddr = _feltToC(contractAddress, calloc);
     final pHandle = calloc<Uint64>();
     try {
       _check(_bindings.accountCreateFromMnemonic(
-          pMnemonic.cast(), index, accountIndex, pAddr, pPassphrase.cast(), pHandle));
+          mnemonicNative.ptr.cast(), index, accountIndex, pAddr, passphraseNative.ptr.cast(), pHandle));
       return AccountHandle(pHandle.value);
     } finally {
-      _freeUtf8Secret(pMnemonic);
-      _freeUtf8Secret(pPassphrase);
+      _freeUtf8Secret(mnemonicNative.ptr, mnemonicNative.byteLength);
+      _freeUtf8Secret(passphraseNative.ptr, passphraseNative.byteLength);
       calloc.free(pAddr);
       calloc.free(pHandle);
     }

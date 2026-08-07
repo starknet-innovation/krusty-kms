@@ -462,12 +462,12 @@ pub struct HttpMultisigCoordinator {
 }
 
 impl HttpMultisigCoordinator {
-    /// Create a coordinator from a parsed base URL (no SSRF checks).
+    /// Create a coordinator from a parsed base URL **without** SSRF checks.
     ///
     /// Prefer [`Self::from_url`] for untrusted URLs. This constructor uses the
     /// default reqwest redirect policy and does not validate resolved IPs.
     #[must_use]
-    pub fn new(mut base_url: Url) -> Self {
+    pub fn new_unchecked(mut base_url: Url) -> Self {
         if !base_url.path().ends_with('/') {
             let path = format!("{}/", base_url.path());
             base_url.set_path(&path);
@@ -510,7 +510,7 @@ impl HttpMultisigCoordinator {
         let url =
             Url::parse(base_url).map_err(|error| KmsError::MultisigError(error.to_string()))?;
         match url.scheme() {
-            "http" | "https" => Ok(Self::new(url)),
+            "http" | "https" => Ok(Self::new_unchecked(url)),
             other => Err(KmsError::MultisigError(format!(
                 "unsupported coordinator URL scheme '{other}' (only http/https)"
             ))),
@@ -711,6 +711,8 @@ fn is_blocked_ipv4(v4: Ipv4Addr) -> bool {
         || (v4.octets()[0] == 192 && v4.octets()[1] == 0 && v4.octets()[2] == 0)
         // Benchmarking 198.18.0.0/15
         || (v4.octets()[0] == 198 && (v4.octets()[1] == 18 || v4.octets()[1] == 19))
+        // Reserved / future use 240.0.0.0/4
+        || v4.octets()[0] >= 240
 }
 
 fn is_blocked_ipv6(v6: Ipv6Addr) -> bool {
@@ -1451,6 +1453,7 @@ mod tests {
         assert!(HttpMultisigCoordinator::from_url("http://172.16.0.1/").is_err());
         assert!(HttpMultisigCoordinator::from_url("http://[fc00::1]/").is_err());
         assert!(HttpMultisigCoordinator::from_url("http://[fe80::1]/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://240.0.0.1/").is_err());
         assert!(HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1/").is_ok());
     }
 

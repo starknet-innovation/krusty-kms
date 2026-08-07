@@ -102,20 +102,28 @@ if ! command -v sncast >/dev/null 2>&1; then
 fi
 
 echo "Computing local class hash for $CONTRACT_NAME..."
+# sncast resolves the package relative to CWD; run from the contract dir even
+# when this script is invoked by path from the repo root.
 local_class_hash_raw=$(
-  sncast --json utils class-hash \
-    --contract-name "$CONTRACT_NAME" \
-    --package "$PACKAGE_NAME" \
-    2>/dev/null || true
+  (
+    cd "$SCRIPT_DIR"
+    sncast --json utils class-hash \
+      --contract-name "$CONTRACT_NAME" \
+      --package "$PACKAGE_NAME" \
+      2>/dev/null || true
+  )
 )
 
 if [[ -z "$local_class_hash_raw" ]]; then
   # Fallback: non-JSON output (class hash on its own line or "class_hash: 0x...")
   local_class_hash_raw=$(
-    sncast utils class-hash \
-      --contract-name "$CONTRACT_NAME" \
-      --package "$PACKAGE_NAME" \
-      2>/dev/null || true
+    (
+      cd "$SCRIPT_DIR"
+      sncast utils class-hash \
+        --contract-name "$CONTRACT_NAME" \
+        --package "$PACKAGE_NAME" \
+        2>/dev/null || true
+    )
   )
 fi
 
