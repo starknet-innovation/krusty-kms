@@ -545,7 +545,26 @@ struct PublicOnlyResolver;
 impl reqwest::dns::Resolve for PublicOnlyResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         Box::pin(async move {
-            let host = name.as_str().trim_end_matches('.');
+            let raw = name.as_str().trim_end_matches('.');
+            // reqwest may pass IPv6 literals with brackets; strip them so we can
+            // apply the same IP policy without a spurious DNS lookup.
+            let host = raw
+                .strip_prefix('[')
+                .and_then(|h| h.strip_suffix(']'))
+                .unwrap_or(raw);
+
+            if let Ok(ip) = host.parse::<IpAddr>() {
+                if is_blocked_ip(ip) {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("coordinator host '{host}' is a blocked IP address"),
+                    ))
+                        as Box<dyn std::error::Error + Send + Sync>);
+                }
+                let iter: reqwest::dns::Addrs = Box::new(std::iter::once(SocketAddr::new(ip, 0)));
+                return Ok(iter);
+            }
+
             let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, 0))
                 .await
                 .map_err(|error| {
@@ -597,13 +616,11 @@ fn build_ssrf_safe_client(url: &Url) -> Result<reqwest::Client> {
     // Pin the initially validated public addresses for the base host so the
     // first connection cannot race a different A/AAAA set. Redirects to other
     // hosts still go through PublicOnlyResolver.
-    if let Some(host) = url.host_str() {
-        if host.parse::<IpAddr>().is_err() {
-            let port = url.port_or_known_default().unwrap_or(80);
-            let addrs = resolve_public_socket_addrs(host, port)?;
-            for addr in addrs {
-                builder = builder.resolve(host, addr);
-            }
+    if let Some(url::Host::Domain(domain)) = url.host() {
+        let port = url.port_or_known_default().unwrap_or(80);
+        let addrs = resolve_public_socket_addrs(domain, port)?;
+        for addr in addrs {
+            builder = builder.resolve(domain, addr);
         }
     }
 
@@ -651,34 +668,45 @@ fn validate_coordinator_url(url: &Url) -> Result<()> {
     }
 
     let host = url
-        .host_str()
+        .host()
         .ok_or_else(|| KmsError::MultisigError("coordinator URL missing host".to_string()))?;
-    let host_lower = host.to_ascii_lowercase();
 
-    if host_lower == "localhost"
-        || host_lower.ends_with(".localhost")
-        || host_lower == "metadata.google.internal"
-    {
-        return Err(KmsError::MultisigError(format!(
-            "coordinator host '{host}' is blocked (loopback/metadata)"
-        )));
-    }
-
-    let port = url.port_or_known_default().unwrap_or(80);
-
-    // Literal IP: validate without DNS.
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        if is_blocked_ip(ip) {
-            return Err(KmsError::MultisigError(format!(
-                "coordinator host '{host}' is a blocked IP address"
-            )));
+    match host {
+        url::Host::Ipv4(v4) => {
+            if is_blocked_ipv4(v4) {
+                return Err(KmsError::MultisigError(format!(
+                    "coordinator host '{v4}' is a blocked IP address"
+                )));
+            }
+            Ok(())
         }
-        return Ok(());
-    }
+        url::Host::Ipv6(v6) => {
+            // Prefer `url::Host::Ipv6` over `host_str()`: the latter includes
+            // brackets, which break `IpAddr` parsing and skipped IPv6 SSRF checks.
+            if is_blocked_ip(IpAddr::V6(v6)) {
+                return Err(KmsError::MultisigError(format!(
+                    "coordinator host '{v6}' is a blocked IP address"
+                )));
+            }
+            Ok(())
+        }
+        url::Host::Domain(domain) => {
+            let host_lower = domain.to_ascii_lowercase();
+            if host_lower == "localhost"
+                || host_lower.ends_with(".localhost")
+                || host_lower == "metadata.google.internal"
+            {
+                return Err(KmsError::MultisigError(format!(
+                    "coordinator host '{domain}' is blocked (loopback/metadata)"
+                )));
+            }
 
-    // Hostname: resolve and require every address to be publicly routable.
-    let _ = resolve_public_socket_addrs(host, port)?;
-    Ok(())
+            let port = url.port_or_known_default().unwrap_or(80);
+            // Hostname: resolve and require every address to be publicly routable.
+            let _ = resolve_public_socket_addrs(domain, port)?;
+            Ok(())
+        }
+    }
 }
 
 /// Returns true for non-public / special-use addresses (SSRF targets).
@@ -688,6 +716,16 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
         IpAddr::V6(v6) => {
             if let Some(v4) = v6.to_ipv4_mapped() {
                 return is_blocked_ipv4(v4);
+            }
+            // NAT64 / IPv4-translation prefixes (RFC 6052 / RFC 8215): reject
+            // when the embedded IPv4 destination is itself blocked.
+            if let Some(v4) = ipv4_from_nat64_prefix(v6) {
+                return is_blocked_ipv4(v4);
+            }
+            // Local-use NAT64 `64:ff9b:1::/48` with a non-/96 layout we cannot
+            // decode — fail closed rather than allow a private embedding.
+            if is_local_use_nat64_prefix(v6) {
+                return true;
             }
             is_blocked_ipv6(v6)
         }
@@ -725,6 +763,49 @@ fn is_blocked_ipv6(v6: Ipv6Addr) -> bool {
         || v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8
         // Discard prefix 100::/64
         || (v6.segments()[0] == 0x0100 && v6.segments()[1..4] == [0, 0, 0])
+}
+
+fn ipv4_from_u16_pair(hi: u16, lo: u16) -> Ipv4Addr {
+    Ipv4Addr::new((hi >> 8) as u8, hi as u8, (lo >> 8) as u8, lo as u8)
+}
+
+/// Extract an IPv4 address embedded in a NAT64 translation prefix.
+///
+/// Handles:
+/// - RFC 6052 well-known prefix `64:ff9b::/96` (IPv4 in the last 32 bits)
+/// - RFC 8215 local-use prefix `64:ff9b:1::/48` with `/96`-style embedding
+///   (e.g. `64:ff9b:1::a00:1` → `10.0.0.1`)
+/// - RFC 6052 PLEN=48 embedding under the local-use prefix
+fn ipv4_from_nat64_prefix(v6: Ipv6Addr) -> Option<Ipv4Addr> {
+    let s = v6.segments();
+
+    // Well-known NAT64 prefix 64:ff9b::/96
+    if s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0 && s[3] == 0 && s[4] == 0 && s[5] == 0 {
+        return Some(ipv4_from_u16_pair(s[6], s[7]));
+    }
+
+    // Local-use NAT64 64:ff9b:1::/48 with /96-style suffix (Codex example).
+    if s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0x0001 && s[3] == 0 && s[4] == 0 && s[5] == 0 {
+        return Some(ipv4_from_u16_pair(s[6], s[7]));
+    }
+
+    // RFC 6052 PLEN=48 under local-use: IPv4 in bits 48-63 and 72-87
+    // (bits 64-71 are the "u" octet and must be zero).
+    if s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0x0001 && (s[4] >> 8) == 0 {
+        return Some(Ipv4Addr::new(
+            (s[3] >> 8) as u8,
+            s[3] as u8,
+            s[4] as u8,
+            (s[5] >> 8) as u8,
+        ));
+    }
+
+    None
+}
+
+fn is_local_use_nat64_prefix(v6: Ipv6Addr) -> bool {
+    let s = v6.segments();
+    s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0x0001
 }
 
 #[async_trait]
@@ -1454,6 +1535,11 @@ mod tests {
         assert!(HttpMultisigCoordinator::from_url("http://[fc00::1]/").is_err());
         assert!(HttpMultisigCoordinator::from_url("http://[fe80::1]/").is_err());
         assert!(HttpMultisigCoordinator::from_url("http://240.0.0.1/").is_err());
+        // NAT64 / IPv4-translation prefixes embedding private IPv4 (10.0.0.1).
+        assert!(HttpMultisigCoordinator::from_url("http://[64:ff9b:1::a00:1]/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://[64:ff9b::a00:1]/").is_err());
+        // Public embedding via well-known NAT64 prefix remains allowed.
+        assert!(HttpMultisigCoordinator::from_url("http://[64:ff9b::808:808]/").is_ok());
         assert!(HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1/").is_ok());
     }
 
