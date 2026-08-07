@@ -194,6 +194,10 @@ impl WasmCiphertext {
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmKeypair {
     /// Private key as hex string (0x-prefixed). Treat as secret.
+    ///
+    /// Omitted from default `Serialize` (use the wasm-bindgen getter for the
+    /// intentional secret-returning API).
+    #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key X coordinate as hex string
     pub public_key_x: String,
@@ -234,7 +238,8 @@ impl WasmKeypair {
 /// Public-only Stark / Tongo key material (no private key).
 ///
 /// Prefer this over [`WasmKeypair`] when only the public key is needed
-/// (address derivation, display, API lookups).
+/// (address derivation, display, API lookups). Both affine coordinates are
+/// populated; for x-only Stark keys use [`WasmStarkXOnlyPublicKey`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmPublicKey {
@@ -242,6 +247,30 @@ pub struct WasmPublicKey {
     pub public_key_x: String,
     /// Public key Y coordinate as hex string
     pub public_key_y: String,
+}
+
+/// Stark public key as an x-only felt (no Y coordinate).
+///
+/// Matches `stark_public_key` / account address derivation inputs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmStarkXOnlyPublicKey {
+    /// Public key X coordinate as hex string
+    pub public_key_x: String,
+}
+
+#[wasm_bindgen]
+impl WasmStarkXOnlyPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key_x: String) -> Self {
+        Self { public_key_x }
+    }
+
+    /// Return the x-only public key hex (same as [`Self::public_key_x`]).
+    #[wasm_bindgen(js_name = "publicKeyHex")]
+    pub fn public_key_hex(&self) -> String {
+        self.public_key_x.clone()
+    }
 }
 
 #[wasm_bindgen]
@@ -288,6 +317,10 @@ pub enum WasmTxType {
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmNostrKeypair {
     /// Private key as hex string (64 hex chars, no 0x prefix). Treat as secret.
+    ///
+    /// Omitted from default `Serialize` (use the wasm-bindgen getter for the
+    /// intentional secret-returning API).
+    #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key as x-only hex string (64 hex chars, no 0x prefix)
     pub public_key: String,

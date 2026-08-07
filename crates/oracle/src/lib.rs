@@ -262,27 +262,128 @@ where
     ///
     /// Empty and whitespace-only lines are ignored.
     /// Lines longer than [`MAX_STDIO_LINE_BYTES`] are rejected without parsing.
+    /// The length limit is enforced **while reading** so oversized input cannot
+    /// force unbounded allocation before rejection.
     pub async fn serve<R, W>(&self, reader: R, mut writer: W) -> std::io::Result<()>
     where
         R: AsyncRead + Unpin,
         W: AsyncWrite + Unpin,
     {
-        let mut lines = BufReader::new(reader).lines();
+        let mut reader = BufReader::new(reader);
 
-        while let Some(line) = lines.next_line().await? {
-            if line.trim().is_empty() {
-                continue;
+        loop {
+            match read_line_limited(&mut reader, MAX_STDIO_LINE_BYTES).await? {
+                None => break,
+                Some(LimitedLine::TooLong) => {
+                    let response = OracleResponse {
+                        version: ProtocolVersion::V1_0,
+                        id: None,
+                        outcome: OracleOutcome::Error {
+                            error: GatewayError::new(
+                                GatewayErrorCode::InvalidRequest,
+                                false,
+                                Some(format!(
+                                    "request line exceeds maximum length of {MAX_STDIO_LINE_BYTES} bytes"
+                                )),
+                            ),
+                        },
+                    };
+                    let encoded = serde_json::to_vec(&response)
+                        .expect("oracle responses must always be serializable");
+                    writer.write_all(&encoded).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                }
+                Some(LimitedLine::Complete(line)) => {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
+                    let response = self.handle_line(&line).await;
+                    let encoded = serde_json::to_vec(&response)
+                        .expect("oracle responses must always be serializable");
+                    writer.write_all(&encoded).await?;
+                    writer.write_all(b"\n").await?;
+                    writer.flush().await?;
+                }
             }
-
-            let response = self.handle_line(&line).await;
-            let encoded = serde_json::to_vec(&response)
-                .expect("oracle responses must always be serializable");
-            writer.write_all(&encoded).await?;
-            writer.write_all(b"\n").await?;
-            writer.flush().await?;
         }
 
         Ok(())
+    }
+}
+
+enum LimitedLine {
+    Complete(String),
+    TooLong,
+}
+
+/// Read one newline-delimited line without exceeding `max_bytes` of payload.
+///
+/// On overflow, discards input through the next newline (or EOF) and returns
+/// [`LimitedLine::TooLong`] without retaining the oversized body.
+async fn read_line_limited<R>(
+    reader: &mut R,
+    max_bytes: usize,
+) -> std::io::Result<Option<LimitedLine>>
+where
+    R: AsyncBufReadExt + Unpin,
+{
+    let mut buf = Vec::new();
+    let mut discarded = false;
+
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            if buf.is_empty() && !discarded {
+                return Ok(None);
+            }
+            if discarded {
+                return Ok(Some(LimitedLine::TooLong));
+            }
+            return Ok(Some(LimitedLine::Complete(
+                String::from_utf8_lossy(&buf).into_owned(),
+            )));
+        }
+
+        if let Some(pos) = available.iter().position(|&b| b == b'\n') {
+            if !discarded {
+                let chunk = &available[..pos];
+                if buf.len().saturating_add(chunk.len()) > max_bytes {
+                    discarded = true;
+                } else {
+                    buf.extend_from_slice(chunk);
+                }
+            }
+            reader.consume(pos + 1);
+            if discarded {
+                return Ok(Some(LimitedLine::TooLong));
+            }
+            if buf.last() == Some(&b'\r') {
+                buf.pop();
+            }
+            return Ok(Some(LimitedLine::Complete(
+                String::from_utf8_lossy(&buf).into_owned(),
+            )));
+        }
+
+        // No newline in this buffer fill.
+        if discarded {
+            let n = available.len();
+            reader.consume(n);
+            continue;
+        }
+
+        if buf.len().saturating_add(available.len()) > max_bytes {
+            discarded = true;
+            let n = available.len();
+            reader.consume(n);
+            continue;
+        }
+
+        buf.extend_from_slice(available);
+        let n = available.len();
+        reader.consume(n);
     }
 }
 

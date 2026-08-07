@@ -6,7 +6,7 @@
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use crate::types::{
     WasmAccountState, WasmCiphertext, WasmDecryptedPoint, WasmKeypair, WasmNostrKeypair,
-    WasmNostrPublicKey, WasmPublicKey,
+    WasmNostrPublicKey, WasmPublicKey, WasmStarkXOnlyPublicKey,
 };
 use krusty_kms::AccountClass;
 use starknet_types_core::felt::Felt;
@@ -537,20 +537,20 @@ pub fn derive_argent_legacy_keypair(
 /// Derive the Argent-legacy Stark public key only (x-coordinate).
 ///
 /// Prefer this over [`derive_argent_legacy_keypair`] when private key material
-/// is not needed.
+/// is not needed. Returns [`WasmStarkXOnlyPublicKey`] because
+/// `stark_public_key` is x-only (not a full affine point).
 #[wasm_bindgen(js_name = "deriveArgentLegacyPublicKey")]
 pub fn derive_argent_legacy_public_key(
     mnemonic: &str,
     address_index: u32,
     account_index: u32,
-) -> Result<WasmPublicKey, JsValue> {
+) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
     let pk = krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
         .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?;
     let pubk = krusty_kms::stark_public_key(&pk);
 
-    Ok(WasmPublicKey {
+    Ok(WasmStarkXOnlyPublicKey {
         public_key_x: format!("{:#x}", pubk),
-        public_key_y: String::new(), // x-coordinate only for Stark keys
     })
 }
 

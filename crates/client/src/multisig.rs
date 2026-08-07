@@ -21,6 +21,7 @@ use starknet_rust::providers::Provider;
 use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 use std::collections::HashMap;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -461,7 +462,10 @@ pub struct HttpMultisigCoordinator {
 }
 
 impl HttpMultisigCoordinator {
-    /// Create a coordinator from a parsed base URL.
+    /// Create a coordinator from a parsed base URL (no SSRF checks).
+    ///
+    /// Prefer [`Self::from_url`] for untrusted URLs. This constructor uses the
+    /// default reqwest redirect policy and does not validate resolved IPs.
     #[must_use]
     pub fn new(mut base_url: Url) -> Self {
         if !base_url.path().ends_with('/') {
@@ -475,17 +479,26 @@ impl HttpMultisigCoordinator {
         }
     }
 
-    /// Parse a coordinator base URL.
+    /// Parse a coordinator base URL with SSRF protections.
     ///
-    /// Only `http`/`https` schemes are accepted. Loopback, link-local, and
-    /// common cloud-metadata addresses are rejected to reduce SSRF risk.
+    /// Only `http`/`https` are accepted. Hostnames are DNS-resolved and every
+    /// address must be publicly routable (no loopback, RFC1918, ULA, link-local,
+    /// CGNAT, metadata, etc.). Redirects are revalidated the same way.
     /// Use [`Self::from_url_unchecked`] in tests or when the caller has already
     /// validated the URL against a local allowlist.
     pub fn from_url(base_url: &str) -> Result<Self> {
-        let url =
+        let mut url =
             Url::parse(base_url).map_err(|error| KmsError::MultisigError(error.to_string()))?;
         validate_coordinator_url(&url)?;
-        Ok(Self::new(url))
+        if !url.path().ends_with('/') {
+            let path = format!("{}/", url.path());
+            url.set_path(&path);
+        }
+        let client = build_ssrf_safe_client()?;
+        Ok(Self {
+            base_url: url,
+            client,
+        })
     }
 
     /// Parse a coordinator URL without SSRF host/scheme checks.
@@ -507,6 +520,34 @@ impl HttpMultisigCoordinator {
             .join("v1/multisig/messages")
             .map_err(|error| KmsError::MultisigError(error.to_string()))
     }
+}
+
+#[derive(Debug)]
+struct SsrfBlockedRedirect(String);
+
+impl std::fmt::Display for SsrfBlockedRedirect {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for SsrfBlockedRedirect {}
+
+fn build_ssrf_safe_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= 10 {
+                return attempt.error(SsrfBlockedRedirect(
+                    "too many redirects while contacting coordinator".to_string(),
+                ));
+            }
+            match validate_coordinator_url(attempt.url()) {
+                Ok(()) => attempt.follow(),
+                Err(error) => attempt.error(SsrfBlockedRedirect(error.to_string())),
+            }
+        }))
+        .build()
+        .map_err(|error| KmsError::MultisigError(error.to_string()))
 }
 
 fn validate_coordinator_url(url: &Url) -> Result<()> {
@@ -533,10 +574,39 @@ fn validate_coordinator_url(url: &Url) -> Result<()> {
         )));
     }
 
-    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+    let port = url.port_or_known_default().unwrap_or(80);
+
+    // Literal IP: validate without DNS.
+    if let Ok(ip) = host.parse::<IpAddr>() {
         if is_blocked_ip(ip) {
             return Err(KmsError::MultisigError(format!(
                 "coordinator host '{host}' is a blocked IP address"
+            )));
+        }
+        return Ok(());
+    }
+
+    // Hostname: resolve and require every address to be publicly routable.
+    let addrs: Vec<_> = (host, port)
+        .to_socket_addrs()
+        .map_err(|error| {
+            KmsError::MultisigError(format!(
+                "failed to resolve coordinator host '{host}': {error}"
+            ))
+        })?
+        .collect();
+
+    if addrs.is_empty() {
+        return Err(KmsError::MultisigError(format!(
+            "coordinator host '{host}' resolved to no addresses"
+        )));
+    }
+
+    for addr in addrs {
+        if is_blocked_ip(addr.ip()) {
+            return Err(KmsError::MultisigError(format!(
+                "coordinator host '{host}' resolves to blocked address {}",
+                addr.ip()
             )));
         }
     }
@@ -544,18 +614,48 @@ fn validate_coordinator_url(url: &Url) -> Result<()> {
     Ok(())
 }
 
-fn is_blocked_ip(ip: std::net::IpAddr) -> bool {
+/// Returns true for non-public / special-use addresses (SSRF targets).
+fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
-        std::net::IpAddr::V4(v4) => {
-            v4.is_loopback()
-                || v4.is_link_local()
-                || v4.octets() == [169, 254, 169, 254] // AWS/GCP metadata
-                || v4.is_unspecified()
-        }
-        std::net::IpAddr::V6(v6) => {
-            v6.is_loopback() || v6.is_unspecified() || (v6.segments()[0] & 0xffc0) == 0xfe80
+        IpAddr::V4(v4) => is_blocked_ipv4(v4),
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_blocked_ipv4(v4);
+            }
+            is_blocked_ipv6(v6)
         }
     }
+}
+
+fn is_blocked_ipv4(v4: Ipv4Addr) -> bool {
+    v4.is_private()
+        || v4.is_loopback()
+        || v4.is_link_local()
+        || v4.is_broadcast()
+        || v4.is_documentation()
+        || v4.is_unspecified()
+        || v4.is_multicast()
+        || v4.octets()[0] == 0
+        // CGNAT 100.64.0.0/10
+        || (v4.octets()[0] == 100 && (v4.octets()[1] & 0b1100_0000) == 0b0100_0000)
+        // AWS/GCP metadata
+        || v4.octets() == [169, 254, 169, 254]
+        // IETF Protocol Assignments 192.0.0.0/24 (except .9/.10 sometimes)
+        || (v4.octets()[0] == 192 && v4.octets()[1] == 0 && v4.octets()[2] == 0)
+        // Benchmarking 198.18.0.0/15
+        || (v4.octets()[0] == 198 && (v4.octets()[1] == 18 || v4.octets()[1] == 19))
+}
+
+fn is_blocked_ipv6(v6: Ipv6Addr) -> bool {
+    v6.is_loopback()
+        || v6.is_unspecified()
+        || v6.is_multicast()
+        || v6.is_unicast_link_local()
+        || v6.is_unique_local()
+        // Documentation 2001:db8::/32
+        || v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8
+        // Discard prefix 100::/64
+        || (v6.segments()[0] == 0x0100 && v6.segments()[1..4] == [0, 0, 0])
 }
 
 #[async_trait]
@@ -1264,8 +1364,9 @@ mod tests {
 
     #[test]
     fn test_http_coordinator_preserves_base_path() {
+        // Fictional host: use unchecked (from_url resolves DNS).
         let coordinator =
-            HttpMultisigCoordinator::from_url("https://coordinator.example/api").unwrap();
+            HttpMultisigCoordinator::from_url_unchecked("https://coordinator.example/api").unwrap();
         assert_eq!(
             coordinator.messages_url().unwrap().as_str(),
             "https://coordinator.example/api/v1/multisig/messages"
@@ -1278,6 +1379,11 @@ mod tests {
         assert!(HttpMultisigCoordinator::from_url("http://localhost:8080").is_err());
         assert!(HttpMultisigCoordinator::from_url("http://127.0.0.1/").is_err());
         assert!(HttpMultisigCoordinator::from_url("http://169.254.169.254/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://10.0.0.1/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://192.168.1.1/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://172.16.0.1/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://[fc00::1]/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://[fe80::1]/").is_err());
         assert!(HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1/").is_ok());
     }
 

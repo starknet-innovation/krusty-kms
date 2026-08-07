@@ -46,8 +46,8 @@ pub type GatewayResult<T> = Result<T, GatewayError>;
 
 const DEFAULT_OPERATION_RETENTION_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 const DEFAULT_OPERATION_RETENTION_MAX_ENTRIES: usize = 1_024;
-/// Gateway-global ceiling for snapshot cache entries. Request `max_entries` cannot
-/// shrink the shared cache below this floor / above this ceiling for eviction.
+/// Gateway-global ceiling for snapshot cache entries.
+/// Per-request `CachePolicy.max_entries` is deprecated and ignored for eviction.
 const DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES: usize = 256;
 
 /// Trusted-boundary dependency that resolves a private key for the requested domain/path.
@@ -653,9 +653,9 @@ where
 
         match self.fetch_snapshot(&request, now_ms).await {
             Ok(snapshot) => {
-                // Eviction uses the gateway-global ceiling only. Request
-                // `max_entries` is treated as a soft per-request hint for TTL
-                // policy validation, never as a way to flush other entries.
+                // Eviction uses the gateway-global ceiling only.
+                // `CachePolicy.max_entries` is deprecated and ignored here so a
+                // single request cannot flush unrelated shared-cache entries.
                 self.store_snapshot(key, snapshot.clone(), self.snapshot_cache_max_entries)
                     .await;
                 let status = self
@@ -824,6 +824,8 @@ where
                 Some("cache ttl_ms must be greater than zero".to_string()),
             ));
         }
+        // max_entries is deprecated for shared snapshot eviction but still
+        // validated (> 0) for wire/API compatibility with CachePolicy::new.
         if cache_policy.max_entries == 0 {
             return Err(GatewayError::new(
                 GatewayErrorCode::InvalidCachePolicy,

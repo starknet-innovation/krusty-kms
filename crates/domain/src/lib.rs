@@ -605,14 +605,27 @@ pub struct TrackedToken {
 }
 
 /// Cache behavior contract exposed to integrators.
+///
+/// # Deprecation notice
+///
+/// [`Self::max_entries`] is **deprecated**. Gateway snapshot eviction uses a
+/// process-global ceiling and ignores per-request `max_entries` so one client
+/// cannot flush another client's cache. The field remains on the wire for
+/// compatibility and must still be `> 0` when constructing via [`Self::new`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CachePolicy {
     pub ttl_ms: u64,
     pub stale_while_revalidate_ms: u64,
+    /// Deprecated: ignored for gateway snapshot-cache eviction (global ceiling).
+    #[doc(alias = "deprecated_max_entries")]
     pub max_entries: usize,
 }
 
 impl CachePolicy {
+    /// Construct a cache policy.
+    ///
+    /// `max_entries` is retained for API/wire compatibility but is **deprecated**
+    /// and ignored by the gateway shared snapshot cache.
     pub fn new(
         ttl_ms: u64,
         stale_while_revalidate_ms: u64,

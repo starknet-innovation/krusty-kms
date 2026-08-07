@@ -3,6 +3,9 @@
 use std::panic::catch_unwind;
 use std::slice;
 
+use krusty_kms_common::SecretFelt;
+use zeroize::Zeroize;
+
 use crate::error::*;
 use crate::helpers::*;
 use crate::types::*;
@@ -28,23 +31,17 @@ pub unsafe extern "C" fn kms_stark_sign(
         }
 
         let msg = kms_to_felt(&*hash);
-        // Copy secret into a local so the stack slot can be cleared after use.
-        let mut sk = kms_to_felt(&*private_key);
+        // SecretFelt zeroizes on drop (volatile write); plain assignment can be DCE'd.
+        let sk = SecretFelt::new(kms_to_felt(&*private_key));
 
-        let result = match krusty_kms::sign_stark_hash(&sk, &msg) {
+        match krusty_kms::sign_stark_hash(sk.expose_secret(), &msg) {
             Ok(sig) => {
                 *out_r = felt_to_kms(&sig.r);
                 *out_s = felt_to_kms(&sig.s);
                 KMS_OK
             }
             Err(_) => KMS_ERR_CRYPTO,
-        };
-
-        // Best-effort wipe of the local private-key copy.
-        sk = starknet_types_core::felt::Felt::ZERO;
-        let _ = sk;
-
-        result
+        }
     })
     .unwrap_or(KMS_ERR_INTERNAL)
 }
@@ -75,11 +72,14 @@ pub unsafe extern "C" fn kms_eth_sign(
 
         let signer = match krusty_kms::EthSigner::from_private_key(&pk_arr) {
             Ok(s) => s,
-            Err(_) => return KMS_ERR_INVALID_INPUT,
+            Err(_) => {
+                pk_arr.zeroize();
+                return KMS_ERR_INVALID_INPUT;
+            }
         };
 
-        // Wipe the temporary private-key copy.
-        pk_arr.fill(0);
+        // Guaranteed wipe of the temporary private-key copy.
+        pk_arr.zeroize();
 
         match signer.sign_hash(&h) {
             Ok(sig) => {

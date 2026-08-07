@@ -105,22 +105,24 @@ static void jbytearrays_to_projective(JNIEnv *env, jbyteArray x, jbyteArray y, j
 static jstring string_dynamic(JNIEnv *env,
     int32_t (*fn)(const char*, char*, size_t, size_t*),
     const char *input) {
-    size_t written = 0;
-    int32_t rc = fn(input, NULL, 0, &written);
+    size_t needed = 0;
+    int32_t rc = fn(input, NULL, 0, &needed);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
 
-    char *buf = (char *)malloc(written + 1);
+    size_t capacity = needed + 1;
+    char *buf = (char *)malloc(capacity);
     if (buf == NULL) {
         throw_kms_error(env, KMS_ERR_INTERNAL);
         return NULL;
     }
 
-    rc = fn(input, buf, written + 1, &written);
-    if (rc != KMS_OK) { secure_free(buf, written + 1); throw_kms_error(env, rc); return NULL; }
+    size_t written = 0;
+    rc = fn(input, buf, capacity, &written);
+    if (rc != KMS_OK) { secure_free(buf, capacity); throw_kms_error(env, rc); return NULL; }
 
     buf[written] = '\0';
     jstring result = (*env)->NewStringUTF(env, buf);
-    secure_free(buf, written + 1);
+    secure_free(buf, capacity);
     return result;
 }
 
@@ -128,44 +130,48 @@ static jstring string_dynamic(JNIEnv *env,
 static jstring string_dynamic_handle(JNIEnv *env,
     int32_t (*fn)(KmsAccountHandle, const char*, char*, size_t, size_t*),
     KmsAccountHandle handle, const char *input) {
-    size_t written = 0;
-    int32_t rc = fn(handle, input, NULL, 0, &written);
+    size_t needed = 0;
+    int32_t rc = fn(handle, input, NULL, 0, &needed);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
 
-    char *buf = (char *)malloc(written + 1);
+    size_t capacity = needed + 1;
+    char *buf = (char *)malloc(capacity);
     if (buf == NULL) {
         throw_kms_error(env, KMS_ERR_INTERNAL);
         return NULL;
     }
 
-    rc = fn(handle, input, buf, written + 1, &written);
-    if (rc != KMS_OK) { secure_free(buf, written + 1); throw_kms_error(env, rc); return NULL; }
+    size_t written = 0;
+    rc = fn(handle, input, buf, capacity, &written);
+    if (rc != KMS_OK) { secure_free(buf, capacity); throw_kms_error(env, rc); return NULL; }
 
     buf[written] = '\0';
     jstring result = (*env)->NewStringUTF(env, buf);
-    secure_free(buf, written + 1);
+    secure_free(buf, capacity);
     return result;
 }
 
 /* Two-call dynamic string for parameterless functions */
 static jstring string_dynamic_noarg(JNIEnv *env,
     int32_t (*fn)(char*, size_t, size_t*)) {
-    size_t written = 0;
-    int32_t rc = fn(NULL, 0, &written);
+    size_t needed = 0;
+    int32_t rc = fn(NULL, 0, &needed);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
 
-    char *buf = (char *)malloc(written + 1);
+    size_t capacity = needed + 1;
+    char *buf = (char *)malloc(capacity);
     if (buf == NULL) {
         throw_kms_error(env, KMS_ERR_INTERNAL);
         return NULL;
     }
 
-    rc = fn(buf, written + 1, &written);
-    if (rc != KMS_OK) { secure_free(buf, written + 1); throw_kms_error(env, rc); return NULL; }
+    size_t written = 0;
+    rc = fn(buf, capacity, &written);
+    if (rc != KMS_OK) { secure_free(buf, capacity); throw_kms_error(env, rc); return NULL; }
 
     buf[written] = '\0';
     jstring result = (*env)->NewStringUTF(env, buf);
-    secure_free(buf, written + 1);
+    secure_free(buf, capacity);
     return result;
 }
 
@@ -332,20 +338,32 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_poseidonHashMany(
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateMnemonic(
     JNIEnv *env, jclass cls, jint wordCount) {
     (void)cls;
-    size_t written = 0;
-    int32_t rc = kms_generate_mnemonic((uint32_t)wordCount, NULL, 0, &written);
-    if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
+    /* Random each call: do not size from a probe phrase. Use a fixed
+     * capacity with grow-on-BUFFER_TOO_SMALL, and always wipe `capacity`. */
+    size_t capacity = 512;
+    for (int attempt = 0; attempt < 4; attempt++) {
+        char *buf = (char *)malloc(capacity);
+        if (buf == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
 
-    char *buf = (char *)malloc(written + 1);
-    if (buf == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
-
-    rc = kms_generate_mnemonic((uint32_t)wordCount, buf, written + 1, &written);
-    if (rc != KMS_OK) { secure_free(buf, written + 1); throw_kms_error(env, rc); return NULL; }
-
-    buf[written] = '\0';
-    jstring result = (*env)->NewStringUTF(env, buf);
-    secure_free(buf, written + 1);
-    return result;
+        size_t written = 0;
+        int32_t rc = kms_generate_mnemonic((uint32_t)wordCount, buf, capacity, &written);
+        if (rc == KMS_OK) {
+            buf[written] = '\0';
+            jstring result = (*env)->NewStringUTF(env, buf);
+            secure_free(buf, capacity);
+            return result;
+        }
+        if (rc == KMS_ERR_BUFFER_TOO_SMALL && written + 1 > capacity) {
+            secure_free(buf, capacity);
+            capacity = written + 1;
+            continue;
+        }
+        secure_free(buf, capacity);
+        throw_kms_error(env, rc);
+        return NULL;
+    }
+    throw_kms_error(env, KMS_ERR_INTERNAL);
+    return NULL;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateMnemonicFromEntropy(
@@ -353,32 +371,35 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateMnemonicFromEntrop
     (void)cls;
     jsize len = (*env)->GetArrayLength(env, entropy);
     jbyte *data = (*env)->GetByteArrayElements(env, entropy, NULL);
+    if (data == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
 
-    size_t written = 0;
+    size_t needed = 0;
     int32_t rc = kms_generate_mnemonic_from_entropy(
-        (const uint8_t *)data, (size_t)len, NULL, 0, &written);
+        (const uint8_t *)data, (size_t)len, NULL, 0, &needed);
     if (rc != KMS_OK) {
         (*env)->ReleaseByteArrayElements(env, entropy, data, JNI_ABORT);
         throw_kms_error(env, rc);
         return NULL;
     }
 
-    char *buf = (char *)malloc(written + 1);
+    size_t capacity = needed + 1;
+    char *buf = (char *)malloc(capacity);
     if (buf == NULL) {
         (*env)->ReleaseByteArrayElements(env, entropy, data, JNI_ABORT);
         throw_kms_error(env, KMS_ERR_INTERNAL);
         return NULL;
     }
 
+    size_t written = 0;
     rc = kms_generate_mnemonic_from_entropy(
-        (const uint8_t *)data, (size_t)len, buf, written + 1, &written);
+        (const uint8_t *)data, (size_t)len, buf, capacity, &written);
     (*env)->ReleaseByteArrayElements(env, entropy, data, JNI_ABORT);
 
-    if (rc != KMS_OK) { secure_free(buf, written + 1); throw_kms_error(env, rc); return NULL; }
+    if (rc != KMS_OK) { secure_free(buf, capacity); throw_kms_error(env, rc); return NULL; }
 
     buf[written] = '\0';
     jstring result = (*env)->NewStringUTF(env, buf);
-    secure_free(buf, written + 1);
+    secure_free(buf, capacity);
     return result;
 }
 

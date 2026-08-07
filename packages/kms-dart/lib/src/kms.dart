@@ -49,10 +49,18 @@ class Kms {
   Pointer<Utf8> _toNativeUtf8(String value) =>
       value.toNativeUtf8(allocator: calloc);
 
-  void _freeUtf8Secret(Pointer<Utf8> ptr, String source) {
+  /// Wipe and free a NUL-terminated native UTF-8 buffer.
+  ///
+  /// Length is taken from the native buffer (strlen) so we do not allocate a
+  /// second Dart-heap copy of the secret via `utf8.encode`.
+  void _freeUtf8Secret(Pointer<Utf8> ptr) {
     if (ptr.address == 0) return;
-    final byteLen = utf8.encode(source).length + 1;
-    _secureFree(ptr, byteLen);
+    final bytes = ptr.cast<Uint8>();
+    var len = 0;
+    while (bytes[len] != 0) {
+      len++;
+    }
+    _secureFree(ptr, len + 1);
   }
 
   String _dynamicString(int Function(Pointer<Uint8> out, int outLen, Pointer<Size> written) fn) {
@@ -300,7 +308,7 @@ class Kms {
     try {
       _check(_bindings.validateMnemonic(pPhrase.cast()));
     } finally {
-      _freeUtf8Secret(pPhrase, phrase);
+      _freeUtf8Secret(pPhrase);
     }
   }
 
@@ -319,8 +327,8 @@ class Kms {
       }
       return result;
     } finally {
-      _freeUtf8Secret(pPhrase, phrase);
-      _freeUtf8Secret(pPassphrase, passphrase);
+      _freeUtf8Secret(pPhrase);
+      _freeUtf8Secret(pPassphrase);
       _secureFree(pOut, 64);
       calloc.free(pWritten);
     }
@@ -345,8 +353,8 @@ class Kms {
           pMnemonic.cast(), index, accountIndex, coinType, pPassphrase.cast(), pOut));
       return _feltFromC(pOut.ref);
     } finally {
-      _freeUtf8Secret(pMnemonic, mnemonic);
-      _freeUtf8Secret(pPassphrase, passphrase);
+      _freeUtf8Secret(pMnemonic);
+      _freeUtf8Secret(pPassphrase);
       _secureFree(pOut, sizeOf<c.KmsFelt>());
     }
   }
@@ -369,8 +377,8 @@ class Kms {
         _projectiveFromC(pOut.ref.publicKey),
       );
     } finally {
-      _freeUtf8Secret(pMnemonic, mnemonic);
-      _freeUtf8Secret(pPassphrase, passphrase);
+      _freeUtf8Secret(pMnemonic);
+      _freeUtf8Secret(pPassphrase);
       _secureFree(pOut, sizeOf<c.KmsTongoKeyPair>());
     }
   }
@@ -394,8 +402,8 @@ class Kms {
       }
       return result;
     } finally {
-      _freeUtf8Secret(pMnemonic, mnemonic);
-      _freeUtf8Secret(pPassphrase, passphrase);
+      _freeUtf8Secret(pMnemonic);
+      _freeUtf8Secret(pPassphrase);
       _secureFree(pOut, 32);
     }
   }
@@ -420,8 +428,8 @@ class Kms {
       }
       return NostrKeyPair(privKey, pubKey);
     } finally {
-      _freeUtf8Secret(pMnemonic, mnemonic);
-      _freeUtf8Secret(pPassphrase, passphrase);
+      _freeUtf8Secret(pMnemonic);
+      _freeUtf8Secret(pPassphrase);
       _secureFree(pOut, sizeOf<c.KmsNostrKeyPair>());
     }
   }
@@ -522,8 +530,8 @@ class Kms {
           pMnemonic.cast(), index, accountIndex, pAddr, pPassphrase.cast(), pHandle));
       return AccountHandle(pHandle.value);
     } finally {
-      _freeUtf8Secret(pMnemonic, mnemonic);
-      _freeUtf8Secret(pPassphrase, passphrase);
+      _freeUtf8Secret(pMnemonic);
+      _freeUtf8Secret(pPassphrase);
       calloc.free(pAddr);
       calloc.free(pHandle);
     }
