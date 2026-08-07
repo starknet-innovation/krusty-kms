@@ -7,7 +7,7 @@ use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 
 use crate::error::*;
-use crate::helpers::*;
+use crate::helpers::{felt_to_kms, kms_to_felt, KMS_MAX_POSEIDON_VALUES};
 use crate::types::*;
 
 #[no_mangle]
@@ -39,6 +39,9 @@ pub unsafe extern "C" fn kms_poseidon_hash_many(
         if out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
+        if values_len > KMS_MAX_POSEIDON_VALUES {
+            return KMS_ERR_INVALID_INPUT;
+        }
         if values_len > 0 && values.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
@@ -55,4 +58,18 @@ pub unsafe extern "C" fn kms_poseidon_hash_many(
         KMS_OK
     })
     .unwrap_or(KMS_ERR_INTERNAL)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn poseidon_rejects_oversized_values_len() {
+        let mut out = KmsFelt { bytes: [0; 32] };
+        let rc = unsafe {
+            kms_poseidon_hash_many(std::ptr::null(), KMS_MAX_POSEIDON_VALUES + 1, &mut out)
+        };
+        assert_eq!(rc, KMS_ERR_INVALID_INPUT);
+    }
 }

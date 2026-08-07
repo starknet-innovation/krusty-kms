@@ -118,7 +118,8 @@ pub fn encode_short_string(s: &str) -> Result<Felt> {
 /// # Arguments
 /// * `public_key` - The Stark public key (compressed, x-coordinate only)
 /// * `class_hash` - The `OpenZeppelin` account class hash
-/// * `salt` - Optional salt (defaults to 0)
+/// * `salt` - Optional salt (defaults to the public key, matching
+///   [`crate::SaltPolicy::PublicKey`] used by deploy/gateway flows)
 ///
 /// # Returns
 /// The derived account contract address.
@@ -135,7 +136,8 @@ pub fn derive_oz_account_address(
     class_hash: &Felt,
     salt: Option<&Felt>,
 ) -> Result<Felt> {
-    let salt = salt.unwrap_or(&Felt::ZERO);
+    // Align with SaltPolicy::PublicKey (deploy/gateway default), not Zero.
+    let salt = salt.unwrap_or(public_key);
 
     // OpenZeppelin account constructor takes [public_key]
     let constructor_calldata = vec![*public_key];
@@ -238,8 +240,12 @@ mod tests {
         let addr_with_salt =
             derive_oz_account_address(&public_key, &class_hash, Some(&salt)).unwrap();
         let addr_without_salt = derive_oz_account_address(&public_key, &class_hash, None).unwrap();
+        let addr_public_key_salt =
+            derive_oz_account_address(&public_key, &class_hash, Some(&public_key)).unwrap();
 
         assert_ne!(addr_with_salt, addr_without_salt);
+        // Default salt matches SaltPolicy::PublicKey.
+        assert_eq!(addr_without_salt, addr_public_key_salt);
     }
 
     #[test]

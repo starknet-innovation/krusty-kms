@@ -13,6 +13,13 @@ use crate::types::*;
 /// Encrypt a message under an ElGamal public key and produce a proof.
 ///
 /// The proof is serialized as JSON into `out_proof_json`.
+///
+/// # Atomicity
+///
+/// Ciphertext points (`out_l` / `out_r`) are written only after the proof
+/// buffer write succeeds. On `KMS_ERR_BUFFER_TOO_SMALL`, or when
+/// `out_proof_json` is NULL (size probe), the point outputs are left
+/// untouched so callers do not observe a partial result.
 #[no_mangle]
 pub unsafe extern "C" fn kms_elgamal_encrypt(
     message: *const KmsFelt,
@@ -49,20 +56,29 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
             Err(_) => return KMS_ERR_CRYPTO,
         };
 
-        *out_l = proj_to_kms(&enc.l);
-        *out_r = proj_to_kms(&enc.r);
-
         let proof_str = match to_deterministic_json(&enc.proof) {
             Ok(s) => s,
             Err(e) => return e,
         };
 
-        write_string_output(
+        let rc = write_string_output(
             &proof_str,
             out_proof_json,
             out_proof_json_len,
             out_proof_json_written,
-        )
+        );
+        if rc != KMS_OK {
+            return rc;
+        }
+
+        // Size probe (NULL proof buffer): report length only; do not publish points.
+        if out_proof_json.is_null() {
+            return KMS_OK;
+        }
+
+        *out_l = proj_to_kms(&enc.l);
+        *out_r = proj_to_kms(&enc.r);
+        KMS_OK
     })
     .unwrap_or(KMS_ERR_INTERNAL)
 }
@@ -133,6 +149,8 @@ mod tests {
         let mut out_r = out_l;
 
         // Two-call pattern: first probe required bytes, then write.
+        // Probe must not publish ciphertext points.
+        let zero_point = out_l;
         let mut needed = 0usize;
         let rc = unsafe {
             kms_elgamal_encrypt(
@@ -149,8 +167,12 @@ mod tests {
         };
         assert_eq!(rc, KMS_OK);
         assert!(needed > 0);
+        assert_eq!(out_l.x.bytes, zero_point.x.bytes);
+        assert_eq!(out_r.x.bytes, zero_point.x.bytes);
 
-        let mut needed2 = 0usize;
+        // BUFFER_TOO_SMALL must also leave points untouched.
+        let mut tiny = [0u8; 1];
+        let mut tiny_written = 0usize;
         let rc = unsafe {
             kms_elgamal_encrypt(
                 &msg_kms,
@@ -159,13 +181,15 @@ mod tests {
                 &pfx_kms,
                 &mut out_l,
                 &mut out_r,
-                std::ptr::null_mut(),
-                0,
-                &mut needed2,
+                tiny.as_mut_ptr() as *mut std::ffi::c_char,
+                tiny.len(),
+                &mut tiny_written,
             )
         };
-        assert_eq!(rc, KMS_OK);
-        assert_eq!(needed2, needed);
+        assert_eq!(rc, KMS_ERR_BUFFER_TOO_SMALL);
+        assert_eq!(tiny_written, needed);
+        assert_eq!(out_l.x.bytes, zero_point.x.bytes);
+        assert_eq!(out_r.x.bytes, zero_point.x.bytes);
 
         let mut proof_buf = vec![0u8; needed + 1];
         let mut proof_written = 0usize;
@@ -185,6 +209,7 @@ mod tests {
         assert_eq!(rc, KMS_OK);
         assert!(proof_written > 0);
         assert_eq!(proof_written, needed);
+        assert_ne!(out_l.x.bytes, zero_point.x.bytes);
 
         // Decrypt
         let sk_kms = felt_to_kms(&sk);

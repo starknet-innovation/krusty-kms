@@ -5,7 +5,9 @@ use std::panic::catch_unwind;
 use std::slice;
 
 use crate::error::*;
-use crate::helpers::*;
+use crate::helpers::{
+    read_cstr, read_cstr_optional, write_bytes_output, write_string_output, KMS_MAX_ENTROPY_LEN,
+};
 
 #[no_mangle]
 pub unsafe extern "C" fn kms_generate_mnemonic(
@@ -34,6 +36,9 @@ pub unsafe extern "C" fn kms_generate_mnemonic_from_entropy(
     catch_unwind(|| {
         if entropy.is_null() {
             return KMS_ERR_NULL_POINTER;
+        }
+        if entropy_len == 0 || entropy_len > KMS_MAX_ENTROPY_LEN {
+            return KMS_ERR_INVALID_INPUT;
         }
         let data = slice::from_raw_parts(entropy, entropy_len);
         match bip39::Mnemonic::from_entropy(data) {
@@ -86,4 +91,25 @@ pub unsafe extern "C" fn kms_mnemonic_to_seed(
         }
     })
     .unwrap_or(KMS_ERR_INTERNAL)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entropy_rejects_oversized_len() {
+        let entropy = [0u8; KMS_MAX_ENTROPY_LEN + 1];
+        let mut written = 0usize;
+        let rc = unsafe {
+            kms_generate_mnemonic_from_entropy(
+                entropy.as_ptr(),
+                entropy.len(),
+                std::ptr::null_mut(),
+                0,
+                &mut written,
+            )
+        };
+        assert_eq!(rc, KMS_ERR_INVALID_INPUT);
+    }
 }

@@ -6,7 +6,7 @@ use std::slice;
 use starknet_types_core::felt::Felt;
 
 use crate::error::*;
-use crate::helpers::*;
+use crate::helpers::{felt_to_kms, kms_to_felt, KMS_MAX_CONSTRUCTOR_CALLDATA};
 use crate::types::*;
 
 #[no_mangle]
@@ -21,6 +21,9 @@ pub unsafe extern "C" fn kms_calculate_contract_address(
     catch_unwind(|| {
         if salt.is_null() || class_hash.is_null() || deployer_address.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
+        }
+        if constructor_calldata_len > KMS_MAX_CONSTRUCTOR_CALLDATA {
+            return KMS_ERR_INVALID_INPUT;
         }
         if constructor_calldata_len > 0 && constructor_calldata.is_null() {
             return KMS_ERR_NULL_POINTER;

@@ -29,8 +29,8 @@ pub use derivation::{
     TongoKeyPair, NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
 };
 pub use discovery::{
-    derive_discovery_keypairs, generate_candidates, CandidateAccount, DerivationType,
-    DerivedKeypair, WalletType,
+    derive_discovery_keypairs, generate_candidates, CandidateAccount, CandidateAccountWithSecrets,
+    DerivationType, DerivedKeypair, DerivedKeypairWithSecrets, WalletType,
 };
 pub use encryption::{
     decrypt_private_key, decrypt_with_key, encrypt_private_key, encrypt_with_key, EncryptedKey,

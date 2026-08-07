@@ -84,6 +84,14 @@ pub unsafe extern "C" fn kms_derive_keypair_with_coin_type(
     .unwrap_or(KMS_ERR_INTERNAL)
 }
 
+/// Derive a Nostr (secp256k1) private key from a BIP-39 mnemonic.
+///
+/// # Buffer contract
+///
+/// `out` **must** point to a caller-owned buffer of **exactly 32 bytes**.
+/// This ABI does not take an `out_len` parameter; wrappers must allocate 32
+/// bytes (see `uint8_t out[32]` in `kms.h`). Exactly 32 bytes are always
+/// written on success.
 #[no_mangle]
 pub unsafe extern "C" fn kms_derive_nostr_private_key(
     mnemonic: *const c_char,
@@ -108,6 +116,7 @@ pub unsafe extern "C" fn kms_derive_nostr_private_key(
         let pass = if p.is_empty() { None } else { Some(p) };
         match krusty_kms::derive_nostr_private_key(m, index, account_index, pass) {
             Ok(key) => {
+                debug_assert_eq!(key.len(), 32, "Nostr private key must be 32 bytes");
                 std::ptr::copy_nonoverlapping(key.as_ptr(), out, 32);
                 KMS_OK
             }

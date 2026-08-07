@@ -67,6 +67,43 @@ pub fn poseidon_hash_many(felts: &[Felt]) -> Felt {
     Poseidon::hash_array(felts)
 }
 
+/// Fold public statement points into a Poseidon Fiat-Shamir prefix.
+///
+/// # Security / compatibility
+///
+/// [`crate::poe::ProofOfExponentiation`] (and several Cairo on-chain verifiers)
+/// intentionally hash only `(prefix, A)` for the challenge so transcripts stay
+/// compatible with deployed contracts. Statement fields such as `y` are expected
+/// to already be bound into `prefix` by the caller (e.g. fund/withdraw prefixes).
+///
+/// For **new** APIs that are not verified by existing Cairo code, use this helper
+/// to bind missing statement points into the prefix before prove/verify:
+/// `let prefix = extend_poseidon_prefix(&base_prefix, &[&y])?;`
+pub fn extend_poseidon_prefix(prefix: &Felt, points: &[&ProjectivePoint]) -> Result<Felt> {
+    let mut felts = vec![*prefix];
+    for point in points {
+        let affine = point
+            .to_affine()
+            .map_err(|_| krusty_kms_common::KmsError::PointAtInfinity)?;
+        felts.push(affine.x());
+        felts.push(affine.y());
+    }
+    Ok(poseidon_hash_many(&felts))
+}
+
+/// Fold public statement points into a Pedersen Fiat-Shamir prefix.
+///
+/// # Security / compatibility
+///
+/// [`crate::poe2::ProofOfExponentiation2`] and [`crate::elgamal::ElGamal`] keep
+/// their legacy challenge transcripts (compatible with existing verifiers).
+/// Callers of new APIs should bind omitted statement fields (`y`, `g1`, `g2`,
+/// `pk`, `AR`, …) into the prefix via this helper rather than changing the
+/// on-chain challenge shape.
+pub fn extend_pedersen_prefix(prefix: &Felt, points: &[&ProjectivePoint]) -> Result<Felt> {
+    compute_challenge(prefix, points)
+}
+
 /// Compute challenge using Poseidon hash with prefix and commitment points.
 /// This matches Cairo's challenge computation: poseidon_hash + reduce_modulo_order.
 pub fn compute_poseidon_challenge(prefix: &Felt, points: &[&ProjectivePoint]) -> Result<Felt> {

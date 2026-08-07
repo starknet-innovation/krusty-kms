@@ -5,6 +5,7 @@
 //! key material from lingering in memory.
 
 use starknet_types_core::felt::Felt;
+use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
 /// A `Felt` that holds secret key material and is zeroized on drop.
@@ -54,13 +55,15 @@ impl From<Felt> for SecretFelt {
 
 impl PartialEq for SecretFelt {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        // Constant-time compare of big-endian encodings to avoid timing leaks
+        // when checking secret equality (e.g. key verification).
+        bool::from(self.0.to_bytes_be().ct_eq(&other.0.to_bytes_be()))
     }
 }
 
 impl PartialEq<Felt> for SecretFelt {
     fn eq(&self, other: &Felt) -> bool {
-        self.0 == *other
+        bool::from(self.0.to_bytes_be().ct_eq(&other.to_bytes_be()))
     }
 }
 

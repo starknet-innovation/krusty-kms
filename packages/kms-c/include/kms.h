@@ -129,6 +129,7 @@ int32_t kms_mnemonic_to_seed(const char* phrase, const char* passphrase, uint8_t
 
 int32_t kms_derive_private_key_with_coin_type(const char* mnemonic, uint32_t index, uint32_t account_index, uint32_t coin_type, const char* passphrase, KmsFelt* out);
 int32_t kms_derive_keypair_with_coin_type(const char* mnemonic, uint32_t index, uint32_t account_index, uint32_t coin_type, const char* passphrase, KmsTongoKeyPair* out);
+/* out must be a 32-byte buffer; exactly 32 bytes are written on success. */
 int32_t kms_derive_nostr_private_key(const char* mnemonic, uint32_t index, uint32_t account_index, const char* passphrase, uint8_t out[32]);
 int32_t kms_derive_nostr_keypair(const char* mnemonic, uint32_t index, uint32_t account_index, const char* passphrase, KmsNostrKeyPair* out);
 

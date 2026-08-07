@@ -154,11 +154,13 @@ pub unsafe extern "C" fn kms_generate_fund_proof(
             current_balance,
         };
 
-        let result = handle::with(h, |acc| fund(acc, sdk_params).map_err(|_| KMS_ERR_CRYPTO));
-
-        let proof = match result {
-            Ok(p) => p,
+        let account = match handle::clone_account(h) {
+            Ok(a) => a,
             Err(e) => return e,
+        };
+        let proof = match fund(&account, sdk_params) {
+            Ok(p) => p,
+            Err(_) => return KMS_ERR_CRYPTO,
         };
 
         let (y_x, y_y) = match point_to_hex_xy(&proof.y) {
@@ -267,13 +269,13 @@ pub unsafe extern "C" fn kms_generate_transfer_proof(
             auditor_pub_key,
         };
 
-        let result = handle::with(h, |acc| {
-            transfer(acc, sdk_params).map_err(|_| KMS_ERR_CRYPTO)
-        });
-
-        let proof = match result {
-            Ok(p) => p,
+        let account = match handle::clone_account(h) {
+            Ok(a) => a,
             Err(e) => return e,
+        };
+        let proof = match transfer(&account, sdk_params) {
+            Ok(p) => p,
+            Err(_) => return KMS_ERR_CRYPTO,
         };
 
         let (tl_x, tl_y) = match point_to_hex_xy(&proof.transfer_balance_l) {
@@ -417,13 +419,13 @@ pub unsafe extern "C" fn kms_generate_rollover_proof(
             },
         };
 
-        let result = handle::with(h, |acc| {
-            rollover(acc, sdk_params).map_err(|_| KMS_ERR_CRYPTO)
-        });
-
-        let proof = match result {
-            Ok(p) => p,
+        let account = match handle::clone_account(h) {
+            Ok(a) => a,
             Err(e) => return e,
+        };
+        let proof = match rollover(&account, sdk_params) {
+            Ok(p) => p,
+            Err(_) => return KMS_ERR_CRYPTO,
         };
 
         let (y_x, y_y) = match point_to_hex_xy(&proof.y) {
@@ -524,13 +526,13 @@ pub unsafe extern "C" fn kms_generate_withdraw_proof(
             auditor_key,
         };
 
-        let result = handle::with(h, |acc| {
-            withdraw(acc, sdk_params).map_err(|_| KMS_ERR_CRYPTO)
-        });
-
-        let proof = match result {
-            Ok(p) => p,
+        let account = match handle::clone_account(h) {
+            Ok(a) => a,
             Err(e) => return e,
+        };
+        let proof = match withdraw(&account, sdk_params) {
+            Ok(p) => p,
+            Err(_) => return KMS_ERR_CRYPTO,
         };
 
         let (y_x, y_y) = match point_to_hex_xy(&proof.y) {
@@ -667,13 +669,13 @@ pub unsafe extern "C" fn kms_generate_ragequit_proof(
             auditor_key,
         };
 
-        let result = handle::with(h, |acc| {
-            ragequit(acc, sdk_params).map_err(|_| KMS_ERR_CRYPTO)
-        });
-
-        let proof = match result {
-            Ok(p) => p,
+        let account = match handle::clone_account(h) {
+            Ok(a) => a,
             Err(e) => return e,
+        };
+        let proof = match ragequit(&account, sdk_params) {
+            Ok(p) => p,
+            Err(_) => return KMS_ERR_CRYPTO,
         };
 
         let (y_x, y_y) = match point_to_hex_xy(&proof.y) {
