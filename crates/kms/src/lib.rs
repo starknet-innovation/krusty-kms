@@ -44,7 +44,9 @@ pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
 };
 pub use stark_signing::{sign_stark_hash, stark_public_key, StarkSignature};
-pub use strk20::derive_strk20_viewing_key;
+pub use strk20::{
+    derive_strk20_viewing_key, fold_strk20_viewing_key, strk20_viewing_key_message_hash,
+};
 pub use tx_hash::{
     compute_declare_v2_hash, compute_declare_v3_hash, compute_deploy_account_v1_hash,
     compute_deploy_account_v3_hash, compute_invoke_v1_hash, compute_invoke_v3_hash,
