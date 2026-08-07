@@ -476,16 +476,85 @@ impl HttpMultisigCoordinator {
     }
 
     /// Parse a coordinator base URL.
+    ///
+    /// Only `http`/`https` schemes are accepted. Loopback, link-local, and
+    /// common cloud-metadata addresses are rejected to reduce SSRF risk.
+    /// Use [`Self::from_url_unchecked`] in tests or when the caller has already
+    /// validated the URL against a local allowlist.
     pub fn from_url(base_url: &str) -> Result<Self> {
         let url =
             Url::parse(base_url).map_err(|error| KmsError::MultisigError(error.to_string()))?;
+        validate_coordinator_url(&url)?;
         Ok(Self::new(url))
+    }
+
+    /// Parse a coordinator URL without SSRF host/scheme checks.
+    ///
+    /// Intended for tests and explicitly trusted local tooling.
+    pub fn from_url_unchecked(base_url: &str) -> Result<Self> {
+        let url =
+            Url::parse(base_url).map_err(|error| KmsError::MultisigError(error.to_string()))?;
+        match url.scheme() {
+            "http" | "https" => Ok(Self::new(url)),
+            other => Err(KmsError::MultisigError(format!(
+                "unsupported coordinator URL scheme '{other}' (only http/https)"
+            ))),
+        }
     }
 
     fn messages_url(&self) -> Result<Url> {
         self.base_url
             .join("v1/multisig/messages")
             .map_err(|error| KmsError::MultisigError(error.to_string()))
+    }
+}
+
+fn validate_coordinator_url(url: &Url) -> Result<()> {
+    match url.scheme() {
+        "http" | "https" => {}
+        other => {
+            return Err(KmsError::MultisigError(format!(
+                "unsupported coordinator URL scheme '{other}' (only http/https)"
+            )));
+        }
+    }
+
+    let host = url
+        .host_str()
+        .ok_or_else(|| KmsError::MultisigError("coordinator URL missing host".to_string()))?;
+    let host_lower = host.to_ascii_lowercase();
+
+    if host_lower == "localhost"
+        || host_lower.ends_with(".localhost")
+        || host_lower == "metadata.google.internal"
+    {
+        return Err(KmsError::MultisigError(format!(
+            "coordinator host '{host}' is blocked (loopback/metadata)"
+        )));
+    }
+
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        if is_blocked_ip(ip) {
+            return Err(KmsError::MultisigError(format!(
+                "coordinator host '{host}' is a blocked IP address"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn is_blocked_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_link_local()
+                || v4.octets() == [169, 254, 169, 254] // AWS/GCP metadata
+                || v4.is_unspecified()
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback() || v6.is_unspecified() || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
     }
 }
 
@@ -1201,6 +1270,15 @@ mod tests {
             coordinator.messages_url().unwrap().as_str(),
             "https://coordinator.example/api/v1/multisig/messages"
         );
+    }
+
+    #[test]
+    fn test_http_coordinator_rejects_dangerous_urls() {
+        assert!(HttpMultisigCoordinator::from_url("file:///etc/passwd").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://localhost:8080").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://127.0.0.1/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://169.254.169.254/").is_err());
+        assert!(HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1/").is_ok());
     }
 
     #[test]

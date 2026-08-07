@@ -4,6 +4,7 @@ use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::curve::{AffinePoint, ProjectivePoint};
 use starknet_types_core::felt::Felt;
 use std::sync::LazyLock;
+use subtle::{Choice, ConditionallySelectable};
 
 /// Wrapper for Stark curve operations with ergonomic API.
 pub struct StarkCurve;
@@ -43,7 +44,7 @@ impl StarkCurve {
         GENERATOR_H_INNER.clone()
     }
 
-    /// Multiply a point by a scalar using double-and-add algorithm.
+    /// Multiply a point by a scalar using a regularized double-and-add algorithm.
     ///
     /// # Arguments
     /// * `scalar` - The scalar multiplier
@@ -64,16 +65,26 @@ impl StarkCurve {
 
     /// Multiply the generator by a scalar.
     ///
-    /// Uses double-and-add algorithm for scalar multiplication.
+    /// Uses a regularized double-and-add algorithm for scalar multiplication.
     ///
     /// Cyclomatic Complexity: 1
     pub fn mul_generator(scalar: &Felt) -> ProjectivePoint {
         Self::scalar_mul(&Self::generator(), scalar)
     }
 
-    /// Scalar multiplication using double-and-add algorithm.
+    /// Scalar multiplication with scalar-bit-independent control flow.
     ///
-    /// Cyclomatic Complexity: 3 (nested loops + conditional)
+    /// # Security
+    ///
+    /// For every scalar bit this always computes both the point double and the
+    /// conditional add, then selects with a constant-time byte mask. That removes
+    /// the classic double-and-add secret-dependent branch on the scalar bits.
+    ///
+    /// Field/group arithmetic in `starknet-types-core` / lambdaworks is still
+    /// not constant-time, so this is a best-effort mitigation of scalar-bit
+    /// branching only — not a fully constant-time EC implementation.
+    ///
+    /// Cyclomatic Complexity: 3 (nested loops)
     fn scalar_mul(point: &ProjectivePoint, scalar: &Felt) -> ProjectivePoint {
         // Handle zero scalar: 0 * point = point at infinity
         if *scalar == Felt::ZERO {
@@ -81,22 +92,19 @@ impl StarkCurve {
         }
 
         let scalar_bytes = scalar.to_bytes_be();
-        let mut result: Option<ProjectivePoint> = None;
+        let mut result = ProjectivePoint::identity();
         let mut temp = point.clone();
 
         for byte in scalar_bytes.iter().rev() {
             for i in 0..8 {
-                if (byte >> i) & 1 == 1 {
-                    result = Some(match result {
-                        Some(r) => &r + &temp,
-                        None => temp.clone(),
-                    });
-                }
+                let bit = Choice::from((byte >> i) & 1);
+                let added = &result + &temp;
+                result = ct_select_point(bit, &added, &result);
                 temp = &temp + &temp;
             }
         }
 
-        result.unwrap_or_else(ProjectivePoint::identity)
+        result
     }
 
     /// Add two points on the curve.
@@ -142,6 +150,29 @@ impl StarkCurve {
     pub fn is_on_curve(x: Felt, y: Felt) -> bool {
         AffinePoint::new(x, y).is_ok()
     }
+}
+
+/// Constant-time select between two field elements (`choice ? a : b`).
+fn ct_select_felt(choice: Choice, a: &Felt, b: &Felt) -> Felt {
+    let a_bytes = a.to_bytes_be();
+    let b_bytes = b.to_bytes_be();
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        out[i] = u8::conditional_select(&b_bytes[i], &a_bytes[i], choice);
+    }
+    Felt::from_bytes_be(&out)
+}
+
+/// Constant-time select between two projective points (`choice ? a : b`).
+///
+/// Both `a` and `b` must be valid curve points (including identity). The
+/// selected result is exactly one of the inputs.
+fn ct_select_point(choice: Choice, a: &ProjectivePoint, b: &ProjectivePoint) -> ProjectivePoint {
+    ProjectivePoint::new(
+        ct_select_felt(choice, &a.x(), &b.x()),
+        ct_select_felt(choice, &a.y(), &b.y()),
+        ct_select_felt(choice, &a.z(), &b.z()),
+    )
 }
 
 #[cfg(test)]

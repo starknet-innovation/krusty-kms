@@ -6,6 +6,7 @@
 use crate::error::{WasmError, WasmResult};
 use serde::{Deserialize, Serialize};
 use starknet_types_core::felt::Felt;
+use std::fmt;
 use wasm_bindgen::prelude::*;
 
 /// Account state returned from on-chain queries.
@@ -180,16 +181,34 @@ impl WasmCiphertext {
     }
 }
 
-/// Keypair for Tongo operations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Keypair for Tongo / Starknet operations.
+///
+/// # Security / threat model
+///
+/// This type intentionally exposes `private_key` as a plain hex string for
+/// JS interop (signing, export, wallet recovery). That string lives in the
+/// JS heap and **cannot** be reliably wiped. Prefer companion public-only
+/// APIs (`derivePublicKey`, etc.) when private material is not required.
+/// Never `console.log` this value; `Debug` redacts the private key.
+#[derive(Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmKeypair {
-    /// Private key as hex string (0x-prefixed)
+    /// Private key as hex string (0x-prefixed). Treat as secret.
     pub private_key: String,
     /// Public key X coordinate as hex string
     pub public_key_x: String,
     /// Public key Y coordinate as hex string
     pub public_key_y: String,
+}
+
+impl fmt::Debug for WasmKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmKeypair")
+            .field("private_key", &"***")
+            .field("public_key_x", &self.public_key_x)
+            .field("public_key_y", &self.public_key_y)
+            .finish()
+    }
 }
 
 #[wasm_bindgen]
@@ -198,6 +217,38 @@ impl WasmKeypair {
     pub fn new(private_key: String, public_key_x: String, public_key_y: String) -> Self {
         Self {
             private_key,
+            public_key_x,
+            public_key_y,
+        }
+    }
+
+    /// Get the full public key as "0x{x}{y}" concatenated hex.
+    #[wasm_bindgen(js_name = "publicKeyHex")]
+    pub fn public_key_hex(&self) -> String {
+        let x = self.public_key_x.trim_start_matches("0x");
+        let y = self.public_key_y.trim_start_matches("0x");
+        format!("0x{x}{y}")
+    }
+}
+
+/// Public-only Stark / Tongo key material (no private key).
+///
+/// Prefer this over [`WasmKeypair`] when only the public key is needed
+/// (address derivation, display, API lookups).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmPublicKey {
+    /// Public key X coordinate as hex string
+    pub public_key_x: String,
+    /// Public key Y coordinate as hex string
+    pub public_key_y: String,
+}
+
+#[wasm_bindgen]
+impl WasmPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key_x: String, public_key_y: String) -> Self {
+        Self {
             public_key_x,
             public_key_y,
         }
@@ -227,13 +278,28 @@ pub enum WasmTxType {
 ///
 /// Used for NIP-04/NIP-44 encrypted messaging.
 /// Public key is x-only (32 bytes, BIP-340 format).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// # Security / threat model
+///
+/// `private_key` is a plain hex string in the JS heap and cannot be reliably
+/// wiped. Prefer [`WasmNostrPublicKey`] / `deriveNostrPublicKey` when private
+/// material is not required. `Debug` redacts the private key.
+#[derive(Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmNostrKeypair {
-    /// Private key as hex string (64 hex chars, no 0x prefix)
+    /// Private key as hex string (64 hex chars, no 0x prefix). Treat as secret.
     pub private_key: String,
     /// Public key as x-only hex string (64 hex chars, no 0x prefix)
     pub public_key: String,
+}
+
+impl fmt::Debug for WasmNostrKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmNostrKeypair")
+            .field("private_key", &"***")
+            .field("public_key", &self.public_key)
+            .finish()
+    }
 }
 
 #[wasm_bindgen]
@@ -244,6 +310,22 @@ impl WasmNostrKeypair {
             private_key,
             public_key,
         }
+    }
+}
+
+/// Public-only Nostr key (x-only, BIP-340). No private key material.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmNostrPublicKey {
+    /// Public key as x-only hex string (64 hex chars, no 0x prefix)
+    pub public_key: String,
+}
+
+#[wasm_bindgen]
+impl WasmNostrPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key: String) -> Self {
+        Self { public_key }
     }
 }
 
@@ -306,6 +388,26 @@ mod tests {
             state.checked_total_balance(),
             Err(WasmError::InvalidAmount(_))
         ));
+    }
+
+    #[test]
+    fn wasm_keypair_debug_redacts_private_key() {
+        let kp = WasmKeypair::new(
+            "0xdeadbeef".to_string(),
+            "0x1".to_string(),
+            "0x2".to_string(),
+        );
+        let debug = format!("{kp:?}");
+        assert!(debug.contains("***"));
+        assert!(!debug.contains("deadbeef"));
+    }
+
+    #[test]
+    fn wasm_nostr_keypair_debug_redacts_private_key() {
+        let kp = WasmNostrKeypair::new("aabbccdd".to_string(), "11223344".to_string());
+        let debug = format!("{kp:?}");
+        assert!(debug.contains("***"));
+        assert!(!debug.contains("aabbccdd"));
     }
 }
 

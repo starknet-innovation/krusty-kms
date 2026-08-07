@@ -121,13 +121,27 @@ impl ControllerWallet {
         Ok(())
     }
 
-    /// Create a wildcard session (authorizes any call).
-    pub async fn create_wildcard_session(&self, expires_secs: u64) -> Result<()> {
+    /// Create a dangerous wildcard session that authorizes any call.
+    ///
+    /// # Safety / danger
+    /// This grants unrestricted session authority. Prefer
+    /// [`Self::create_session`] with explicit [`SessionPolicy`] allowlists.
+    ///
+    /// The old name `create_wildcard_session` is kept as a deprecated alias.
+    pub async fn create_dangerous_wildcard_session(&self, expires_secs: u64) -> Result<()> {
         let mut ctrl = self.controller.lock().await;
         ctrl.create_wildcard_session(expires_secs)
             .await
             .map_err(error::controller_error_to_kms)?;
         Ok(())
+    }
+
+    /// Deprecated alias for [`Self::create_dangerous_wildcard_session`].
+    #[deprecated(
+        note = "use create_dangerous_wildcard_session; wildcard sessions authorize any call"
+    )]
+    pub async fn create_wildcard_session(&self, expires_secs: u64) -> Result<()> {
+        self.create_dangerous_wildcard_session(expires_secs).await
     }
 
     /// Deploy the controller account on-chain.

@@ -23,6 +23,9 @@ use krusty_kms_domain::{
 use krusty_kms_gateway::{Clock, Gateway, GatewayBackend, GatewayResponse, SecretResolver};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
+/// Maximum accepted stdio request line length (bytes). Larger lines are rejected.
+const MAX_STDIO_LINE_BYTES: usize = 256 * 1024;
+
 /// Effectful command surface consumed by the stdio transport.
 #[async_trait]
 pub trait OracleHandler: Send + Sync {
@@ -154,6 +157,14 @@ where
             };
         }
 
+        if let Some(error) = require_confirm_if_enabled(&request) {
+            return OracleResponse {
+                version: ProtocolVersion::V1_0,
+                id: response_id,
+                outcome: OracleOutcome::Error { error },
+            };
+        }
+
         let outcome = match request.command {
             OracleCommand::GetProtocolInfo => OracleOutcome::Ok {
                 result: Box::new(OracleResult::ProtocolInfo(self.handler.protocol_info())),
@@ -215,6 +226,22 @@ where
 
     /// Parse one JSON line into a protocol request and return a response.
     pub async fn handle_line(&self, line: &str) -> OracleResponse {
+        if line.len() > MAX_STDIO_LINE_BYTES {
+            return OracleResponse {
+                version: ProtocolVersion::V1_0,
+                id: None,
+                outcome: OracleOutcome::Error {
+                    error: GatewayError::new(
+                        GatewayErrorCode::InvalidRequest,
+                        false,
+                        Some(format!(
+                            "request line exceeds maximum length of {MAX_STDIO_LINE_BYTES} bytes"
+                        )),
+                    ),
+                },
+            };
+        }
+
         match serde_json::from_str::<OracleRequest>(line) {
             Ok(request) => self.handle_request(request).await,
             Err(_) => OracleResponse {
@@ -234,6 +261,7 @@ where
     /// Serve newline-delimited requests from `reader` and write one response line per request.
     ///
     /// Empty and whitespace-only lines are ignored.
+    /// Lines longer than [`MAX_STDIO_LINE_BYTES`] are rejected without parsing.
     pub async fn serve<R, W>(&self, reader: R, mut writer: W) -> std::io::Result<()>
     where
         R: AsyncRead + Unpin,
@@ -256,6 +284,36 @@ where
 
         Ok(())
     }
+}
+
+fn require_confirm_env_enabled() -> bool {
+    match std::env::var("KRUSTY_ORACLE_REQUIRE_CONFIRM") {
+        Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
+        Err(_) => false,
+    }
+}
+
+/// When `KRUSTY_ORACLE_REQUIRE_CONFIRM=1`, privileged sign/deploy require `"confirm": true`.
+fn require_confirm_if_enabled(request: &OracleRequest) -> Option<GatewayError> {
+    if !require_confirm_env_enabled() {
+        return None;
+    }
+
+    let privileged = matches!(
+        request.command,
+        OracleCommand::Sign(_) | OracleCommand::DeployAccount(_)
+    );
+    if privileged && !request.confirm {
+        return Some(GatewayError::new(
+            GatewayErrorCode::InvalidRequest,
+            false,
+            Some(
+                "privileged command requires confirm=true when KRUSTY_ORACLE_REQUIRE_CONFIRM is set"
+                    .to_string(),
+            ),
+        ));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -475,6 +533,7 @@ mod tests {
                 kind: AccountClassKind::OpenZeppelin,
                 class_hash: None,
                 source_label: None,
+                allow_unlisted_class_hash: false,
             },
             salt_policy: SaltPolicySpec::PublicKey,
         }
@@ -507,6 +566,7 @@ mod tests {
             chain_id: ChainId::Sepolia,
             domain: krusty_kms_domain::StarkSignDomain::TransactionHash,
             hash: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: true,
         }
     }
 
@@ -529,6 +589,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion::V1_0,
                 id: RequestId::new("req-1").unwrap(),
+                confirm: false,
                 command: OracleCommand::DeriveAccount(sample_derivation_request()),
             })
             .await;
@@ -555,6 +616,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion { major: 9, minor: 9 },
                 id: RequestId::new("req-2").unwrap(),
+                confirm: false,
                 command: OracleCommand::GetProtocolInfo,
             })
             .await;
@@ -596,6 +658,7 @@ mod tests {
         let request = serde_json::to_vec(&OracleRequest {
             version: ProtocolVersion::V1_0,
             id: RequestId::new("req-3").unwrap(),
+            confirm: false,
             command: OracleCommand::GetOperationStatus(
                 krusty_kms_domain::GetOperationStatusRequest {
                     operation_id: OperationId::new("op-1").unwrap(),
@@ -635,6 +698,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion::V1_0,
                 id: RequestId::new("req-4").unwrap(),
+                confirm: false,
                 command: OracleCommand::GetProtocolInfo,
             })
             .await;
@@ -658,6 +722,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion::V1_0,
                 id: RequestId::new("req-sign").unwrap(),
+                confirm: false,
                 command: OracleCommand::Sign(sample_sign_request()),
             })
             .await;
@@ -690,6 +755,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion::V1_0,
                 id: RequestId::new("req-sign-raw").unwrap(),
+                confirm: false,
                 command: OracleCommand::Sign(sample_raw_nostr_sign_request()),
             })
             .await;
@@ -722,6 +788,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion::V1_0,
                 id: RequestId::new("req-sign-stark").unwrap(),
+                confirm: false,
                 command: OracleCommand::Sign(sample_stark_sign_request()),
             })
             .await;
@@ -756,6 +823,7 @@ mod tests {
             .handle_request(OracleRequest {
                 version: ProtocolVersion::V1_0,
                 id: RequestId::new("req-5").unwrap(),
+                confirm: false,
                 command: OracleCommand::QueryAccountSnapshot(
                     krusty_kms_domain::AccountSnapshotRequest {
                         chain_id: ChainId::Sepolia,

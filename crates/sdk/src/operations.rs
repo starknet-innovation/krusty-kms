@@ -318,6 +318,10 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     let g = StarkCurve::generator();
     let h = StarkCurve::generator_h();
 
+    // Verify storedBalance is an encryption of the claimed balance: g^b = L0 - R0^x
+    // (same consistency check as withdraw)
+    verify_cipher_encrypts_balance(&params.current_balance, x, b0, &g)?;
+
     // Get affine coordinates for prefix computation
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
     let to_affine = to.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
@@ -735,21 +739,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let r0 = &params.current_balance.r;
 
     // Verify storedBalance is an encryption of the balance: g^b = L0 - R0^x
-    let r0_x = StarkCurve::mul(x, Some(r0));
-    let r0_x_affine = StarkCurve::projective_to_affine(&r0_x)?;
-    let neg_r0_x =
-        StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
-    let g_b = StarkCurve::add(l0, &neg_r0_x);
-    let expected_g_b = StarkCurve::mul(&Felt::from(account.balance()), Some(&g));
-
-    let g_b_affine = StarkCurve::projective_to_affine(&g_b)?;
-    let expected_g_b_affine = StarkCurve::projective_to_affine(&expected_g_b)?;
-
-    if g_b_affine != expected_g_b_affine {
-        return Err(KmsError::CryptoError(
-            "storedBalance is not an encryption of balance".to_string(),
-        ));
-    }
+    verify_cipher_encrypts_balance(&params.current_balance, x, account.balance(), &g)?;
 
     // Compute leftover balance
     let left = account.balance() - params.amount;
@@ -947,21 +937,14 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
 
     // Verify storedBalance is an encryption of the full balance: g^b = L0 - R0^x
     // Reference: ragequit.ts:78-81
-    let r0_x = StarkCurve::mul(x, Some(r0));
-    let r0_x_affine = StarkCurve::projective_to_affine(&r0_x)?;
-    let neg_r0_x =
-        StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
-    let g_b = StarkCurve::add(l0, &neg_r0_x);
-    let expected_g_b = StarkCurve::mul(&Felt::from(account.balance()), Some(&g));
-
-    let g_b_affine = StarkCurve::projective_to_affine(&g_b)?;
-    let expected_g_b_affine = StarkCurve::projective_to_affine(&expected_g_b)?;
-
-    if g_b_affine != expected_g_b_affine {
-        return Err(KmsError::CryptoError(
-            "storedBalance is not an encryption of full balance".to_string(),
-        ));
-    }
+    verify_cipher_encrypts_balance(&params.current_balance, x, account.balance(), &g).map_err(
+        |e| match e {
+            KmsError::CryptoError(_) => KmsError::CryptoError(
+                "storedBalance is not an encryption of full balance".to_string(),
+            ),
+            other => other,
+        },
+    )?;
 
     // Full amount is the entire account balance
     let full_amount = account.balance();
@@ -1020,10 +1003,8 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
             r: g.clone(), // R = g*1 = g
         };
 
-        // Skip validation due to Rust curve implementation difference:
-        // - Cairo: 0 * g = O (point at infinity), so cipher (y, g) validates as: y - g*x = y - y = O = g^0
-        // - Rust: 0 * g = g (bug in scalar_mul), so validation fails locally
-        // The cipher is mathematically correct and will verify on-chain with Cairo's implementation
+        // Curve scalar_mul now correctly maps 0 * g -> identity, so local
+        // validation matches Cairo (cipher (y, g) decrypts to g^0 = O).
         let audit_prefix = AuditPrefixData {
             chain_id: params.chain_id,
             tongo_address: params.tongo_address,
@@ -1035,7 +1016,7 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
             0, // Balance after ragequit is 0
             &new_balance_cipher,
             &auditor_key,
-            false, // Skip validation due to curve implementation difference
+            true, // Re-enabled: 0*g identity fix makes validation sound
             Some(&audit_prefix),
         )?;
 
@@ -1073,6 +1054,33 @@ fn create_affine_point(x: Felt, y: Felt) -> Result<starknet_types_core::curve::A
     AffinePoint::new(x, y).map_err(|e| {
         krusty_kms_common::KmsError::InvalidPublicKey(format!("Invalid affine point: {:?}", e))
     })
+}
+
+/// Verify that `cipher` is an ElGamal encryption of `balance` under private key `x`.
+///
+/// Checks `g^balance == L - R^x`.
+fn verify_cipher_encrypts_balance(
+    cipher: &ElGamalCiphertext,
+    x: &Felt,
+    balance: u128,
+    g: &ProjectivePoint,
+) -> Result<()> {
+    let r0_x = StarkCurve::mul(x, Some(&cipher.r));
+    let r0_x_affine = StarkCurve::projective_to_affine(&r0_x)?;
+    let neg_r0_x =
+        StarkCurve::affine_to_projective(&create_affine_point(r0_x_affine.x(), -r0_x_affine.y())?);
+    let g_b = StarkCurve::add(&cipher.l, &neg_r0_x);
+    let expected_g_b = StarkCurve::mul(&Felt::from(balance), Some(g));
+
+    let g_b_affine = StarkCurve::projective_to_affine(&g_b)?;
+    let expected_g_b_affine = StarkCurve::projective_to_affine(&expected_g_b)?;
+
+    if g_b_affine != expected_g_b_affine {
+        return Err(KmsError::CryptoError(
+            "storedBalance is not an encryption of balance".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 // Proof structures
@@ -1230,13 +1238,10 @@ mod tests {
     #[test]
     fn test_transfer() {
         use krusty_kms_crypto::StarkCurve;
-        let account = create_test_account();
+        let mut account = create_test_account();
+        account.set_balance(1000);
         let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
-        let g = StarkCurve::generator();
-        let current_balance = ElGamalCiphertext {
-            l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
-            r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
-        };
+        let current_balance = encrypt_balance_for_account(&account, 1000, Felt::from(42u64));
 
         let params = TransferParams {
             recipient_public_key: recipient_key,
@@ -1252,7 +1257,7 @@ mod tests {
         };
 
         let result = transfer(&account, params);
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "transfer failed: {:?}", result.err());
     }
 
     #[test]
@@ -1431,14 +1436,11 @@ mod tests {
     #[test]
     fn test_transfer_with_auditor() {
         use krusty_kms_crypto::StarkCurve;
-        let account = create_test_account();
+        let mut account = create_test_account();
+        account.set_balance(1000);
         let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
         let auditor_key = StarkCurve::mul_generator(&Felt::from(888u64));
-        let g = StarkCurve::generator();
-        let current_balance = ElGamalCiphertext {
-            l: StarkCurve::mul(&Felt::from(1000u128), Some(&g)),
-            r: StarkCurve::mul(&Felt::from(42u64), Some(&g)),
-        };
+        let current_balance = encrypt_balance_for_account(&account, 1000, Felt::from(42u64));
 
         let params = TransferParams {
             recipient_public_key: recipient_key,
@@ -1454,7 +1456,7 @@ mod tests {
         };
 
         let result = transfer(&account, params);
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "transfer failed: {:?}", result.err());
         let proof = result.unwrap();
         // Audit data should be present when auditor key is provided
         assert!(proof.audit_balance.is_some());

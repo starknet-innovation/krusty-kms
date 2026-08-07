@@ -15,7 +15,7 @@ fn main() -> Result<(), String> {
 
     let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).map_err(|error| error.to_string())?;
     let descriptor = oz
-        .deployment_descriptor(&public_key, SaltPolicy::Zero)
+        .deployment_descriptor(&public_key, SaltPolicy::PublicKey)
         .map_err(|error| error.to_string())?;
 
     println!("public key x: {public_key:#x}");

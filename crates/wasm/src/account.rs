@@ -6,6 +6,7 @@
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use crate::types::{
     WasmAccountState, WasmCiphertext, WasmDecryptedPoint, WasmKeypair, WasmNostrKeypair,
+    WasmNostrPublicKey, WasmPublicKey,
 };
 use krusty_kms::AccountClass;
 use starknet_types_core::felt::Felt;
@@ -217,6 +218,13 @@ fn decrypted_point_to_wasm(
 }
 
 /// Generate a new random mnemonic phrase.
+///
+/// # Security / threat model
+///
+/// The mnemonic is returned as a plain JavaScript string and cannot be
+/// reliably wiped from the JS heap. Treat it as high-value secret material:
+/// never log it, never persist it unencrypted, and prefer keeping it only in
+/// secure storage after generation.
 #[wasm_bindgen(js_name = "generateMnemonic")]
 pub fn generate_mnemonic(word_count: Option<u8>) -> Result<String, JsValue> {
     let count = word_count.unwrap_or(12) as usize;
@@ -230,6 +238,13 @@ pub fn validate_mnemonic(mnemonic: &str) -> bool {
 }
 
 /// Derive a keypair from mnemonic (for external use).
+///
+/// # Security / threat model
+///
+/// Returns the private key as a hex string in the JS heap. Prefer
+/// [`derive_public_key`] when only the public key is needed. Never log the
+/// returned [`WasmKeypair`]; its `Debug` form redacts the private key, but
+/// JS property access still exposes it.
 #[wasm_bindgen(js_name = "deriveKeypair")]
 pub fn derive_keypair(
     mnemonic: &str,
@@ -257,10 +272,44 @@ pub fn derive_keypair(
     })
 }
 
+/// Derive the public key only from a mnemonic (Tongo coin type).
+///
+/// Prefer this over [`derive_keypair`] when private key material is not needed.
+#[wasm_bindgen(js_name = "derivePublicKey")]
+pub fn derive_public_key(
+    mnemonic: &str,
+    address_index: u32,
+    account_index: u32,
+    passphrase: Option<String>,
+) -> Result<WasmPublicKey, JsValue> {
+    let kp = from_sdk_result(krusty_kms::derive_keypair(
+        mnemonic,
+        address_index,
+        account_index,
+        passphrase.as_deref(),
+    ))
+    .map_err(JsValue::from)?;
+
+    let affine = kp
+        .public_key
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid public key point"))?;
+
+    Ok(WasmPublicKey {
+        public_key_x: format!("{:#x}", affine.x()),
+        public_key_y: format!("{:#x}", affine.y()),
+    })
+}
+
 /// Derive a Starknet account keypair from mnemonic (coin type 9004).
 ///
 /// This is used for signing Starknet transactions and deriving the
 /// OpenZeppelin account contract address.
+///
+/// # Security / threat model
+///
+/// Returns the private key as a hex string in the JS heap. Prefer
+/// [`derive_starknet_public_key`] when only the public key is needed.
 ///
 /// # Arguments
 /// * `mnemonic` - 12 or 24 word BIP-39 mnemonic
@@ -298,6 +347,37 @@ pub fn derive_starknet_keypair(
     })
 }
 
+/// Derive the Starknet public key only from a mnemonic (coin type 9004).
+///
+/// Prefer this over [`derive_starknet_keypair`] when private key material is
+/// not needed (e.g. address derivation).
+#[wasm_bindgen(js_name = "deriveStarknetPublicKey")]
+pub fn derive_starknet_public_key(
+    mnemonic: &str,
+    address_index: u32,
+    account_index: u32,
+    passphrase: Option<String>,
+) -> Result<WasmPublicKey, JsValue> {
+    let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
+        mnemonic,
+        address_index,
+        account_index,
+        krusty_kms::STARKNET_COIN_TYPE,
+        passphrase.as_deref(),
+    ))
+    .map_err(JsValue::from)?;
+
+    let affine = kp
+        .public_key
+        .to_affine()
+        .map_err(|_| JsValue::from_str("Invalid public key point"))?;
+
+    Ok(WasmPublicKey {
+        public_key_x: format!("{:#x}", affine.x()),
+        public_key_y: format!("{:#x}", affine.y()),
+    })
+}
+
 /// Derive an OpenZeppelin account contract address from a public key.
 ///
 /// This calculates the counterfactual address for an OpenZeppelin account
@@ -306,7 +386,7 @@ pub fn derive_starknet_keypair(
 /// # Arguments
 /// * `public_key_x` - The x-coordinate of the Stark public key (hex string)
 /// * `class_hash` - The OpenZeppelin account class hash (hex string)
-/// * `salt` - Optional salt for address derivation (hex string, defaults to "0x0")
+/// * `salt` - Optional salt for address derivation (hex string; defaults to the public key)
 ///
 /// # Returns
 /// The derived account contract address as hex string
@@ -358,6 +438,11 @@ pub fn get_nostr_coin_type() -> u32 {
 ///
 /// Derivation path: m/44'/1237'/{account_index}'/0/{address_index}
 ///
+/// # Security / threat model
+///
+/// Returns the private key as a hex string in the JS heap. Prefer
+/// [`derive_nostr_public_key`] when only the public key is needed.
+///
 /// # Arguments
 /// * `mnemonic` - 12 or 24 word BIP-39 mnemonic
 /// * `address_index` - HD wallet address index (default: 0)
@@ -391,6 +476,29 @@ pub fn derive_nostr_keypair(
     })
 }
 
+/// Derive the Nostr x-only public key only from a mnemonic (coin type 1237).
+///
+/// Prefer this over [`derive_nostr_keypair`] when private key material is not needed.
+#[wasm_bindgen(js_name = "deriveNostrPublicKey")]
+pub fn derive_nostr_public_key(
+    mnemonic: &str,
+    address_index: u32,
+    account_index: u32,
+    passphrase: Option<String>,
+) -> Result<WasmNostrPublicKey, JsValue> {
+    let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
+        mnemonic,
+        address_index,
+        account_index,
+        passphrase.as_deref(),
+    ))
+    .map_err(JsValue::from)?;
+
+    Ok(WasmNostrPublicKey {
+        public_key: hex::encode(kp.public_key),
+    })
+}
+
 /// Derive a Starknet keypair using old Argent's "double derivation" scheme.
 ///
 /// Old Argent wallets use a two-step derivation:
@@ -399,6 +507,11 @@ pub fn derive_nostr_keypair(
 ///
 /// This is needed to recover keys for accounts created with old Argent-X.
 /// Braavos and new Argent use direct `m/44'/9004'/0'/0/{index}` derivation instead.
+///
+/// # Security / threat model
+///
+/// Returns the private key as a hex string in the JS heap. Prefer
+/// [`derive_argent_legacy_public_key`] when only the public key is needed.
 ///
 /// # Arguments
 /// * `mnemonic` - 12 or 24 word BIP-39 mnemonic
@@ -416,6 +529,26 @@ pub fn derive_argent_legacy_keypair(
 
     Ok(WasmKeypair {
         private_key: format!("{:#066x}", pk),
+        public_key_x: format!("{:#x}", pubk),
+        public_key_y: String::new(), // x-coordinate only for Stark keys
+    })
+}
+
+/// Derive the Argent-legacy Stark public key only (x-coordinate).
+///
+/// Prefer this over [`derive_argent_legacy_keypair`] when private key material
+/// is not needed.
+#[wasm_bindgen(js_name = "deriveArgentLegacyPublicKey")]
+pub fn derive_argent_legacy_public_key(
+    mnemonic: &str,
+    address_index: u32,
+    account_index: u32,
+) -> Result<WasmPublicKey, JsValue> {
+    let pk = krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
+        .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?;
+    let pubk = krusty_kms::stark_public_key(&pk);
+
+    Ok(WasmPublicKey {
         public_key_x: format!("{:#x}", pubk),
         public_key_y: String::new(), // x-coordinate only for Stark keys
     })

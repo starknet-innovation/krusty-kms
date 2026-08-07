@@ -36,7 +36,12 @@ impl ProofOfExponentiation {
         // Compute commitment A = g^r
         let a = StarkCurve::mul(r.expose_secret(), Some(&g));
 
-        // Compute Fiat-Shamir challenge c = Poseidon(prefix, A)
+        // Compute Fiat-Shamir challenge c = Poseidon(prefix, A).
+        //
+        // SECURITY / COMPATIBILITY: The challenge intentionally omits `y` so the
+        // transcript matches Cairo on-chain verifiers and checked-in prover
+        // vectors. Callers must bind `y` (and any other statement) into `prefix`
+        // (see `hash::extend_poseidon_prefix`) — fund/withdraw already do this.
         let c = compute_poseidon_challenge(prefix, &[&a])?;
 
         // Compute response s = r + c*x (mod curve order)

@@ -36,6 +36,8 @@ pub enum DomainError {
     InvalidWaitPolicy(&'static str),
     #[error("invalid sign request: {0}")]
     InvalidSignRequest(String),
+    #[error("invalid secret_ref: {0}")]
+    InvalidSecretRef(String),
 }
 
 /// Canonical felt-like hex string.
@@ -184,12 +186,33 @@ impl SecretRef {
                 field: "secret_ref",
             });
         }
+        if looks_like_raw_secret_material(&value) {
+            return Err(DomainError::InvalidSecretRef(
+                "must be an opaque identifier, not raw key material".to_string(),
+            ));
+        }
         Ok(Self(value))
     }
 
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// Reject SecretRef values that look like hex private keys or BIP-39 mnemonics.
+fn looks_like_raw_secret_material(value: &str) -> bool {
+    let trimmed = value.trim();
+    let hex_body = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
+    if hex_body.len() == 64 && hex_body.chars().all(|c| c.is_ascii_hexdigit()) {
+        return true;
+    }
+
+    let word_count = trimmed.split_whitespace().count();
+    // 12+ space-separated tokens strongly suggests a mnemonic phrase.
+    word_count >= 12
 }
 
 impl TryFrom<String> for SecretRef {
@@ -319,6 +342,12 @@ pub struct AccountClassSpec {
     pub class_hash: Option<FeltHex>,
     /// Optional source label for provenance, such as a manifest version.
     pub source_label: Option<String>,
+    /// Dangerous opt-in: allow a class hash that is not on the known allowlist.
+    ///
+    /// Defaults to `false`. When false, gateway/oracle derive/deploy reject
+    /// arbitrary explicit class hashes.
+    #[serde(default)]
+    pub allow_unlisted_class_hash: bool,
 }
 
 /// Canonical account derivation request.
@@ -418,6 +447,13 @@ pub enum SignRequest {
         chain_id: ChainId,
         domain: StarkSignDomain,
         hash: FeltHex,
+        /// Dangerous opt-in for blind/pre-hashed Stark ECDSA signing.
+        ///
+        /// Defaults to `false`. When false, the request is rejected so callers
+        /// must explicitly acknowledge raw-hash signing (prefer typed-data /
+        /// structured sign paths when available).
+        #[serde(default)]
+        allow_raw_stark_hash: bool,
     },
     StarkRawMessage {
         secret: SecretRef,
@@ -444,9 +480,17 @@ impl SignRequest {
             Self::StarkHash {
                 key_domain,
                 derivation_path,
+                allow_raw_stark_hash,
                 ..
+            } => {
+                derivation_path.validate_for(key_domain.key_domain())?;
+                if !allow_raw_stark_hash {
+                    return Err(DomainError::InvalidSignRequest(
+                        "stark_hash signing requires allow_raw_stark_hash=true; prefer typed/structured sign paths".to_string(),
+                    ));
+                }
             }
-            | Self::StarkRawMessage {
+            Self::StarkRawMessage {
                 key_domain,
                 derivation_path,
                 ..
@@ -894,9 +938,25 @@ mod tests {
             chain_id: ChainId::Sepolia,
             domain: StarkSignDomain::TransactionHash,
             hash: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: true,
         };
 
         assert!(request.validate().is_ok());
+
+        let denied = SignRequest::StarkHash {
+            secret: SecretRef::new("stark-secret").unwrap(),
+            key_domain: StarkKeyDomain::StarknetAccount,
+            derivation_path: DerivationPath {
+                coin_type: 9004,
+                account_index: 0,
+                address_index: 1,
+            },
+            chain_id: ChainId::Sepolia,
+            domain: StarkSignDomain::TransactionHash,
+            hash: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: false,
+        };
+        assert!(denied.validate().is_err());
 
         let invalid = SignRequest::StarkHash {
             secret: SecretRef::new("stark-secret").unwrap(),
@@ -909,8 +969,20 @@ mod tests {
             chain_id: ChainId::Sepolia,
             domain: StarkSignDomain::TransactionHash,
             hash: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: true,
         };
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn secret_ref_rejects_raw_key_material() {
+        let hex_key = "0x".to_string() + &"ab".repeat(32);
+        assert!(SecretRef::new(hex_key).is_err());
+        assert!(SecretRef::new(
+            "habit hope tip crystal because grunt nation idea electric witness alert like"
+        )
+        .is_err());
+        assert!(SecretRef::new("wallet-1").is_ok());
     }
 
     #[test]

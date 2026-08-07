@@ -33,6 +33,7 @@ let public_key_x = affine.x();
 
 // Resolve the latest manifest-backed OZ class hash for Sepolia
 let class_hash = OpenZeppelinAccount::latest(ChainId::Sepolia)?.class_hash();
+// `None` salt defaults to the public key (SaltPolicy::PublicKey), matching deploy/gateway.
 let account_address = derive_oz_account_address(&public_key_x, &class_hash, None)?;
 ```
 

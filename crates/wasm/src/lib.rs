@@ -33,7 +33,8 @@ pub use proof::{
     WasmTransferProofResult, WasmWithdrawParams, WasmWithdrawProofResult,
 };
 pub use types::{
-    WasmAccountState, WasmCiphertext, WasmKeypair, WasmNostrKeypair, WasmPoint, WasmTxType,
+    WasmAccountState, WasmCiphertext, WasmKeypair, WasmNostrKeypair, WasmNostrPublicKey, WasmPoint,
+    WasmPublicKey, WasmTxType,
 };
 
 /// Initialize the WASM module.

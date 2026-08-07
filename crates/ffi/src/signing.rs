@@ -14,6 +14,7 @@ use crate::types::*;
 /// Sign a message hash with a Stark private key (ECDSA on Stark curve).
 ///
 /// Produces `(r, s)` as two `KmsFelt` outputs.
+/// Uses deterministic RFC-6979 nonce generation (cairo-compatible seed retry).
 #[no_mangle]
 pub unsafe extern "C" fn kms_stark_sign(
     hash: *const KmsFelt,
@@ -27,19 +28,23 @@ pub unsafe extern "C" fn kms_stark_sign(
         }
 
         let msg = kms_to_felt(&*hash);
-        let sk = kms_to_felt(&*private_key);
+        // Copy secret into a local so the stack slot can be cleared after use.
+        let mut sk = kms_to_felt(&*private_key);
 
-        // Generate a random nonce k
-        let k = krusty_kms_crypto::scalar::random_felt();
-
-        match starknet_crypto::sign(&sk, &msg, &k) {
+        let result = match krusty_kms::sign_stark_hash(&sk, &msg) {
             Ok(sig) => {
                 *out_r = felt_to_kms(&sig.r);
                 *out_s = felt_to_kms(&sig.s);
                 KMS_OK
             }
             Err(_) => KMS_ERR_CRYPTO,
-        }
+        };
+
+        // Best-effort wipe of the local private-key copy.
+        sk = starknet_types_core::felt::Felt::ZERO;
+        let _ = sk;
+
+        result
     })
     .unwrap_or(KMS_ERR_INTERNAL)
 }
@@ -72,6 +77,9 @@ pub unsafe extern "C" fn kms_eth_sign(
             Ok(s) => s,
             Err(_) => return KMS_ERR_INVALID_INPUT,
         };
+
+        // Wipe the temporary private-key copy.
+        pk_arr.fill(0);
 
         match signer.sign_hash(&h) {
             Ok(sig) => {
@@ -107,6 +115,23 @@ mod tests {
         // r and s should be non-zero
         assert_ne!(r.bytes, [0; 32]);
         assert_ne!(s.bytes, [0; 32]);
+    }
+
+    #[test]
+    fn test_stark_sign_is_deterministic() {
+        let hash = felt_to_kms(&Felt::from(0x1234u64));
+        let sk = felt_to_kms(&Felt::from(42u64));
+        let mut r1 = KmsFelt { bytes: [0; 32] };
+        let mut s1 = KmsFelt { bytes: [0; 32] };
+        let mut r2 = KmsFelt { bytes: [0; 32] };
+        let mut s2 = KmsFelt { bytes: [0; 32] };
+
+        let rc1 = unsafe { kms_stark_sign(&hash, &sk, &mut r1, &mut s1) };
+        let rc2 = unsafe { kms_stark_sign(&hash, &sk, &mut r2, &mut s2) };
+        assert_eq!(rc1, KMS_OK);
+        assert_eq!(rc2, KMS_OK);
+        assert_eq!(r1.bytes, r2.bytes);
+        assert_eq!(s1.bytes, s2.bytes);
     }
 
     #[test]

@@ -9,9 +9,10 @@ use ctr::cipher::{KeyIvInit, StreamCipher};
 use krusty_kms_common::{KmsError, Result};
 use scrypt::{scrypt, Params as ScryptParams};
 use sha3::{Digest, Keccak256};
+use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
-use crate::encryption::{decrypt_with_key, encrypt_with_key};
+use crate::encryption::{decrypt_with_key, encrypt_with_key, scrypt_log_n};
 
 type Aes128Ctr = ctr::Ctr128BE<Aes128>;
 
@@ -233,8 +234,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid mac hex: {e}")))?;
 
-    // Derive key via scrypt
-    let log_n = (n as f64).log2() as u8;
+    // Derive key via scrypt (validate N is a power of two in the allowed range)
+    let log_n = scrypt_log_n(n)?;
     let params = ScryptParams::new(log_n, r, p, dklen)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut derived_key = vec![0u8; dklen];
@@ -247,7 +248,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     mac_input.extend_from_slice(&ciphertext);
     let computed_mac = Keccak256::digest(&mac_input);
 
-    if computed_mac.as_slice() != expected_mac.as_slice() {
+    // Constant-time MAC compare to avoid password-oracle timing leaks.
+    if !bool::from(computed_mac.as_slice().ct_eq(expected_mac.as_slice())) {
         derived_key.zeroize();
         return Err(KmsError::CryptoError(
             "MAC verification failed: wrong password or corrupted keystore".to_string(),
@@ -272,7 +274,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 
 /// Derive a 32-byte key from a password and salt using scrypt (r=8, p=1).
 fn derive_scrypt_key(password: &[u8], kdf_salt: &[u8], n: u32) -> Result<[u8; 32]> {
-    let log_n = (n as f64).log2() as u8;
+    let log_n = scrypt_log_n(n)?;
     let params = ScryptParams::new(log_n, 8, 1, 32)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut key = [u8::default(); 32];
@@ -336,7 +338,7 @@ mod tests {
         let iv = vec![0xcd; 16];
 
         // Derive key
-        let log_n = (TEST_SCRYPT_N as f64).log2() as u8;
+        let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1, 32).unwrap();
         let mut derived_key = vec![0u8; 32];
         scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
@@ -391,7 +393,7 @@ mod tests {
         let iv = vec![0xcd; 16];
         let password = test_password(0);
 
-        let log_n = (TEST_SCRYPT_N as f64).log2() as u8;
+        let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1, 32).unwrap();
         let mut derived_key = vec![0u8; 32];
         scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();

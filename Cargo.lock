@@ -1498,6 +1498,7 @@ dependencies = [
  "sha3",
  "starknet-crypto",
  "starknet-types-core",
+ "subtle",
  "thiserror 1.0.69",
  "zeroize",
 ]
@@ -1556,6 +1557,7 @@ dependencies = [
  "serde",
  "serde_json",
  "starknet-types-core",
+ "subtle",
  "thiserror 1.0.69",
  "zeroize",
 ]
@@ -1579,6 +1581,7 @@ dependencies = [
  "sha2",
  "sha3",
  "starknet-types-core",
+ "subtle",
  "thiserror 1.0.69",
  "zeroize",
 ]

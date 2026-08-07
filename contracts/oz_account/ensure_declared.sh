@@ -16,6 +16,10 @@ Checks whether the manifest-backed OpenZeppelin account class hash is declared
 on the target network. If `--declare` is passed, submits `sncast declare` when
 the class is missing.
 
+After `scarb build`, the local Sierra class hash is computed via
+`sncast utils class-hash` and must match the manifest hash before any declare
+is attempted.
+
 Requirements for declaration:
 - `sncast` must already be configured with an account/profile able to declare.
 - The current shell environment must provide any required auth for `sncast`.
@@ -91,6 +95,73 @@ fi
 
 echo "Building $PACKAGE_NAME ($version)..."
 scarb --manifest-path "$MANIFEST_PATH" build
+
+if ! command -v sncast >/dev/null 2>&1; then
+  echo "sncast is required to compute the local class hash after build" >&2
+  exit 1
+fi
+
+echo "Computing local class hash for $CONTRACT_NAME..."
+local_class_hash_raw=$(
+  sncast --json utils class-hash \
+    --contract-name "$CONTRACT_NAME" \
+    --package "$PACKAGE_NAME" \
+    2>/dev/null || true
+)
+
+if [[ -z "$local_class_hash_raw" ]]; then
+  # Fallback: non-JSON output (class hash on its own line or "class_hash: 0x...")
+  local_class_hash_raw=$(
+    sncast utils class-hash \
+      --contract-name "$CONTRACT_NAME" \
+      --package "$PACKAGE_NAME" \
+      2>/dev/null || true
+  )
+fi
+
+if [[ -z "$local_class_hash_raw" ]]; then
+  echo "Failed to compute local class hash with sncast utils class-hash." >&2
+  echo "Refuse to continue: local toolchain could not reproduce the class hash." >&2
+  exit 1
+fi
+
+local_class_hash=$(
+  if jq -e . >/dev/null 2>&1 <<<"$local_class_hash_raw"; then
+    jq -r '.class_hash // .classHash // empty' <<<"$local_class_hash_raw"
+  else
+    # Extract the first 0x-prefixed hex token from plain output.
+    grep -oE '0x[0-9a-fA-F]+' <<<"$local_class_hash_raw" | head -n1 || true
+  fi
+)
+
+if [[ -z "$local_class_hash" ]]; then
+  echo "Could not parse local class hash from sncast output:" >&2
+  echo "$local_class_hash_raw" >&2
+  echo "Refuse to declare a class that may not match the manifest." >&2
+  exit 1
+fi
+
+normalize_felt() {
+  local value="${1#0x}"
+  value=$(echo "$value" | tr '[:upper:]' '[:lower:]' | sed 's/^0*//')
+  if [[ -z "$value" ]]; then
+    value="0"
+  fi
+  printf '0x%s' "$value"
+}
+
+manifest_norm=$(normalize_felt "$class_hash")
+local_norm=$(normalize_felt "$local_class_hash")
+
+if [[ "$manifest_norm" != "$local_norm" ]]; then
+  echo "Local class hash does not match manifest." >&2
+  echo "  manifest: $class_hash" >&2
+  echo "  local:    $local_class_hash" >&2
+  echo "Refuse to --declare a mismatched class. Update class-hashes.json only after verifying the local build." >&2
+  exit 1
+fi
+
+echo "Local class hash matches manifest: $class_hash"
 
 rpc_payload=$(jq -cn --arg class_hash "$class_hash" '{
   jsonrpc: "2.0",
