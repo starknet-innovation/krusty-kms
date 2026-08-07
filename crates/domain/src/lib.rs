@@ -202,12 +202,25 @@ impl SecretRef {
 /// Reject SecretRef values that look like hex private keys or BIP-39 mnemonics.
 fn looks_like_raw_secret_material(value: &str) -> bool {
     let trimmed = value.trim();
-    let hex_body = trimmed
+    let (has_0x, hex_body) = match trimmed
         .strip_prefix("0x")
         .or_else(|| trimmed.strip_prefix("0X"))
-        .unwrap_or(trimmed);
-    if hex_body.len() == 64 && hex_body.chars().all(|c| c.is_ascii_hexdigit()) {
-        return true;
+    {
+        Some(body) => (true, body),
+        None => (false, trimmed),
+    };
+
+    if !hex_body.is_empty() && hex_body.chars().all(|c| c.is_ascii_hexdigit()) {
+        // `0x`-prefixed values in the felt/scalar width range are key material
+        // (including unpadded Stark scalars from `expose_secret_hex`).
+        if has_0x && (1..=64).contains(&hex_body.len()) {
+            return true;
+        }
+        // Bare hex long enough to be a near-full 32-byte key; keep short opaque
+        // hex IDs (e.g. "abc123") allowed.
+        if !has_0x && (48..=64).contains(&hex_body.len()) {
+            return true;
+        }
     }
 
     let word_count = trimmed.split_whitespace().count();
@@ -460,6 +473,10 @@ pub enum SignRequest {
         key_domain: StarkKeyDomain,
         derivation_path: DerivationPath,
         message: FeltHex,
+        /// Dangerous opt-in for blind felt signing (same risk class as
+        /// [`Self::StarkHash`] raw-hash signing). Defaults to `false`.
+        #[serde(default)]
+        allow_raw_stark_hash: bool,
     },
     NostrEvent {
         secret: SecretRef,
@@ -493,9 +510,15 @@ impl SignRequest {
             Self::StarkRawMessage {
                 key_domain,
                 derivation_path,
+                allow_raw_stark_hash,
                 ..
             } => {
                 derivation_path.validate_for(key_domain.key_domain())?;
+                if !allow_raw_stark_hash {
+                    return Err(DomainError::InvalidSignRequest(
+                        "stark_raw_message signing requires allow_raw_stark_hash=true; prefer typed/structured sign paths".to_string(),
+                    ));
+                }
             }
             Self::NostrEvent {
                 derivation_path,
@@ -991,11 +1014,46 @@ mod tests {
     fn secret_ref_rejects_raw_key_material() {
         let hex_key = "0x".to_string() + &"ab".repeat(32);
         assert!(SecretRef::new(hex_key).is_err());
+        // Unpadded Stark scalar style (typical `expose_secret_hex` output).
+        assert!(SecretRef::new("0x2a").is_err());
+        assert!(SecretRef::new("0x".to_string() + &"ab".repeat(31)).is_err());
+        assert!(SecretRef::new("ab".repeat(32)).is_err());
+        assert!(SecretRef::new("ab".repeat(24)).is_err());
         assert!(SecretRef::new(
             "habit hope tip crystal because grunt nation idea electric witness alert like"
         )
         .is_err());
         assert!(SecretRef::new("wallet-1").is_ok());
+        assert!(SecretRef::new("abc123").is_ok());
+    }
+
+    #[test]
+    fn stark_raw_message_requires_allow_raw_opt_in() {
+        let denied = SignRequest::StarkRawMessage {
+            secret: SecretRef::new("stark-secret").unwrap(),
+            key_domain: StarkKeyDomain::StarknetAccount,
+            derivation_path: DerivationPath {
+                coin_type: 9004,
+                account_index: 0,
+                address_index: 1,
+            },
+            message: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: false,
+        };
+        assert!(denied.validate().is_err());
+
+        let allowed = SignRequest::StarkRawMessage {
+            secret: SecretRef::new("stark-secret").unwrap(),
+            key_domain: StarkKeyDomain::StarknetAccount,
+            derivation_path: DerivationPath {
+                coin_type: 9004,
+                account_index: 0,
+                address_index: 1,
+            },
+            message: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: true,
+        };
+        assert!(allowed.validate().is_ok());
     }
 
     #[test]

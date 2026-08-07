@@ -64,6 +64,7 @@ Supported request variants:
 - `kind = "stark_raw_message"`
   - `key_domain` is `StarknetAccount` or `TongoAccount`
   - `message` is a canonical felt hex string
+  - `allow_raw_stark_hash` must be `true` (default `false`); same blind-signing opt-in as `stark_hash`
 - `kind = "nostr_event"`
   - `event_id` is a 32-byte lowercase hex string
 - `kind = "nostr_raw_message"`

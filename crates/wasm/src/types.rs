@@ -9,6 +9,31 @@ use starknet_types_core::felt::Felt;
 use std::fmt;
 use wasm_bindgen::prelude::*;
 
+fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> String {
+    match (Felt::from_hex(public_key_x), Felt::from_hex(public_key_y)) {
+        (Ok(x), Ok(y)) => krusty_kms_common::utils::serialize_public_key_hex(&x, &y),
+        _ => {
+            let x = public_key_x
+                .trim_start_matches("0x")
+                .trim_start_matches("0X");
+            let y = public_key_y
+                .trim_start_matches("0x")
+                .trim_start_matches("0X");
+            format!("0x{:0>64}{:0>64}", x, y)
+        }
+    }
+}
+
+fn padded_felt_hex(value: &str) -> String {
+    match Felt::from_hex(value) {
+        Ok(felt) => format!("{:#066x}", felt),
+        Err(_) => {
+            let body = value.trim_start_matches("0x").trim_start_matches("0X");
+            format!("0x{:0>64}", body)
+        }
+    }
+}
+
 /// Account state returned from on-chain queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
@@ -226,12 +251,12 @@ impl WasmKeypair {
         }
     }
 
-    /// Get the full public key as "0x{x}{y}" concatenated hex.
+    /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
+    ///
+    /// Compatible with `deserializePublicKey`.
     #[wasm_bindgen(js_name = "publicKeyHex")]
     pub fn public_key_hex(&self) -> String {
-        let x = self.public_key_x.trim_start_matches("0x");
-        let y = self.public_key_y.trim_start_matches("0x");
-        format!("0x{x}{y}")
+        padded_public_key_hex(&self.public_key_x, &self.public_key_y)
     }
 }
 
@@ -266,10 +291,10 @@ impl WasmStarkXOnlyPublicKey {
         Self { public_key_x }
     }
 
-    /// Return the x-only public key hex (same as [`Self::public_key_x`]).
+    /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
     #[wasm_bindgen(js_name = "publicKeyHex")]
     pub fn public_key_hex(&self) -> String {
-        self.public_key_x.clone()
+        padded_felt_hex(&self.public_key_x)
     }
 }
 
@@ -283,12 +308,12 @@ impl WasmPublicKey {
         }
     }
 
-    /// Get the full public key as "0x{x}{y}" concatenated hex.
+    /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
+    ///
+    /// Compatible with `deserializePublicKey`.
     #[wasm_bindgen(js_name = "publicKeyHex")]
     pub fn public_key_hex(&self) -> String {
-        let x = self.public_key_x.trim_start_matches("0x");
-        let y = self.public_key_y.trim_start_matches("0x");
-        format!("0x{x}{y}")
+        padded_public_key_hex(&self.public_key_x, &self.public_key_y)
     }
 }
 

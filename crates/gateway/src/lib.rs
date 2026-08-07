@@ -456,6 +456,7 @@ where
                 key_domain,
                 derivation_path,
                 message: hash,
+                ..
             } => {
                 let private_key = match self
                     .secret_resolver
