@@ -279,9 +279,27 @@ public enum Kms {
     }
 
     public static func generateMnemonic(_ wordCount: UInt32) throws -> String {
-        try dynamicString { out, outLen, outWritten in
-            kms_generate_mnemonic(wordCount, out, outLen, outWritten)
+        // Random each call: do not size from a probe phrase. Fixed capacity with
+        // grow-on-BUFFER_TOO_SMALL (same strategy as the JNI wrapper).
+        var capacity = 512
+        for _ in 0..<4 {
+            var out = [CChar](repeating: 0, count: capacity)
+            var written = 0
+            let rc = kms_generate_mnemonic(wordCount, &out, out.count, &written)
+            if rc == KMS_OK {
+                let result = String(cString: out)
+                secureZeroCChars(&out)
+                return result
+            }
+            if rc == KMS_ERR_BUFFER_TOO_SMALL, written + 1 > capacity {
+                secureZeroCChars(&out)
+                capacity = written + 1
+                continue
+            }
+            secureZeroCChars(&out)
+            try check(rc)
         }
+        throw KmsError.fromCode(KMS_ERR_INTERNAL)
     }
 
     public static func generateMnemonicFromEntropy(_ entropy: [UInt8]) throws -> String {

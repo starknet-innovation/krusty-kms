@@ -6,9 +6,10 @@
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use crate::types::{
     WasmAccountState, WasmCiphertext, WasmDecryptedPoint, WasmKeypair, WasmNostrKeypair,
-    WasmNostrPublicKey, WasmPublicKey, WasmStarkXOnlyPublicKey,
+    WasmNostrPublicKey, WasmPublicKey, WasmStarkXOnlyKeypair, WasmStarkXOnlyPublicKey,
 };
 use krusty_kms::AccountClass;
+use krusty_kms_common::SecretFelt;
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 
@@ -508,6 +509,9 @@ pub fn derive_nostr_public_key(
 /// This is needed to recover keys for accounts created with old Argent-X.
 /// Braavos and new Argent use direct `m/44'/9004'/0'/0/{index}` derivation instead.
 ///
+/// Returns an x-only Stark keypair ([`WasmStarkXOnlyKeypair`]) because
+/// `stark_public_key` does not produce an affine Y coordinate.
+///
 /// # Security / threat model
 ///
 /// Returns the private key as a hex string in the JS heap. Prefer
@@ -522,15 +526,16 @@ pub fn derive_argent_legacy_keypair(
     mnemonic: &str,
     address_index: u32,
     account_index: u32,
-) -> Result<WasmKeypair, JsValue> {
-    let pk = krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
-        .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?;
-    let pubk = krusty_kms::stark_public_key(&pk);
+) -> Result<WasmStarkXOnlyKeypair, JsValue> {
+    let pk = SecretFelt::new(
+        krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
+            .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
+    );
+    let pubk = krusty_kms::stark_public_key(pk.expose_secret());
 
-    Ok(WasmKeypair {
-        private_key: format!("{:#066x}", pk),
+    Ok(WasmStarkXOnlyKeypair {
+        private_key: format!("{:#066x}", pk.expose_secret()),
         public_key_x: format!("{:#x}", pubk),
-        public_key_y: String::new(), // x-coordinate only for Stark keys
     })
 }
 
@@ -545,9 +550,11 @@ pub fn derive_argent_legacy_public_key(
     address_index: u32,
     account_index: u32,
 ) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
-    let pk = krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
-        .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?;
-    let pubk = krusty_kms::stark_public_key(&pk);
+    let pk = SecretFelt::new(
+        krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
+            .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
+    );
+    let pubk = krusty_kms::stark_public_key(pk.expose_secret());
 
     Ok(WasmStarkXOnlyPublicKey {
         public_key_x: format!("{:#x}", pubk),

@@ -21,7 +21,7 @@ use starknet_rust::providers::Provider;
 use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
@@ -483,7 +483,9 @@ impl HttpMultisigCoordinator {
     ///
     /// Only `http`/`https` are accepted. Hostnames are DNS-resolved and every
     /// address must be publicly routable (no loopback, RFC1918, ULA, link-local,
-    /// CGNAT, metadata, etc.). Redirects are revalidated the same way.
+    /// CGNAT, metadata, etc.). The HTTP client uses a validating DNS resolver so
+    /// every connection-time lookup (and redirect hop) is re-checked, closing the
+    /// DNS-rebinding gap between preflight validation and `send()`.
     /// Use [`Self::from_url_unchecked`] in tests or when the caller has already
     /// validated the URL against a local allowlist.
     pub fn from_url(base_url: &str) -> Result<Self> {
@@ -494,7 +496,7 @@ impl HttpMultisigCoordinator {
             let path = format!("{}/", url.path());
             url.set_path(&path);
         }
-        let client = build_ssrf_safe_client()?;
+        let client = build_ssrf_safe_client(&url)?;
         Ok(Self {
             base_url: url,
             client,
@@ -533,8 +535,53 @@ impl std::fmt::Display for SsrfBlockedRedirect {
 
 impl std::error::Error for SsrfBlockedRedirect {}
 
-fn build_ssrf_safe_client() -> Result<reqwest::Client> {
-    reqwest::Client::builder()
+/// DNS resolver that rejects non-public addresses on every lookup.
+///
+/// Used by the SSRF-safe HTTP client so connection-time resolution cannot
+/// rebind to an internal IP after a successful preflight check.
+#[derive(Debug, Default)]
+struct PublicOnlyResolver;
+
+impl reqwest::dns::Resolve for PublicOnlyResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let host = name.as_str().trim_end_matches('.');
+            let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, 0))
+                .await
+                .map_err(|error| {
+                    Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("DNS resolve failed for '{host}': {error}"),
+                    )) as Box<dyn std::error::Error + Send + Sync>
+                })?
+                .collect();
+
+            if addrs.is_empty() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("coordinator host '{host}' resolved to no addresses"),
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+
+            // Fail closed if any address is non-public (rebinding / mixed RRset).
+            if addrs.iter().any(|addr| is_blocked_ip(addr.ip())) {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("coordinator host '{host}' resolved to a blocked address"),
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+
+            let iter: reqwest::dns::Addrs = Box::new(addrs.into_iter());
+            Ok(iter)
+        })
+    }
+}
+
+fn build_ssrf_safe_client(url: &Url) -> Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder()
+        .dns_resolver(Arc::new(PublicOnlyResolver))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() >= 10 {
                 return attempt.error(SsrfBlockedRedirect(
@@ -545,9 +592,52 @@ fn build_ssrf_safe_client() -> Result<reqwest::Client> {
                 Ok(()) => attempt.follow(),
                 Err(error) => attempt.error(SsrfBlockedRedirect(error.to_string())),
             }
-        }))
+        }));
+
+    // Pin the initially validated public addresses for the base host so the
+    // first connection cannot race a different A/AAAA set. Redirects to other
+    // hosts still go through PublicOnlyResolver.
+    if let Some(host) = url.host_str() {
+        if host.parse::<IpAddr>().is_err() {
+            let port = url.port_or_known_default().unwrap_or(80);
+            let addrs = resolve_public_socket_addrs(host, port)?;
+            for addr in addrs {
+                builder = builder.resolve(host, addr);
+            }
+        }
+    }
+
+    builder
         .build()
         .map_err(|error| KmsError::MultisigError(error.to_string()))
+}
+
+fn resolve_public_socket_addrs(host: &str, port: u16) -> Result<Vec<SocketAddr>> {
+    let addrs: Vec<_> = (host, port)
+        .to_socket_addrs()
+        .map_err(|error| {
+            KmsError::MultisigError(format!(
+                "failed to resolve coordinator host '{host}': {error}"
+            ))
+        })?
+        .collect();
+
+    if addrs.is_empty() {
+        return Err(KmsError::MultisigError(format!(
+            "coordinator host '{host}' resolved to no addresses"
+        )));
+    }
+
+    for addr in &addrs {
+        if is_blocked_ip(addr.ip()) {
+            return Err(KmsError::MultisigError(format!(
+                "coordinator host '{host}' resolves to blocked address {}",
+                addr.ip()
+            )));
+        }
+    }
+
+    Ok(addrs)
 }
 
 fn validate_coordinator_url(url: &Url) -> Result<()> {
@@ -587,30 +677,7 @@ fn validate_coordinator_url(url: &Url) -> Result<()> {
     }
 
     // Hostname: resolve and require every address to be publicly routable.
-    let addrs: Vec<_> = (host, port)
-        .to_socket_addrs()
-        .map_err(|error| {
-            KmsError::MultisigError(format!(
-                "failed to resolve coordinator host '{host}': {error}"
-            ))
-        })?
-        .collect();
-
-    if addrs.is_empty() {
-        return Err(KmsError::MultisigError(format!(
-            "coordinator host '{host}' resolved to no addresses"
-        )));
-    }
-
-    for addr in addrs {
-        if is_blocked_ip(addr.ip()) {
-            return Err(KmsError::MultisigError(format!(
-                "coordinator host '{host}' resolves to blocked address {}",
-                addr.ip()
-            )));
-        }
-    }
-
+    let _ = resolve_public_socket_addrs(host, port)?;
     Ok(())
 }
 

@@ -34,7 +34,7 @@ pub use proof::{
 };
 pub use types::{
     WasmAccountState, WasmCiphertext, WasmKeypair, WasmNostrKeypair, WasmNostrPublicKey, WasmPoint,
-    WasmPublicKey, WasmStarkXOnlyPublicKey, WasmTxType,
+    WasmPublicKey, WasmStarkXOnlyKeypair, WasmStarkXOnlyPublicKey, WasmTxType,
 };
 
 /// Initialize the WASM module.

@@ -1261,6 +1261,42 @@ mod tests {
     }
 
     #[test]
+    fn test_transfer_rejects_mismatched_cipher_balance() {
+        use krusty_kms_crypto::StarkCurve;
+        let mut account = create_test_account();
+        account.set_balance(1000);
+        let recipient_key = StarkCurve::mul_generator(&Felt::from(99u64));
+        // Cipher encrypts 500 while account.balance() is 1000 — must fail the
+        // cipher↔balance consistency check added for the audit fix.
+        let current_balance = encrypt_balance_for_account(&account, 500, Felt::from(42u64));
+
+        let params = TransferParams {
+            recipient_public_key: recipient_key,
+            amount: 100,
+            nonce: Felt::from(1u64),
+            chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
+            tongo_address: Felt::from(123456u64),
+            sender_address: Felt::from(0xCAFEu64),
+            current_balance,
+            bit_size: 16,
+            auditor_pub_key: None,
+        };
+
+        let result = transfer(&account, params);
+        match result {
+            Ok(_) => panic!("mismatched cipher balance should be rejected"),
+            Err(error) => {
+                let message = error.to_string();
+                assert!(
+                    message.contains("storedBalance")
+                        || message.contains("encryption of balance"),
+                    "unexpected error: {message}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_transfer_insufficient_balance() {
         use krusty_kms_crypto::StarkCurve;
         let account = create_test_account();

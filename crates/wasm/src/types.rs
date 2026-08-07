@@ -274,6 +274,51 @@ pub struct WasmPublicKey {
     pub public_key_y: String,
 }
 
+/// Stark x-only keypair (private key + x-coordinate public key).
+///
+/// Used by Argent-legacy derivation where `stark_public_key` does not produce Y.
+///
+/// # Security / threat model
+///
+/// `private_key` is a plain hex string in the JS heap and cannot be reliably
+/// wiped. Prefer [`WasmStarkXOnlyPublicKey`] when private material is not
+/// required. `Debug` redacts the private key; default `Serialize` omits it.
+#[derive(Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmStarkXOnlyKeypair {
+    /// Private key as hex string (0x-prefixed). Treat as secret.
+    #[serde(skip_serializing)]
+    pub private_key: String,
+    /// Public key X coordinate as hex string
+    pub public_key_x: String,
+}
+
+impl fmt::Debug for WasmStarkXOnlyKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmStarkXOnlyKeypair")
+            .field("private_key", &"***")
+            .field("public_key_x", &self.public_key_x)
+            .finish()
+    }
+}
+
+#[wasm_bindgen]
+impl WasmStarkXOnlyKeypair {
+    #[wasm_bindgen(constructor)]
+    pub fn new(private_key: String, public_key_x: String) -> Self {
+        Self {
+            private_key,
+            public_key_x,
+        }
+    }
+
+    /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
+    #[wasm_bindgen(js_name = "publicKeyHex")]
+    pub fn public_key_hex(&self) -> String {
+        padded_felt_hex(&self.public_key_x)
+    }
+}
+
 /// Stark public key as an x-only felt (no Y coordinate).
 ///
 /// Matches `stark_public_key` / account address derivation inputs.

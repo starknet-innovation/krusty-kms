@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -281,11 +280,41 @@ class Kms {
   // Mnemonic
   // ---------------------------------------------------------------------------
 
+  // C ABI `KMS_ERR_BUFFER_TOO_SMALL`
+  static const int _errBufferTooSmall = 3;
+
+  /// Random mnemonic generation: fixed capacity with grow-on-BUFFER_TOO_SMALL.
+  ///
+  /// Must not use the generic probe/fill helper — each `generateMnemonic` call
+  /// produces a different phrase whose UTF-8 length can differ.
   String generateMnemonic(int wordCount) {
-    return _dynamicString(
-      (out, outLen, written) =>
-          _bindings.generateMnemonic(wordCount, out, outLen, written),
-    );
+    var capacity = 512;
+    final pWritten = calloc<Size>();
+    try {
+      for (var attempt = 0; attempt < 4; attempt++) {
+        final allocCapacity = capacity;
+        final buf = calloc<Uint8>(allocCapacity);
+        try {
+          pWritten.value = 0;
+          final rc = _bindings.generateMnemonic(
+              wordCount, buf, allocCapacity, pWritten);
+          if (rc == KmsException.ok) {
+            return buf.cast<Utf8>().toDartString(length: pWritten.value);
+          }
+          if (rc == _errBufferTooSmall && pWritten.value + 1 > allocCapacity) {
+            capacity = pWritten.value + 1;
+            continue;
+          }
+          _check(rc);
+        } finally {
+          _secureFree(buf, allocCapacity);
+        }
+      }
+      throw const KmsException(
+          KmsException.errInternal, 'mnemonic generation failed');
+    } finally {
+      calloc.free(pWritten);
+    }
   }
 
   String generateMnemonicFromEntropy(Uint8List entropy) {
