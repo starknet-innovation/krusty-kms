@@ -6,10 +6,9 @@ targets = [
     { triple = "x86_64-unknown-linux-gnu" },
     { triple = "wasm32-unknown-unknown" },
 ]
-# Keep false: crates/controller (workspace-excluded) optionally depends on a git
-# `account_sdk` when `--features sdk` is enabled. Enabling all-features here would
-# require an allow-git entry for that tag.
-all-features = false
+# Audit optional features on publishable crates (e.g. krusty-kms-client `nats`).
+# crates/controller is workspace-excluded and is not part of this graph.
+all-features = true
 
 [advisories]
 yanked = "deny"

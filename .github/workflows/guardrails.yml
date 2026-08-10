@@ -106,7 +106,7 @@ jobs:
         env:
           RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links"
         run: >
-          cargo doc --locked --no-deps
+          cargo doc --locked --no-deps --all-features
           -p krusty-kms-common
           -p krusty-kms-wallet-api
           -p krusty-kms-domain
