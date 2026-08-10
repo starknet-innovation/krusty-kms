@@ -127,8 +127,6 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
-      - name: Install nightly (rustdoc JSON)
-        run: rustup toolchain install nightly --component rust-docs
       - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
         with:
           tool: cargo-semver-checks
@@ -151,4 +149,5 @@ jobs:
           git worktree add /tmp/krusty-semver-baseline "${baseline_rev}"
           echo "BASELINE_ROOT=/tmp/krusty-semver-baseline" >> "$GITHUB_ENV"
       - name: Check publishable crate semver
+        # Nightly pin lives in check-semver.sh (NIGHTLY_TOOLCHAIN); script installs it.
         run: bash .github/scripts/check-semver.sh

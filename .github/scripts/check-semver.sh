@@ -29,7 +29,10 @@ if ! command -v rustup >/dev/null; then
   exit 1
 fi
 
-rustup toolchain install nightly --component rust-docs >/dev/null
+# Pin nightly: floating `nightly` can change rustdoc JSON format and break
+# cargo-semver-checks compatibility across CI runs.
+NIGHTLY_TOOLCHAIN="${NIGHTLY_TOOLCHAIN:-nightly-2026-08-08}"
+rustup toolchain install "$NIGHTLY_TOOLCHAIN" --component rust-docs >/dev/null
 if ! command -v cargo-semver-checks >/dev/null && ! cargo semver-checks -V >/dev/null 2>&1; then
   cargo install cargo-semver-checks --locked
 fi
@@ -54,7 +57,7 @@ rustdoc_json() {
     cd "$manifest_root"
     # Package name uses hyphens; rustdoc JSON uses underscores.
     local json_name="${crate//-/_}.json"
-    if ! cargo +nightly rustdoc -p "$crate" --locked --all-features --lib -- \
+    if ! cargo "+$NIGHTLY_TOOLCHAIN" rustdoc -p "$crate" --locked --all-features --lib -- \
       -Z unstable-options \
       --output-format json; then
       echo "::error::rustdoc JSON generation failed for $crate in $manifest_root" >&2

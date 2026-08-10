@@ -195,7 +195,7 @@ for f in "${changed[@]}"; do
   esac
 
   if is_src_rs "$f"; then
-    if git diff "$base_ref"...HEAD -- "$f" | grep -E '^[+-]\s*pub(\s|\()' >/dev/null; then
+    if git diff "$base_ref"...HEAD -- "$f" | grep -E '^[+-]\s*pub\s' >/dev/null; then
       needs_note=1
       reasons+=("new/changed/removed pub items in $f")
     fi
