@@ -10,8 +10,28 @@ SOFT_LIMIT_DEFAULT = 350
 HARD_NEW_DEFAULT = 500
 
 
+def _is_repo_root(path: Path) -> bool:
+    return (path / "Cargo.toml").is_file() and (path / ".github/guardrails").is_dir()
+
+
 def repo_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if _is_repo_root(candidate):
+            return candidate
+    try:
+        fallback = here.parents[3]
+    except IndexError as exc:
+        raise RuntimeError(
+            f"Could not locate repo root from {here}: "
+            "no ancestor contains both Cargo.toml and .github/guardrails/"
+        ) from exc
+    if _is_repo_root(fallback):
+        return fallback
+    raise RuntimeError(
+        f"Could not locate repo root from {here}: "
+        f"walk-up found no markers and fallback {fallback} is not a valid repo root"
+    )
 
 
 def load_baseline(path: Path | None = None) -> dict:
