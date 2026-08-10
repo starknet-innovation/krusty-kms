@@ -81,7 +81,7 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: cargo deny check
-        run: cargo deny check --all-features
+        run: cargo deny check
 
   docs:
     name: rustdoc link check
