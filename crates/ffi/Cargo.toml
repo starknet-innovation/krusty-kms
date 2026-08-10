@@ -15,7 +15,6 @@ krusty-kms-crypto = { path = "../crypto", default-features = false }
 krusty-kms-common = { path = "../common" }
 krusty-kms-sdk = { path = "../sdk", default-features = false }
 starknet-types-core = { workspace = true }
-starknet-crypto = "0.8"
 bip39 = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }

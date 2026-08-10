@@ -67,12 +67,13 @@ The client exposes `Multisig` for OpenZeppelin Cairo multisig contracts:
   contract.
 - `MultisigCoordinator` defines the trusted pub/sub boundary used to distribute
   proposals and signer status.
-- `NatsMultisigCoordinator` provides the standard live pub/sub backend; the HTTP
-  coordinator is available for simple retained-message services.
+- `NatsMultisigCoordinator` provides the opt-in (`nats` feature) live pub/sub
+  backend; the HTTP coordinator is available for simple retained-message
+  services.
 
 See [`docs/oz-multisig-coordination.md`](../../docs/oz-multisig-coordination.md),
 [`docs/oz-multisig-wallet-guide.md`](../../docs/oz-multisig-wallet-guide.md),
-and `cargo run -p krusty-kms-client --example oz_multisig_coordination`.
+and `cargo run -p krusty-kms-client --features nats --example oz_multisig_coordination`.
 
 ## Tongo Contract Address (Sepolia)
 

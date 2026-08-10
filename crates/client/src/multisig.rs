@@ -12,6 +12,7 @@ mod contract;
 mod encoding;
 mod http;
 mod in_memory;
+#[cfg(feature = "nats")]
 mod nats;
 mod types;
 
@@ -24,6 +25,7 @@ pub use codec::{hash_transaction, hash_transaction_batch};
 pub use contract::Multisig;
 pub use http::HttpMultisigCoordinator;
 pub use in_memory::InMemoryMultisigCoordinator;
+#[cfg(feature = "nats")]
 pub use nats::NatsMultisigCoordinator;
 pub use types::{
     MultisigCall, MultisigCoordinationMessage, MultisigCoordinator, MultisigExecutionNotice,

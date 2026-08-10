@@ -16,29 +16,40 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 targets = ["x86_64-unknown-linux-gnu"]
 
+[features]
+default = []
+nats = ["dep:async-nats", "dep:bytes"]
+
 [dependencies]
-krusty-kms-common = { version = "0.6.0", path = "../common" }
-krusty-kms-wallet-api = { version = "0.6.0", path = "../wallet-api" }
-krusty-kms = { version = "0.6.0", path = "../kms" }
-krusty-kms-sdk = { version = "0.6.0", path = "../sdk" }
-krusty-kms-crypto = { version = "0.6.0", path = "../crypto" }
+krusty-kms-common = { version = "0.7.0", path = "../common" }
+krusty-kms-wallet-api = { version = "0.7.0", path = "../wallet-api" }
+krusty-kms = { version = "0.7.0", path = "../kms" }
+krusty-kms-sdk = { version = "0.7.0", path = "../sdk" }
+krusty-kms-crypto = { version = "0.7.0", path = "../crypto" }
 starknet-types-core.workspace = true
 starknet-rust = "0.18.0"
 tokio = { workspace = true, features = ["time", "sync", "macros", "net", "rt"] }
 serde.workspace = true
 serde_json.workspace = true
 hex.workspace = true
-thiserror.workspace = true
 url = "2.5"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-async-nats = "0.49.1"
-bytes = "1"
+async-nats = { version = "0.49.1", optional = true }
+bytes = { version = "1", optional = true }
 futures-util = "0.3"
 bs58 = "0.5"
 async-trait.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
+
+[[example]]
+name = "oz_multisig_coordination"
+required-features = ["nats"]
+
+[[test]]
+name = "nats_multisig_coordinator"
+required-features = ["nats"]
 
 [lints]
 workspace = true
