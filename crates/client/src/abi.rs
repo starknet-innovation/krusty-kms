@@ -86,6 +86,14 @@ pub mod multisig {
         LazyLock::new(|| selector("execute_transaction_batch"));
 }
 
+/// Starknet account (SNIP-6) ABI selectors.
+pub mod account {
+    use super::*;
+
+    pub static IS_VALID_SIGNATURE: LazyLock<StarknetRsFelt> =
+        LazyLock::new(|| selector("is_valid_signature"));
+}
+
 /// Tongo contract ABI selectors.
 pub mod tongo {
     use super::*;

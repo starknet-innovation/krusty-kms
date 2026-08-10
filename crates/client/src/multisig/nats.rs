@@ -2,15 +2,15 @@
 
 use super::encoding::{address_subject_token, felt_subject_token};
 use super::types::{
-    validate_incoming_message, MultisigCoordinationMessage, MultisigCoordinator,
-    MultisigMessageStream, MultisigTopic,
+    validate_envelope_payload, validate_incoming_envelope, MultisigCoordinationEnvelope,
+    MultisigCoordinator, MultisigMessageStream, MultisigTopic,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::StreamExt;
 use krusty_kms_common::{KmsError, Result};
 
-/// NATS-backed trusted coordinator using standard pub/sub subjects.
+/// NATS-backed coordinator using standard pub/sub subjects.
 ///
 /// NATS core pub/sub is live delivery. Use [`MultisigCoordinator::subscribe`]
 /// before publishing when callers need to observe messages through this backend.
@@ -68,13 +68,11 @@ impl NatsMultisigCoordinator {
 
 #[async_trait]
 impl MultisigCoordinator for NatsMultisigCoordinator {
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
-        if let MultisigCoordinationMessage::Proposal(proposal) = &message {
-            proposal.validate_transaction_id()?;
-        }
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()> {
+        validate_envelope_payload(&envelope)?;
 
-        let subject = self.subject(&message.topic());
-        let payload = serde_json::to_vec(&message)
+        let subject = self.subject(&envelope.topic());
+        let payload = serde_json::to_vec(&envelope)
             .map_err(|error| KmsError::MultisigError(error.to_string()))?;
         self.client
             .publish(subject, Bytes::from(payload))
@@ -97,11 +95,12 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
 
         let topic = topic.clone();
         Ok(Box::pin(subscriber.map(move |message| {
-            let parsed = serde_json::from_slice::<MultisigCoordinationMessage>(&message.payload)
+            let parsed = serde_json::from_slice::<MultisigCoordinationEnvelope>(&message.payload)
                 .map_err(|error| KmsError::MultisigError(error.to_string()))?;
             // The coordinator is untrusted on the receive path: reject
-            // misrouted topics and proposals whose id does not recompute.
-            validate_incoming_message(&topic, &parsed)?;
+            // misrouted topics, unsupported schema versions, and proposals
+            // whose id does not recompute.
+            validate_incoming_envelope(&topic, &parsed)?;
             Ok(parsed)
         })))
     }

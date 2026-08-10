@@ -1,7 +1,10 @@
 //! `Multisig::confirm_proposal` validation against a recording wallet executor.
 
-use super::{address, call};
-use crate::multisig::{Multisig, MultisigProposal};
+use super::{address, call, confirmation_notice, test_signing_key};
+use crate::multisig::{
+    Multisig, MultisigCoordinationMessage, MultisigProposal, SignedMultisigCoordinationMessage,
+    MULTISIG_COORDINATION_SCHEMA_VERSION,
+};
 use crate::tx::Tx;
 use crate::wallet::WalletExecutor;
 use async_trait::async_trait;
@@ -70,6 +73,62 @@ fn test_multisig_handle(address_value: u64) -> Multisig {
         Url::parse("http://127.0.0.1:0").unwrap(),
     )));
     Multisig::new(provider, address(address_value), ChainId::Sepolia)
+}
+
+#[tokio::test]
+async fn test_verify_signed_message_prevalidation() {
+    // These rejections trigger before any RPC call, so a handle with an
+    // unroutable provider exercises them deterministically.
+    let multisig = test_multisig_handle(1);
+    let key = test_signing_key(0x1234);
+    let signed =
+        SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+            .unwrap();
+
+    // Unsupported schema version.
+    let mut wrong_version = signed.clone();
+    wrong_version.version = 0;
+    assert!(matches!(
+        multisig.verify_signed_message(&wrong_version).await,
+        Err(KmsError::MultisigError(_))
+    ));
+
+    // Message bound to a different multisig contract.
+    let foreign_multisig = test_multisig_handle(9);
+    assert!(matches!(
+        foreign_multisig.verify_signed_message(&signed).await,
+        Err(KmsError::MultisigError(_))
+    ));
+
+    // Message bound to a different chain.
+    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+        Url::parse("http://127.0.0.1:0").unwrap(),
+    )));
+    let mainnet_handle = Multisig::new(provider, address(1), ChainId::Mainnet);
+    assert!(matches!(
+        mainnet_handle.verify_signed_message(&signed).await,
+        Err(KmsError::MultisigError(_))
+    ));
+
+    // Signed proposal whose transaction id does not recompute.
+    let mut forged_proposal = MultisigProposal::new(
+        address(1),
+        ChainId::Sepolia,
+        vec![call()],
+        Felt::from(99u64),
+        address(2),
+        None,
+    );
+    forged_proposal.transaction_id = Felt::from(1u64);
+    let forged = SignedMultisigCoordinationMessage {
+        version: MULTISIG_COORDINATION_SCHEMA_VERSION,
+        message: MultisigCoordinationMessage::Proposal(forged_proposal),
+        signature: signed.signature.clone(),
+    };
+    assert!(matches!(
+        multisig.verify_signed_message(&forged).await,
+        Err(KmsError::MultisigError(_))
+    ));
 }
 
 #[tokio::test]

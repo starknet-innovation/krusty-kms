@@ -4,6 +4,32 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-10
+
+### Changed
+
+- **Breaking:** multisig coordination notices are now cryptographically
+  authenticated (#52). `MultisigCoordinator::publish`/`messages`/`subscribe`
+  exchange a versioned `MultisigCoordinationEnvelope` (signed schema v1, or
+  the legacy unsigned message as v0). New
+  `SignedMultisigCoordinationMessage` carries the claimed actor's account
+  signature over a domain-separated hash of
+  `(topic, message_kind, payload_hash)`; receivers authenticate it against
+  the on-chain signer set and the actor's account contract (SNIP-6
+  `is_valid_signature`) via `Multisig::verify_signed_message`, or offline via
+  `verify_with_stark_public_key`. Forged confirmation/revocation/execution
+  notices and proposer/memo attribution tampering by a compromised
+  coordinator no longer verify. Every verification entry point recomputes a
+  proposal's `transaction_id` before considering the signature, since the
+  signing hash covers `calls`/`salt` only transitively through that id.
+  `verify_signed_message` pins its signer-set
+  and signature reads to a single block hash, and envelope deserialization
+  rejects any payload that carries `version` but is not a well-formed signed
+  envelope, so authentication cannot be silently stripped. Verified notices
+  prove actor authorization only — not publisher identity, freshness, or
+  uniqueness — so consumers that tally them must deduplicate by
+  `(actor, topic, message kind)`.
+
 ## [0.7.0] - 2026-08-10
 
 ### Changed

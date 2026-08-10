@@ -1,13 +1,14 @@
 //! Coordinator transports: in-memory pub/sub, receive-side validation,
 //! HTTP SSRF policy, and NATS subject construction.
 
-use super::{address, call};
-use crate::multisig::types::validate_incoming_message;
+use super::{address, call, test_signing_key};
+use crate::multisig::types::validate_incoming_envelope;
 #[cfg(feature = "nats")]
 use crate::multisig::NatsMultisigCoordinator;
 use crate::multisig::{
-    HttpMultisigCoordinator, InMemoryMultisigCoordinator, MultisigCoordinationMessage,
-    MultisigCoordinator, MultisigProposal, MultisigSignerNotice, MultisigTopic,
+    HttpMultisigCoordinator, InMemoryMultisigCoordinator, MultisigCoordinationEnvelope,
+    MultisigCoordinationMessage, MultisigCoordinator, MultisigProposal, MultisigSignerNotice,
+    MultisigTopic, SignedMultisigCoordinationMessage,
 };
 use futures_util::StreamExt;
 use krusty_kms_common::{ChainId, KmsError};
@@ -27,18 +28,19 @@ async fn test_in_memory_coordinator_routes_by_topic() {
     let topic = proposal.topic();
 
     coordinator
-        .publish(MultisigCoordinationMessage::Proposal(proposal.clone()))
+        .publish(MultisigCoordinationMessage::Proposal(proposal.clone()).into())
         .await
         .unwrap();
     coordinator
-        .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(
+        .publish(
+            MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
                 address(1),
                 ChainId::Sepolia,
                 proposal.transaction_id,
                 address(3),
-            ),
-        ))
+            ))
+            .into(),
+        )
         .await
         .unwrap();
 
@@ -60,12 +62,49 @@ async fn test_in_memory_coordinator_live_subscription() {
     let mut subscription = coordinator.subscribe(&proposal.topic()).await.unwrap();
 
     coordinator
-        .publish(MultisigCoordinationMessage::Proposal(proposal.clone()))
+        .publish(MultisigCoordinationMessage::Proposal(proposal.clone()).into())
         .await
         .unwrap();
 
     let received = subscription.next().await.unwrap().unwrap();
-    assert_eq!(received, MultisigCoordinationMessage::Proposal(proposal));
+    assert_eq!(
+        received,
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(proposal))
+    );
+}
+
+#[tokio::test]
+async fn test_in_memory_coordinator_signed_envelope_roundtrip() {
+    let coordinator = InMemoryMultisigCoordinator::new();
+    let key = test_signing_key(0x1234);
+    let proposal = MultisigProposal::new(
+        address(1),
+        ChainId::Sepolia,
+        vec![call()],
+        Felt::from(99u64),
+        address(2),
+        None,
+    );
+    let topic = proposal.topic();
+    let signed = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        MultisigCoordinationMessage::Proposal(proposal),
+        &key,
+    )
+    .unwrap();
+
+    let mut subscription = coordinator.subscribe(&topic).await.unwrap();
+    coordinator.publish(signed.clone().into()).await.unwrap();
+
+    let received = subscription.next().await.unwrap().unwrap();
+    assert_eq!(received.as_signed(), Some(&signed));
+
+    // Unsupported schema versions are rejected at the publish boundary.
+    let mut future_version = signed;
+    future_version.version = 99;
+    assert!(matches!(
+        coordinator.publish(future_version.into()).await,
+        Err(KmsError::MultisigError(_))
+    ));
 }
 
 #[tokio::test]
@@ -83,14 +122,14 @@ async fn test_in_memory_coordinator_rejects_tampered_proposal() {
 
     assert!(matches!(
         coordinator
-            .publish(MultisigCoordinationMessage::Proposal(proposal))
+            .publish(MultisigCoordinationMessage::Proposal(proposal).into())
             .await,
         Err(KmsError::MultisigError(_))
     ));
 }
 
 #[test]
-fn test_incoming_message_validation() {
+fn test_incoming_envelope_validation() {
     let proposal = MultisigProposal::new(
         address(1),
         ChainId::Sepolia,
@@ -100,10 +139,11 @@ fn test_incoming_message_validation() {
         None,
     );
     let topic = proposal.topic();
-    let message = MultisigCoordinationMessage::Proposal(proposal.clone());
+    let envelope: MultisigCoordinationEnvelope =
+        MultisigCoordinationMessage::Proposal(proposal.clone()).into();
 
     // Consistent proposal passes.
-    validate_incoming_message(&topic, &message).unwrap();
+    validate_incoming_envelope(&topic, &envelope).unwrap();
 
     // Cross-topic replay/misrouting is rejected.
     let other_topic = MultisigTopic {
@@ -111,7 +151,7 @@ fn test_incoming_message_validation() {
         chain_id: topic.chain_id,
         transaction_id: topic.transaction_id,
     };
-    assert!(validate_incoming_message(&other_topic, &message).is_err());
+    assert!(validate_incoming_envelope(&other_topic, &envelope).is_err());
 
     // Same multisig and id on another chain is a different topic.
     let other_chain_topic = MultisigTopic {
@@ -119,14 +159,15 @@ fn test_incoming_message_validation() {
         chain_id: ChainId::Mainnet,
         transaction_id: topic.transaction_id,
     };
-    assert!(validate_incoming_message(&other_chain_topic, &message).is_err());
+    assert!(validate_incoming_envelope(&other_chain_topic, &envelope).is_err());
 
     // Forged transaction id (id not recomputing from calls/salt) is rejected.
     let mut forged = proposal;
     forged.transaction_id = Felt::from(1u64);
     let forged_topic = forged.topic();
-    let forged_message = MultisigCoordinationMessage::Proposal(forged);
-    assert!(validate_incoming_message(&forged_topic, &forged_message).is_err());
+    let forged_envelope: MultisigCoordinationEnvelope =
+        MultisigCoordinationMessage::Proposal(forged).into();
+    assert!(validate_incoming_envelope(&forged_topic, &forged_envelope).is_err());
 }
 
 #[test]

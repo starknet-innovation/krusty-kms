@@ -4,20 +4,21 @@ mod ssrf;
 
 use super::encoding::felt_to_hex;
 use super::types::{
-    validate_incoming_message, MultisigCoordinationMessage, MultisigCoordinator, MultisigTopic,
+    validate_envelope_payload, validate_incoming_envelope, MultisigCoordinationEnvelope,
+    MultisigCoordinator, MultisigTopic,
 };
 use async_trait::async_trait;
 use krusty_kms_common::{KmsError, Result};
 use ssrf::{build_ssrf_safe_client, validate_coordinator_url};
 use url::Url;
 
-/// HTTP implementation of the trusted coordinator protocol.
+/// HTTP implementation of the coordinator protocol.
 ///
 /// Expected server API:
 ///
-/// - `POST /v1/multisig/messages` with a [`MultisigCoordinationMessage`] JSON body.
+/// - `POST /v1/multisig/messages` with a [`MultisigCoordinationEnvelope`] JSON body.
 /// - `GET /v1/multisig/messages?multisig=<addr>&transaction_id=<id>` returning
-///   `Vec<MultisigCoordinationMessage>`.
+///   `Vec<MultisigCoordinationEnvelope>`.
 #[derive(Clone)]
 pub struct HttpMultisigCoordinator {
     base_url: Url,
@@ -89,14 +90,12 @@ impl HttpMultisigCoordinator {
 
 #[async_trait]
 impl MultisigCoordinator for HttpMultisigCoordinator {
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
-        if let MultisigCoordinationMessage::Proposal(proposal) = &message {
-            proposal.validate_transaction_id()?;
-        }
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()> {
+        validate_envelope_payload(&envelope)?;
 
         self.client
             .post(self.messages_url()?)
-            .json(&message)
+            .json(&envelope)
             .send()
             .await
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
@@ -105,14 +104,14 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
         Ok(())
     }
 
-    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationMessage>> {
+    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationEnvelope>> {
         let mut url = self.messages_url()?;
         url.query_pairs_mut()
             .append_pair("multisig", &topic.multisig.to_hex())
             .append_pair("chain_id", topic.chain_id.name())
             .append_pair("transaction_id", &felt_to_hex(topic.transaction_id));
 
-        let messages = self
+        let envelopes = self
             .client
             .get(url)
             .send()
@@ -120,14 +119,14 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
             .error_for_status()
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
-            .json::<Vec<MultisigCoordinationMessage>>()
+            .json::<Vec<MultisigCoordinationEnvelope>>()
             .await
             .map_err(|error| KmsError::MultisigError(error.to_string()))?;
 
         // Receive-side validation: the coordinator response is untrusted.
-        for message in &messages {
-            validate_incoming_message(topic, message)?;
+        for envelope in &envelopes {
+            validate_incoming_envelope(topic, envelope)?;
         }
-        Ok(messages)
+        Ok(envelopes)
     }
 }

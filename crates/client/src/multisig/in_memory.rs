@@ -1,7 +1,8 @@
 //! In-memory coordinator transport.
 
 use super::types::{
-    MultisigCoordinationMessage, MultisigCoordinator, MultisigMessageStream, MultisigTopic,
+    validate_envelope_payload, MultisigCoordinationEnvelope, MultisigCoordinator,
+    MultisigMessageStream, MultisigTopic,
 };
 use async_trait::async_trait;
 use futures_util::stream;
@@ -12,8 +13,8 @@ use tokio::sync::{broadcast, RwLock};
 /// In-memory coordinator useful for tests and examples.
 #[derive(Default)]
 pub struct InMemoryMultisigCoordinator {
-    messages: RwLock<HashMap<String, Vec<MultisigCoordinationMessage>>>,
-    subscriptions: RwLock<HashMap<String, broadcast::Sender<MultisigCoordinationMessage>>>,
+    messages: RwLock<HashMap<String, Vec<MultisigCoordinationEnvelope>>>,
+    subscriptions: RwLock<HashMap<String, broadcast::Sender<MultisigCoordinationEnvelope>>>,
 }
 
 impl InMemoryMultisigCoordinator {
@@ -25,25 +26,23 @@ impl InMemoryMultisigCoordinator {
 
 #[async_trait]
 impl MultisigCoordinator for InMemoryMultisigCoordinator {
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
-        if let MultisigCoordinationMessage::Proposal(proposal) = &message {
-            proposal.validate_transaction_id()?;
-        }
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()> {
+        validate_envelope_payload(&envelope)?;
 
-        let key = message.topic().key();
+        let key = envelope.topic().key();
         let mut messages = self.messages.write().await;
         messages
             .entry(key.clone())
             .or_default()
-            .push(message.clone());
+            .push(envelope.clone());
         drop(messages);
 
         let sender = self.topic_sender(&key).await;
-        let _ = sender.send(message);
+        let _ = sender.send(envelope);
         Ok(())
     }
 
-    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationMessage>> {
+    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationEnvelope>> {
         let messages = self.messages.read().await;
         Ok(messages.get(&topic.key()).cloned().unwrap_or_default())
     }
@@ -55,7 +54,7 @@ impl MultisigCoordinator for InMemoryMultisigCoordinator {
             receiver,
             |mut receiver| async move {
                 match receiver.recv().await {
-                    Ok(message) => Some((Ok(message), receiver)),
+                    Ok(envelope) => Some((Ok(envelope), receiver)),
                     Err(broadcast::error::RecvError::Lagged(count)) => Some((
                         Err(KmsError::MultisigError(format!(
                             "in-memory multisig subscription lagged by {count} messages"
@@ -70,7 +69,7 @@ impl MultisigCoordinator for InMemoryMultisigCoordinator {
 }
 
 impl InMemoryMultisigCoordinator {
-    async fn topic_sender(&self, key: &str) -> broadcast::Sender<MultisigCoordinationMessage> {
+    async fn topic_sender(&self, key: &str) -> broadcast::Sender<MultisigCoordinationEnvelope> {
         {
             let subscriptions = self.subscriptions.read().await;
             if let Some(sender) = subscriptions.get(key) {

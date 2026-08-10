@@ -6,7 +6,9 @@ use super::codec::{
     read_address_span, read_bool, read_felt, read_transaction_state, read_u32, read_u64,
     serialize_batch_call_args, serialize_single_call_args,
 };
-use super::types::{MultisigCall, MultisigProposal, MultisigTransactionState};
+use super::types::{
+    MultisigCall, MultisigProposal, MultisigTransactionState, SignedMultisigCoordinationMessage,
+};
 use super::StarknetRsFelt;
 use crate::abi;
 use crate::wallet::utils::core_felt_to_rs;
@@ -177,19 +179,141 @@ impl Multisig {
         read_felt(&result, "hash_transaction_batch")
     }
 
+    /// Authenticate a signed coordination message against on-chain state.
+    ///
+    /// Verifies, in order:
+    ///
+    /// 1. envelope payload ([`SignedMultisigCoordinationMessage::validate_structure`]:
+    ///    supported schema version, non-empty signature, and proposal
+    ///    `transaction_id` recomputing from `calls`/`salt`),
+    /// 2. the message targets this multisig contract and chain,
+    /// 3. the claimed actor is currently in the on-chain signer set (the
+    ///    OpenZeppelin multisig requires signers for confirm, revoke, and
+    ///    execute alike, so this applies to every message kind),
+    /// 4. the claimed actor's account contract accepts the signature over the
+    ///    coordination message hash via SNIP-6 `is_valid_signature`.
+    ///
+    /// Returns the authenticated actor address on success.
+    ///
+    /// # What a verified envelope does and does not prove
+    ///
+    /// It proves the actor authorized *this exact message* — the routing
+    /// topic, the message kind, and the attribution fields covered by the
+    /// signing hash. It does not prove:
+    ///
+    /// - **Publisher identity.** Anyone holding a copy, including the
+    ///   coordinator, can relay it.
+    /// - **Freshness or uniqueness.** A valid envelope stays valid, so the
+    ///   coordinator can replay it. Callers that tally notices must
+    ///   deduplicate by `(actor, topic, message kind)` before counting, or a
+    ///   single confirmation can be counted repeatedly.
+    /// - **On-chain success.** Chain state remains authoritative for quorum
+    ///   and execution; a notice is at most a hint to go read it.
+    ///
+    /// Both on-chain reads are pinned to one block, so signer-set membership
+    /// and signature validity are decided against a single consistent
+    /// snapshot: a signer removal or account upgrade landing mid-verification
+    /// cannot be observed by one read but not the other. A removed signer's
+    /// notices stop verifying once the removal lands on-chain.
+    pub async fn verify_signed_message(
+        &self,
+        signed: &SignedMultisigCoordinationMessage,
+    ) -> Result<Address> {
+        signed.validate_structure()?;
+
+        let topic = signed.message.topic();
+        if topic.multisig != self.address {
+            return Err(KmsError::MultisigError(format!(
+                "signed message targets multisig {} but this handle is {}",
+                topic.multisig.to_hex(),
+                self.address.to_hex()
+            )));
+        }
+        if topic.chain_id != self.chain_id {
+            return Err(KmsError::MultisigError(format!(
+                "signed message was created for chain {} but this handle is on {}",
+                topic.chain_id, self.chain_id
+            )));
+        }
+
+        // Pin both reads to one block so the membership check and the
+        // signature check cannot straddle a signer removal or an account
+        // upgrade. Hash rather than height: a reorg replacing the block would
+        // otherwise silently change what the second read sees.
+        let head = self
+            .provider
+            .block_hash_and_number()
+            .await
+            .map_err(|error| KmsError::RpcError(error.to_string()))?;
+        let block_id = BlockId::Hash(head.block_hash);
+
+        let actor = signed.claimed_actor();
+        let signer_result = self
+            .call_at_block(
+                self.address,
+                *abi::multisig::IS_SIGNER,
+                vec![core_felt_to_rs(actor.as_felt())],
+                block_id,
+            )
+            .await?;
+        if !read_bool(&signer_result, "is_signer")? {
+            return Err(KmsError::MultisigError(format!(
+                "claimed actor {} is not a signer of multisig {}",
+                actor.to_hex(),
+                self.address.to_hex()
+            )));
+        }
+
+        let mut calldata = Vec::with_capacity(signed.signature.len() + 2);
+        calldata.push(core_felt_to_rs(signed.message_hash()));
+        calldata.push(core_felt_to_rs(Felt::from(signed.signature.len() as u64)));
+        calldata.extend(signed.signature.iter().copied().map(core_felt_to_rs));
+
+        let result = self
+            .call_at_block(actor, *abi::account::IS_VALID_SIGNATURE, calldata, block_id)
+            .await?;
+        let value = read_felt(&result, "is_valid_signature")?;
+        // SNIP-6 accounts return the short string 'VALID'; some legacy
+        // accounts return boolean 1.
+        if value == Felt::from_bytes_be_slice(b"VALID") || value == Felt::ONE {
+            Ok(actor)
+        } else {
+            Err(KmsError::MultisigError(format!(
+                "account {} rejected the coordination message signature",
+                actor.to_hex()
+            )))
+        }
+    }
+
     pub(super) async fn call(
         &self,
         selector: StarknetRsFelt,
         calldata: Vec<StarknetRsFelt>,
     ) -> Result<Vec<StarknetRsFelt>> {
+        self.call_at_block(
+            self.address,
+            selector,
+            calldata,
+            BlockId::Tag(BlockTag::Latest),
+        )
+        .await
+    }
+
+    async fn call_at_block(
+        &self,
+        contract: Address,
+        selector: StarknetRsFelt,
+        calldata: Vec<StarknetRsFelt>,
+        block_id: BlockId,
+    ) -> Result<Vec<StarknetRsFelt>> {
         self.provider
             .call(
                 FunctionCall {
-                    contract_address: core_felt_to_rs(self.address.as_felt()),
+                    contract_address: core_felt_to_rs(contract.as_felt()),
                     entry_point_selector: selector,
                     calldata,
                 },
-                BlockId::Tag(BlockTag::Latest),
+                block_id,
             )
             .await
             .map_err(|error| KmsError::RpcError(error.to_string()))

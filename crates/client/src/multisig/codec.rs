@@ -1,9 +1,10 @@
 //! Transaction hashing and Cairo calldata encode/decode for the multisig ABI.
 
-use super::types::{MultisigCall, MultisigTransactionState};
+use super::types::{MultisigCall, MultisigCoordinationMessage, MultisigTransactionState};
 use super::StarknetRsFelt;
 use crate::wallet::utils::{core_felt_to_rs, rs_felt_to_core};
 use krusty_kms_common::{Address, KmsError, Result};
+use starknet_rust::core::utils::starknet_keccak;
 use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 
@@ -35,6 +36,58 @@ pub fn hash_transaction_batch(calls: &[MultisigCall], salt: Felt) -> Felt {
 
 fn pedersen_update(state: Felt, value: Felt) -> Felt {
     Pedersen::hash(&state, &value)
+}
+
+/// Domain separation tag (Cairo short string) for coordination signatures.
+///
+/// Binds the schema version. The tag guarantees a coordination signature can
+/// never collide with a Starknet transaction hash or any other signed payload.
+const COORDINATION_DOMAIN_TAG: &[u8] = b"krusty-kms.multisig.notice.v1";
+
+/// Compute the signing hash for a coordination message.
+///
+/// The hash is a domain-separated Pedersen chain over
+/// `(domain_tag, chain_id, multisig, transaction_id, message_kind,
+/// payload_hash)` — i.e. the routing topic, the message kind, and a
+/// kind-specific payload digest:
+///
+/// - `Proposal`: claimed proposer and memo (`starknet_keccak` of the UTF-8
+///   memo bytes, `0` when absent). The `calls`/`salt` are bound transitively
+///   through `transaction_id`, which every verification path recomputes via
+///   [`MultisigProposal::validate_transaction_id`].
+/// - `Confirmation` / `Revocation`: claimed signer.
+/// - `Execution`: claimed executor.
+///
+/// [`MultisigProposal::validate_transaction_id`]: super::types::MultisigProposal::validate_transaction_id
+#[must_use]
+pub fn coordination_message_hash(message: &MultisigCoordinationMessage) -> Felt {
+    let topic = message.topic();
+    let mut state = Felt::ZERO;
+    state = pedersen_update(state, Felt::from_bytes_be_slice(COORDINATION_DOMAIN_TAG));
+    state = pedersen_update(state, topic.chain_id.as_felt());
+    state = pedersen_update(state, topic.multisig.as_felt());
+    state = pedersen_update(state, topic.transaction_id);
+    state = pedersen_update(state, message.kind_felt());
+    pedersen_update(state, coordination_payload_hash(message))
+}
+
+fn coordination_payload_hash(message: &MultisigCoordinationMessage) -> Felt {
+    match message {
+        MultisigCoordinationMessage::Proposal(proposal) => {
+            let memo_hash = proposal.memo.as_deref().map_or(Felt::ZERO, |memo| {
+                rs_felt_to_core(starknet_keccak(memo.as_bytes()))
+            });
+            let state = pedersen_update(Felt::ZERO, proposal.proposer.as_felt());
+            pedersen_update(state, memo_hash)
+        }
+        MultisigCoordinationMessage::Confirmation(notice)
+        | MultisigCoordinationMessage::Revocation(notice) => {
+            pedersen_update(Felt::ZERO, notice.signer.as_felt())
+        }
+        MultisigCoordinationMessage::Execution(notice) => {
+            pedersen_update(Felt::ZERO, notice.executor.as_felt())
+        }
+    }
 }
 
 pub(super) fn serialize_single_call_args(call: &MultisigCall, salt: Felt) -> Vec<StarknetRsFelt> {

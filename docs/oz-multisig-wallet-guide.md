@@ -11,7 +11,7 @@ The implementation is split across:
 - `krusty-kms`: deterministic deployment descriptors and constructor calldata
   for the wrapper class.
 - `krusty-kms-client`: `IMultisig` call builders, transaction ID hashing,
-  on-chain status queries, and trusted coordination backends.
+  on-chain status queries, and coordination backends.
 
 The coordination server is not an authorization layer. It only distributes
 proposals and signer status. The Starknet multisig contract remains the source
@@ -123,7 +123,7 @@ pub/sub path:
 
 ```toml
 [dependencies]
-krusty-kms-client = { version = "0.7", features = ["nats"] }
+krusty-kms-client = { version = "0.8", features = ["nats"] }
 ```
 
 ```rust
@@ -141,7 +141,7 @@ krusty.multisig.<chain-id>.<multisig-address-64-hex>.<transaction-id-64-hex>
 Core NATS is live delivery, so a CLI inbox should subscribe before publishing or
 before waiting for other signers. If the product needs replayable proposal
 history, enable NATS JetStream for the same subject namespace or run an HTTP
-gateway that persists `MultisigCoordinationMessage` payloads and republishes to
+gateway that persists `MultisigCoordinationEnvelope` payloads and republishes to
 NATS.
 
 ## Transaction Lifecycle
@@ -158,7 +158,9 @@ let multisig = Multisig::new(provider.clone(), multisig_address, ChainId::Sepoli
 Build the target calls and proposal:
 
 ```rust
-use krusty_kms_client::{MultisigCall, MultisigCoordinationMessage};
+use krusty_kms_client::{
+    MultisigCall, MultisigCoordinationMessage, SignedMultisigCoordinationMessage,
+};
 use starknet_types_core::felt::Felt;
 
 let call = MultisigCall::new(target_address, selector, calldata);
@@ -170,9 +172,13 @@ let proposal = multisig.proposal(
 );
 
 proposal.validate_transaction_id()?;
-coordinator
-    .publish(MultisigCoordinationMessage::Proposal(proposal.clone()))
-    .await?;
+// Sign the notice with the proposer's account key so receivers can
+// authenticate the attribution instead of trusting the coordinator.
+let signed = SignedMultisigCoordinationMessage::sign_with_stark_key(
+    MultisigCoordinationMessage::Proposal(proposal.clone()),
+    &proposer_signing_key,
+)?;
+coordinator.publish(signed.into()).await?;
 ```
 
 Submit the proposal on-chain through a registered signer wallet:
@@ -184,20 +190,41 @@ let tx = multisig
 tx.wait(wait_options).await?;
 ```
 
-Other signers confirm on-chain and optionally publish signer notices:
+Other signers confirm on-chain and optionally publish signed signer notices:
 
 ```rust
 use krusty_kms_client::MultisigSignerNotice;
 
-let tx = multisig.confirm(&bob_wallet, proposal.transaction_id).await?;
+let tx = multisig.confirm_proposal(&bob_wallet, &proposal).await?;
 tx.wait(wait_options).await?;
 
-coordinator
-    .publish(MultisigCoordinationMessage::Confirmation(
-        MultisigSignerNotice::new(multisig_address, proposal.transaction_id, bob_address),
-    ))
-    .await?;
+// Take the routing fields from the proposal so the notice cannot drift from it.
+let confirmation = SignedMultisigCoordinationMessage::sign_with_stark_key(
+    MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
+        proposal.multisig,
+        proposal.chain_id,
+        proposal.transaction_id,
+        bob_address,
+    )),
+    &bob_signing_key,
+)?;
+coordinator.publish(confirmation.into()).await?;
 ```
+
+Receivers authenticate a signed notice before tallying or displaying it as
+fact:
+
+```rust
+// Checks the claimed actor against the on-chain signer set and validates the
+// signature through the actor's account contract (SNIP-6 `is_valid_signature`).
+// Both reads are pinned to one block hash.
+let actor = multisig.verify_signed_message(&signed_notice).await?;
+```
+
+A verified notice proves the actor authorized that exact message — not who
+relayed it, nor that it is fresh or unique. A coordinator can replay a valid
+envelope, so deduplicate by `(actor, topic, message kind)` before counting one
+toward a tally, and keep reading the chain for authoritative state.
 
 Once the contract reports `Confirmed`, execute the stored batch:
 
@@ -263,7 +290,9 @@ Recommended CLI behavior:
 - `propose` computes the transaction ID locally, validates it, stores the full
   payload, and publishes `Proposal`.
 - `inbox` subscribes to the NATS subject namespace and displays proposals,
-  confirmations, revocations, and executions.
+  confirmations, revocations, and executions. Signed envelopes should be
+  authenticated with `Multisig::verify_signed_message` before they are shown
+  as attributed facts; unsigned (legacy) messages are unauthenticated hints.
 - `submit`, `confirm`, `revoke`, and `execute` always query the chain before
   sending a transaction so the CLI can show current state and avoid stale
   actions.
@@ -272,8 +301,9 @@ Recommended CLI behavior:
 
 ## Operational Notes
 
-Protect signer private keys exactly as normal Starknet account keys. The
-coordinator never needs private keys or signatures.
+Protect signer private keys exactly as normal Starknet account keys. Notice
+signing happens client-side with the signer's own account key; the coordinator
+itself never holds private keys and cannot mint valid signed envelopes.
 
 Use NATS authentication, TLS, and subject ACLs in shared environments. A signer
 should only publish and subscribe to the multisig subject namespaces it is
