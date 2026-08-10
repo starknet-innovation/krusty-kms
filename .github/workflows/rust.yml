@@ -6,12 +6,16 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "CHANGELOG.md"
+      - ".github/scripts/verify-release-changelog.sh"
       - ".github/workflows/rust.yml"
   pull_request:
     paths:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "CHANGELOG.md"
+      - ".github/scripts/verify-release-changelog.sh"
       - ".github/workflows/rust.yml"
 
 permissions:
@@ -104,4 +108,10 @@ jobs:
           if [ "$FAILED" -eq 1 ]; then
             echo "::error::Bump the version in Cargo.toml [workspace.package] before merging"
             exit 1
+          fi
+      - name: Require a changelog entry for version bumps
+        run: |
+          if git diff -U0 origin/${{ github.base_ref }}...HEAD -- Cargo.toml \
+            | grep -Eq '^\+[[:space:]]*version[[:space:]]*='; then
+            bash .github/scripts/verify-release-changelog.sh
           fi

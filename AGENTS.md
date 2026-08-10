@@ -37,8 +37,9 @@ truth.
 
 - Never run `cargo publish` locally and never add or request a long-lived crates.io
   token. Publishing uses GitHub Actions OIDC and the protected `crates-io` environment.
-- Bump the root `[workspace.package].version`, update `Cargo.lock`, and complete the
-  package preflight before opening the release PR.
+- Bump the root `[workspace.package].version`, update `Cargo.lock`, create a dated
+  `CHANGELOG.md` entry with a release-note bullet, and complete the package preflight
+  before opening the release PR. CI rejects a version bump without that entry.
 - Only tag the merged `main` commit as `v<workspace-version>`; pushing that immutable
   tag starts the release. Do not move, recreate, or force-push a release tag.
 - A transient or partial release is recovered by rerunning the existing workflow run.

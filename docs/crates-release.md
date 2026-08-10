@@ -15,6 +15,9 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
   `v<workspace-version>` and must point to a commit reachable from `main`.
 - The protected GitHub `crates-io` environment requires approval from its configured
   reviewer before the workflow can obtain a publishing token.
+- Every release needs a dated `CHANGELOG.md` entry named `## [<workspace-version>] -
+  YYYY-MM-DD` with at least one release-note bullet. CI checks it on a version-bump PR
+  and the publishing workflow checks it again before authentication.
 - Release tags are immutable. Never delete, move, recreate, or force-push one.
 
 The workflow publishes these crates in dependency order:
@@ -38,7 +41,20 @@ do not fall back to an API token.
 1. Begin from current `main` and make a focused release branch.
 2. Change only the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
    inherit this version; do not assign a one-off version to an individual published crate.
-3. Refresh `Cargo.lock` and verify the version is consistent:
+3. Create the release entry in `CHANGELOG.md` using the workspace version and release
+   date. Include at least one concise bullet describing the user-visible change:
+
+   ```md
+   ## [0.5.5] - 2026-08-10
+
+   ### Changed
+
+   - Describe the release.
+   ```
+
+   Keep `## [Unreleased]` at the top for changes that are not yet released.
+
+4. Refresh `Cargo.lock` and verify the version is consistent:
 
    ```bash
    cargo check --workspace --all-targets
@@ -46,7 +62,7 @@ do not fall back to an API token.
      | jq -r '.packages[] | select(.name == "krusty-kms") | .version'
    ```
 
-4. Run the release preflight locally. It matches the workflow's publishable package set:
+5. Run the release preflight locally. It matches the workflow's publishable package set:
 
    ```bash
    cargo package --locked --workspace \
@@ -58,7 +74,7 @@ do not fall back to an API token.
      --exclude qb-game
    ```
 
-5. Run the normal checks appropriate to the change, open the release PR, and merge it
+6. Run the normal checks appropriate to the change, open the release PR, and merge it
    into `main`. Do not publish from the branch or before the PR is merged.
 
 ## Publish the merged release

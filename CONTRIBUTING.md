@@ -327,7 +327,7 @@ If your PR changes behavior, update docs accordingly:
 
 - public API docs
 - READMEs and examples
-- changelog/release notes (if the repo uses one)
+- `CHANGELOG.md` for every crates.io release
 
 Docs should be:
 
