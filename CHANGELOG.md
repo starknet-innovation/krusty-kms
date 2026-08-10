@@ -4,6 +4,122 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-10
+
+Third security-hardening pass, covering the Medium and Low/Info findings
+backlog from the full-repository audit (#46). Critical/High passes landed in
+#41 and #45.
+
+### Changed
+
+- **Breaking:** `SecretFelt::expose_secret_hex` now returns
+  `Zeroizing<String>` instead of `String`, so exported key hex is scrubbed on
+  drop (M-07). Callers that need an owned `String` must copy explicitly via
+  `.as_str().to_owned()`.
+- **Breaking:** `KmsError::InsufficientBalance` is now a fieldless variant.
+  It previously carried `{ available, required }`, which leaked the exact
+  confidential plaintext balance into JS/FFI error strings and logs (M-03).
+  The same change applies to the wasm and gateway error mappings.
+- **Breaking:** account-discovery secret accessors are now fallible.
+  `CandidateAccount::{expose_private_key, with_secrets}` and
+  `DerivedKeypair::{expose_private_key, with_secrets}` return `Result`, so a
+  value deserialized from the public-only JSON form reports a missing key
+  instead of yielding an empty string that could flow into signing or export
+  paths (M-05). Both types now zeroize their private key on drop and expose
+  `verify_key_binding()` to re-verify that the private key derives the stated
+  public key after a serialization round-trip.
+- **Breaking:** OpenZeppelin account discovery emits two candidates per
+  derivation index — `salt = public_key` (matching the deploy/gateway
+  default) plus the legacy `salt = 0` — so recovery no longer misses accounts
+  deployed by this project's own flow (M-06). Callers that assumed a fixed
+  candidate count per index must adjust.
+- **Breaking:** `WaitForAcceptance` policies are bounded more tightly:
+  `timeout_ms` is capped at 15 minutes (was 24 hours) and `poll_interval_ms`
+  must be at least 250 ms. Transports serve requests sequentially, so an
+  unbounded wait monopolized the pipe and a tiny interval flooded the RPC
+  endpoint (M-10). Use `SubmitOnly` plus `GetOperationStatus` polling to
+  track slower deployments.
+- **Breaking:** `krusty-kms-crypto`'s `test-utils` feature is renamed to
+  `insecure-deterministic-rng`, and enabling it is no longer sufficient to
+  activate the deterministic stream: `set_deterministic_rng` now also
+  requires `KRUSTY_KMS_ALLOW_DETERMINISTIC_RNG=1` in the process
+  environment, so a dependent crate turning the feature on through cargo
+  feature unification cannot silently disable real entropy (M-20).
+- Scalar arithmetic modulo the curve order is now constant-time, backed by
+  `crypto-bigint` Montgomery residues instead of variable-time `num-bigint`.
+  Proof responses derived from secret scalars (`s = r + c*x`) no longer leak
+  key material through timing on shared hosts (M-02). Transcripts are
+  unchanged — all checked-in prover and cross-language parity vectors still
+  pass.
+- Snapshot cache metadata leaving the gateway is quantized to a 5-second
+  grid (`generated_at_ms` floors, `age_ms` ceils). The cache is shared across
+  all callers, so exact timestamps on a `Hit` revealed when another caller
+  last queried the same address (M-12). Internal freshness and TTL decisions
+  still use exact values.
+- Snapshot requests are limited to 16 tracked tokens, since each token costs
+  backend RPC calls (M-11).
+- Only `https://` RPC endpoints are accepted by `create_provider`, with a
+  loopback-only exception (`localhost`, `127.0.0.1`, `::1`) for local
+  devnets (M-14).
+
+### Fixed
+
+- Gateway `sign` verifies the request's `chain_id` against the configured
+  backend before recording it in the signed provenance, so the attested
+  chain is a verified fact rather than a caller claim (M-09).
+- JNI string arguments are converted through an explicit UTF-16 → standard
+  UTF-8 path instead of `GetStringUTFChars`' modified UTF-8 (CESU-8).
+  Passphrases containing non-BMP characters now derive the same keys on the
+  JVM as on Swift, Dart, and Rust; previously they diverged, making funds
+  unreachable from one platform (M-22). Unpaired surrogates are rejected,
+  and every extracted string buffer is securely wiped.
+- `kms_felt_from_hex` and `kms_felt_from_bytes_be` reject non-canonical
+  inputs (>= the field prime) instead of silently reducing them, which could
+  turn a 32-byte key into a *different* key while the JSON paths rejected
+  the same input (M-25).
+- The FFI account registry recovers from mutex poisoning instead of failing
+  every subsequent call for the process lifetime after one panic (M-23).
+- Malformed SNIP-12 enum type strings (for example `"a)b("`) from
+  dapp-supplied typed data return an error instead of panicking on an
+  out-of-bounds slice (M-08).
+- RPC felts are converted to `u128`/`u32` with explicit range checks.
+  `get_rate` feeds `approve(amount * rate)`, where a silently truncated
+  value would inflate the granted allowance (M-13).
+- Plaintext key buffers are zeroized in `encrypt_private_key` and both
+  intermediate copies inside `EthSigner::from_hex` (M-07).
+- `decryptBalance`'s `max_search` is capped at 2^32 and `randomBytesHex`'s
+  length at 1024 bytes, so JS callers cannot pin the calling thread or force
+  an unbounded allocation (M-16).
+- `FeltHex::parse` rejects values that alias to a different field element,
+  including exactly the field prime, which upstream `Felt::from_hex` accepts
+  and maps to 0.
+- BIP-44 derivation rejects `index`, `account_index`, and `coin_type` values
+  with the BIP-32 hardened bit set. Path builders OR that bit in, so such a
+  value silently aliased to another caller's key.
+- `isValidStarkPrivateKey` now requires `0 < key < n`. Keys in `[n, p)`
+  previously validated but silently reduce mod the curve order when signing,
+  i.e. they alias to a different key.
+- `Amount::to_human` no longer panics for `decimals >= 39`, where
+  `10^decimals` overflows `u128`.
+
+### Security / supply chain
+
+- The workspace-root `cargo-audit` ignore list is now empty; the ignores
+  motivated by the workspace-excluded `krusty-kms-controller` crate moved to
+  `crates/controller/.cargo/audit.toml`. Carrying them at the root masked
+  the same advisories if a production dependency ever regressed onto an
+  affected version (M-17).
+- `account_sdk` is pinned by immutable commit rev rather than a mutable git
+  tag (M-18).
+- Verified and documented the publisher provenance of the `starknet-rust`
+  crate family in `docs/supply-chain.md` (M-19).
+- Both publish workflows now run fmt, clippy, the full test suite, and
+  `cargo audit` as a gating job before publishing, and `npm publish` passes
+  `--provenance` (M-21).
+- Removed an orphaned, uncompiled, unaudited `wallet/eth.rs` (661 lines),
+  configured Dependabot across all package ecosystems, and added
+  keystore/key-material patterns to `.gitignore`.
+
 ## [0.8.1] - 2026-08-10
 
 ### Changed
