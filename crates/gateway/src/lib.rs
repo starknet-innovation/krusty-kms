@@ -861,6 +861,17 @@ where
                     Some("wait poll_interval_ms must be greater than zero".to_string()),
                 ));
             }
+            // The wait loop caps each sleep at the remaining deadline, but an
+            // absurd interval still degrades liveness; bound it like the timeout.
+            if wait.poll_interval_ms > MAX_WAIT_TIMEOUT_MS {
+                return Err(GatewayError::new(
+                    GatewayErrorCode::InvalidWaitPolicy,
+                    false,
+                    Some(format!(
+                        "wait poll_interval_ms must be at most {MAX_WAIT_TIMEOUT_MS}"
+                    )),
+                ));
+            }
             if wait.timeout_ms == 0 {
                 return Err(GatewayError::new(
                     GatewayErrorCode::InvalidWaitPolicy,

@@ -293,7 +293,13 @@ async fn wait_for_acceptance(
         }
 
         match observe_transaction(provider, tx_hash).await? {
-            TransactionObservation::Pending => tokio::time::sleep(interval).await,
+            // Never sleep past the deadline: `poll_interval_ms` is
+            // caller-controlled, so a huge interval would otherwise park the
+            // task far beyond the requested timeout.
+            TransactionObservation::Pending => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                tokio::time::sleep(interval.min(remaining)).await
+            }
             TransactionObservation::Accepted => return Ok(()),
             TransactionObservation::Reverted { reason } => {
                 return Err(KmsError::TransactionReverted(format!(
