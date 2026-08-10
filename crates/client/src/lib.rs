@@ -1,5 +1,7 @@
 //! Starknet wallet, deployment, and Tongo protocol client.
 
+#![forbid(unsafe_code)]
+
 #[allow(dead_code)]
 mod abi;
 mod account;

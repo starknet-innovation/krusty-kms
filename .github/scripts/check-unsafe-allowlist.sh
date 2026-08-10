@@ -1,43 +1,86 @@
 #!/usr/bin/env bash
-# Fail if `unsafe` appears outside the allowlisted files.
+# Fail if production crates lack a crate-level unsafe policy, or if `unsafe`
+# appears outside modules that explicitly allow it.
+#
+# Prefer compiler enforcement:
+#   #![forbid(unsafe_code)]  — crates with no unsafe
+#   #![deny(unsafe_code)] + #[allow(unsafe_code)] on specific modules — rare exceptions
+#   #![allow(unsafe_code)]   — FFI boundary crate only
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-allowlist="$root/.github/guardrails/unsafe-allowlist.txt"
-
-if [[ ! -f "$allowlist" ]]; then
-  echo "::error::missing unsafe allowlist at $allowlist"
-  exit 1
-fi
-
-mapfile -t allowed < <(grep -vE '^\s*(#|$)' "$allowlist")
-declare -A allow_set=()
-for f in "${allowed[@]}"; do
-  allow_set["$f"]=1
-done
-
 failed=0
-while IFS= read -r -d '' path; do
-  rel="${path#"$root"/}"
-  if [[ -n "${allow_set[$rel]:-}" ]]; then
+
+production_libs=(
+  crates/common/src/lib.rs
+  crates/wallet-api/src/lib.rs
+  crates/domain/src/lib.rs
+  crates/crypto/src/lib.rs
+  crates/kms/src/lib.rs
+  crates/sdk/src/lib.rs
+  crates/client/src/lib.rs
+  crates/gateway/src/lib.rs
+  crates/oracle/src/lib.rs
+  crates/wasm/src/lib.rs
+  crates/ffi/src/lib.rs
+)
+
+for lib in "${production_libs[@]}"; do
+  path="$root/$lib"
+  if [[ ! -f "$path" ]]; then
+    echo "::error::missing $lib"
+    failed=1
     continue
   fi
-  if grep -nE '\bunsafe\b' "$path" >/dev/null; then
-    echo "::error file=$rel::$rel contains \`unsafe\` but is not in .github/guardrails/unsafe-allowlist.txt"
-    grep -nE '\bunsafe\b' "$path" | head -n 5 | sed "s/^/  $rel:/"
-    failed=1
-  fi
-done < <(find "$root/crates" -name '*.rs' -not -path '*/target/*' -print0)
-
-# Also ensure allowlisted files still exist (catch renames).
-for f in "${allowed[@]}"; do
-  if [[ ! -f "$root/$f" ]]; then
-    echo "::error::allowlisted unsafe file missing: $f (update the allowlist)"
+  if ! grep -qE '#!\[(forbid|deny|allow)\(unsafe_code\)\]' "$path"; then
+    echo "::error file=$lib::$lib must declare #![forbid|deny|allow(unsafe_code)]"
     failed=1
   fi
 done
+
+# Textual fallback only for files that do not inherit an allow(unsafe_code) path.
+# Strip line comments and simple block comments before matching to avoid doc hits.
+python3 - "$root" <<'PY' || failed=1
+import re, sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+# Modules explicitly allowed to contain unsafe (must match crate attributes).
+allowed = {
+    "crates/common/src/secret_felt.rs",
+    # Entire FFI crate is the raw-pointer boundary.
+}
+for path in (root / "crates/ffi/src").rglob("*.rs"):
+    allowed.add(str(path.relative_to(root)))
+
+comment_line = re.compile(r"//.*?$", re.M)
+block_comment = re.compile(r"/\*.*?\*/", re.S)
+string_lit = re.compile(r'"(?:\\.|[^"\\])*"')
+
+failed = 0
+for path in sorted((root / "crates").rglob("*.rs")):
+    if "target" in path.parts or "experimental" in path.parts:
+        continue
+    rel = str(path.relative_to(root))
+    if rel in allowed:
+        continue
+    # Skip crate roots that allow unsafe at the crate level (ffi handled above).
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    stripped = block_comment.sub("", text)
+    stripped = comment_line.sub("", stripped)
+    stripped = string_lit.sub('""', stripped)
+    if re.search(r"\bunsafe\b", stripped):
+        print(f"::error file={rel}::{rel} contains `unsafe` outside an allowlisted module")
+        for i, line in enumerate(stripped.splitlines(), 1):
+            if re.search(r"\bunsafe\b", line):
+                print(f"  {rel}:{i}:{line.strip()}")
+                break
+        failed = 1
+
+sys.exit(failed)
+PY
 
 if (( failed == 1 )); then
   exit 1
 fi
-echo "unsafe allowlist ok (${#allowed[@]} files)"
+echo "unsafe policy ok"

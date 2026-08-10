@@ -2,6 +2,9 @@
 # Soft size gate for Rust production sources in a PR.
 # Counts added+deleted lines and touched files under crates/** (excluding
 # experimental/). Large PRs must include a justification marker in the PR body.
+#
+# Scope trade-off: this intentionally measures production Rust sources only,
+# not guardrail shell/Python. Documented in docs/maintainability-guardrails.md.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -11,6 +14,7 @@ max_lines="${PR_MAX_LINES:-400}"
 max_files="${PR_MAX_FILES:-10}"
 base_ref="${GUARDRAILS_BASE_REF:-}"
 pr_body="${PR_BODY:-}"
+fail_closed="${GUARDRAILS_FAIL_CLOSED:-}"
 
 if [[ -z "$base_ref" ]]; then
   if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
@@ -20,12 +24,20 @@ if [[ -z "$base_ref" ]]; then
   fi
 fi
 
-if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
-  echo "base ref $base_ref unavailable; fetching..."
-  git fetch --no-tags --depth=1 origin "${GITHUB_BASE_REF:-main}" || true
+if [[ -z "$fail_closed" && -n "${GITHUB_BASE_REF:-}" ]]; then
+  fail_closed=1
 fi
 
 if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+  echo "base ref $base_ref unavailable; fetching full history for triple-dot diff..."
+  git fetch --no-tags origin "${GITHUB_BASE_REF:-main}"
+fi
+
+if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+  if [[ "$fail_closed" == "1" ]]; then
+    echo "::error::cannot resolve base ref $base_ref; PR size check fails closed"
+    exit 1
+  fi
   echo "::warning::cannot resolve base ref $base_ref; skipping PR size check"
   exit 0
 fi
@@ -38,12 +50,8 @@ if [[ ${#files[@]} -eq 0 ]]; then
   exit 0
 fi
 
-# Count changed lines only in those files
-changed_lines=0
-if [[ ${#files[@]} -gt 0 ]]; then
-  changed_lines="$(git diff --numstat "$base_ref"...HEAD -- "${files[@]}" \
-    | awk '{ add+=$1; del+=$2 } END { print add+del+0 }')"
-fi
+changed_lines="$(git diff --numstat "$base_ref"...HEAD -- "${files[@]}" \
+  | awk '{ add+=$1; del+=$2 } END { print add+del+0 }')"
 
 file_count="${#files[@]}"
 echo "PR touches $file_count production Rust file(s), ~$changed_lines changed line(s)"

@@ -3,14 +3,18 @@ name: Ignored integration tests
 # Optional / bitrot-protection suite for `--ignored` tests that need external
 # services (devnet, NATS, Sepolia RPC, scarb). Default CI never runs these.
 #
-# Trigger manually after provisioning the required tools/services, or let the
-# weekly schedule smoke-compile the ignored targets so they do not rot silently.
+# `list` / `compile` run on hosted runners. `nats` provisions a NATS service
+# container. `sepolia` and `multisig-devnet` require network secrets / a local
+# stack and are expected to be run on a suitably provisioned runner.
 
 on:
   workflow_dispatch:
     inputs:
       suite:
-        description: "Which ignored suite to attempt"
+        description: >
+          Suite to run. list/compile work on hosted runners; nats uses a service
+          container; sepolia/multisig-devnet need external RPC/devnet (self-hosted
+          or pre-provisioned).
         required: true
         default: "list"
         type: choice
@@ -29,39 +33,45 @@ permissions:
 
 jobs:
   ignored:
-    name: Ignored suite (${{ github.event.inputs.suite || 'compile' }})
+    name: Ignored suite (${{ inputs.suite || 'compile' }})
     runs-on: ubuntu-latest
+    services:
+      nats:
+        image: nats:2.10
+        ports:
+          - 4222:4222
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: List ignored tests
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.suite == 'list' || github.event.inputs.suite == 'compile' }}
+        if: ${{ github.event_name == 'schedule' || inputs.suite == 'list' || inputs.suite == 'compile' }}
         run: |
           cargo test --workspace --exclude krusty-kms-wasm -- --ignored --list
           cargo test -p krusty-kms-client --features nats -- --ignored --list
 
       - name: Compile ignored targets (no run)
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.suite == 'compile' }}
+        if: ${{ github.event_name == 'schedule' || inputs.suite == 'compile' }}
         run: |
           # Ensures ignored integration harnesses keep compiling.
           cargo test --workspace --exclude krusty-kms-wasm --no-run
           cargo test -p krusty-kms-client --features nats --no-run
 
-      - name: NATS multisig coordinator (requires nats-server)
-        if: ${{ github.event.inputs.suite == 'nats' }}
+      - name: NATS multisig coordinator
+        if: ${{ inputs.suite == 'nats' }}
+        env:
+          NATS_URL: nats://127.0.0.1:4222
         run: |
-          echo "Requires a local nats-server. See AGENTS.md / CONTRIBUTING.md."
           cargo test -p krusty-kms-client --features nats --test nats_multisig_coordinator -- --ignored --nocapture
 
-      - name: Live Sepolia Tongo integration (requires RPC)
-        if: ${{ github.event.inputs.suite == 'sepolia' }}
+      - name: Live Sepolia Tongo integration (requires RPC access)
+        if: ${{ inputs.suite == 'sepolia' }}
         run: |
-          echo "Requires network access to Starknet Sepolia RPC."
+          echo "Requires network access to Starknet Sepolia RPC / secrets on the runner."
           cargo test -p krusty-kms-client --test tongo_sepolia_integration -- --ignored --nocapture
 
-      - name: OpenZeppelin multisig on starknet-devnet
-        if: ${{ github.event.inputs.suite == 'multisig-devnet' }}
+      - name: OpenZeppelin multisig on starknet-devnet (requires local stack)
+        if: ${{ inputs.suite == 'multisig-devnet' }}
         run: |
           echo "Requires starknet-devnet on 127.0.0.1:5050 plus scarb/sncast for contracts/."
           cargo test -p krusty-kms-client --test oz_multisig_devnet -- --ignored --nocapture

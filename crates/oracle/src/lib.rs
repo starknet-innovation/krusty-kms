@@ -13,6 +13,8 @@
 //! - parse failures never panic and return `id: null`
 //! - transport does not own secrets, caches, or RPC state; it delegates to the handler
 
+#![forbid(unsafe_code)]
+
 mod handler;
 mod line_reader;
 mod stdio;

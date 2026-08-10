@@ -4,6 +4,8 @@
 //! generation behavior. Lower-level derivation, signing, and reusable value
 //! types live in `krusty-kms`, `krusty-kms-crypto`, and `krusty-kms-common`.
 
+#![forbid(unsafe_code)]
+
 pub mod account;
 pub mod crypto;
 pub mod operations;

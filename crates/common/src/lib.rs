@@ -6,11 +6,14 @@
 //! - shared error definitions
 //! - small utilities that do not own network, clock, or protocol policy
 
+#![deny(unsafe_code)]
+
 pub mod address;
 pub mod amount;
 pub mod chain;
 pub mod error;
 pub mod network;
+#[allow(unsafe_code)] // volatile zeroization in Drop / Zeroize
 pub mod secret_felt;
 pub mod serialization;
 pub mod starknet;

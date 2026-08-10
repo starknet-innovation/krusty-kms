@@ -178,7 +178,7 @@
     },
     {
       "path": "crates/wasm/src/lib.rs",
-      "lines": 402
+      "lines": 404
     },
     {
       "path": "crates/wasm/src/proof.rs",

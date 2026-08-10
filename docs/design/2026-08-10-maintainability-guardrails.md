@@ -50,7 +50,15 @@ Ignored integration tests get a weekly compile + `workflow_dispatch` runner so
   correctly or adjusting the public API.
 - `cargo-deny` may need license allowlist updates when adding dependencies.
 
-## Alternatives considered
+## Review follow-ups (2026-08-10)
 
-- Hard-fail every file over 350 lines immediately — rejected; too much churn.
-- Policy-only docs — rejected; already proven insufficient.
+Addressed on the same PR after review:
+
+- Reverted exact `starknet-types-core` pin; rely on lockfile + locked rustdoc JSON.
+- Replaced textual `unsafe` allowlist with crate-level `forbid`/`deny`/`allow`.
+- Layering check fails closed on unknown crates (incl. `controller` + experimental).
+- Guardrails `push` limited to `main` + concurrency group; prebuilt tool installs.
+- Design-note coverage widened; baseline bumps require `docs/design/*.md`.
+- PR-size / design-note fail closed on PRs; shared `surfaces.py` for extractors.
+- Softened `SECURITY.md`; dropped redundant FFI digest; trimmed deny licenses.
+

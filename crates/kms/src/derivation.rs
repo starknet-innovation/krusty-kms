@@ -45,7 +45,7 @@ pub struct TongoKeyPair {
 impl core::fmt::Debug for TongoKeyPair {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TongoKeyPair")
-            .field("private_key", &self.private_key)
+            .field("private_key", &"***")
             .field("public_key", &self.public_key)
             .finish()
     }

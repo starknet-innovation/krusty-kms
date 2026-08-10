@@ -6,6 +6,9 @@ targets = [
     { triple = "x86_64-unknown-linux-gnu" },
     { triple = "wasm32-unknown-unknown" },
 ]
+# Keep false: crates/controller (workspace-excluded) optionally depends on a git
+# `account_sdk` when `--features sdk` is enabled. Enabling all-features here would
+# require an allow-git entry for that tag.
 all-features = false
 
 [advisories]
@@ -26,10 +29,11 @@ allow = [
     "Unicode-3.0",
     "Unicode-DFS-2016",
     "Zlib",
+    # Present via transitive crates (e.g. some crypto/util deps). Prefer not to
+    # expand further without discussion — CC0 has no patent grant.
     "CC0-1.0",
     "CDLA-Permissive-2.0",
     "MPL-2.0",
-    "OpenSSL",
     "0BSD",
     "BSL-1.0",
 ]

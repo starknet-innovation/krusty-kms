@@ -15,12 +15,16 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
-- Redacted `Debug` for `TongoKeyPair` (no longer relies on a derived impl that
-  could regress secret handling).
+- Align `TongoKeyPair` `Debug` with `NostrKeyPair` by redacting as `"***"`.
 - Broken rustdoc intra-doc links in `SecretFelt`, range helpers, and OZ deploy
   docs.
-- Pin `starknet-types-core` to `=0.2.0` to avoid API-incompatible `0.2.x`
-  resolutions; set `license` metadata on `krusty-kms-cabi`.
+- Set `license` metadata on `krusty-kms-cabi`.
+
+### Changed
+
+- Keep `starknet-types-core` on a caret requirement (`"0.2.0"`) and rely on
+  `Cargo.lock` + locked rustdoc JSON for semver checks (exact pins would break
+  downstream resolution).
 
 ## [0.8.1] - 2026-08-10
 

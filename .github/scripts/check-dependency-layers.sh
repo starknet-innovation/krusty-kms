@@ -1,17 +1,20 @@
 #!/usr/bin/env bash
-# Enforce the production crate dependency DAG.
+# Enforce the crate dependency DAG. Fail closed on crates missing from policy.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
+export PYTHONPATH="$root/.github/scripts${PYTHONPATH:+:$PYTHONPATH}"
 
 python3 - <<'PY'
-import re
 import sys
 from pathlib import Path
 
+from lib.surfaces import krusty_deps_from_cargo_toml
+
 root = Path(".")
-# Allowed krusty-* path dependencies for each package directory name.
+
+# Keys are paths relative to crates/ (top-level dirs, or experimental package dirs).
 ALLOWED = {
     "common": set(),
     "wallet-api": {"krusty-kms-common"},
@@ -45,37 +48,43 @@ ALLOWED = {
         "krusty-kms-common",
         "krusty-kms-sdk",
     },
+    # Excluded from the workspace, but still in-tree — keep it on the policy list.
+    "controller": {"krusty-kms-common", "krusty-kms-wallet-api"},
+    "experimental/gaming-experimental/mental-poker": {
+        "krusty-kms-common",
+        "krusty-kms-crypto",
+    },
+    "experimental/gaming-experimental/mental-poker-wasm": {
+        "krusty-kms-common",
+        "krusty-kms-crypto",
+    },
+    "experimental/gaming-experimental/qb-game": {"krusty-kms-crypto"},
 }
 
-dep_re = re.compile(r"^(krusty-kms(?:-[a-z0-9-]+)?)\s*=")
-
 failed = 0
+
+# Discover every crates/**/Cargo.toml package and require policy coverage.
+found: set[str] = set()
+for cargo in sorted((root / "crates").rglob("Cargo.toml")):
+    rel = cargo.parent.relative_to(root / "crates").as_posix()
+    found.add(rel)
+
+unknown = sorted(found - set(ALLOWED))
+if unknown:
+    print(f"::error::crates not covered by the layering policy: {unknown}")
+    failed = 1
+
+missing_policy = sorted(set(ALLOWED) - found)
+if missing_policy:
+    print(f"::error::layering policy references missing crates: {missing_policy}")
+    failed = 1
+
 for crate_dir, allowed in sorted(ALLOWED.items()):
     cargo = root / "crates" / crate_dir / "Cargo.toml"
     if not cargo.is_file():
-        print(f"::error::missing {cargo}")
-        failed = 1
         continue
-    text = cargo.read_text()
-    # Only inspect [dependencies] and target-specific dependency tables,
-    # not [dev-dependencies].
-    sections = re.split(r"\n(?=\[)", text)
-    deps = set()
-    for section in sections:
-        header = section.split("\n", 1)[0]
-        if not (
-            header.startswith("[dependencies]")
-            or ".dependencies]" in header
-        ):
-            continue
-        if "dev-dependencies" in header:
-            continue
-        for line in section.splitlines()[1:]:
-            m = dep_re.match(line.strip())
-            if m:
-                deps.add(m.group(1))
+    deps = krusty_deps_from_cargo_toml(cargo.read_text())
     unexpected = sorted(deps - allowed)
-    missing_declared = sorted(allowed & deps)  # noqa: F841 - kept for clarity
     if unexpected:
         print(f"::error::crates/{crate_dir} has forbidden krusty-* dependencies: {unexpected}")
         print(f"  allowed: {sorted(allowed) or '(none)'}")

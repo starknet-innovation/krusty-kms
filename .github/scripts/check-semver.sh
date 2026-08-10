@@ -52,7 +52,7 @@ rustdoc_json() {
     if ! cargo +nightly rustdoc -p "$crate" --locked --lib -- \
       -Z unstable-options \
       --output-format json; then
-      echo "::error::rustdoc JSON generation failed for $crate in $manifest_root"
+      echo "::error::rustdoc JSON generation failed for $crate in $manifest_root" >&2
       exit 1
     fi
     local src="target/doc/$json_name"
@@ -60,7 +60,7 @@ rustdoc_json() {
       src="$(find target/doc -maxdepth 1 -name "$json_name" | head -n1 || true)"
     fi
     if [[ -z "$src" || ! -f "$src" ]]; then
-      echo "::error::missing rustdoc json for $crate at $manifest_root (expected target/doc/$json_name)"
+      echo "::error::missing rustdoc json for $crate at $manifest_root (expected target/doc/$json_name)" >&2
       exit 1
     fi
     cp "$src" "$out_dir/$json_name"

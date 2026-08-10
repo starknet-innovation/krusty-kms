@@ -5,6 +5,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 baseline_path="${FILE_SIZE_BASELINE:-$root/.github/guardrails/file-size-baseline.json}"
+export PYTHONPATH="$root/.github/scripts${PYTHONPATH:+:$PYTHONPATH}"
 
 if [[ ! -f "$baseline_path" ]]; then
   echo "::error::missing file-size baseline at $baseline_path"
@@ -14,12 +15,13 @@ fi
 python3 - "$baseline_path" "$root" <<'PY'
 import json, sys
 from pathlib import Path
+from lib.surfaces import hard_new_limit, soft_limit
 
 baseline_path = Path(sys.argv[1])
 root = Path(sys.argv[2])
 data = json.loads(baseline_path.read_text())
-soft = int(data["soft_limit"])
-hard_new = int(data["hard_limit_new_files"])
+soft = soft_limit(data)
+hard_new = hard_new_limit(data)
 known = {entry["path"]: int(entry["lines"]) for entry in data["files"]}
 
 failed = 0
@@ -36,7 +38,6 @@ for rel, baseline_lines in sorted(known.items()):
     if lines > baseline_lines:
         grown.append((rel, baseline_lines, lines))
 
-# Scan for new oversized Rust sources under crates/
 for path in sorted((root / "crates").rglob("*.rs")):
     if "target" in path.parts:
         continue

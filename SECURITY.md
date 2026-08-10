@@ -41,5 +41,10 @@ Treat changes in these areas with extra scrutiny:
 
 - Never log or `Display` raw secret key material.
 - Prefer `SecretFelt` / `zeroize` for secret scalars.
-- New `unsafe` outside `.github/guardrails/unsafe-allowlist.txt` is blocked in CI.
-- Dependency advisories are gated by `cargo audit` and `cargo-deny`.
+- Production crates declare `#![forbid(unsafe_code)]` (or a narrow
+  `deny`/`allow` exception for `SecretFelt` / the C ABI crate). Expanding those
+  exceptions requires a `docs/design/*.md` note for baseline/surface changes —
+  a PR-body `## Design` heading alone is not enough for FFI/WASM/file-size
+  baseline updates.
+- Dependency advisories are gated by `cargo audit` (`rust.yml`) and
+  `cargo-deny` (`guardrails.yml`).

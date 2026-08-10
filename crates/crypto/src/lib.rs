@@ -20,6 +20,8 @@
 //! - `random`: Efficient random value generation
 //! - `scalar`: Scalar arithmetic operations
 
+#![forbid(unsafe_code)]
+
 pub mod audit;
 pub mod bit;
 pub mod curve;

@@ -4,79 +4,49 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
+export PYTHONPATH="$root/.github/scripts${PYTHONPATH:+:$PYTHONPATH}"
 
 python3 - <<'PY'
-import hashlib, json, re, shutil
+import hashlib
+import json
+import shutil
 from pathlib import Path
 
-root = Path(".")
+from lib.surfaces import (
+    extract_wasm_exports,
+    hard_new_limit,
+    load_baseline,
+    oversized_rust_files,
+    soft_limit,
+)
 
-# File-size baseline
-rows = []
-for path in sorted((root / "crates").rglob("*.rs")):
-    if "target" in path.parts:
-        continue
-    n = sum(1 for _ in path.open("rb"))
-    if n >= 350:
-        rows.append({"path": str(path.relative_to(root)), "lines": n})
+root = Path(".")
+existing = load_baseline()
+soft = soft_limit(existing)
+hard_new = hard_new_limit(existing)
+
+rows = oversized_rust_files(root, min_lines=soft)
 baseline = {
     "version": 1,
-    "soft_limit": 350,
-    "hard_limit_new_files": 500,
+    "soft_limit": soft,
+    "hard_limit_new_files": hard_new,
     "notes": "Baseline of existing oversized files. CI fails if any listed file grows, or if a new file exceeds hard_limit_new_files.",
     "files": rows,
 }
 path = root / ".github/guardrails/file-size-baseline.json"
 path.write_text(json.dumps(baseline, indent=2) + "\n")
-print(f"updated {path} ({len(rows)} files)")
+print(f"updated {path} ({len(rows)} files, soft_limit={soft})")
 
-# Unsafe allowlist
-unsafe_files = []
-for path in sorted((root / "crates").rglob("*.rs")):
-    if "target" in path.parts:
-        continue
-    if re.search(r"\bunsafe\b", path.read_text(errors="ignore")):
-        unsafe_files.append(str(path.relative_to(root)))
-allow = root / ".github/guardrails/unsafe-allowlist.txt"
-allow.write_text(
-    "# Files allowed to contain `unsafe`. Adding a new file requires a design note.\n"
-    + "\n".join(unsafe_files)
-    + "\n"
-)
-print(f"updated {allow} ({len(unsafe_files)} files)")
-
-# FFI snapshot
+# FFI snapshot only (digest is derived at check time).
 hdr = root / "packages/kms-c/include/kms.h"
-digest = hashlib.sha256(hdr.read_bytes()).hexdigest()
-(root / ".github/guardrails/ffi-kms.h.sha256").write_text(
-    f"{digest}  packages/kms-c/include/kms.h\n"
-)
 shutil.copy(hdr, root / ".github/guardrails/ffi-kms.h.snapshot")
+digest = hashlib.sha256(hdr.read_bytes()).hexdigest()
 print(f"updated FFI snapshot ({digest})")
 
-# WASM exports
-exports = []
-for path in sorted((root / "crates/wasm/src").rglob("*.rs")):
-    lines = path.read_text().splitlines()
-    i = 0
-    while i < len(lines):
-        if "#[wasm_bindgen" in lines[i] and "wasm_bindgen_test" not in lines[i]:
-            j = i
-            while j < len(lines) and not re.match(
-                r"^\s*(pub\s+)?(async\s+)?(unsafe\s+)?(fn|struct|enum|type|const|static)\b",
-                lines[j],
-            ) and not re.match(r"^\s*impl\b", lines[j]):
-                j += 1
-            if j < len(lines):
-                attrs = "\n".join(lines[i : j + 1])
-                m = re.search(r'js_name\s*=\s*"([^"]+)"', attrs)
-                name = m.group(1) if m else lines[j].strip()
-                exports.append(f"{path.relative_to(root)}: {name}")
-            i = j + 1
-        else:
-            i += 1
+exports = extract_wasm_exports(root)
 (root / ".github/guardrails/wasm-exports.txt").write_text("\n".join(exports) + "\n")
 print(f"updated wasm exports ({len(exports)} entries)")
 PY
 
 echo "Baselines regenerated. Review the diff before committing."
+echo "Note: file-size baseline bumps require a docs/design/ note."

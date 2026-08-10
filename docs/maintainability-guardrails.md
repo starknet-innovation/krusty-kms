@@ -9,9 +9,9 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | --- | --- | --- |
 | File-size ratchet | `.github/scripts/check-file-size-ratchet.sh` | Existing oversized files cannot grow; new files cannot exceed 500 lines |
 | PR size | `.github/scripts/check-pr-size.sh` | >400 changed lines or >10 production Rust files without justification |
-| Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges |
-| `unsafe` allowlist | `.github/scripts/check-unsafe-allowlist.sh` | `unsafe` outside listed files |
-| Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / `Debug` derive leaks |
+| Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
+| `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny`/`allow(unsafe_code)`; stray `unsafe` |
+| Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / missing Debug redaction |
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |
 | WASM export freeze | `.github/scripts/check-wasm-exports.sh` | `wasm_bindgen` surface drift |
 | Design note | `.github/scripts/check-design-note.sh` | Public API / dep / surface changes without design note |
@@ -22,15 +22,18 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Ignored-test bitrot | `.github/workflows/ignored-integration.yml` | Weekly compile of `--ignored` harnesses |
 
 Workflow entrypoint: [`.github/workflows/guardrails.yml`](../.github/workflows/guardrails.yml).
+Push runs are limited to `main` (PR events cover branches) with a concurrency group.
 
 ## Baselines
 
 Committed under [`.github/guardrails/`](../.github/guardrails/):
 
 - `file-size-baseline.json` — ratchet for files already over the soft limit
-- `unsafe-allowlist.txt` — files permitted to contain `unsafe`
-- `ffi-kms.h.snapshot` / `ffi-kms.h.sha256` — canonical C ABI header
+- `ffi-kms.h.snapshot` — canonical C ABI header
 - `wasm-exports.txt` — `wasm_bindgen` export surface
+
+Shared extraction logic lives in [`.github/scripts/lib/surfaces.py`](../.github/scripts/lib/surfaces.py)
+so checkers and regenerators cannot drift.
 
 Regenerate after an intentional change:
 
@@ -38,8 +41,16 @@ Regenerate after an intentional change:
 bash .github/scripts/regenerate-guardrail-baselines.sh
 ```
 
-Then include a short design note under `docs/design/` (or a `## Design` section
-in the PR body) explaining why the surface grew.
+Then add a short design note under `docs/design/` explaining why the surface grew.
+Baseline / FFI / WASM snapshot updates require a real `docs/design/*.md` file (a PR-body
+`## Design` heading alone is not enough).
+
+## PR size scope (intentional)
+
+`check-pr-size.sh` measures **production Rust sources** under `crates/**` (excluding
+`experimental/`). Guardrail shell/Python is out of scope for that metric so policy
+tooling can evolve without fighting its own line budget. Review still applies to those
+scripts; they are covered by the fitness suite instead.
 
 ## Local pre-commit
 
@@ -47,15 +58,15 @@ in the PR body) explaining why the surface grew.
 git config core.hooksPath .githooks
 ```
 
-The hook runs `cargo fmt` plus the fast fitness scripts (file size, layering,
-unsafe allowlist, secret hygiene, FFI/WASM snapshots).
+Requires bash ≥ 4. The hook runs `cargo fmt` plus the fast fitness scripts.
 
 ## Design notes
 
 Non-trivial public API, dependency, or boundary changes need:
 
 - `docs/design/YYYY-MM-DD-slug.md`, or
-- a `## Design` section in the PR description
+- a `## Design` section in the PR description (except for security/boundary baseline
+  updates, which require the file)
 
 Keep notes to 1–2 pages: inputs/outputs, invariants, failure modes, and the
 smallest interface that works.
@@ -74,7 +85,8 @@ common
 └──────────────► (also used directly by gateway/client/wasm/ffi)
 ```
 
-`check-dependency-layers.sh` is the source of truth.
+`controller` and `experimental/*` are also on the policy list so unknown crates fail
+closed. `check-dependency-layers.sh` is the source of truth.
 
 ## Docs / missing docs trajectory
 

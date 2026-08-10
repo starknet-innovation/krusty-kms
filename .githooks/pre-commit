@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "pre-commit needs bash >= 4 (e.g. brew install bash)"
+  exit 1
+fi
+
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
@@ -25,7 +30,7 @@ scripts=(
 )
 
 for script in "${scripts[@]}"; do
-  if [[ -x "$script" || -f "$script" ]]; then
+  if [[ -f "$script" ]]; then
     bash "$script"
   fi
 done

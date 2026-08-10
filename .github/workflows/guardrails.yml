@@ -2,6 +2,7 @@ name: Guardrails
 
 on:
   push:
+    branches: [main]
     paths:
       - "crates/**"
       - "packages/kms-c/**"
@@ -28,6 +29,10 @@ on:
       - ".github/scripts/**"
       - ".github/workflows/guardrails.yml"
 
+concurrency:
+  group: guardrails-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -36,7 +41,7 @@ jobs:
     name: Maintainability fitness checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
@@ -46,7 +51,7 @@ jobs:
       - name: Dependency layering
         run: bash .github/scripts/check-dependency-layers.sh
 
-      - name: Unsafe allowlist
+      - name: Unsafe policy
         run: bash .github/scripts/check-unsafe-allowlist.sh
 
       - name: Secret hygiene
@@ -63,6 +68,7 @@ jobs:
         env:
           GITHUB_BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          GUARDRAILS_FAIL_CLOSED: "1"
         run: bash .github/scripts/check-pr-size.sh
 
       - name: Design note for public-surface changes
@@ -70,16 +76,18 @@ jobs:
         env:
           GITHUB_BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          GUARDRAILS_FAIL_CLOSED: "1"
         run: bash .github/scripts/check-design-note.sh
 
   deny:
     name: cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-deny
       - name: cargo deny check
         run: cargo deny check
 
@@ -87,7 +95,7 @@ jobs:
     name: rustdoc link check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Document publishable crates
         env:
@@ -109,14 +117,16 @@ jobs:
     # Compare publishable crate APIs against the PR base (or origin/main) using
     # locked rustdoc JSON. See .github/scripts/check-semver.sh.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
       - name: Install nightly (rustdoc JSON)
         run: rustup toolchain install nightly --component rust-docs
-      - name: Install cargo-semver-checks
-        run: cargo install cargo-semver-checks --locked
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-semver-checks
       - name: Prepare git baseline worktree
         env:
           BASE_REF: ${{ github.base_ref }}

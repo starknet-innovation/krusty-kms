@@ -5,6 +5,8 @@
 //! request/result/error surface that higher-level adapters and transports can
 //! build on without re-inventing protocol glue.
 
+#![forbid(unsafe_code)]
+
 pub mod oracle;
 
 mod account;
