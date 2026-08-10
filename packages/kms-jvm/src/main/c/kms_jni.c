@@ -942,7 +942,10 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
     if (jbytearray_to_felt(env, message, &cMsg)) return NULL;
     if (jbytearrays_to_projective(env, pubX, pubY, pubZ, &cPub)) return NULL;
     if (jbytearray_to_felt(env, random, &cRand)) return NULL;
-    if (jbytearray_to_felt(env, prefix, &cPrefix)) return NULL;
+    if (jbytearray_to_felt(env, prefix, &cPrefix)) {
+        secure_wipe(&cRand, sizeof(cRand));
+        return NULL;
+    }
 
     KmsProjectivePoint outL, outR;
 
@@ -950,15 +953,24 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
     size_t written = 0;
     int32_t rc = kms_elgamal_encrypt(
         &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR, NULL, 0, &written);
-    if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
+    if (rc != KMS_OK) {
+        secure_wipe(&cRand, sizeof(cRand));
+        throw_kms_error(env, rc);
+        return NULL;
+    }
 
     char *proofBuf = (char *)malloc(written + 1);
-    if (proofBuf == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
+    if (proofBuf == NULL) {
+        secure_wipe(&cRand, sizeof(cRand));
+        throw_kms_error(env, KMS_ERR_INTERNAL);
+        return NULL;
+    }
 
     /* Second call: fill proof and ciphertext */
     rc = kms_elgamal_encrypt(
         &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR,
         proofBuf, written + 1, &written);
+    secure_wipe(&cRand, sizeof(cRand));
     if (rc != KMS_OK) { free(proofBuf); throw_kms_error(env, rc); return NULL; }
 
     /* Build result: byte[][7] = {lx, ly, lz, rx, ry, rz, proofBytes} */
