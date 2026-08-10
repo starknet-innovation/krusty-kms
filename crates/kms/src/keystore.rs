@@ -411,7 +411,7 @@ mod tests {
     fn decrypt_keystore_rejects_bad_nonce_length_without_panicking() {
         // 4 bytes instead of 24 used to hit an assert inside `generic-array`.
         for nonce_hex in ["", "deadbeef", &hex::encode([0u8; 25])] {
-            let err = decrypt_keystore(&keystore_v1_with_nonce_hex(nonce_hex), "password1234")
+            let err = decrypt_keystore(&keystore_v1_with_nonce_hex(nonce_hex), &test_password(0))
                 .expect_err("must be rejected");
             // The variant matters as much as the message: a wrong-length nonce is a
             // property of the file, and `CryptoError` would tell a caller to retry the
@@ -428,7 +428,7 @@ mod tests {
         // 10..=31 is the exact panic window: scrypt allows 10..=64, but anything
         // under 32 makes `derived_key[16..32]` go out of bounds.
         for dklen in [10u64, 15, 16, 17, 31] {
-            let err = decrypt_ethers_keystore(&ethers_keystore_with(dklen, 16), "password1234")
+            let err = decrypt_ethers_keystore(&ethers_keystore_with(dklen, 16), &test_password(0))
                 .expect_err("must be rejected");
             assert!(
                 matches!(err, KmsError::DeserializationError(_)),
@@ -443,7 +443,7 @@ mod tests {
         // asserts on a length mismatch. Asserting on the message, not just `is_err`,
         // so the case cannot pass for an unrelated reason.
         for iv_len in [0usize, 8, 15, 17, 32] {
-            let err = decrypt_ethers_keystore(&ethers_keystore_with(32, iv_len), "password1234")
+            let err = decrypt_ethers_keystore(&ethers_keystore_with(32, iv_len), &test_password(0))
                 .expect_err("must be rejected");
             assert!(
                 format!("{err}").contains("Invalid cipherparams.iv length"),
@@ -456,7 +456,7 @@ mod tests {
     fn well_formed_dklen_and_iv_reach_mac_verification() {
         // Guards against over-tightening: dklen=32 with a 16-byte IV must get
         // past the new length checks and fail on the MAC instead.
-        let err = decrypt_ethers_keystore(&ethers_keystore_with(32, 16), "password1234")
+        let err = decrypt_ethers_keystore(&ethers_keystore_with(32, 16), &test_password(0))
             .expect_err("MAC must fail");
         assert!(
             format!("{err}").contains("MAC verification failed"),
@@ -469,7 +469,7 @@ mod tests {
         // 33..=64 never panicked -- the slices stay in bounds and the extra bytes
         // are ignored, which is what geth and ethers do. Still accepted.
         for dklen in [33u64, 48, 64] {
-            let err = decrypt_ethers_keystore(&ethers_keystore_with(dklen, 16), "password1234")
+            let err = decrypt_ethers_keystore(&ethers_keystore_with(dklen, 16), &test_password(0))
                 .expect_err("MAC must fail");
             assert!(
                 format!("{err}").contains("MAC verification failed"),
