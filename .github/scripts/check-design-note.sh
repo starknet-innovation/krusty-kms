@@ -47,6 +47,24 @@ is_src_rs() {
   esac
 }
 
+# Root Cargo.toml centralizes production deps under [workspace.dependencies].
+root_cargo_workspace_deps_changed() {
+  git diff "$base_ref"...HEAD -- Cargo.toml | awk '
+    BEGIN { in_ws=0; found=0 }
+    /^(\+\+\+|---|@@)/ { next }
+    /^[ +\-]\[/ {
+      if ($0 ~ /\[workspace\.dependencies\]/) {
+        in_ws=1
+      } else {
+        in_ws=0
+      }
+      next
+    }
+    in_ws && /^[+-]/ && $0 !~ /^[+-][[:space:]]*#/ && $0 ~ /^[+-][a-zA-Z0-9_.-]+[[:space:]]*=/ { found=1 }
+    END { exit found ? 0 : 1 }
+  '
+}
+
 for f in "${changed[@]}"; do
   case "$f" in
     crates/experimental/*) continue ;;
@@ -60,6 +78,12 @@ for f in "${changed[@]}"; do
   fi
 
   case "$f" in
+    Cargo.toml)
+      if root_cargo_workspace_deps_changed; then
+        needs_note=1
+        reasons+=("workspace dependency manifest changed: Cargo.toml [workspace.dependencies]")
+      fi
+      ;;
     crates/*/Cargo.toml)
       if git diff "$base_ref"...HEAD -- "$f" | grep -E '^\+[a-zA-Z0-9_-]+\s*=' >/dev/null; then
         needs_note=1

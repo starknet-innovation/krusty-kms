@@ -4,6 +4,11 @@
 # semver-compatible but API-incompatible dependency minors (e.g.
 # starknet-types-core 0.2.0 -> 0.2.4). Generating rustdoc with --locked
 # keeps both sides on the committed dependency graph.
+#
+# Use --all-features so feature-gated public APIs (e.g. krusty-kms-client's
+# `nats` / NatsMultisigCoordinator) appear in rustdoc JSON, matching
+# cargo-semver-checks' default feature selection. If a crate fails with
+# --all-features (e.g. optional git deps), add a per-crate fallback below.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -49,7 +54,7 @@ rustdoc_json() {
     cd "$manifest_root"
     # Package name uses hyphens; rustdoc JSON uses underscores.
     local json_name="${crate//-/_}.json"
-    if ! cargo +nightly rustdoc -p "$crate" --locked --lib -- \
+    if ! cargo +nightly rustdoc -p "$crate" --locked --all-features --lib -- \
       -Z unstable-options \
       --output-format json; then
       echo "::error::rustdoc JSON generation failed for $crate in $manifest_root" >&2
