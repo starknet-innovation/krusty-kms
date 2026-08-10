@@ -1,10 +1,17 @@
-//! OpenZeppelin Cairo multisig client and trusted coordination primitives.
+//! OpenZeppelin Cairo multisig client and coordination primitives.
 //!
 //! The OpenZeppelin multisig is an on-chain governance contract, not an
 //! off-chain signature aggregator. A coordination server is useful for
 //! distributing proposals and signer status, but Starknet remains the source of
 //! truth: every submit, confirm, revoke, and execute action is still sent
 //! through a registered signer account.
+//!
+//! The coordinator is trusted for delivery only, never for authenticity. It is
+//! a distribution boundary, not an authorization boundary: a compromised
+//! coordinator can drop, reorder, replay, or forge payloads. Receivers
+//! therefore re-derive transaction ids locally, check that messages match the
+//! subscribed topic, and authenticate actor attribution through
+//! [`SignedMultisigCoordinationMessage`].
 
 use crate::abi;
 use crate::tx::Tx;
@@ -119,7 +126,7 @@ impl MultisigTopic {
     }
 }
 
-/// Proposal payload distributed through a trusted coordination server.
+/// Proposal payload distributed through a coordination server.
 ///
 /// `transaction_id` must equal [`hash_transaction_batch`] for `calls` and
 /// `salt`. Receivers should call [`MultisigProposal::validate_transaction_id`]
@@ -272,7 +279,7 @@ impl MultisigExecutionNotice {
     }
 }
 
-/// Logical coordination message exchanged through the trusted coordinator.
+/// Logical coordination message exchanged through the coordinator.
 ///
 /// On the wire, messages travel inside a [`MultisigCoordinationEnvelope`].
 /// A bare (unsigned) message is advisory: the claimed
@@ -520,17 +527,45 @@ impl SignedMultisigCoordinationMessage {
 ///
 /// Serialization is self-describing: a signed envelope carries
 /// `version`/`message`/`signature` fields, while a legacy unsigned message is
-/// the bare tagged [`MultisigCoordinationMessage`] JSON (schema version 0).
+/// the bare tagged [`MultisigCoordinationMessage`] (schema version 0).
 /// Receivers should prefer signed envelopes and treat unsigned ones as
-/// unauthenticated hints; a signed envelope with an unknown version is
-/// rejected during send/receive validation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// unauthenticated hints.
+///
+/// Deserialization discriminates on the *presence* of `version` rather than
+/// trying each shape in turn: a payload carrying `version` must be a
+/// well-formed signed envelope or it is rejected outright. Falling back to the
+/// unsigned shape there would let a coordinator silently strip authentication
+/// — moving `signature` to the top level, or setting an unsupported `version`
+/// — and have the result accepted as a legacy hint instead of erroring.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum MultisigCoordinationEnvelope {
     /// Schema version >= 1: message plus actor signature.
     Signed(SignedMultisigCoordinationMessage),
     /// Legacy schema version 0: unauthenticated message.
     Unsigned(MultisigCoordinationMessage),
+}
+
+impl<'de> Deserialize<'de> for MultisigCoordinationEnvelope {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Buffered as JSON because the coordination protocol is defined as
+        // JSON on the wire, and `MultisigCoordinationMessage` is an
+        // internally tagged enum that already requires a self-describing
+        // format.
+        let value = serde_json::Value::deserialize(deserializer)?;
+        if value.get("version").is_some() {
+            let signed = SignedMultisigCoordinationMessage::deserialize(value)
+                .map_err(serde::de::Error::custom)?;
+            Ok(Self::Signed(signed))
+        } else {
+            let message = MultisigCoordinationMessage::deserialize(value)
+                .map_err(serde::de::Error::custom)?;
+            Ok(Self::Unsigned(message))
+        }
+    }
 }
 
 impl MultisigCoordinationEnvelope {
@@ -549,7 +584,12 @@ impl MultisigCoordinationEnvelope {
         self.message().topic()
     }
 
-    /// The signed form, when this envelope is authenticated.
+    /// The signed form, when this envelope carries a signature.
+    ///
+    /// This reports the envelope *shape* only. A signature supplied by an
+    /// untrusted coordinator is not trustworthy until it is checked with
+    /// [`Multisig::verify_signed_message`] or
+    /// [`SignedMultisigCoordinationMessage::verify_with_stark_public_key`].
     #[must_use]
     pub fn as_signed(&self) -> Option<&SignedMultisigCoordinationMessage> {
         match self {
@@ -612,11 +652,13 @@ fn validate_incoming_envelope(
     validate_envelope_payload(envelope)
 }
 
-/// Trusted coordination server boundary.
+/// Coordination server boundary.
 ///
 /// Implementations may use WebSockets, HTTP long polling, a durable message
-/// bus, or any other trusted pub/sub system. The server distributes messages;
-/// on-chain multisig checks still authorize every action.
+/// bus, or any other pub/sub system. The server distributes messages and is
+/// trusted for delivery only: on-chain multisig checks authorize every action,
+/// and actor attribution is authenticated by
+/// [`SignedMultisigCoordinationMessage`] rather than by the transport.
 #[async_trait]
 pub trait MultisigCoordinator: Send + Sync {
     /// Publish one coordination envelope.
@@ -715,7 +757,7 @@ impl InMemoryMultisigCoordinator {
     }
 }
 
-/// NATS-backed trusted coordinator using standard pub/sub subjects.
+/// NATS-backed coordinator using standard pub/sub subjects.
 ///
 /// NATS core pub/sub is live delivery. Use [`MultisigCoordinator::subscribe`]
 /// before publishing when callers need to observe messages through this backend.
@@ -811,7 +853,7 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
     }
 }
 
-/// HTTP implementation of the trusted coordinator protocol.
+/// HTTP implementation of the coordinator protocol.
 ///
 /// Expected server API:
 ///
@@ -1572,14 +1614,28 @@ impl Multisig {
     /// 5. the claimed actor's account contract accepts the signature over
     ///    [`coordination_message_hash`] via SNIP-6 `is_valid_signature`.
     ///
-    /// Returns the authenticated actor address, which may then be tallied
-    /// (e.g. counted toward an off-chain quorum estimate or shown as
-    /// attribution). Chain state remains authoritative: a verified notice
-    /// proves who published it, not that the on-chain action succeeded.
+    /// Returns the authenticated actor address on success.
     ///
-    /// Signer-set membership and signature validity are read from the latest
-    /// block; a removed signer's notices stop verifying once the removal
-    /// lands on-chain.
+    /// # What a verified envelope does and does not prove
+    ///
+    /// It proves the actor authorized *this exact message* — the routing
+    /// topic, the message kind, and the attribution fields covered by
+    /// [`coordination_message_hash`]. It does not prove:
+    ///
+    /// - **Publisher identity.** Anyone holding a copy, including the
+    ///   coordinator, can relay it.
+    /// - **Freshness or uniqueness.** A valid envelope stays valid, so the
+    ///   coordinator can replay it. Callers that tally notices must
+    ///   deduplicate by `(actor, topic, message kind)` before counting, or a
+    ///   single confirmation can be counted repeatedly.
+    /// - **On-chain success.** Chain state remains authoritative for quorum
+    ///   and execution; a notice is at most a hint to go read it.
+    ///
+    /// Both on-chain reads are pinned to one block, so signer-set membership
+    /// and signature validity are decided against a single consistent
+    /// snapshot: a signer removal or account upgrade landing mid-verification
+    /// cannot be observed by one read but not the other. A removed signer's
+    /// notices stop verifying once the removal lands on-chain.
     pub async fn verify_signed_message(
         &self,
         signed: &SignedMultisigCoordinationMessage,
@@ -1604,8 +1660,27 @@ impl Multisig {
             proposal.validate_transaction_id()?;
         }
 
+        // Pin both reads to one block so the membership check and the
+        // signature check cannot straddle a signer removal or an account
+        // upgrade. Hash rather than height: a reorg replacing the block would
+        // otherwise silently change what the second read sees.
+        let head = self
+            .provider
+            .block_hash_and_number()
+            .await
+            .map_err(|error| KmsError::RpcError(error.to_string()))?;
+        let block_id = BlockId::Hash(head.block_hash);
+
         let actor = signed.claimed_actor();
-        if !self.is_signer(&actor).await? {
+        let signer_result = self
+            .call_at_block(
+                self.address,
+                *abi::multisig::IS_SIGNER,
+                vec![core_felt_to_rs(actor.as_felt())],
+                block_id,
+            )
+            .await?;
+        if !read_bool(&signer_result, "is_signer")? {
             return Err(KmsError::MultisigError(format!(
                 "claimed actor {} is not a signer of multisig {}",
                 actor.to_hex(),
@@ -1619,7 +1694,7 @@ impl Multisig {
         calldata.extend(signed.signature.iter().copied().map(core_felt_to_rs));
 
         let result = self
-            .call_at(actor, *abi::account::IS_VALID_SIGNATURE, calldata)
+            .call_at_block(actor, *abi::account::IS_VALID_SIGNATURE, calldata, block_id)
             .await?;
         let value = read_felt(&result, "is_valid_signature")?;
         // SNIP-6 accounts return the short string 'VALID'; some legacy
@@ -1665,6 +1740,17 @@ impl Multisig {
         selector: StarknetRsFelt,
         calldata: Vec<StarknetRsFelt>,
     ) -> Result<Vec<StarknetRsFelt>> {
+        self.call_at_block(contract, selector, calldata, BlockId::Tag(BlockTag::Latest))
+            .await
+    }
+
+    async fn call_at_block(
+        &self,
+        contract: Address,
+        selector: StarknetRsFelt,
+        calldata: Vec<StarknetRsFelt>,
+        block_id: BlockId,
+    ) -> Result<Vec<StarknetRsFelt>> {
         self.provider
             .call(
                 FunctionCall {
@@ -1672,7 +1758,7 @@ impl Multisig {
                     entry_point_selector: selector,
                     calldata,
                 },
-                BlockId::Tag(BlockTag::Latest),
+                block_id,
             )
             .await
             .map_err(|error| KmsError::RpcError(error.to_string()))
@@ -2277,6 +2363,43 @@ mod tests {
             MultisigCoordinationEnvelope::Unsigned(confirmation_notice(3))
         );
         assert!(parsed.as_signed().is_none());
+    }
+
+    #[test]
+    fn test_envelope_deserialization_never_downgrades_versioned_payloads() {
+        // A payload carrying `version` must be a well-formed signed envelope.
+        // Deserializing these as `Unsigned` instead would let a coordinator
+        // strip authentication and have the result accepted as a legacy hint.
+
+        // Signature moved to the top level (signed shape destroyed).
+        let flattened = r#"{"type":"confirmation",
+            "multisig":"0x0000000000000000000000000000000000000000000000000000000000000001",
+            "chain_id":"Sepolia",
+            "transaction_id":"0x000000000000000000000000000000000000000000000000000000000000002a",
+            "signer":"0x0000000000000000000000000000000000000000000000000000000000000003",
+            "version":1,"signature":["0x1","0x2"]}"#;
+        assert!(serde_json::from_str::<MultisigCoordinationEnvelope>(flattened).is_err());
+
+        // Legacy message carrying an unsupported version.
+        let stray_version = r#"{"type":"confirmation",
+            "multisig":"0x0000000000000000000000000000000000000000000000000000000000000001",
+            "chain_id":"Sepolia",
+            "transaction_id":"0x000000000000000000000000000000000000000000000000000000000000002a",
+            "signer":"0x0000000000000000000000000000000000000000000000000000000000000003",
+            "version":99}"#;
+        assert!(serde_json::from_str::<MultisigCoordinationEnvelope>(stray_version).is_err());
+
+        // A well-formed envelope with an unsupported version still parses (so
+        // the error names the version) and is rejected by validation.
+        let key = test_signing_key(0x1234);
+        let mut future_version =
+            SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+                .unwrap();
+        future_version.version = 99;
+        let json =
+            serde_json::to_string(&MultisigCoordinationEnvelope::from(future_version)).unwrap();
+        let parsed: MultisigCoordinationEnvelope = serde_json::from_str(&json).unwrap();
+        assert!(validate_envelope_payload(&parsed).is_err());
     }
 
     #[tokio::test]

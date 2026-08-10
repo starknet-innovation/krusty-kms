@@ -11,7 +11,7 @@ The implementation is split across:
 - `krusty-kms`: deterministic deployment descriptors and constructor calldata
   for the wrapper class.
 - `krusty-kms-client`: `IMultisig` call builders, transaction ID hashing,
-  on-chain status queries, and trusted coordination backends.
+  on-chain status queries, and coordination backends.
 
 The coordination server is not an authorization layer. It only distributes
 proposals and signer status. The Starknet multisig contract remains the source
@@ -191,10 +191,11 @@ use krusty_kms_client::MultisigSignerNotice;
 let tx = multisig.confirm_proposal(&bob_wallet, &proposal).await?;
 tx.wait(wait_options).await?;
 
+// Take the routing fields from the proposal so the notice cannot drift from it.
 let confirmation = SignedMultisigCoordinationMessage::sign_with_stark_key(
     MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
-        multisig_address,
-        chain_id,
+        proposal.multisig,
+        proposal.chain_id,
         proposal.transaction_id,
         bob_address,
     )),
@@ -209,8 +210,14 @@ fact:
 ```rust
 // Checks the claimed actor against the on-chain signer set and validates the
 // signature through the actor's account contract (SNIP-6 `is_valid_signature`).
+// Both reads are pinned to one block hash.
 let actor = multisig.verify_signed_message(&signed_notice).await?;
 ```
+
+A verified notice proves the actor authorized that exact message — not who
+relayed it, nor that it is fresh or unique. A coordinator can replay a valid
+envelope, so deduplicate by `(actor, topic, message kind)` before counting one
+toward a tally, and keep reading the chain for authoritative state.
 
 Once the contract reports `Confirmed`, execute the stored batch:
 

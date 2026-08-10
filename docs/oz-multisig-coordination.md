@@ -5,13 +5,16 @@ This repo supports OpenZeppelin Cairo multisig contracts through two layers:
 - `krusty-kms` builds deterministic deployment descriptors for a concrete
   `MultisigWallet` class.
 - `krusty-kms-client` builds and submits `IMultisig` calls, computes the same
-  transaction IDs as the contract, and defines a trusted coordination protocol.
+  transaction IDs as the contract, and defines the coordination protocol.
 
-The trusted coordinator is not an authority. It is a pub/sub server for proposal
-and status messages. Every signer still submits `submit_transaction_batch`,
-`confirm_transaction`, `revoke_confirmation`, or `execute_transaction_batch`
-through their own Starknet account, and the contract enforces signer/quorum
-rules on-chain.
+The coordinator is trusted for delivery only, never for authenticity. It is a
+pub/sub server for proposal and status messages, and it is a distribution
+boundary rather than an authorization boundary: a compromised coordinator can
+drop, reorder, replay, or forge payloads. Every signer still submits
+`submit_transaction_batch`, `confirm_transaction`, `revoke_confirmation`, or
+`execute_transaction_batch` through their own Starknet account, the contract
+enforces signer/quorum rules on-chain, and actor attribution is authenticated
+by [signed envelopes](#signed-envelopes) rather than by the transport.
 
 For an operator-facing walkthrough covering devnet tests, NATS tests, and a
 CLI-style wallet lifecycle, see
@@ -47,7 +50,7 @@ let descriptor = multisig.deployment_descriptor(
 1. A signer builds a `MultisigProposal` from one or more `MultisigCall`s.
 2. The client wraps `MultisigCoordinationMessage::Proposal` in a
    `SignedMultisigCoordinationMessage` (signed with the proposer's account
-   key) and publishes it to the trusted coordinator.
+   key) and publishes it to the coordinator.
 3. A registered signer submits the proposal on-chain with
    `submit_transaction_batch`.
 4. Each approving signer sends `confirm_transaction(id)` on-chain and may publish
@@ -184,18 +187,41 @@ let actor = multisig.verify_signed_message(&signed).await?;
 signed.verify_with_stark_public_key(public_key)?;
 ```
 
-A verified notice proves who published it — not that the on-chain action
-succeeded. Chain reads stay authoritative for quorum and execution state.
+Both on-chain reads in `verify_signed_message` are pinned to a single block
+hash, so a signer removal or account upgrade landing mid-verification cannot be
+observed by the membership check but not the signature check.
+
+### What a verified envelope proves
+
+A verified envelope proves the actor authorized *that exact message* — the
+routing topic, the message kind, and the attribution fields covered by the
+hash. It does **not** prove:
+
+- **Publisher identity.** Anyone holding a copy, the coordinator included, can
+  relay it.
+- **Freshness or uniqueness.** A valid envelope stays valid, so the coordinator
+  can replay it. Consumers that tally notices must deduplicate by
+  `(actor, topic, message kind)` before counting, or one confirmation can be
+  counted repeatedly.
+- **On-chain success.** Chain reads stay authoritative for quorum and execution
+  state; a notice is at most a hint to go read them.
 
 ### Schema versioning
 
 The signed envelope is version 1 of the coordinator payload schema
 (`MULTISIG_COORDINATION_SCHEMA_VERSION`); bare unsigned messages are version 0.
 Both NATS and HTTP coordinators send and accept `MultisigCoordinationEnvelope`,
-which deserializes either shape, and reject signed envelopes with an unknown
-version on both the publish and receive paths. Any future schema bump must
-change the domain tag inside the signing hash so signatures can never validate
-across versions.
+which deserializes either shape and rejects signed envelopes with an unknown
+version on both the publish and receive paths.
+
+Deserialization discriminates on the *presence* of `version`, not by trying
+each shape in turn: a payload carrying `version` must be a well-formed signed
+envelope or it is rejected. Otherwise a coordinator could strip authentication
+— hoisting `signature` to the top level, or setting an unsupported `version` —
+and have the result silently accepted as an unsigned legacy hint.
+
+Any future schema bump must also change the domain tag inside the signing hash
+so signatures can never validate across versions.
 
 ## Integration Tests
 

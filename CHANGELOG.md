@@ -19,7 +19,13 @@ All notable changes to the published Rust crates are documented here.
   `is_valid_signature`) via `Multisig::verify_signed_message`, or offline via
   `verify_with_stark_public_key`. Forged confirmation/revocation/execution
   notices and proposer/memo attribution tampering by a compromised
-  coordinator no longer verify.
+  coordinator no longer verify. `verify_signed_message` pins its signer-set
+  and signature reads to a single block hash, and envelope deserialization
+  rejects any payload that carries `version` but is not a well-formed signed
+  envelope, so authentication cannot be silently stripped. Verified notices
+  prove actor authorization only — not publisher identity, freshness, or
+  uniqueness — so consumers that tally them must deduplicate by
+  `(actor, topic, message kind)`.
 
 ## [0.6.0] - 2026-08-10
 
