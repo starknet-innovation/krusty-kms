@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-10
+
 ### Changed
 
 - **Breaking:** multisig coordination notices are now cryptographically
