@@ -160,9 +160,10 @@ pub struct OracleResponse {
 mod tests {
     use super::*;
     use crate::{
-        AccountClassKind, AccountClassSpec, ChainId, DerivationPath, HexBytes, KeyDomain,
-        SaltPolicySpec, SecretRef,
+        AccountClassKind, AccountClassSpec, DerivationPath, HexBytes, KeyDomain, SaltPolicySpec,
+        SecretRef,
     };
+    use krusty_kms_common::ChainId;
 
     #[test]
     fn request_id_rejects_blank_values() {
