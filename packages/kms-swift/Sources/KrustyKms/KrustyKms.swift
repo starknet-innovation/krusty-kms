@@ -635,7 +635,9 @@ public enum Kms {
         var keyBytes = privateKeyBytes
         var out = KmsEthSignature()
         // Wipe the Swift-side copy of the private key once the FFI call returns.
-        defer { keyBytes.replaceSubrange(0..<32, with: repeatElement(0, count: 32)) }
+        // kms_secure_wipe (memset_s / explicit_bzero) cannot be dead-store
+        // eliminated, unlike replaceSubrange on a buffer about to die.
+        defer { secureZero(&keyBytes) }
         let rc = keyBytes.withUnsafeMutableBufferPointer { ptr in
             kms_eth_sign(&cHash, ptr.baseAddress, &out)
         }
