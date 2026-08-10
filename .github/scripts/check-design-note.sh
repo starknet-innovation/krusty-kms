@@ -118,7 +118,7 @@ import sys
 from pathlib import Path
 
 text = Path(sys.argv[1]).read_text()
-_DEP_KEY = re.compile(r"^([a-zA-Z0-9_-]+)\s*=")
+_DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
 _DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
 
 

@@ -158,9 +158,9 @@ def _collect_impl_pub_fns(
 
 
 def _format_field(attrs: str, signature: str) -> str:
-    m = re.search(r'js_name\s*=\s*"([^"]+)"', attrs)
-    if m:
-        return f"js_name={m.group(1)} | {signature}"
+    bindgen = _format_bindgen_attrs(attrs)
+    if bindgen:
+        return f"{bindgen} | {signature}"
     return signature
 
 
@@ -384,7 +384,8 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
 _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
 _KRUSTY_NAME_RE = re.compile(rf"^{_KRUSTY_NAME}$")
 _KRUSTY_PACKAGE = re.compile(rf'package\s*=\s*"({_KRUSTY_NAME})"')
-_DEP_KEY = re.compile(r"^([a-zA-Z0-9_-]+)\s*=")
+_DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
+_DEP_WS_INLINE = re.compile(r"^([a-zA-Z0-9_-]+)\.workspace\s*=\s*true\b")
 _DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
 
 
@@ -424,8 +425,42 @@ def krusty_deps_from_cargo_toml(text: str) -> set[str]:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
+            ws_match = _DEP_WS_INLINE.match(stripped)
+            if ws_match:
+                _add_krusty_dep_from_entry(deps, ws_match.group(1), stripped)
+                continue
             key_match = _DEP_KEY.match(stripped)
             if not key_match:
                 continue
             _add_krusty_dep_from_entry(deps, key_match.group(1), stripped)
     return deps
+
+
+def _assert_surfaces_self_checks() -> None:
+    assert (
+        _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
+        == "wasm_bindgen(skip) | pub foo: String"
+    )
+    assert (
+        _format_field(
+            '#[wasm_bindgen(js_name = "encryptedKey")]',
+            "pub encrypted_key: String",
+        )
+        == "wasm_bindgen(js_name=encryptedKey) | pub encrypted_key: String"
+    )
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkrusty-kms-common.workspace = true\n"
+    ) == {"krusty-kms-common"}
+    assert krusty_deps_from_cargo_toml(
+        '[dependencies]\nfoo = { package = "krusty-kms-sdk", path = "../sdk" }\n'
+    ) == {"krusty-kms-sdk"}
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nserde.workspace = true\n"
+    ) == set()
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies.krusty-kms-common]\nworkspace = true\n"
+    ) == {"krusty-kms-common"}
+
+
+if __name__ == "__main__":
+    _assert_surfaces_self_checks()

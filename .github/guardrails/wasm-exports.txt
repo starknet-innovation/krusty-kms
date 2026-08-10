@@ -39,7 +39,7 @@ crates/wasm/src/discovery.rs: wasm_bindgen(js_name=deriveDiscoveryKeypairs) | pu
 crates/wasm/src/discovery.rs: wasm_bindgen(js_name=deriveDiscoveryKeypairsWithSecrets) | pub fn derive_discovery_keypairs_with_secrets(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
 crates/wasm/src/discovery.rs: wasm_bindgen(js_name=discoverAccountsFromMnemonic) | pub fn discover_accounts_from_mnemonic(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
 crates/wasm/src/discovery.rs: wasm_bindgen(js_name=discoverAccountsFromMnemonicWithSecrets) | pub fn discover_accounts_from_mnemonic_with_secrets(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
-crates/wasm/src/encryption.rs: wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedKey { pub nonce: String; pub salt: String; js_name=encryptedKey | pub encrypted_key: String }
+crates/wasm/src/encryption.rs: wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedKey { pub nonce: String; pub salt: String; wasm_bindgen(js_name=encryptedKey) | pub encrypted_key: String }
 crates/wasm/src/encryption.rs: wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedPayload { pub nonce: String; pub ciphertext: String }
 crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptPrivateKey) | pub fn encrypt_private_key(private_key_hex: &str, password: &str, scrypt_n: u32) -> Result<WasmEncryptedKey, JsValue>
 crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptPrivateKey) | pub fn decrypt_private_key(nonce: &str, salt: &str, encrypted_key: &str, password: &str, scrypt_n: u32) -> Result<String, JsValue>
@@ -144,8 +144,8 @@ crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: St
 crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmNostrPublicKey { pub public_key: String }
 crates/wasm/src/types.rs: impl WasmNostrPublicKey {
 crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(public_key: String) -> Self
-crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmStarkSignature { pub r: String; pub s: String; js_name=publicKey | pub public_key: String }
-crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmNostrSignature { js_name=publicKey | pub public_key: String; pub signature: String }
+crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmStarkSignature { pub r: String; pub s: String; wasm_bindgen(js_name=publicKey) | pub public_key: String }
+crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmNostrSignature { wasm_bindgen(js_name=publicKey) | pub public_key: String; pub signature: String }
 crates/wasm/src/utils.rs: wasm_bindgen(js_name=grindKey) | pub fn grind_key(seed_hex: &str) -> Result<String, JsValue>
 crates/wasm/src/utils.rs: wasm_bindgen(js_name=randomBytesHex) | pub fn random_bytes_hex(length: usize) -> Result<String, JsValue>
 crates/wasm/src/utils.rs: wasm_bindgen(js_name=isValidFelt) | pub fn is_valid_felt(hex_str: &str) -> bool
