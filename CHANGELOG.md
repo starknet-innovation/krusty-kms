@@ -33,6 +33,15 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   default) plus the legacy `salt = 0` — so recovery no longer misses accounts
   deployed by this project's own flow (M-06). Callers that assumed a fixed
   candidate count per index must adjust.
+- **Breaking:** the wasm `generateAccountAddresses` compact view now maps each
+  wallet type to an **array** of every candidate address for that type, rather
+  than a single address string:
+  `{ "0": { "OpenZeppelin": ["0x…", "0x…"], … } }`. It previously kept only
+  the first address per wallet type, which silently hid deployed accounts in a
+  recovery path — three Argent legacy class hashes and four Argent Cairo 0
+  proxy implementations were being discarded, and adding the OpenZeppelin
+  `salt = public_key` variant above would have displaced the legacy
+  `salt = 0` address this API used to return.
 - **Breaking:** `WaitForAcceptance` policies are bounded more tightly:
   `timeout_ms` is capped at 15 minutes (was 24 hours) and `poll_interval_ms`
   must be at least 250 ms. Transports serve requests sequentially, so an
@@ -87,9 +96,14 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   value would inflate the granted allowance (M-13).
 - Plaintext key buffers are zeroized in `encrypt_private_key` and both
   intermediate copies inside `EthSigner::from_hex` (M-07).
-- `decryptBalance`'s `max_search` is capped at 2^32 and `randomBytesHex`'s
+- `decryptBalance`'s `max_search` is capped at 2^20 and `randomBytesHex`'s
   length at 1024 bytes, so JS callers cannot pin the calling thread or force
-  an unbounded allocation (M-16).
+  an unbounded allocation (M-16). The cap is deliberately close to the
+  existing default: the search is a linear scan costing a curve addition plus
+  an affine conversion per step (~420k steps/sec natively in release, slower
+  under wasm), so a nominally-finite ceiling like 2^32 would still occupy the
+  calling thread for hours and provide no protection. Recovering larger
+  balances needs a better algorithm, not a larger linear bound.
 - `FeltHex::parse` rejects values that alias to a different field element,
   including exactly the field prime, which upstream `Felt::from_hex` accepts
   and maps to 0.

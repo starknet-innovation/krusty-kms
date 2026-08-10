@@ -102,11 +102,21 @@ pub fn generate_account_candidates_with_secrets(
 /// Generate a compact summary of candidate addresses grouped by derivation index.
 ///
 /// Returns a JSON object where keys are derivation indices and values are
-/// objects mapping wallet type to address. Useful for quick discovery without
-/// needing the full candidate details. Never includes private keys.
+/// objects mapping wallet type to **all** candidate addresses for that type.
+/// Useful for quick discovery without needing the full candidate details.
+/// Never includes private keys.
+///
+/// # Why every address, not just the first
+///
+/// A wallet type can have several address variants at one index: OpenZeppelin
+/// has two salt policies (`salt = public_key` and the legacy `salt = 0`),
+/// Argent legacy spans three Cairo 1 class hashes, and Argent Cairo 0 spans
+/// four proxy implementations. This is a funds-recovery path, so collapsing to
+/// one address per wallet type silently hides deployed accounts — every
+/// omitted variant is an account the caller cannot find.
 ///
 /// # Returns
-/// JSON string: `{ "0": { "Braavos": "0x...", "Argent": "0x...", ... }, "1": { ... } }`
+/// JSON string: `{ "0": { "Braavos": ["0x..."], "OpenZeppelin": ["0x...", "0x..."], ... } }`
 #[wasm_bindgen(js_name = "generateAccountAddresses")]
 pub fn generate_account_addresses(
     mnemonic: &str,
@@ -116,18 +126,21 @@ pub fn generate_account_addresses(
     let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Discovery failed: {e}")))?;
 
-    // Group by (derivation_index, wallet_type) → take first address for each combo
-    let mut grouped: std::collections::BTreeMap<u32, std::collections::BTreeMap<String, String>> =
-        std::collections::BTreeMap::new();
+    // Group by (derivation_index, wallet_type) → every distinct address.
+    let mut grouped: std::collections::BTreeMap<
+        u32,
+        std::collections::BTreeMap<String, Vec<String>>,
+    > = std::collections::BTreeMap::new();
 
     for c in &candidates {
         let index_map = grouped.entry(c.derivation_index).or_default();
         let type_name = format!("{:?}", c.wallet_type);
-        // Only keep the first address per wallet type per index
-        // (there may be multiple class hash variants)
-        index_map
-            .entry(type_name)
-            .or_insert_with(|| c.address.clone());
+        let addresses = index_map.entry(type_name).or_default();
+        // Distinct class-hash variants can in principle derive the same
+        // address; keep the list free of duplicates.
+        if !addresses.contains(&c.address) {
+            addresses.push(c.address.clone());
+        }
     }
 
     to_json_string(&grouped)
@@ -334,6 +347,54 @@ mod tests {
         // Compact path must never embed private key material
         assert!(!json.contains("privateKey"));
         assert!(!json.contains("private_key"));
+    }
+
+    /// The compact view must surface *every* address variant per wallet type.
+    /// Collapsing to one address per type hid deployed accounts in a recovery
+    /// path — notably it dropped the legacy `salt = 0` OpenZeppelin address once
+    /// the `salt = public_key` variant was added ahead of it.
+    #[wasm_bindgen_test]
+    fn test_generate_account_addresses_keeps_all_variants() {
+        let json = generate_account_addresses(TEST_MNEMONIC, Some(1)).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let index0 = parsed.get("0").expect("index 0 present");
+
+        let oz = index0
+            .get("OpenZeppelin")
+            .and_then(|v| v.as_array())
+            .expect("OpenZeppelin entry is an array");
+        assert_eq!(oz.len(), 2, "both OZ salt policies must be listed: {oz:?}");
+        assert_ne!(oz[0], oz[1], "the two salt policies differ in address");
+
+        // Argent legacy (3 class hashes) and Argent Cairo 0 (4 proxy impls)
+        // were silently collapsed to one address each before this change.
+        let legacy = index0
+            .get("ArgentLegacy")
+            .and_then(|v| v.as_array())
+            .expect("ArgentLegacy entry is an array");
+        assert_eq!(legacy.len(), 3, "all Argent legacy variants: {legacy:?}");
+
+        let cairo0 = index0
+            .get("ArgentCairo0")
+            .and_then(|v| v.as_array())
+            .expect("ArgentCairo0 entry is an array");
+        assert_eq!(cairo0.len(), 4, "all Argent Cairo 0 variants: {cairo0:?}");
+
+        // Every address in the compact view must also appear in the full
+        // candidate list, so the two APIs cannot drift.
+        let full: Vec<serde_json::Value> =
+            serde_json::from_str(&generate_account_candidates(TEST_MNEMONIC, Some(1)).unwrap())
+                .unwrap();
+        let full_addrs: Vec<&str> = full
+            .iter()
+            .map(|c| c.get("address").unwrap().as_str().unwrap())
+            .collect();
+        for entry in index0.as_object().unwrap().values() {
+            for addr in entry.as_array().unwrap() {
+                let addr = addr.as_str().unwrap();
+                assert!(full_addrs.contains(&addr), "{addr} missing from full list");
+            }
+        }
     }
 
     #[wasm_bindgen_test]

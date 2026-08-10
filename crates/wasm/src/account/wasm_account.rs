@@ -142,9 +142,8 @@ impl WasmAccount {
     /// # Arguments
     /// * `ciphertext` - The ciphertext to decrypt
     /// * `max_search` - Maximum value to search for (default: 1,000,000;
-    ///   capped at 2^32 — each unit of search is a curve operation on the
-    ///   calling thread, so an unbounded value would let one call freeze it
-    ///   near-indefinitely)
+    ///   capped at 2^20 — see [`Self::MAX_SEARCH_CEILING`] for why the cap has
+    ///   to be this small)
     ///
     /// # Returns
     /// The decrypted balance as a string (for large number support in JS)
@@ -154,8 +153,19 @@ impl WasmAccount {
         ciphertext: &WasmCiphertext,
         max_search: Option<u64>,
     ) -> Result<String, JsValue> {
-        /// Upper bound on brute-force discrete-log search (~2^32 curve ops).
-        const MAX_SEARCH_CEILING: u64 = 1 << 32;
+        /// Upper bound on the brute-force discrete-log search.
+        ///
+        /// The search is a linear scan performing a curve addition plus an
+        /// affine conversion per step — measured at ~420k steps/sec natively in
+        /// release, and slower under wasm. So the ceiling has to bound
+        /// wall-clock time, not merely be finite: 2^32 works out to roughly
+        /// three hours natively and worse in a browser, which is no protection
+        /// at all for a synchronous call on the calling thread.
+        ///
+        /// 2^20 holds the worst case to a few seconds and matches the existing
+        /// default. Recovering larger balances needs a better algorithm
+        /// (baby-step giant-step, Pollard's kangaroo), not a bigger linear cap.
+        const MAX_SEARCH_CEILING: u64 = 1 << 20;
 
         let cipher = parse_ciphertext(ciphertext)?;
 
