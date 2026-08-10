@@ -78,10 +78,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
-        with:
-          command: check
-          arguments: --all-features
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: cargo deny check
+        run: cargo deny check --all-features
 
   docs:
     name: rustdoc link check
@@ -137,5 +137,3 @@ jobs:
           echo "BASELINE_ROOT=/tmp/krusty-semver-baseline" >> "$GITHUB_ENV"
       - name: Check publishable crate semver
         run: bash .github/scripts/check-semver.sh
-        env:
-          BASELINE_ROOT: ${{ env.BASELINE_ROOT }}
