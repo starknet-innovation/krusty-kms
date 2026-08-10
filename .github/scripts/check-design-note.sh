@@ -247,11 +247,20 @@ if (( needs_note == 0 )); then
 fi
 
 has_design_file=0
-for f in "${changed[@]}"; do
-  if [[ "$f" == docs/design/* ]]; then
-    has_design_file=1
-  fi
-done
+while IFS=$'\t' read -r status path path2; do
+  case "$status" in
+    A|M) candidate="$path" ;;
+    R*) candidate="${path2:-}" ;;
+    *) continue ;;
+  esac
+  case "$candidate" in
+    docs/design/*.md)
+      if [[ -f "$candidate" ]]; then
+        has_design_file=1
+      fi
+      ;;
+  esac
+done < <(git diff --name-status "$base_ref"...HEAD)
 
 has_note=$has_design_file
 if grep -qiE '^##[[:space:]]*Design\b|docs/design/' <<<"$pr_body"; then

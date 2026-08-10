@@ -478,6 +478,17 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
                 return _normalize_ws(" ".join(parts))
         return _normalize_ws(" ".join(parts))
 
+    if re.match(r"^\s*(pub\s+)?(?:mod|type|static)\b", first) or re.match(
+        r"^\s*(pub\s+)?const\s+(?!fn\b)", first
+    ):
+        parts: list[str] = []
+        for j in range(start, len(lines)):
+            line = lines[j].strip()
+            parts.append(line)
+            if ";" in line:
+                return _normalize_ws(" ".join(parts))
+        return _normalize_ws(" ".join(parts))
+
     parts: list[str] = []
     for j in range(start, len(lines)):
         line = lines[j].strip()
@@ -858,6 +869,28 @@ pub use operations::{
 };
 """.strip()
     assert extract_public_surface(use_a) != extract_public_surface(use_b)
+
+    mod_a = """
+pub mod secret_felt;
+pub mod other;
+""".strip()
+    mod_b = """
+pub mod secret_felt;
+#[allow(unsafe_code)]
+pub mod other;
+""".strip()
+    mod_c = """
+#[allow(unsafe_code)]
+pub mod secret_felt;
+pub mod other;
+""".strip()
+    surface_a = extract_public_surface(mod_a)
+    surface_b = extract_public_surface(mod_b)
+    surface_c = extract_public_surface(mod_c)
+    assert surface_a == surface_b
+    assert "pub mod secret_felt;" in surface_a
+    assert "pub mod other;" in surface_a
+    assert surface_a == surface_c
 
 
 def _assert_file_size_ratchet_checks() -> None:
