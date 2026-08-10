@@ -470,7 +470,16 @@ impl SignedMultisigCoordinationMessage {
         self.message.claimed_actor()
     }
 
-    /// Structural validation: supported schema version, non-empty signature.
+    /// Payload validation: supported schema version, non-empty signature, and
+    /// — for proposals — that `transaction_id` recomputes from `calls`/`salt`.
+    ///
+    /// The proposal check lives here, not only on the coordinator receive
+    /// path, because [`coordination_message_hash`] covers `calls`/`salt` only
+    /// transitively through `transaction_id`. Without recomputing the id, a
+    /// coordinator could swap `calls`/`salt` while keeping the original id and
+    /// signature, and the signature would still verify. Every verification
+    /// entry point calls this first, so no path can attribute a tampered
+    /// batch to a signer.
     ///
     /// This does **not** verify the signature cryptographically; use
     /// [`Multisig::verify_signed_message`] or
@@ -487,10 +496,17 @@ impl SignedMultisigCoordinationMessage {
                 "signed coordination message carries an empty signature".to_string(),
             ));
         }
+        if let MultisigCoordinationMessage::Proposal(proposal) = &self.message {
+            proposal.validate_transaction_id()?;
+        }
         Ok(())
     }
 
     /// Verify a Stark `[r, s]` signature against a known public key, offline.
+    ///
+    /// Runs [`Self::validate_structure`] first, so a proposal whose
+    /// `transaction_id` does not recompute from `calls`/`salt` is rejected
+    /// before the signature is considered.
     ///
     /// The caller is responsible for binding `public_key` to the claimed
     /// actor (e.g. from local key management or a prior authenticated
@@ -1605,13 +1621,14 @@ impl Multisig {
     ///
     /// Verifies, in order:
     ///
-    /// 1. envelope structure (supported schema version, non-empty signature),
+    /// 1. envelope payload ([`SignedMultisigCoordinationMessage::validate_structure`]:
+    ///    supported schema version, non-empty signature, and proposal
+    ///    `transaction_id` recomputing from `calls`/`salt`),
     /// 2. the message targets this multisig contract and chain,
-    /// 3. proposal integrity (`transaction_id` recomputes from `calls`/`salt`),
-    /// 4. the claimed actor is currently in the on-chain signer set (the
+    /// 3. the claimed actor is currently in the on-chain signer set (the
     ///    OpenZeppelin multisig requires signers for confirm, revoke, and
     ///    execute alike, so this applies to every message kind),
-    /// 5. the claimed actor's account contract accepts the signature over
+    /// 4. the claimed actor's account contract accepts the signature over
     ///    [`coordination_message_hash`] via SNIP-6 `is_valid_signature`.
     ///
     /// Returns the authenticated actor address on success.
@@ -1655,9 +1672,6 @@ impl Multisig {
                 "signed message was created for chain {} but this handle is on {}",
                 topic.chain_id, self.chain_id
             )));
-        }
-        if let MultisigCoordinationMessage::Proposal(proposal) = &signed.message {
-            proposal.validate_transaction_id()?;
         }
 
         // Pin both reads to one block so the membership check and the
@@ -2325,6 +2339,52 @@ mod tests {
         assert!(signed
             .verify_with_stark_public_key(rs_felt_to_core(other_key.verifying_key().scalar()))
             .is_err());
+    }
+
+    #[test]
+    fn test_offline_verify_rejects_tampered_proposal_batch() {
+        // The signing hash covers calls/salt only through transaction_id, so a
+        // coordinator can swap the batch while keeping the id and signature
+        // intact and the signature still verifies. Offline verification must
+        // recompute the id, or it would attribute an attacker's calls to the
+        // signer.
+        let key = test_signing_key(0x1234);
+        let public_key = rs_felt_to_core(key.verifying_key().scalar());
+        let proposal = MultisigProposal::new(
+            address(1),
+            ChainId::Sepolia,
+            vec![call()],
+            Felt::from(99u64),
+            address(2),
+            None,
+        );
+        let signed = SignedMultisigCoordinationMessage::sign_with_stark_key(
+            MultisigCoordinationMessage::Proposal(proposal.clone()),
+            &key,
+        )
+        .unwrap();
+        signed.verify_with_stark_public_key(public_key).unwrap();
+
+        let mut tampered = proposal;
+        tampered.calls = vec![MultisigCall::new(
+            address(0xbad),
+            Felt::from(0x666u64),
+            vec![Felt::from(1u64)],
+        )];
+        tampered.salt = Felt::from(1234u64);
+        // transaction_id and signature deliberately left untouched.
+        let forged = SignedMultisigCoordinationMessage {
+            message: MultisigCoordinationMessage::Proposal(tampered),
+            ..signed
+        };
+        // The raw signature is still good over the unchanged hash...
+        assert_eq!(forged.message_hash(), forged.message_hash());
+        // ...but verification rejects it on the recomputed transaction id.
+        assert!(matches!(
+            forged.verify_with_stark_public_key(public_key),
+            Err(KmsError::MultisigError(_))
+        ));
+        assert!(forged.validate_structure().is_err());
     }
 
     #[test]

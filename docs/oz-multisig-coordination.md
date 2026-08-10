@@ -169,7 +169,11 @@ pedersen_chain([
 
 The proposal payload hash covers the proposer and the `starknet_keccak` of the
 memo; `calls`/`salt` are bound transitively through `transaction_id`, which
-receivers independently recompute. The signature itself is a SNIP-6 felt array
+receivers independently recompute. That recomputation is mandatory, not
+advisory: because the signature does not cover `calls`/`salt` directly, a
+coordinator could otherwise swap the batch while keeping the original id and
+signature. Both verification entry points recompute the id before considering
+the signature, so no path can attribute a tampered batch to a signer. The signature itself is a SNIP-6 felt array
 (`[r, s]` for Stark-key accounts, produced by
 `SignedMultisigCoordinationMessage::sign_with_stark_key`), so non-Stark account
 types can carry their native signature encoding via
