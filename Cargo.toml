@@ -34,8 +34,8 @@ edition = "2021"
 rust-version = "1.92"
 authors = ["Krusty KMS Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/starknet-innovation/kms"
-homepage = "https://github.com/starknet-innovation/kms"
+repository = "https://github.com/starknet-innovation/krusty-kms"
+homepage = "https://github.com/starknet-innovation/krusty-kms"
 keywords = ["cryptography", "kms", "starknet", "encryption"]
 categories = ["cryptography"]
 
