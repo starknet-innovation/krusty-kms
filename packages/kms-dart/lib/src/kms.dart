@@ -9,6 +9,17 @@ import 'ffi/library.dart';
 import 'ffi/types.dart' as c;
 import 'types.dart';
 
+typedef _ElgamalEncryptFn = int Function(
+    Pointer<c.KmsFelt> message,
+    Pointer<c.KmsProjectivePoint> publicKey,
+    Pointer<c.KmsFelt> random,
+    Pointer<c.KmsFelt> prefix,
+    Pointer<c.KmsProjectivePoint> outL,
+    Pointer<c.KmsProjectivePoint> outR,
+    Pointer<Uint8> outProofJson,
+    int outProofJsonLen,
+    Pointer<Size> outProofJsonWritten);
+
 class Kms {
   static Kms? _instance;
   late final KmsBindings _bindings;
@@ -697,7 +708,31 @@ class Kms {
   // ElGamal
   // ---------------------------------------------------------------------------
 
+  /// Encrypts [message] with the legacy Fiat-Shamir transcript
+  /// `H(prefix, L, R, AL)`, which does not bind the public key or the `AR`
+  /// commitment. Only use this for verifiers pinned to the legacy transcript
+  /// (e.g. deployed Cairo contracts); otherwise prefer [elgamalEncryptStrong].
   ({ProjectivePoint l, ProjectivePoint r, String proofJson}) elgamalEncrypt(
+    Felt message,
+    ProjectivePoint publicKey,
+    Felt random,
+    Felt prefix,
+  ) =>
+      _elgamalEncrypt(_bindings.elgamalEncrypt, message, publicKey, random, prefix);
+
+  /// Encrypts [message] with the fully transcript-bound proof
+  /// `H(prefix, pk, L, R, AL, AR)`. Rejected by legacy-transcript verifiers.
+  ({ProjectivePoint l, ProjectivePoint r, String proofJson}) elgamalEncryptStrong(
+    Felt message,
+    ProjectivePoint publicKey,
+    Felt random,
+    Felt prefix,
+  ) =>
+      _elgamalEncrypt(
+          _bindings.elgamalEncryptStrong, message, publicKey, random, prefix);
+
+  ({ProjectivePoint l, ProjectivePoint r, String proofJson}) _elgamalEncrypt(
+    _ElgamalEncryptFn encryptFn,
     Felt message,
     ProjectivePoint publicKey,
     Felt random,
@@ -712,12 +747,12 @@ class Kms {
     final pWritten = calloc<Size>();
     try {
       // First call to get proof size
-      _check(_bindings.elgamalEncrypt(
+      _check(encryptFn(
           pMsg, pPub, pRand, pPrefix, pOutL, pOutR, nullptr, 0, pWritten));
       final proofLen = pWritten.value;
       final pProof = calloc<Uint8>(proofLen + 1);
       try {
-        _check(_bindings.elgamalEncrypt(
+        _check(encryptFn(
             pMsg, pPub, pRand, pPrefix, pOutL, pOutR, pProof, proofLen + 1, pWritten));
         return (
           l: _projectiveFromC(pOutL.ref),
@@ -730,7 +765,7 @@ class Kms {
     } finally {
       calloc.free(pMsg);
       calloc.free(pPub);
-      calloc.free(pRand);
+      _secureFree(pRand, sizeOf<c.KmsFelt>());
       calloc.free(pPrefix);
       calloc.free(pOutL);
       calloc.free(pOutR);
