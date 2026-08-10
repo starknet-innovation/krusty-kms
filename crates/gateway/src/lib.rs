@@ -902,7 +902,13 @@ where
         // reach the status endpoint enumerate and observe other callers'
         // operations; 128 bits of OS entropy keep ids unguessable while the
         // prefix keeps them readable in logs.
-        let entropy: [u8; 16] = krusty_kms_crypto::random_bytes();
+        let entropy: [u8; 16] = krusty_kms_crypto::try_random_bytes().map_err(|error| {
+            GatewayError::new(
+                GatewayErrorCode::Internal,
+                true,
+                Some(format!("OS entropy source unavailable: {error}")),
+            )
+        })?;
         let id = OperationId::new(format!(
             "{}-{}",
             operation_prefix(kind),
