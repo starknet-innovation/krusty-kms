@@ -160,8 +160,8 @@ public enum Kms {
 
     /// Best-effort wipe of secret bytes before buffer release.
     ///
-    /// Uses `kms_secure_wipe` (`explicit_bzero` on Apple/Linux) so the store
-    /// cannot be optimized away when the buffer is about to die.
+    /// Uses `kms_secure_wipe` (`memset_s` on Apple, `explicit_bzero` on Linux)
+    /// so the store cannot be optimized away when the buffer is about to die.
     private static func secureZero(_ buffer: inout [UInt8]) {
         buffer.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress else { return }
