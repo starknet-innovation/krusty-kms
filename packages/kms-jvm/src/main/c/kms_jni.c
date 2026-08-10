@@ -338,6 +338,12 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_poseidonHashMany(
     jsize count = (*env)->GetArrayLength(env, values);
     KmsFelt *felts = NULL;
     if (count > 0) {
+        /* On 32-bit targets count * sizeof(KmsFelt) can wrap, undersizing the
+           allocation while the loop below writes count elements. */
+        if ((size_t)count > SIZE_MAX / sizeof(KmsFelt)) {
+            throw_kms_error(env, KMS_ERR_INVALID_INPUT);
+            return NULL;
+        }
         felts = (KmsFelt *)calloc((size_t)count, sizeof(KmsFelt));
         if (felts == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
         for (jsize i = 0; i < count; i++) {
@@ -665,6 +671,11 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_calculateContractAddres
     jsize count = (*env)->GetArrayLength(env, constructorCalldata);
     KmsFelt *calldata = NULL;
     if (count > 0) {
+        /* See poseidonHashMany: guard the allocation-size multiplication. */
+        if ((size_t)count > SIZE_MAX / sizeof(KmsFelt)) {
+            throw_kms_error(env, KMS_ERR_INVALID_INPUT);
+            return NULL;
+        }
         calldata = (KmsFelt *)calloc((size_t)count, sizeof(KmsFelt));
         if (calldata == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
         for (jsize i = 0; i < count; i++) {
