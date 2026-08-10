@@ -158,6 +158,28 @@ public enum Kms {
         if code != KMS_OK { throw KmsError.fromCode(code) }
     }
 
+    /// Best-effort wipe of secret bytes before buffer release.
+    private static func secureZero(_ buffer: inout [UInt8]) {
+        buffer.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            memset(base, 0, raw.count)
+        }
+    }
+
+    private static func secureZeroCChars(_ buffer: inout [CChar]) {
+        buffer.withUnsafeMutableBytes { raw in
+            guard let base = raw.baseAddress else { return }
+            memset(base, 0, raw.count)
+        }
+    }
+
+    private static func secureZeroFelt(_ felt: inout KmsFelt) {
+        withUnsafeMutableBytes(of: &felt) { raw in
+            guard let base = raw.baseAddress else { return }
+            memset(base, 0, raw.count)
+        }
+    }
+
     private static func dynamicString(
         _ call: (_ out: UnsafeMutablePointer<CChar>?, _ outLen: Int, _ outWritten: UnsafeMutablePointer<Int>?) -> Int32
     ) throws -> String {
@@ -166,7 +188,9 @@ public enum Kms {
 
         var out = [CChar](repeating: 0, count: written + 1)
         try check(call(&out, out.count, &written))
-        return String(cString: out)
+        let result = String(cString: out)
+        secureZeroCChars(&out)
+        return result
     }
 
     public static func abiVersion() throws -> (major: UInt32, minor: UInt32) {
@@ -255,9 +279,27 @@ public enum Kms {
     }
 
     public static func generateMnemonic(_ wordCount: UInt32) throws -> String {
-        try dynamicString { out, outLen, outWritten in
-            kms_generate_mnemonic(wordCount, out, outLen, outWritten)
+        // Random each call: do not size from a probe phrase. Fixed capacity with
+        // grow-on-BUFFER_TOO_SMALL (same strategy as the JNI wrapper).
+        var capacity = 512
+        for _ in 0..<4 {
+            var out = [CChar](repeating: 0, count: capacity)
+            var written = 0
+            let rc = kms_generate_mnemonic(wordCount, &out, out.count, &written)
+            if rc == KMS_OK {
+                let result = String(cString: out)
+                secureZeroCChars(&out)
+                return result
+            }
+            if rc == KMS_ERR_BUFFER_TOO_SMALL, written + 1 > capacity {
+                secureZeroCChars(&out)
+                capacity = written + 1
+                continue
+            }
+            secureZeroCChars(&out)
+            try check(rc)
         }
+        throw KmsError.fromCode(KMS_ERR_INTERNAL)
     }
 
     public static func generateMnemonicFromEntropy(_ entropy: [UInt8]) throws -> String {
@@ -288,7 +330,9 @@ public enum Kms {
             }
         }
         try check(rc)
-        return Array(out.prefix(written))
+        let result = Array(out.prefix(written))
+        secureZero(&out)
+        return result
     }
 
     public static func derivePrivateKey(
@@ -305,7 +349,9 @@ public enum Kms {
             }
         }
         try check(rc)
-        return Felt(cValue: out)
+        let result = Felt(cValue: out)
+        secureZeroFelt(&out)
+        return result
     }
 
     public static func deriveKeypair(
@@ -322,7 +368,12 @@ public enum Kms {
             }
         }
         try check(rc)
-        return TongoKeyPair(cValue: out)
+        let result = TongoKeyPair(cValue: out)
+        withUnsafeMutableBytes(of: &out) { raw in
+            guard let base = raw.baseAddress else { return }
+            memset(base, 0, raw.count)
+        }
+        return result
     }
 
     public static func deriveNostrPrivateKey(
@@ -331,6 +382,7 @@ public enum Kms {
         accountIndex: UInt32,
         passphrase: String = ""
     ) throws -> [UInt8] {
+        // ABI: kms_derive_nostr_private_key always writes exactly 32 bytes.
         var out = [UInt8](repeating: 0, count: 32)
         let rc = mnemonic.withCString { m in
             passphrase.withCString { p in
@@ -338,7 +390,9 @@ public enum Kms {
             }
         }
         try check(rc)
-        return out
+        let result = Array(out)
+        secureZero(&out)
+        return result
     }
 
     public static func deriveNostrKeypair(
@@ -354,7 +408,12 @@ public enum Kms {
             }
         }
         try check(rc)
-        return NostrKeyPair(cValue: out)
+        let result = NostrKeyPair(cValue: out)
+        withUnsafeMutableBytes(of: &out) { raw in
+            guard let base = raw.baseAddress else { return }
+            memset(base, 0, raw.count)
+        }
+        return result
     }
 
     public static func calculateContractAddress(

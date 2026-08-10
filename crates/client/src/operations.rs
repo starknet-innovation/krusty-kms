@@ -42,7 +42,11 @@ pub fn build_fund_calls(
     hint_nonce: &[u8; 24],
 ) -> Result<(Call, Call)> {
     // 1. Build ERC20 approve call
-    let approve_amount = proof.amount * rate;
+    let approve_amount = proof.amount.checked_mul(rate).ok_or_else(|| {
+        krusty_kms_common::KmsError::InvalidAmount(
+            "approve amount overflow: amount * rate exceeds u128".to_string(),
+        )
+    })?;
     let approve_call = build_erc20_approve(erc20_address, tongo_address, approve_amount)?;
 
     // 2. Build fund call
@@ -549,7 +553,11 @@ pub fn build_outside_fund_calls(
     rate: u128,
 ) -> Result<(Call, Call)> {
     // 1. Build ERC20 approve call
-    let approve_amount = amount * rate;
+    let approve_amount = amount.checked_mul(rate).ok_or_else(|| {
+        krusty_kms_common::KmsError::InvalidAmount(
+            "approve amount overflow: amount * rate exceeds u128".to_string(),
+        )
+    })?;
     let approve_call = build_erc20_approve(erc20_address, tongo_address, approve_amount)?;
 
     // 2. Build outside_fund call: [to.x, to.y, amount]

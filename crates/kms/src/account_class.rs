@@ -284,6 +284,26 @@ impl ArgentAccount {
     pub const CLASS_HASH: &str =
         "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f";
 
+    /// Argent Account class hash (Cairo 1, v0.3.1).
+    pub const CLASS_HASH_V031: &str =
+        "0x029927c8af6bccf3f6fda035981e765a7bdbf18a2dc0d630494f8758aa908e2b";
+
+    /// Argent Account class hash (Cairo 1, v0.3.0).
+    pub const CLASS_HASH_V030: &str =
+        "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
+
+    /// Class hashes accepted for Argent Cairo 1 deployments.
+    pub fn known_class_hashes() -> Vec<Felt> {
+        [
+            Self::CLASS_HASH,
+            Self::CLASS_HASH_V031,
+            Self::CLASS_HASH_V030,
+        ]
+        .into_iter()
+        .map(|hash| Felt::from_hex(hash).expect("static Argent class hash"))
+        .collect()
+    }
+
     pub fn new() -> Self {
         Self {
             class_hash: Felt::from_hex(Self::CLASS_HASH).unwrap(),

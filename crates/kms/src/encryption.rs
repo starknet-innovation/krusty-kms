@@ -36,9 +36,26 @@ pub struct EncryptedPayload {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/// Minimum allowed scrypt N (2^10).
+pub(crate) const SCRYPT_N_MIN: u32 = 1 << 10;
+/// Maximum allowed scrypt N (2^20).
+pub(crate) const SCRYPT_N_MAX: u32 = 1 << 20;
+
+/// Validate scrypt N and return `log2(N)` for [`ScryptParams`].
+///
+/// Requires `N` to be a power of two in `[2^10, 2^20]`.
+pub(crate) fn scrypt_log_n(n: u32) -> Result<u8> {
+    if !(SCRYPT_N_MIN..=SCRYPT_N_MAX).contains(&n) || !n.is_power_of_two() {
+        return Err(KmsError::CryptoError(format!(
+            "Invalid scrypt N={n}: must be a power of 2 in [{SCRYPT_N_MIN}, {SCRYPT_N_MAX}]"
+        )));
+    }
+    Ok(n.trailing_zeros() as u8)
+}
+
 /// Derive a 32-byte key from a password and salt using scrypt.
 fn derive_scrypt_key(password: &[u8], kdf_salt: &[u8], n: u32) -> Result<[u8; 32]> {
-    let log_n = (n as f64).log2() as u8;
+    let log_n = scrypt_log_n(n)?;
     let params = ScryptParams::new(log_n, 8, 1, 32)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut key = [u8::default(); 32];
@@ -229,6 +246,14 @@ mod tests {
         let wrong_password = test_password(1);
         let result = decrypt_private_key(&encrypted, &wrong_password, TEST_SCRYPT_N);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_invalid_scrypt_n() {
+        assert!(scrypt_log_n(1023).is_err());
+        assert!(scrypt_log_n(3).is_err());
+        assert!(scrypt_log_n(1 << 21).is_err());
+        assert_eq!(scrypt_log_n(1024).unwrap(), 10);
     }
 
     #[test]

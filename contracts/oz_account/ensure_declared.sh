@@ -13,10 +13,15 @@ usage() {
 Usage: ensure_declared.sh [--network sepolia|mainnet] [--rpc-url URL] [--version VERSION] [--declare]
 
 Checks whether the manifest-backed OpenZeppelin account class hash is declared
-on the target network. If `--declare` is passed, submits `sncast declare` when
-the class is missing.
+on the target network. Check-only mode (default) only queries RPC using the
+pinned manifest hash and does not require `sncast`.
 
-Requirements for declaration:
+If `--declare` is passed and the class is missing, the script builds locally,
+verifies the Sierra class hash matches the manifest via `sncast utils class-hash`,
+then submits `sncast declare`.
+
+Requirements for declaration (`--declare` only):
+- `scarb` and `sncast` must be available.
 - `sncast` must already be configured with an account/profile able to declare.
 - The current shell environment must provide any required auth for `sncast`.
 EOF
@@ -89,9 +94,6 @@ if [[ -z "$class_hash" ]]; then
   exit 1
 fi
 
-echo "Building $PACKAGE_NAME ($version)..."
-scarb --manifest-path "$MANIFEST_PATH" build
-
 rpc_payload=$(jq -cn --arg class_hash "$class_hash" '{
   jsonrpc: "2.0",
   id: 1,
@@ -114,6 +116,84 @@ if [[ "$declare_if_missing" != "true" ]]; then
   exit 2
 fi
 
+# --declare path: reproduce the local Sierra hash before submitting.
+echo "Building $PACKAGE_NAME ($version)..."
+scarb --manifest-path "$MANIFEST_PATH" build
+
+if ! command -v sncast >/dev/null 2>&1; then
+  echo "sncast is required to compute the local class hash before declare" >&2
+  exit 1
+fi
+
+echo "Computing local class hash for $CONTRACT_NAME..."
+# sncast resolves the package relative to CWD; run from the contract dir even
+# when this script is invoked by path from the repo root.
+local_class_hash_raw=$(
+  (
+    cd "$SCRIPT_DIR"
+    sncast --json utils class-hash \
+      --contract-name "$CONTRACT_NAME" \
+      --package "$PACKAGE_NAME" \
+      2>/dev/null || true
+  )
+)
+
+if [[ -z "$local_class_hash_raw" ]]; then
+  # Fallback: non-JSON output (class hash on its own line or "class_hash: 0x...")
+  local_class_hash_raw=$(
+    (
+      cd "$SCRIPT_DIR"
+      sncast utils class-hash \
+        --contract-name "$CONTRACT_NAME" \
+        --package "$PACKAGE_NAME" \
+        2>/dev/null || true
+    )
+  )
+fi
+
+if [[ -z "$local_class_hash_raw" ]]; then
+  echo "Failed to compute local class hash with sncast utils class-hash." >&2
+  echo "Refuse to continue: local toolchain could not reproduce the class hash." >&2
+  exit 1
+fi
+
+local_class_hash=$(
+  if jq -e . >/dev/null 2>&1 <<<"$local_class_hash_raw"; then
+    jq -r '.class_hash // .classHash // empty' <<<"$local_class_hash_raw"
+  else
+    # Extract the first 0x-prefixed hex token from plain output.
+    grep -oE '0x[0-9a-fA-F]+' <<<"$local_class_hash_raw" | head -n1 || true
+  fi
+)
+
+if [[ -z "$local_class_hash" ]]; then
+  echo "Could not parse local class hash from sncast output:" >&2
+  echo "$local_class_hash_raw" >&2
+  echo "Refuse to declare a class that may not match the manifest." >&2
+  exit 1
+fi
+
+normalize_felt() {
+  local value="${1#0x}"
+  value=$(echo "$value" | tr '[:upper:]' '[:lower:]' | sed 's/^0*//')
+  if [[ -z "$value" ]]; then
+    value="0"
+  fi
+  printf '0x%s' "$value"
+}
+
+manifest_norm=$(normalize_felt "$class_hash")
+local_norm=$(normalize_felt "$local_class_hash")
+
+if [[ "$manifest_norm" != "$local_norm" ]]; then
+  echo "Local class hash does not match manifest." >&2
+  echo "  manifest: $class_hash" >&2
+  echo "  local:    $local_class_hash" >&2
+  echo "Refuse to --declare a mismatched class. Update class-hashes.json only after verifying the local build." >&2
+  exit 1
+fi
+
+echo "Local class hash matches manifest: $class_hash"
 echo "Declaring $CONTRACT_NAME via sncast..."
 sncast declare \
   --contract-name "$CONTRACT_NAME" \

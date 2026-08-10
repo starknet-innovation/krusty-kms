@@ -34,7 +34,7 @@ pub mod scalar;
 pub use audit::{AuditPrefixData, AuditProver};
 pub use curve::StarkCurve;
 pub use elgamal::{recover_small_discrete_log, ElGamal, ElGamalEncryption};
-pub use hash::poseidon_hash_many;
+pub use hash::{extend_pedersen_prefix, extend_poseidon_prefix, poseidon_hash_many};
 pub use poe::ProofOfExponentiation;
 pub use poe2::ProofOfExponentiation2;
 #[cfg(feature = "test-utils")]

@@ -64,6 +64,10 @@ pub enum OracleCommand {
 pub struct OracleRequest {
     pub version: ProtocolVersion,
     pub id: RequestId,
+    /// Explicit confirmation for privileged sign/deploy when
+    /// `KRUSTY_ORACLE_REQUIRE_CONFIRM=1` is set on the oracle process.
+    #[serde(default)]
+    pub confirm: bool,
     #[serde(flatten)]
     pub command: OracleCommand,
 }
@@ -170,6 +174,7 @@ mod tests {
         let request = OracleRequest {
             version: ProtocolVersion::V1_0,
             id: RequestId::new("req-1").unwrap(),
+            confirm: false,
             command: OracleCommand::DeriveAccount(DerivationRequest {
                 secret: SecretRef::new("wallet-1").unwrap(),
                 key_domain: KeyDomain::StarknetAccount,
@@ -183,6 +188,7 @@ mod tests {
                     kind: AccountClassKind::OpenZeppelin,
                     class_hash: None,
                     source_label: None,
+                    allow_unlisted_class_hash: false,
                 },
                 salt_policy: SaltPolicySpec::PublicKey,
             }),
@@ -209,6 +215,7 @@ mod tests {
         let request = OracleRequest {
             version: ProtocolVersion::V1_0,
             id: RequestId::new("req-sign").unwrap(),
+            confirm: false,
             command: OracleCommand::Sign(SignRequest::NostrEvent {
                 secret: SecretRef::new("nostr-secret").unwrap(),
                 derivation_path: DerivationPath {

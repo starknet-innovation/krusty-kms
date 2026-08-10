@@ -166,13 +166,22 @@ pub fn derive_keypair(
 /// A Nostr keypair (raw secp256k1 private key as bytes).
 ///
 /// The private key is zeroized when the keypair is dropped.
-#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct NostrKeyPair {
     /// 32-byte secp256k1 private key
     pub private_key: [u8; 32],
     /// 32-byte x-only public key (BIP-340 format)
     #[zeroize(skip)]
     pub public_key: [u8; 32],
+}
+
+impl core::fmt::Debug for NostrKeyPair {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("NostrKeyPair")
+            .field("private_key", &"***")
+            .field("public_key", &self.public_key)
+            .finish()
+    }
 }
 
 /// Derive a Nostr private key from a mnemonic.
@@ -389,10 +398,26 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<Der
         0x41, 0x41,
     ]);
 
-    // BIP-32: child_key = (parse256(IL) + parent_key) mod n
+    // BIP-32: reject IL >= n. Spec says try the next index; for a fixed path we
+    // return an error (hardened failure) rather than silently advancing.
     let il_num = BigUint::from_bytes_be(il);
+    if il_num >= secp256k1_n {
+        return Err(KmsError::CryptoError(
+            "BIP-32 child derivation failed: IL >= curve order n".to_string(),
+        ));
+    }
+
+    // BIP-32: child_key = (parse256(IL) + parent_key) mod n
     let parent_num = BigUint::from_bytes_be(key);
     let child_num = (il_num + parent_num) % &secp256k1_n;
+
+    // BIP-32: reject ki == 0 (invalid private key). Spec says try next index;
+    // for a fixed path we return an error.
+    if child_num == BigUint::from(0u32) {
+        return Err(KmsError::CryptoError(
+            "BIP-32 child derivation failed: derived key is zero".to_string(),
+        ));
+    }
 
     // Convert back to bytes (big-endian, padded to 32 bytes)
     let child_bytes = child_num.to_bytes_be();
@@ -462,6 +487,11 @@ pub fn grind_key(key_seed: &[u8; 32]) -> Result<Felt> {
         if candidate < max_allowed {
             // Take modulo to get final Stark private key
             let k = candidate % &stark_order;
+
+            // Reject the zero scalar (invalid private key); try the next counter.
+            if k == BigUint::from(0u32) {
+                continue;
+            }
 
             // Convert to 32-byte array (big-endian)
             let k_bytes = k.to_bytes_be();
@@ -618,6 +648,15 @@ mod tests {
         // Convert Felt to bytes for comparison
         let tongo_bytes = tongo.private_key.expose_secret().to_bytes_be();
         assert_ne!(nostr.private_key.as_slice(), tongo_bytes.as_slice());
+    }
+
+    #[test]
+    fn test_nostr_keypair_debug_redacts_private_key() {
+        let keypair = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
+        let debug = format!("{:?}", keypair);
+        assert!(debug.contains("private_key: \"***\""));
+        let priv_hex = hex::encode(keypair.private_key);
+        assert!(!debug.contains(&priv_hex));
     }
 
     #[test]

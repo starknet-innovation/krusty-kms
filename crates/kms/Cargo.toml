@@ -39,6 +39,7 @@ rand_core.workspace = true
 k256 = { version = "0.13", features = ["ecdsa"] }
 starknet-crypto = "0.8"
 zeroize.workspace = true
+subtle.workspace = true
 chacha20poly1305.workspace = true
 scrypt.workspace = true
 aes.workspace = true

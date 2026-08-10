@@ -79,7 +79,12 @@ impl ElGamal {
         let a_l = StarkCurve::add(&g_rb, &pk_rr);
         let a_r = StarkCurve::mul(r_r.expose_secret(), Some(&g));
 
-        // Compute Fiat-Shamir challenge
+        // Compute Fiat-Shamir challenge c = H(prefix, L, R, AL).
+        //
+        // SECURITY / COMPATIBILITY: Omits `pk` and `AR` from the challenge hash
+        // to preserve compatibility with existing verifiers / vectors. Bind
+        // those fields into `prefix` via `hash::extend_pedersen_prefix` for new
+        // APIs that are not pinned to the legacy transcript.
         let c = compute_challenge_triple(prefix, l, r, &a_l)?;
 
         // Compute responses (mod curve order)

@@ -47,6 +47,17 @@ where
     })
 }
 
+/// Clone the account behind `handle` under a short registry lock.
+///
+/// Callers should use this before long-running proof generation so the global
+/// registry mutex is not held for the duration of proving.
+pub fn clone_account(handle: u64) -> Result<TongoAccount, i32> {
+    with_registry(|map| {
+        let account = map.get(&handle).ok_or(KMS_ERR_INVALID_HANDLE)?;
+        Ok(account.as_ref().clone())
+    })
+}
+
 /// Run a closure with a mutable reference to the account behind `handle`.
 pub fn with_mut<F, R>(handle: u64, f: F) -> Result<R, i32>
 where

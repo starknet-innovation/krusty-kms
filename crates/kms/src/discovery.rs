@@ -11,6 +11,7 @@ use crate::stark_signing::stark_public_key;
 use krusty_kms_common::Result;
 use serde::{Deserialize, Serialize};
 use starknet_types_core::felt::Felt;
+use std::fmt;
 
 // ---------------------------------------------------------------------------
 // Known class hashes
@@ -20,13 +21,14 @@ use starknet_types_core::felt::Felt;
 const BRAAVOS_BASE: &str = "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201";
 
 /// Argent Cairo 1 v0.4.0 class hash.
-const ARGENT_V040: &str = "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f";
+/// Argent Cairo 1 v0.4.0 class hash.
+const ARGENT_V040: &str = ArgentAccount::CLASS_HASH;
 
 /// Argent Cairo 1 v0.3.1 class hash.
-const ARGENT_V031: &str = "0x029927c8af6bccf3f6fda035981e765a7bdbf18a2dc0d630494f8758aa908e2b";
+const ARGENT_V031: &str = ArgentAccount::CLASS_HASH_V031;
 
 /// Argent Cairo 1 v0.3.0 class hash.
-const ARGENT_V030: &str = "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
+const ARGENT_V030: &str = ArgentAccount::CLASS_HASH_V030;
 
 /// Argent Cairo 0 proxy class hash.
 const ARGENT_PROXY: &str = "0x025ec026985a3bf9d0cc1fe17326b245dfdc3ff89b8fde106542a3ea56c5a918";
@@ -83,7 +85,10 @@ pub enum WalletType {
 /// This struct contains the **private key** in the `private_key` field.
 /// Callers must handle this securely — avoid logging, persist only in
 /// encrypted storage, and zeroize when no longer needed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Default `Serialize` **omits** `private_key`. Use [`Self::with_secrets`] (or
+/// [`Self::expose_private_key`]) at intentional recovery boundaries.
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CandidateAccount {
     pub wallet_type: WalletType,
@@ -93,7 +98,9 @@ pub struct CandidateAccount {
     pub address: String,
     /// The Stark public key (x-coordinate).
     pub public_key: String,
-    /// The Stark private key. Handle with care — zeroize after use.
+    /// The Stark private key. Omitted from default Serialize; use
+    /// [`Self::with_secrets`] when an API must return it.
+    #[serde(default)]
     pub private_key: String,
     /// The HD derivation index used.
     pub derivation_index: u32,
@@ -101,6 +108,77 @@ pub struct CandidateAccount {
     pub derivation_path: String,
     /// The class hash version label (e.g., "v0.4.0", "proxy+v0.2.4").
     pub class_version: String,
+}
+
+impl fmt::Debug for CandidateAccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CandidateAccount")
+            .field("wallet_type", &self.wallet_type)
+            .field("class_hash", &self.class_hash)
+            .field("address", &self.address)
+            .field("public_key", &self.public_key)
+            .field("private_key", &"***")
+            .field("derivation_index", &self.derivation_index)
+            .field("derivation_path", &self.derivation_path)
+            .field("class_version", &self.class_version)
+            .finish()
+    }
+}
+
+impl CandidateAccount {
+    /// Intentional access to the private key hex string.
+    pub fn expose_private_key(&self) -> &str {
+        &self.private_key
+    }
+
+    /// Serializable view that includes the private key.
+    ///
+    /// Use only at explicit recovery / WASM boundaries that must return secrets.
+    pub fn with_secrets(&self) -> CandidateAccountWithSecrets<'_> {
+        CandidateAccountWithSecrets {
+            wallet_type: self.wallet_type,
+            class_hash: &self.class_hash,
+            address: &self.address,
+            public_key: &self.public_key,
+            private_key: &self.private_key,
+            derivation_index: self.derivation_index,
+            derivation_path: &self.derivation_path,
+            class_version: &self.class_version,
+        }
+    }
+}
+
+impl Serialize for CandidateAccount {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Public view: private_key is intentionally omitted.
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("CandidateAccount", 7)?;
+        state.serialize_field("walletType", &self.wallet_type)?;
+        state.serialize_field("classHash", &self.class_hash)?;
+        state.serialize_field("address", &self.address)?;
+        state.serialize_field("publicKey", &self.public_key)?;
+        state.serialize_field("derivationIndex", &self.derivation_index)?;
+        state.serialize_field("derivationPath", &self.derivation_path)?;
+        state.serialize_field("classVersion", &self.class_version)?;
+        state.end()
+    }
+}
+
+/// Serializable candidate including the private key (recovery escape hatch).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CandidateAccountWithSecrets<'a> {
+    pub wallet_type: WalletType,
+    pub class_hash: &'a str,
+    pub address: &'a str,
+    pub public_key: &'a str,
+    pub private_key: &'a str,
+    pub derivation_index: u32,
+    pub derivation_path: &'a str,
+    pub class_version: &'a str,
 }
 
 // ---------------------------------------------------------------------------
@@ -118,19 +196,79 @@ fn felt_hex(f: &Felt) -> String {
 /// API-based account lookup — e.g., querying Argent's smart account API by
 /// public key to find accounts whose addresses can't be derived locally
 /// (because the salt was server-provided).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Default `Serialize` omits `private_key`. Use [`Self::with_secrets`] when an
+/// intentional recovery boundary must include it.
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedKeypair {
     /// Which derivation scheme produced this keypair.
     pub derivation_type: DerivationType,
     /// The Stark public key (x-coordinate, hex).
     pub public_key: String,
-    /// The Stark private key (hex). Handle with care.
+    /// The Stark private key (hex). Omitted from default Serialize.
+    #[serde(default)]
     pub private_key: String,
     /// The HD derivation index.
     pub derivation_index: u32,
     /// Human-readable derivation path.
     pub derivation_path: String,
+}
+
+impl fmt::Debug for DerivedKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DerivedKeypair")
+            .field("derivation_type", &self.derivation_type)
+            .field("public_key", &self.public_key)
+            .field("private_key", &"***")
+            .field("derivation_index", &self.derivation_index)
+            .field("derivation_path", &self.derivation_path)
+            .finish()
+    }
+}
+
+impl DerivedKeypair {
+    /// Intentional access to the private key hex string.
+    pub fn expose_private_key(&self) -> &str {
+        &self.private_key
+    }
+
+    /// Serializable view that includes the private key.
+    pub fn with_secrets(&self) -> DerivedKeypairWithSecrets<'_> {
+        DerivedKeypairWithSecrets {
+            derivation_type: self.derivation_type,
+            public_key: &self.public_key,
+            private_key: &self.private_key,
+            derivation_index: self.derivation_index,
+            derivation_path: &self.derivation_path,
+        }
+    }
+}
+
+impl Serialize for DerivedKeypair {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("DerivedKeypair", 4)?;
+        state.serialize_field("derivationType", &self.derivation_type)?;
+        state.serialize_field("publicKey", &self.public_key)?;
+        state.serialize_field("derivationIndex", &self.derivation_index)?;
+        state.serialize_field("derivationPath", &self.derivation_path)?;
+        state.end()
+    }
+}
+
+/// Serializable keypair including the private key (recovery escape hatch).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DerivedKeypairWithSecrets<'a> {
+    pub derivation_type: DerivationType,
+    pub public_key: &'a str,
+    pub private_key: &'a str,
+    pub derivation_index: u32,
+    pub derivation_path: &'a str,
 }
 
 /// The derivation scheme used to produce a keypair.
@@ -375,8 +513,32 @@ mod tests {
             .find(|c| c.wallet_type == WalletType::ArgentLegacy && c.derivation_index == 0)
             .expect("expected an ArgentLegacy candidate at index 0");
         assert_eq!(
-            legacy.private_key, "0x72e62ef0a3dc57f2891f0f27bc60b6951854990968d07660c6f245f14de67c",
+            legacy.expose_private_key(),
+            "0x72e62ef0a3dc57f2891f0f27bc60b6951854990968d07660c6f245f14de67c",
             "Argent legacy private key mismatch for test mnemonic"
+        );
+    }
+
+    #[test]
+    fn test_candidate_debug_redacts_private_key() {
+        let candidates = generate_candidates(TEST_MNEMONIC, 1).unwrap();
+        let c = &candidates[0];
+        let debug = format!("{:?}", c);
+        assert!(debug.contains("private_key: \"***\""));
+        assert!(!debug.contains(c.expose_private_key()));
+    }
+
+    #[test]
+    fn test_candidate_default_serialize_omits_private_key() {
+        let candidates = generate_candidates(TEST_MNEMONIC, 1).unwrap();
+        let json = serde_json::to_value(&candidates[0]).unwrap();
+        assert!(json.get("privateKey").is_none());
+        assert!(json.get("address").is_some());
+
+        let with_secrets = serde_json::to_value(candidates[0].with_secrets()).unwrap();
+        assert_eq!(
+            with_secrets["privateKey"],
+            candidates[0].expose_private_key()
         );
     }
 

@@ -2,6 +2,22 @@
 
 `krusty-kms-oracle` provides a newline-delimited JSON transport on top of the gateway surface.
 
+## Trust Model
+
+**Stdio is trusted-peer only.** The oracle process does not authenticate callers.
+Anyone who can write to the process stdin can request derive/sign/deploy operations
+against whatever `SecretResolver` the host wired in. Deploy it only behind a local
+supervisor, OS user boundary, or other peer-trust mechanism — never as a public
+network endpoint.
+
+Optional hardening:
+
+- Request lines longer than 256 KiB are rejected.
+- Set `KRUSTY_ORACLE_REQUIRE_CONFIRM=1` to require `"confirm": true` on privileged
+  `sign` / `deploy_account` requests.
+- `secret` values must be opaque IDs (hex-looking private keys and mnemonic-like
+  phrases are rejected).
+
 ## Transport Contract
 
 - One JSON request per line on input
@@ -9,6 +25,7 @@
 - Responses always use server protocol version `1.0`
 - Malformed JSON returns `status = "error"` with `id = null`
 - Malformed JSON uses the stable message `invalid request JSON`
+- Oversized lines return `status = "error"` with a max-length message
 
 ## Supported Commands
 
@@ -43,15 +60,21 @@ Supported request variants:
   - `key_domain` is `StarknetAccount` or `TongoAccount`
   - `domain` is `TransactionHash` or `TypedDataHash`
   - `chain_id` and `hash` are required
+  - `allow_raw_stark_hash` must be `true` (default `false`); blind hash signing is opt-in
 - `kind = "stark_raw_message"`
   - `key_domain` is `StarknetAccount` or `TongoAccount`
   - `message` is a canonical felt hex string
+  - `allow_raw_stark_hash` must be `true` (default `false`); same blind-signing opt-in as `stark_hash`
 - `kind = "nostr_event"`
   - `event_id` is a 32-byte lowercase hex string
 - `kind = "nostr_raw_message"`
   - `payload` is `{ "Hex": "..." }` or `{ "Utf8": "..." }`
 
 Impossible combinations are intentionally not representable on the wire. For example, there is no request shape that mixes a Nostr key with a Stark transaction hash.
+
+When deriving/deploying with an explicit `account_class.class_hash`, the hash must
+be on the known OZ/Argent/Braavos allowlist unless
+`allow_unlisted_class_hash: true` is set.
 
 ## Request Shape
 
@@ -72,7 +95,8 @@ Impossible combinations are intentionally not representable on the wire. For exa
     "account_class": {
       "kind": "OpenZeppelin",
       "class_hash": null,
-      "source_label": null
+      "source_label": null,
+      "allow_unlisted_class_hash": false
     },
     "salt_policy": "PublicKey"
   }
@@ -165,7 +189,8 @@ Impossible combinations are intentionally not representable on the wire. For exa
     },
     "chain_id": "Sepolia",
     "domain": "TransactionHash",
-    "hash": "0x0000000000000000000000000000000000000000000000000000000000001234"
+    "hash": "0x0000000000000000000000000000000000000000000000000000000000001234",
+    "allow_raw_stark_hash": true
   }
 }
 ```

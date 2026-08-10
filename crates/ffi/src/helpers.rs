@@ -10,6 +10,15 @@ use starknet_types_core::felt::{Felt, NonZeroFelt};
 use crate::error::*;
 use crate::types::*;
 
+/// Maximum number of felts accepted by `kms_poseidon_hash_many`.
+pub const KMS_MAX_POSEIDON_VALUES: usize = 4096;
+
+/// Maximum constructor calldata length for contract address derivation.
+pub const KMS_MAX_CONSTRUCTOR_CALLDATA: usize = 1024;
+
+/// Maximum BIP-39 entropy length in bytes (256-bit mnemonic).
+pub const KMS_MAX_ENTROPY_LEN: usize = 32;
+
 // ---------------------------------------------------------------------------
 // Felt <-> KmsFelt
 // ---------------------------------------------------------------------------

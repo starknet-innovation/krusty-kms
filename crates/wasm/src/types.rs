@@ -6,7 +6,45 @@
 use crate::error::{WasmError, WasmResult};
 use serde::{Deserialize, Serialize};
 use starknet_types_core::felt::Felt;
+use std::fmt;
 use wasm_bindgen::prelude::*;
+
+fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> Result<String, JsValue> {
+    let x = Felt::from_hex(public_key_x)
+        .map_err(|_| JsValue::from_str("invalid public_key_x: expected felt hex"))?;
+    let y = Felt::from_hex(public_key_y)
+        .map_err(|_| JsValue::from_str("invalid public_key_y: expected felt hex"))?;
+    Ok(krusty_kms_common::utils::serialize_public_key_hex(&x, &y))
+}
+
+fn padded_felt_hex(value: &str) -> Result<String, JsValue> {
+    let felt = Felt::from_hex(value)
+        .map_err(|_| JsValue::from_str("invalid public key felt: expected felt hex"))?;
+    Ok(format!("{:#066x}", felt))
+}
+
+fn require_felt_hex(value: &str, field: &str) -> Result<(), JsValue> {
+    Felt::from_hex(value)
+        .map(|_| ())
+        .map_err(|_| JsValue::from_str(&format!("invalid {field}: expected felt hex")))
+}
+
+fn validate_affine_public_key(public_key_x: &str, public_key_y: &str) -> Result<(), String> {
+    use starknet_types_core::curve::ProjectivePoint;
+
+    let x = Felt::from_hex(public_key_x)
+        .map_err(|_| "invalid public_key_x: expected felt hex".to_string())?;
+    let y = Felt::from_hex(public_key_y)
+        .map_err(|_| "invalid public_key_y: expected felt hex".to_string())?;
+    ProjectivePoint::from_affine(x, y)
+        .map(|_| ())
+        .map_err(|_| "invalid public key: coordinates are not on the Stark curve".to_string())
+}
+
+fn require_affine_public_key(public_key_x: &str, public_key_y: &str) -> Result<(), JsValue> {
+    validate_affine_public_key(public_key_x, public_key_y)
+        .map_err(|message| JsValue::from_str(&message))
+}
 
 /// Account state returned from on-chain queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,11 +218,23 @@ impl WasmCiphertext {
     }
 }
 
-/// Keypair for Tongo operations.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Keypair for Tongo / Starknet operations.
+///
+/// # Security / threat model
+///
+/// This type intentionally exposes `private_key` as a plain hex string for
+/// JS interop (signing, export, wallet recovery). That string lives in the
+/// JS heap and **cannot** be reliably wiped. Prefer companion public-only
+/// APIs (`derivePublicKey`, etc.) when private material is not required.
+/// Never `console.log` this value; `Debug` redacts the private key.
+#[derive(Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmKeypair {
-    /// Private key as hex string (0x-prefixed)
+    /// Private key as hex string (0x-prefixed). Treat as secret.
+    ///
+    /// Omitted from default `Serialize` (use the wasm-bindgen getter for the
+    /// intentional secret-returning API).
+    #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key X coordinate as hex string
     pub public_key_x: String,
@@ -192,23 +242,146 @@ pub struct WasmKeypair {
     pub public_key_y: String,
 }
 
+impl fmt::Debug for WasmKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmKeypair")
+            .field("private_key", &"***")
+            .field("public_key_x", &self.public_key_x)
+            .field("public_key_y", &self.public_key_y)
+            .finish()
+    }
+}
+
 #[wasm_bindgen]
 impl WasmKeypair {
     #[wasm_bindgen(constructor)]
-    pub fn new(private_key: String, public_key_x: String, public_key_y: String) -> Self {
-        Self {
+    pub fn new(
+        private_key: String,
+        public_key_x: String,
+        public_key_y: String,
+    ) -> Result<WasmKeypair, JsValue> {
+        require_affine_public_key(&public_key_x, &public_key_y)?;
+        Ok(Self {
             private_key,
             public_key_x,
             public_key_y,
-        }
+        })
     }
 
-    /// Get the full public key as "0x{x}{y}" concatenated hex.
+    /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
+    ///
+    /// Compatible with `deserializePublicKey`.
     #[wasm_bindgen(js_name = "publicKeyHex")]
-    pub fn public_key_hex(&self) -> String {
-        let x = self.public_key_x.trim_start_matches("0x");
-        let y = self.public_key_y.trim_start_matches("0x");
-        format!("0x{x}{y}")
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
+        padded_public_key_hex(&self.public_key_x, &self.public_key_y)
+    }
+}
+
+/// Public-only Stark / Tongo key material (no private key).
+///
+/// Prefer this over [`WasmKeypair`] when only the public key is needed
+/// (address derivation, display, API lookups). Both affine coordinates are
+/// populated; for x-only Stark keys use [`WasmStarkXOnlyPublicKey`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmPublicKey {
+    /// Public key X coordinate as hex string
+    pub public_key_x: String,
+    /// Public key Y coordinate as hex string
+    pub public_key_y: String,
+}
+
+/// Stark x-only keypair (private key + x-coordinate public key).
+///
+/// Used by Argent-legacy derivation where `stark_public_key` does not produce Y.
+///
+/// # Security / threat model
+///
+/// `private_key` is a plain hex string in the JS heap and cannot be reliably
+/// wiped. Prefer [`WasmStarkXOnlyPublicKey`] when private material is not
+/// required. `Debug` redacts the private key; default `Serialize` omits it.
+#[derive(Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmStarkXOnlyKeypair {
+    /// Private key as hex string (0x-prefixed). Treat as secret.
+    #[serde(skip_serializing)]
+    pub private_key: String,
+    /// Public key X coordinate as hex string
+    pub public_key_x: String,
+}
+
+impl fmt::Debug for WasmStarkXOnlyKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmStarkXOnlyKeypair")
+            .field("private_key", &"***")
+            .field("public_key_x", &self.public_key_x)
+            .finish()
+    }
+}
+
+#[wasm_bindgen]
+impl WasmStarkXOnlyKeypair {
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        private_key: String,
+        public_key_x: String,
+    ) -> Result<WasmStarkXOnlyKeypair, JsValue> {
+        require_felt_hex(&public_key_x, "public_key_x")?;
+        Ok(Self {
+            private_key,
+            public_key_x,
+        })
+    }
+
+    /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
+    #[wasm_bindgen(js_name = "publicKeyHex")]
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
+        padded_felt_hex(&self.public_key_x)
+    }
+}
+
+/// Stark public key as an x-only felt (no Y coordinate).
+///
+/// Matches `stark_public_key` / account address derivation inputs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmStarkXOnlyPublicKey {
+    /// Public key X coordinate as hex string
+    pub public_key_x: String,
+}
+
+#[wasm_bindgen]
+impl WasmStarkXOnlyPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key_x: String) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
+        require_felt_hex(&public_key_x, "public_key_x")?;
+        Ok(Self { public_key_x })
+    }
+
+    /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
+    #[wasm_bindgen(js_name = "publicKeyHex")]
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
+        padded_felt_hex(&self.public_key_x)
+    }
+}
+
+#[wasm_bindgen]
+impl WasmPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key_x: String, public_key_y: String) -> Result<WasmPublicKey, JsValue> {
+        require_affine_public_key(&public_key_x, &public_key_y)?;
+        Ok(Self {
+            public_key_x,
+            public_key_y,
+        })
+    }
+
+    /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
+    ///
+    /// Compatible with `deserializePublicKey`.
+    #[wasm_bindgen(js_name = "publicKeyHex")]
+    pub fn public_key_hex(&self) -> Result<String, JsValue> {
+        padded_public_key_hex(&self.public_key_x, &self.public_key_y)
     }
 }
 
@@ -227,13 +400,32 @@ pub enum WasmTxType {
 ///
 /// Used for NIP-04/NIP-44 encrypted messaging.
 /// Public key is x-only (32 bytes, BIP-340 format).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// # Security / threat model
+///
+/// `private_key` is a plain hex string in the JS heap and cannot be reliably
+/// wiped. Prefer [`WasmNostrPublicKey`] / `deriveNostrPublicKey` when private
+/// material is not required. `Debug` redacts the private key.
+#[derive(Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmNostrKeypair {
-    /// Private key as hex string (64 hex chars, no 0x prefix)
+    /// Private key as hex string (64 hex chars, no 0x prefix). Treat as secret.
+    ///
+    /// Omitted from default `Serialize` (use the wasm-bindgen getter for the
+    /// intentional secret-returning API).
+    #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key as x-only hex string (64 hex chars, no 0x prefix)
     pub public_key: String,
+}
+
+impl fmt::Debug for WasmNostrKeypair {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WasmNostrKeypair")
+            .field("private_key", &"***")
+            .field("public_key", &self.public_key)
+            .finish()
+    }
 }
 
 #[wasm_bindgen]
@@ -244,6 +436,22 @@ impl WasmNostrKeypair {
             private_key,
             public_key,
         }
+    }
+}
+
+/// Public-only Nostr key (x-only, BIP-340). No private key material.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmNostrPublicKey {
+    /// Public key as x-only hex string (64 hex chars, no 0x prefix)
+    pub public_key: String,
+}
+
+#[wasm_bindgen]
+impl WasmNostrPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key: String) -> Self {
+        Self { public_key }
     }
 }
 
@@ -306,6 +514,47 @@ mod tests {
             state.checked_total_balance(),
             Err(WasmError::InvalidAmount(_))
         ));
+    }
+
+    #[test]
+    fn wasm_keypair_debug_redacts_private_key() {
+        let g = krusty_kms_crypto::StarkCurve::generator();
+        let affine = krusty_kms_crypto::StarkCurve::projective_to_affine(&g).unwrap();
+        let kp = WasmKeypair::new(
+            "0xdeadbeef".to_string(),
+            format!("{:#x}", affine.x()),
+            format!("{:#x}", affine.y()),
+        )
+        .expect("generator is a valid Stark curve point");
+        let debug = format!("{kp:?}");
+        assert!(debug.contains("***"));
+        assert!(!debug.contains("deadbeef"));
+    }
+
+    #[test]
+    fn wasm_keypair_rejects_off_curve_coordinates() {
+        let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
+        assert!(
+            err.contains("not on the Stark curve"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn wasm_public_key_rejects_off_curve_coordinates() {
+        let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
+        assert!(
+            err.contains("not on the Stark curve"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn wasm_nostr_keypair_debug_redacts_private_key() {
+        let kp = WasmNostrKeypair::new("aabbccdd".to_string(), "11223344".to_string());
+        let debug = format!("{kp:?}");
+        assert!(debug.contains("***"));
+        assert!(!debug.contains("aabbccdd"));
     }
 }
 

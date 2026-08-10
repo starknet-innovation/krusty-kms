@@ -4,6 +4,7 @@
 //! which ones are actually deployed on-chain via the Starknet JSON-RPC API.
 
 use std::collections::HashSet;
+use std::fmt;
 use std::sync::Arc;
 
 use krusty_kms::discovery::{CandidateAccount, WalletType};
@@ -15,7 +16,10 @@ use starknet_rust::providers::{Provider, ProviderError};
 use crate::wallet::utils::{core_felt_to_rs, rs_felt_to_core, CoreFelt};
 
 /// An account that was found deployed on-chain.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Default `Serialize` omits `private_key`. Use [`Self::with_secrets`] at
+/// intentional recovery boundaries.
+#[derive(Clone, Deserialize)]
 pub struct DiscoveredAccount {
     /// The wallet type that generated this account.
     pub wallet_type: WalletType,
@@ -25,7 +29,8 @@ pub struct DiscoveredAccount {
     pub address: String,
     /// The Stark public key.
     pub public_key: String,
-    /// The Stark private key. Handle with care.
+    /// The Stark private key. Omitted from default Serialize.
+    #[serde(default)]
     pub private_key: String,
     /// The HD derivation index.
     pub derivation_index: u32,
@@ -36,6 +41,22 @@ pub struct DiscoveredAccount {
     /// The actual class hash deployed on-chain (may differ from derivation class hash
     /// if the account was upgraded after deployment).
     pub deployed_class_hash: String,
+}
+
+impl fmt::Debug for DiscoveredAccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DiscoveredAccount")
+            .field("wallet_type", &self.wallet_type)
+            .field("class_hash", &self.class_hash)
+            .field("address", &self.address)
+            .field("public_key", &self.public_key)
+            .field("private_key", &"***")
+            .field("derivation_index", &self.derivation_index)
+            .field("derivation_path", &self.derivation_path)
+            .field("class_version", &self.class_version)
+            .field("deployed_class_hash", &self.deployed_class_hash)
+            .finish()
+    }
 }
 
 impl DiscoveredAccount {
@@ -54,6 +75,59 @@ impl DiscoveredAccount {
             deployed_class_hash,
         }
     }
+
+    /// Intentional access to the private key hex string.
+    pub fn expose_private_key(&self) -> &str {
+        &self.private_key
+    }
+
+    /// Serializable view that includes the private key.
+    pub fn with_secrets(&self) -> DiscoveredAccountWithSecrets<'_> {
+        DiscoveredAccountWithSecrets {
+            wallet_type: self.wallet_type,
+            class_hash: &self.class_hash,
+            address: &self.address,
+            public_key: &self.public_key,
+            private_key: &self.private_key,
+            derivation_index: self.derivation_index,
+            derivation_path: &self.derivation_path,
+            class_version: &self.class_version,
+            deployed_class_hash: &self.deployed_class_hash,
+        }
+    }
+}
+
+impl Serialize for DiscoveredAccount {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("DiscoveredAccount", 8)?;
+        state.serialize_field("wallet_type", &self.wallet_type)?;
+        state.serialize_field("class_hash", &self.class_hash)?;
+        state.serialize_field("address", &self.address)?;
+        state.serialize_field("public_key", &self.public_key)?;
+        state.serialize_field("derivation_index", &self.derivation_index)?;
+        state.serialize_field("derivation_path", &self.derivation_path)?;
+        state.serialize_field("class_version", &self.class_version)?;
+        state.serialize_field("deployed_class_hash", &self.deployed_class_hash)?;
+        state.end()
+    }
+}
+
+/// Serializable discovered account including the private key.
+#[derive(Debug, Clone, Serialize)]
+pub struct DiscoveredAccountWithSecrets<'a> {
+    pub wallet_type: WalletType,
+    pub class_hash: &'a str,
+    pub address: &'a str,
+    pub public_key: &'a str,
+    pub private_key: &'a str,
+    pub derivation_index: u32,
+    pub derivation_path: &'a str,
+    pub class_version: &'a str,
+    pub deployed_class_hash: &'a str,
 }
 
 /// Discover all Starknet accounts for a mnemonic by checking on-chain deployment.
@@ -193,9 +267,13 @@ mod tests {
         assert_eq!(discovered.derivation_index, 0);
         assert_eq!(discovered.derivation_path, "m/44'/9004'/0'/0/0");
         assert_eq!(discovered.public_key, "0xpub");
-        assert_eq!(discovered.private_key, "0xpriv");
+        assert_eq!(discovered.expose_private_key(), "0xpriv");
         assert_eq!(discovered.class_version, "v0.14.0");
         assert!(matches!(discovered.wallet_type, WalletType::OpenZeppelin));
+
+        let debug = format!("{:?}", discovered);
+        assert!(debug.contains("private_key: \"***\""));
+        assert!(!debug.contains("0xpriv"));
     }
 
     #[test]
@@ -217,6 +295,28 @@ mod tests {
         assert_ne!(discovered.class_hash, discovered.deployed_class_hash);
         assert_eq!(discovered.class_hash, "0xaa");
         assert_eq!(discovered.deployed_class_hash, "0xee");
+    }
+
+    #[test]
+    fn test_discovered_account_default_serialize_omits_private_key() {
+        let discovered = DiscoveredAccount {
+            wallet_type: WalletType::Braavos,
+            class_hash: "0x1".to_string(),
+            address: "0x2".to_string(),
+            public_key: "0x3".to_string(),
+            private_key: "0xsecret".to_string(),
+            derivation_index: 0,
+            derivation_path: "m/44'/9004'/0'/0/0".to_string(),
+            class_version: "base".to_string(),
+            deployed_class_hash: "0x4".to_string(),
+        };
+
+        let json = serde_json::to_value(&discovered).unwrap();
+        assert!(json.get("private_key").is_none());
+        assert_eq!(json["address"], "0x2");
+
+        let with_secrets = serde_json::to_value(discovered.with_secrets()).unwrap();
+        assert_eq!(with_secrets["private_key"], "0xsecret");
     }
 
     #[tokio::test]

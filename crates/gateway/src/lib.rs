@@ -46,6 +46,9 @@ pub type GatewayResult<T> = Result<T, GatewayError>;
 
 const DEFAULT_OPERATION_RETENTION_TTL_MS: u64 = 24 * 60 * 60 * 1000;
 const DEFAULT_OPERATION_RETENTION_MAX_ENTRIES: usize = 1_024;
+/// Gateway-global ceiling for snapshot cache entries.
+/// Per-request `CachePolicy.max_entries` is deprecated and ignored for eviction.
+const DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES: usize = 256;
 
 /// Trusted-boundary dependency that resolves a private key for the requested domain/path.
 #[async_trait]
@@ -153,6 +156,8 @@ pub struct Gateway<B, S, C = SystemClock> {
     clock: C,
     operations: RwLock<OperationStore>,
     snapshot_cache: RwLock<SnapshotCache>,
+    /// Hard ceiling used for shared snapshot-cache eviction (not request-controlled).
+    snapshot_cache_max_entries: usize,
     next_operation: AtomicU64,
 }
 
@@ -201,6 +206,7 @@ where
             clock,
             operations: RwLock::new(OperationStore::new(operation_retention)),
             snapshot_cache: RwLock::new(SnapshotCache::default()),
+            snapshot_cache_max_entries: DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES,
             next_operation: AtomicU64::new(1),
         }
     }
@@ -450,6 +456,7 @@ where
                 key_domain,
                 derivation_path,
                 message: hash,
+                ..
             } => {
                 let private_key = match self
                     .secret_resolver
@@ -647,7 +654,10 @@ where
 
         match self.fetch_snapshot(&request, now_ms).await {
             Ok(snapshot) => {
-                self.store_snapshot(key, snapshot.clone(), request.cache_policy.max_entries)
+                // Eviction uses the gateway-global ceiling only.
+                // `CachePolicy.max_entries` is deprecated and ignored here so a
+                // single request cannot flush unrelated shared-cache entries.
+                self.store_snapshot(key, snapshot.clone(), self.snapshot_cache_max_entries)
                     .await;
                 let status = self
                     .set_operation(&queued.id, queued.kind, OperationState::Completed, None)
@@ -815,6 +825,8 @@ where
                 Some("cache ttl_ms must be greater than zero".to_string()),
             ));
         }
+        // max_entries is deprecated for shared snapshot eviction but still
+        // validated (> 0) for wire/API compatibility with CachePolicy::new.
         if cache_policy.max_entries == 0 {
             return Err(GatewayError::new(
                 GatewayErrorCode::InvalidCachePolicy,
@@ -1019,7 +1031,9 @@ fn map_domain_error(error: DomainError) -> GatewayError {
         DomainError::InvalidFeltHex(message) => {
             GatewayError::new(GatewayErrorCode::InvalidRequest, false, Some(message))
         }
-        DomainError::InvalidHexBytes(message) | DomainError::InvalidSignRequest(message) => {
+        DomainError::InvalidHexBytes(message)
+        | DomainError::InvalidSignRequest(message)
+        | DomainError::InvalidSecretRef(message) => {
             GatewayError::new(GatewayErrorCode::InvalidRequest, false, Some(message))
         }
         DomainError::EmptyField { field } => GatewayError::new(
@@ -1086,7 +1100,15 @@ fn resolve_account_class(
     match spec.kind {
         AccountClassKind::OpenZeppelin => {
             let account = match (&spec.class_hash, &spec.source_label) {
-                (Some(class_hash), _) => OpenZeppelinAccount::from_class_hash(class_hash.to_felt()),
+                (Some(class_hash), _) => {
+                    enforce_class_hash_allowlist(
+                        class_hash.to_felt(),
+                        AccountClassKind::OpenZeppelin,
+                        chain_id,
+                        spec.allow_unlisted_class_hash,
+                    )?;
+                    OpenZeppelinAccount::from_class_hash(class_hash.to_felt())
+                }
                 (None, Some(version)) => {
                     OpenZeppelinAccount::from_manifest(chain_id, version).map_err(map_kms_error)?
                 }
@@ -1104,7 +1126,15 @@ fn resolve_account_class(
             }
 
             Ok(ResolvedAccountClass::Argent(match &spec.class_hash {
-                Some(class_hash) => ArgentAccount::with_class_hash(class_hash.to_felt()),
+                Some(class_hash) => {
+                    enforce_class_hash_allowlist(
+                        class_hash.to_felt(),
+                        AccountClassKind::Argent,
+                        chain_id,
+                        spec.allow_unlisted_class_hash,
+                    )?;
+                    ArgentAccount::with_class_hash(class_hash.to_felt())
+                }
                 None => ArgentAccount::new(),
             }))
         }
@@ -1118,11 +1148,76 @@ fn resolve_account_class(
             }
 
             Ok(ResolvedAccountClass::Braavos(match &spec.class_hash {
-                Some(class_hash) => BraavosAccount::with_class_hash(class_hash.to_felt()),
+                Some(class_hash) => {
+                    enforce_class_hash_allowlist(
+                        class_hash.to_felt(),
+                        AccountClassKind::Braavos,
+                        chain_id,
+                        spec.allow_unlisted_class_hash,
+                    )?;
+                    BraavosAccount::with_class_hash(class_hash.to_felt())
+                }
                 None => BraavosAccount::new(),
             }))
         }
     }
+}
+
+fn known_class_hashes(kind: AccountClassKind, chain_id: ChainId) -> Vec<Felt> {
+    match kind {
+        AccountClassKind::OpenZeppelin => {
+            let mut hashes = Vec::new();
+            if let Ok(latest) = OpenZeppelinAccount::latest(chain_id) {
+                hashes.push(latest.class_hash());
+            }
+            // Also accept the same class hash from the peer network when present.
+            for peer in [ChainId::Sepolia, ChainId::Mainnet] {
+                if peer == chain_id {
+                    continue;
+                }
+                if let Ok(account) = OpenZeppelinAccount::latest(peer) {
+                    let hash = account.class_hash();
+                    if !hashes.contains(&hash) {
+                        hashes.push(hash);
+                    }
+                }
+            }
+            hashes
+        }
+        AccountClassKind::Argent => ArgentAccount::known_class_hashes(),
+        AccountClassKind::Braavos => {
+            let mut hashes = vec![Felt::from_hex(BraavosAccount::CLASS_HASH).unwrap()];
+            if let Ok(legacy) = Felt::from_hex(BraavosAccount::LEGACY_CLASS_HASH) {
+                hashes.push(legacy);
+            }
+            hashes
+        }
+    }
+}
+
+fn enforce_class_hash_allowlist(
+    class_hash: Felt,
+    kind: AccountClassKind,
+    chain_id: ChainId,
+    allow_unlisted: bool,
+) -> GatewayResult<()> {
+    if allow_unlisted {
+        return Ok(());
+    }
+
+    let allowed = known_class_hashes(kind, chain_id);
+    if allowed.contains(&class_hash) {
+        return Ok(());
+    }
+
+    Err(GatewayError::new(
+        GatewayErrorCode::InvalidClassHash,
+        false,
+        Some(format!(
+            "class_hash {class_hash:#x} is not on the known {:?} allowlist; set allow_unlisted_class_hash=true to override",
+            kind
+        )),
+    ))
 }
 
 fn to_salt_policy(spec: &SaltPolicySpec) -> SaltPolicy {
@@ -1527,6 +1622,7 @@ mod tests {
                 kind: AccountClassKind::OpenZeppelin,
                 class_hash: None,
                 source_label: None,
+                allow_unlisted_class_hash: false,
             },
             salt_policy: SaltPolicySpec::PublicKey,
         }
@@ -1586,6 +1682,7 @@ mod tests {
             chain_id: ChainId::Sepolia,
             domain: krusty_kms_domain::StarkSignDomain::TransactionHash,
             hash: FeltHex::parse("0x1234").unwrap(),
+            allow_raw_stark_hash: true,
         }
     }
 
@@ -1830,5 +1927,66 @@ mod tests {
                 operation: third.operation.clone()
             }
         );
+    }
+
+    #[test]
+    fn class_hash_allowlist_accepts_known_open_zeppelin_hash() {
+        let known = OpenZeppelinAccount::latest(ChainId::Sepolia)
+            .unwrap()
+            .class_hash();
+        assert!(enforce_class_hash_allowlist(
+            known,
+            AccountClassKind::OpenZeppelin,
+            ChainId::Sepolia,
+            false,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn class_hash_allowlist_rejects_unknown_hash() {
+        let err = enforce_class_hash_allowlist(
+            Felt::from_hex("0xdeadbeef").unwrap(),
+            AccountClassKind::OpenZeppelin,
+            ChainId::Sepolia,
+            false,
+        )
+        .expect_err("unknown hash must be rejected");
+        assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+        assert!(
+            err.message
+                .as_deref()
+                .unwrap_or("")
+                .contains("allow_unlisted_class_hash=true"),
+            "unexpected message: {:?}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn class_hash_allowlist_override_allows_unknown_hash() {
+        assert!(enforce_class_hash_allowlist(
+            Felt::from_hex("0xdeadbeef").unwrap(),
+            AccountClassKind::OpenZeppelin,
+            ChainId::Sepolia,
+            true,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn class_hash_allowlist_accepts_known_argent_versions() {
+        for hash in ArgentAccount::known_class_hashes() {
+            assert!(
+                enforce_class_hash_allowlist(
+                    hash,
+                    AccountClassKind::Argent,
+                    ChainId::Sepolia,
+                    false,
+                )
+                .is_ok(),
+                "expected known Argent hash {hash:#x} to be allowed"
+            );
+        }
     }
 }

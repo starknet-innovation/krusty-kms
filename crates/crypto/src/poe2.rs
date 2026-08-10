@@ -60,7 +60,12 @@ impl ProofOfExponentiation2 {
         let g2_k2 = StarkCurve::mul(k2.expose_secret(), Some(g2));
         let a = StarkCurve::add(&g1_k1, &g2_k2);
 
-        // Compute Fiat-Shamir challenge c = H(prefix, A)
+        // Compute Fiat-Shamir challenge c = H(prefix, A).
+        //
+        // SECURITY / COMPATIBILITY: Omits `y`, `g1`, and `g2` from the challenge
+        // hash to preserve compatibility with existing verifiers. Bind those
+        // statement fields into `prefix` via `hash::extend_pedersen_prefix` for
+        // new APIs that are not pinned to the legacy transcript.
         let c = compute_challenge_single(prefix, &a)?;
 
         // Compute responses s1 = k1 + c*x1, s2 = k2 + c*x2 (mod curve order)
