@@ -137,7 +137,7 @@ async fn openzeppelin_multisig_flow_on_devnet() {
     );
 
     multisig
-        .confirm(&bob_wallet, proposal.transaction_id)
+        .confirm_proposal(&bob_wallet, &proposal)
         .await
         .unwrap()
         .wait(wait_options())
@@ -163,7 +163,7 @@ async fn openzeppelin_multisig_flow_on_devnet() {
     );
 
     multisig
-        .confirm(&charlie_wallet, proposal.transaction_id)
+        .confirm_proposal(&charlie_wallet, &proposal)
         .await
         .unwrap()
         .wait(wait_options())

@@ -940,9 +940,17 @@ static jobjectArray elgamal_encrypt_jni(
     KmsFelt cMsg, cRand, cPrefix;
     KmsProjectivePoint cPub;
     if (jbytearray_to_felt(env, message, &cMsg)) return NULL;
-    if (jbytearrays_to_projective(env, pubX, pubY, pubZ, &cPub)) return NULL;
-    if (jbytearray_to_felt(env, random, &cRand)) return NULL;
+    if (jbytearrays_to_projective(env, pubX, pubY, pubZ, &cPub)) {
+        /* cMsg is often a confidential amount; wipe even on early failure. */
+        secure_wipe(&cMsg, sizeof(cMsg));
+        return NULL;
+    }
+    if (jbytearray_to_felt(env, random, &cRand)) {
+        secure_wipe(&cMsg, sizeof(cMsg));
+        return NULL;
+    }
     if (jbytearray_to_felt(env, prefix, &cPrefix)) {
+        secure_wipe(&cMsg, sizeof(cMsg));
         secure_wipe(&cRand, sizeof(cRand));
         return NULL;
     }
@@ -957,6 +965,7 @@ static jobjectArray elgamal_encrypt_jni(
         : kms_elgamal_encrypt(
             &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR, NULL, 0, &written);
     if (rc != KMS_OK) {
+        secure_wipe(&cMsg, sizeof(cMsg));
         secure_wipe(&cRand, sizeof(cRand));
         throw_kms_error(env, rc);
         return NULL;
@@ -964,6 +973,7 @@ static jobjectArray elgamal_encrypt_jni(
 
     char *proofBuf = (char *)malloc(written + 1);
     if (proofBuf == NULL) {
+        secure_wipe(&cMsg, sizeof(cMsg));
         secure_wipe(&cRand, sizeof(cRand));
         throw_kms_error(env, KMS_ERR_INTERNAL);
         return NULL;
@@ -977,6 +987,7 @@ static jobjectArray elgamal_encrypt_jni(
         : kms_elgamal_encrypt(
             &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR,
             proofBuf, written + 1, &written);
+    secure_wipe(&cMsg, sizeof(cMsg));
     secure_wipe(&cRand, sizeof(cRand));
     if (rc != KMS_OK) { free(proofBuf); throw_kms_error(env, rc); return NULL; }
 

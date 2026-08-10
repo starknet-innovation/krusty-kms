@@ -598,9 +598,13 @@ public enum Kms {
         var cPrefix = prefix.toCValue()
         var outL = KmsProjectivePoint()
         var outR = KmsProjectivePoint()
-        // The blinding scalar reveals the plaintext point (L - pk^r); wipe the
-        // Swift-side copy once the FFI calls return.
-        defer { secureZeroFelt(&cRand) }
+        // Wipe confidential scalars once the FFI calls return: the message is
+        // often a confidential amount, and the blinding scalar reveals the
+        // plaintext point (L - pk^r).
+        defer {
+            secureZeroFelt(&cMsg)
+            secureZeroFelt(&cRand)
+        }
 
         let encryptFn = strong ? kms_elgamal_encrypt_strong : kms_elgamal_encrypt
 

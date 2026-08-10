@@ -143,8 +143,9 @@ Create a contract handle:
 
 ```rust
 use krusty_kms_client::Multisig;
+use krusty_kms_common::ChainId;
 
-let multisig = Multisig::new(provider.clone(), multisig_address);
+let multisig = Multisig::new(provider.clone(), multisig_address, ChainId::Sepolia);
 ```
 
 Build the target calls and proposal:
