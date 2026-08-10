@@ -24,6 +24,56 @@ fn parse_u32_kdf_param(value: Option<u64>, field: &str) -> Result<u32> {
     })
 }
 
+// Checked u64 -> usize conversion: a plain `as usize` truncates on wasm32, so
+// e.g. 2^32 + 32 would become 32 and bypass the dklen ceiling below.
+fn parse_usize_kdf_param(value: Option<u64>, field: &str) -> Result<usize> {
+    let n = value
+        .ok_or_else(|| KmsError::DeserializationError(format!("Missing kdfparams.{field}")))?;
+    usize::try_from(n).map_err(|_| {
+        KmsError::DeserializationError(format!("kdfparams.{field} exceeds usize range (got {n})"))
+    })
+}
+
+/// Ethereum-keystore-compatible ceilings for attacker-controlled scrypt params.
+///
+/// Memory ≈ 128 · N · r bytes. With [`scrypt_log_n`]'s N ≤ 2^20 and r ≤ 32 that
+/// caps at ~4 GiB; we additionally reject products that would exceed 256 MiB so
+/// malicious keystores cannot turn import into a DoS.
+const SCRYPT_R_MAX: u32 = 32;
+const SCRYPT_P_MAX: u32 = 16;
+// Decryption unconditionally splits the derived key at [..16] and [16..32],
+// so anything shorter than 32 bytes would panic instead of erroring.
+const SCRYPT_DKLEN_MIN: usize = 32;
+const SCRYPT_DKLEN_MAX: usize = 64;
+const SCRYPT_MEMORY_CEILING_BYTES: u64 = 256 * 1024 * 1024;
+
+fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Result<()> {
+    let _log_n = scrypt_log_n(n)?;
+    if !(1..=SCRYPT_R_MAX).contains(&r) {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.r={r} outside allowed range 1..={SCRYPT_R_MAX}"
+        )));
+    }
+    if !(1..=SCRYPT_P_MAX).contains(&p) {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.p={p} outside allowed range 1..={SCRYPT_P_MAX}"
+        )));
+    }
+    if !(SCRYPT_DKLEN_MIN..=SCRYPT_DKLEN_MAX).contains(&dklen) {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.dklen={dklen} outside allowed range {SCRYPT_DKLEN_MIN}..={SCRYPT_DKLEN_MAX}"
+        )));
+    }
+    // scrypt memory ≈ 128 * N * r
+    let memory = (n as u64).saturating_mul(r as u64).saturating_mul(128);
+    if memory > SCRYPT_MEMORY_CEILING_BYTES {
+        return Err(KmsError::DeserializationError(format!(
+            "scrypt params request ~{memory} bytes of memory (ceiling {SCRYPT_MEMORY_CEILING_BYTES})"
+        )));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Native keystore (version 1)
 // ---------------------------------------------------------------------------
@@ -204,10 +254,9 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 
     let p = parse_u32_kdf_param(crypto["kdfparams"]["p"].as_u64(), "p")?;
 
-    let dklen = crypto["kdfparams"]["dklen"]
-        .as_u64()
-        .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.dklen".to_string()))?
-        as usize;
+    let dklen = parse_usize_kdf_param(crypto["kdfparams"]["dklen"].as_u64(), "dklen")?;
+
+    validate_scrypt_resource_params(n, r, p, dklen)?;
 
     // Parse cipher params
     let iv =
@@ -230,7 +279,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid mac hex: {e}")))?;
 
-    // Derive key via scrypt (validate N is a power of two in the allowed range)
+    // Derive key via scrypt (N/r/p already resource-capped above)
     let log_n = scrypt_log_n(n)?;
     let params = ScryptParams::new(log_n, r, p, dklen)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
@@ -425,5 +474,64 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("MAC verification failed"));
+    }
+
+    #[test]
+    fn decrypt_ethers_keystore_rejects_resource_exhausting_params() {
+        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, 32).is_ok());
+        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, SCRYPT_R_MAX + 1, 1, 32).is_err());
+        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, 8, SCRYPT_P_MAX + 1, 32).is_err());
+        assert!(
+            validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MAX + 1).is_err()
+        );
+        // dklen < 32 must be rejected: decryption indexes derived_key[16..32].
+        assert!(
+            validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MIN - 1).is_err()
+        );
+        // N=2^20 with r=32 exceeds the 256 MiB memory ceiling.
+        assert!(validate_scrypt_resource_params(1 << 20, 32, 1, 32).is_err());
+    }
+
+    fn ethers_keystore_with_dklen(dklen: u64) -> String {
+        let keystore = serde_json::json!({
+            "version": 3,
+            "crypto": {
+                "cipher": "aes-128-ctr",
+                "kdf": "scrypt",
+                "kdfparams": {
+                    "n": TEST_SCRYPT_N,
+                    "r": 8,
+                    "p": 1,
+                    "dklen": dklen,
+                    "salt": hex::encode([0xab; 32]),
+                },
+                "cipherparams": { "iv": hex::encode([0xcd; 16]) },
+                "ciphertext": hex::encode([0u8; 32]),
+                "mac": hex::encode([0u8; 32]),
+            }
+        });
+        serde_json::to_string(&keystore).unwrap()
+    }
+
+    #[test]
+    fn decrypt_ethers_keystore_rejects_dklen_below_32() {
+        // A crafted keystore with dklen < 32 must return an error instead of
+        // panicking on derived_key[16..32].
+        let keystore_json = ethers_keystore_with_dklen(16);
+        let result = decrypt_ethers_keystore(&keystore_json, &test_password(0));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
+    }
+
+    #[test]
+    fn decrypt_ethers_keystore_rejects_truncating_dklen() {
+        // 2^32 + 32 truncates to 32 under `as usize` on wasm32; the checked
+        // conversion must reject it before the range validation runs.
+        let keystore_json = ethers_keystore_with_dklen((1u64 << 32) + 32);
+        let result = decrypt_ethers_keystore(&keystore_json, &test_password(0));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
     }
 }
