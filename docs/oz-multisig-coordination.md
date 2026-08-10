@@ -45,12 +45,13 @@ let descriptor = multisig.deployment_descriptor(
 ## Transaction Flow
 
 1. A signer builds a `MultisigProposal` from one or more `MultisigCall`s.
-2. The client publishes `MultisigCoordinationMessage::Proposal` to the trusted
-   coordinator.
+2. The client wraps `MultisigCoordinationMessage::Proposal` in a
+   `SignedMultisigCoordinationMessage` (signed with the proposer's account
+   key) and publishes it to the trusted coordinator.
 3. A registered signer submits the proposal on-chain with
    `submit_transaction_batch`.
 4. Each approving signer sends `confirm_transaction(id)` on-chain and may publish
-   `Confirmation` to the coordinator.
+   a signed `Confirmation` to the coordinator.
 
    **Warning:** when the id came from a coordinator message, do not call
    `Multisig::confirm(id)` with it directly — the id arrives unauthenticated
@@ -88,7 +89,7 @@ multisig/transaction-id pair.
 Core NATS pub/sub is live delivery, so subscribers should call `subscribe`
 before the proposal or signer notice is published. Deployments that need durable
 message replay should enable NATS JetStream for the same subject namespace. The
-message payload is the stable JSON `MultisigCoordinationMessage` shape shown
+message payload is the stable JSON `MultisigCoordinationEnvelope` shape shown
 below, which can also be wrapped by gateway services using standard
 CloudEvents/NATS conventions when crossing service boundaries.
 
@@ -112,28 +113,89 @@ POST /v1/multisig/messages
 GET  /v1/multisig/messages?multisig=<addr>&transaction_id=<id>
 ```
 
-Messages are JSON with hex-encoded felts:
+Messages are JSON with hex-encoded felts. The preferred wire shape is the
+version 1 signed envelope:
 
 ```json
 {
-  "type": "proposal",
-  "multisig": "0x0000000000000000000000000000000000000000000000000000000000000401",
-  "transaction_id": "0x...",
-  "calls": [
-    {
-      "to": "0x...",
-      "selector": "0x...",
-      "calldata": ["0x..."]
-    }
-  ],
-  "salt": "0x...",
-  "proposer": "0x...",
-  "memo": "Increase the target counter"
+  "version": 1,
+  "message": {
+    "type": "proposal",
+    "multisig": "0x0000000000000000000000000000000000000000000000000000000000000401",
+    "chain_id": "Sepolia",
+    "transaction_id": "0x...",
+    "calls": [
+      {
+        "to": "0x...",
+        "selector": "0x...",
+        "calldata": ["0x..."]
+      }
+    ],
+    "salt": "0x...",
+    "proposer": "0x...",
+    "memo": "Increase the target counter"
+  },
+  "signature": ["0x...", "0x..."]
 }
 ```
 
+A legacy (schema version 0) payload is the bare `message` object without the
+envelope; the SDK still parses it but treats it as an unauthenticated hint.
+
 The SDK validates proposal IDs before publishing. Consumers should still query
 the chain before acting because coordinator state can lag or be incomplete.
+
+## Signed Envelopes
+
+The coordinator is untrusted, so without authentication it can forge
+`Confirmation`, `Revocation`, or `Execution` notices for any signer, and can
+rewrite a proposal's `proposer`/`memo` attribution without changing the
+transaction ID. Signed envelopes close that gap.
+
+`SignedMultisigCoordinationMessage` carries the claimed actor's account
+signature over a domain-separated Pedersen chain:
+
+```text
+pedersen_chain([
+  'krusty-kms.multisig.notice.v1',  # domain tag (binds the schema version)
+  chain_id, multisig, transaction_id,  # routing topic
+  message_kind,                        # 1=proposal 2=confirmation 3=revocation 4=execution
+  payload_hash,                        # kind-specific: actor (+ memo hash for proposals)
+])
+```
+
+The proposal payload hash covers the proposer and the `starknet_keccak` of the
+memo; `calls`/`salt` are bound transitively through `transaction_id`, which
+receivers independently recompute. The signature itself is a SNIP-6 felt array
+(`[r, s]` for Stark-key accounts, produced by
+`SignedMultisigCoordinationMessage::sign_with_stark_key`), so non-Stark account
+types can carry their native signature encoding via
+`SignedMultisigCoordinationMessage::new`.
+
+Receivers authenticate a signed envelope before tallying it:
+
+```rust
+// On-chain trust path: claimed actor must be in the multisig's signer set and
+// the actor's account contract must accept the signature (SNIP-6
+// `is_valid_signature`). Returns the authenticated actor address.
+let actor = multisig.verify_signed_message(&signed).await?;
+
+// Offline path when the actor's Stark public key is already known and trusted.
+signed.verify_with_stark_public_key(public_key)?;
+```
+
+A verified notice proves who published it — not that the on-chain action
+succeeded. Chain reads stay authoritative for quorum and execution state.
+
+### Schema versioning
+
+The signed envelope is version 1 of the coordinator payload schema
+(`MULTISIG_COORDINATION_SCHEMA_VERSION`); bare unsigned messages are version 0.
+Both NATS and HTTP coordinators send and accept `MultisigCoordinationEnvelope`,
+which deserializes either shape, and reject signed envelopes with an unknown
+version on both the publish and receive paths. Any future schema bump must
+change the domain tag inside the signing hash so signatures can never validate
+across versions.
 
 ## Integration Tests
 

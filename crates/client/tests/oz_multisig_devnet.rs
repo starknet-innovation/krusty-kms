@@ -11,7 +11,8 @@ use krusty_kms::SaltPolicy;
 use krusty_kms_client::{
     hash_transaction_batch, InMemoryMultisigCoordinator, Multisig, MultisigCall,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigExecutionNotice,
-    MultisigSignerNotice, MultisigTransactionState, WaitOptions, Wallet,
+    MultisigSignerNotice, MultisigTransactionState, SignedMultisigCoordinationMessage, WaitOptions,
+    Wallet,
 };
 use krusty_kms_common::{Address, ChainId, NetworkPreset};
 use serde_json::Value;
@@ -116,10 +117,37 @@ async fn openzeppelin_multisig_flow_on_devnet() {
     assert_eq!(onchain_id, proposal.transaction_id);
 
     let coordinator = InMemoryMultisigCoordinator::new();
+    let signed_proposal = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        MultisigCoordinationMessage::Proposal(proposal.clone()),
+        &signing_key(ALICE_PRIVATE_KEY),
+    )
+    .unwrap();
+    // The claimed proposer authenticates against the on-chain signer set and
+    // alice's account contract (SNIP-6 `is_valid_signature`).
+    assert_eq!(
+        multisig
+            .verify_signed_message(&signed_proposal)
+            .await
+            .unwrap(),
+        alice
+    );
     coordinator
-        .publish(MultisigCoordinationMessage::Proposal(proposal.clone()))
+        .publish(signed_proposal.clone().into())
         .await
         .unwrap();
+
+    // A coordinator swapping the claimed proposer must fail verification:
+    // bob did not sign this proposal.
+    let mut forged_attribution = proposal.clone();
+    forged_attribution.proposer = bob;
+    let forged_proposal = SignedMultisigCoordinationMessage {
+        message: MultisigCoordinationMessage::Proposal(forged_attribution),
+        ..signed_proposal
+    };
+    assert!(multisig
+        .verify_signed_message(&forged_proposal)
+        .await
+        .is_err());
 
     multisig
         .submit_batch(&alice_wallet, &proposal.calls, proposal.salt)
@@ -143,17 +171,40 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         .wait(wait_options())
         .await
         .unwrap();
+    let bob_confirmation = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
+            multisig_address,
+            network.chain_id,
+            proposal.transaction_id,
+            bob,
+        )),
+        &signing_key(BOB_PRIVATE_KEY),
+    )
+    .unwrap();
+    assert_eq!(
+        multisig
+            .verify_signed_message(&bob_confirmation)
+            .await
+            .unwrap(),
+        bob
+    );
     coordinator
-        .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(
-                multisig_address,
-                network.chain_id,
-                proposal.transaction_id,
-                bob,
-            ),
-        ))
+        .publish(bob_confirmation.clone().into())
         .await
         .unwrap();
+
+    // A confirmation forged for bob but signed with charlie's key is rejected
+    // by bob's account contract.
+    let forged_confirmation = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        bob_confirmation.message.clone(),
+        &signing_key(CHARLIE_PRIVATE_KEY),
+    )
+    .unwrap();
+    assert!(multisig
+        .verify_signed_message(&forged_confirmation)
+        .await
+        .is_err());
+
     assert_eq!(
         multisig
             .get_transaction_state(proposal.transaction_id)
@@ -169,15 +220,25 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         .wait(wait_options())
         .await
         .unwrap();
+    let charlie_confirmation = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
+            multisig_address,
+            network.chain_id,
+            proposal.transaction_id,
+            charlie,
+        )),
+        &signing_key(CHARLIE_PRIVATE_KEY),
+    )
+    .unwrap();
+    assert_eq!(
+        multisig
+            .verify_signed_message(&charlie_confirmation)
+            .await
+            .unwrap(),
+        charlie
+    );
     coordinator
-        .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(
-                multisig_address,
-                network.chain_id,
-                proposal.transaction_id,
-                charlie,
-            ),
-        ))
+        .publish(charlie_confirmation.into())
         .await
         .unwrap();
     assert_eq!(
@@ -195,17 +256,24 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         .wait(wait_options())
         .await
         .unwrap();
-    coordinator
-        .publish(MultisigCoordinationMessage::Execution(
-            MultisigExecutionNotice::new(
-                multisig_address,
-                network.chain_id,
-                proposal.transaction_id,
-                charlie,
-            ),
-        ))
-        .await
-        .unwrap();
+    let charlie_execution = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        MultisigCoordinationMessage::Execution(MultisigExecutionNotice::new(
+            multisig_address,
+            network.chain_id,
+            proposal.transaction_id,
+            charlie,
+        )),
+        &signing_key(CHARLIE_PRIVATE_KEY),
+    )
+    .unwrap();
+    assert_eq!(
+        multisig
+            .verify_signed_message(&charlie_execution)
+            .await
+            .unwrap(),
+        charlie
+    );
+    coordinator.publish(charlie_execution.into()).await.unwrap();
 
     assert_eq!(multisig.get_quorum().await.unwrap(), 3);
     assert_eq!(
@@ -226,6 +294,12 @@ fn wait_options() -> Option<WaitOptions> {
         interval_secs: 1,
         timeout_secs: 30,
     })
+}
+
+fn signing_key(private_key: &str) -> starknet_rust::signers::SigningKey {
+    starknet_rust::signers::SigningKey::from_secret_scalar(
+        starknet_rust::core::types::Felt::from_hex(private_key).unwrap(),
+    )
 }
 
 fn devnet_wallet(

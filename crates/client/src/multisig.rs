@@ -15,9 +15,12 @@ use bytes::Bytes;
 use futures_util::{stream, Stream, StreamExt};
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use starknet_rust::core::crypto::{ecdsa_verify, Signature as StarkSignature};
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
+use starknet_rust::core::utils::starknet_keccak;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
+use starknet_rust::signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 use std::collections::HashMap;
@@ -29,9 +32,9 @@ use url::Url;
 
 type StarknetRsFelt = starknet_rust::core::types::Felt;
 
-/// Stream of coordination messages from a pub/sub backend.
+/// Stream of coordination envelopes from a pub/sub backend.
 pub type MultisigMessageStream =
-    Pin<Box<dyn Stream<Item = Result<MultisigCoordinationMessage>> + Send>>;
+    Pin<Box<dyn Stream<Item = Result<MultisigCoordinationEnvelope>> + Send>>;
 
 /// Local representation of `starknet::account::Call` with stable JSON encoding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,16 +272,21 @@ impl MultisigExecutionNotice {
     }
 }
 
-/// Message envelope exchanged through the trusted coordinator.
+/// Logical coordination message exchanged through the trusted coordinator.
 ///
-/// All variants are advisory: the claimed `signer`/`executor`/`proposer` is
-/// not authenticated by the coordinator, so a compromised coordinator can
-/// forge notices. This is safe only because no on-chain action is authorized
-/// by these messages — the multisig contract re-checks quorum and signer
-/// authorization on-chain, and [`Multisig::confirm_proposal`] re-derives the
-/// transaction id from the proposal payload before signing. Consumers must
-/// treat notices as hints (e.g. "check chain state"), never as proof that an
-/// action happened.
+/// On the wire, messages travel inside a [`MultisigCoordinationEnvelope`].
+/// A bare (unsigned) message is advisory: the claimed
+/// `signer`/`executor`/`proposer` is not authenticated by the coordinator, so
+/// a compromised coordinator can forge notices. That is safe only because no
+/// on-chain action is authorized by these messages — the multisig contract
+/// re-checks quorum and signer authorization on-chain, and
+/// [`Multisig::confirm_proposal`] re-derives the transaction id from the
+/// proposal payload before signing. Consumers must treat unsigned notices as
+/// hints (e.g. "check chain state"), never as proof that an action happened.
+///
+/// To authenticate the claimed actor cryptographically, wrap the message in a
+/// [`SignedMultisigCoordinationMessage`] and verify it with
+/// [`Multisig::verify_signed_message`] before tallying it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MultisigCoordinationMessage {
@@ -298,32 +306,310 @@ impl MultisigCoordinationMessage {
             Self::Execution(notice) => notice.topic(),
         }
     }
+
+    /// The account that claims to have performed (or proposed) the action.
+    ///
+    /// This attribution is unauthenticated unless the message arrived inside
+    /// a verified [`SignedMultisigCoordinationMessage`].
+    #[must_use]
+    pub fn claimed_actor(&self) -> Address {
+        match self {
+            Self::Proposal(proposal) => proposal.proposer,
+            Self::Confirmation(notice) | Self::Revocation(notice) => notice.signer,
+            Self::Execution(notice) => notice.executor,
+        }
+    }
+
+    /// Message kind discriminant bound into [`coordination_message_hash`].
+    fn kind_felt(&self) -> Felt {
+        match self {
+            Self::Proposal(_) => Felt::ONE,
+            Self::Confirmation(_) => Felt::TWO,
+            Self::Revocation(_) => Felt::THREE,
+            Self::Execution(_) => Felt::from(4u64),
+        }
+    }
 }
 
-/// Receive-side validation for messages arriving from a coordinator.
+/// Schema version of [`SignedMultisigCoordinationMessage`].
+///
+/// Unsigned legacy messages are version 0 of the coordinator payload schema;
+/// signed envelopes start at version 1. Bumping this constant requires a new
+/// domain tag inside [`coordination_message_hash`] so signatures from one
+/// schema version can never validate under another.
+pub const MULTISIG_COORDINATION_SCHEMA_VERSION: u32 = 1;
+
+/// Domain separation tag (Cairo short string) for coordination signatures.
+///
+/// Binds the schema version. The tag guarantees a coordination signature can
+/// never collide with a Starknet transaction hash or any other signed payload.
+const COORDINATION_DOMAIN_TAG: &[u8] = b"krusty-kms.multisig.notice.v1";
+
+/// Compute the signing hash for a coordination message.
+///
+/// The hash is a domain-separated Pedersen chain over
+/// `(domain_tag, chain_id, multisig, transaction_id, message_kind,
+/// payload_hash)` — i.e. the routing topic, the message kind, and a
+/// kind-specific payload digest:
+///
+/// - `Proposal`: claimed proposer and memo (`starknet_keccak` of the UTF-8
+///   memo bytes, `0` when absent). The `calls`/`salt` are bound transitively
+///   through `transaction_id`, which receivers independently recompute via
+///   [`MultisigProposal::validate_transaction_id`].
+/// - `Confirmation` / `Revocation`: claimed signer.
+/// - `Execution`: claimed executor.
+#[must_use]
+pub fn coordination_message_hash(message: &MultisigCoordinationMessage) -> Felt {
+    let topic = message.topic();
+    let mut state = Felt::ZERO;
+    state = pedersen_update(state, Felt::from_bytes_be_slice(COORDINATION_DOMAIN_TAG));
+    state = pedersen_update(state, topic.chain_id.as_felt());
+    state = pedersen_update(state, topic.multisig.as_felt());
+    state = pedersen_update(state, topic.transaction_id);
+    state = pedersen_update(state, message.kind_felt());
+    pedersen_update(state, coordination_payload_hash(message))
+}
+
+fn coordination_payload_hash(message: &MultisigCoordinationMessage) -> Felt {
+    match message {
+        MultisigCoordinationMessage::Proposal(proposal) => {
+            let memo_hash = proposal.memo.as_deref().map_or(Felt::ZERO, |memo| {
+                rs_felt_to_core(starknet_keccak(memo.as_bytes()))
+            });
+            let state = pedersen_update(Felt::ZERO, proposal.proposer.as_felt());
+            pedersen_update(state, memo_hash)
+        }
+        MultisigCoordinationMessage::Confirmation(notice)
+        | MultisigCoordinationMessage::Revocation(notice) => {
+            pedersen_update(Felt::ZERO, notice.signer.as_felt())
+        }
+        MultisigCoordinationMessage::Execution(notice) => {
+            pedersen_update(Felt::ZERO, notice.executor.as_felt())
+        }
+    }
+}
+
+/// Coordination message authenticated by the claimed actor's account key.
+///
+/// The signature is a SNIP-6 style felt array over
+/// [`coordination_message_hash`]; for Stark-key accounts it is `[r, s]`
+/// (see [`Self::sign_with_stark_key`]). Other account types (e.g. secp256k1
+/// signers) may carry their native signature encoding — on-chain verification
+/// through the account's `is_valid_signature` entrypoint stays
+/// account-agnostic.
+///
+/// Receivers must authenticate the envelope before tallying the notice:
+/// [`Multisig::verify_signed_message`] checks the claimed actor against the
+/// on-chain signer set and validates the signature through the actor's
+/// account contract. [`Self::verify_with_stark_public_key`] offers an offline
+/// check when the actor's Stark public key is already known and trusted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignedMultisigCoordinationMessage {
+    /// Coordinator payload schema version; see
+    /// [`MULTISIG_COORDINATION_SCHEMA_VERSION`].
+    pub version: u32,
+    /// The authenticated coordination message.
+    pub message: MultisigCoordinationMessage,
+    /// Signature over [`coordination_message_hash`] of `message`, in the
+    /// claimed actor's account signature format.
+    #[serde(with = "serde_felt_hex_vec")]
+    pub signature: Vec<Felt>,
+}
+
+impl SignedMultisigCoordinationMessage {
+    /// Wrap a message with an externally produced account signature.
+    ///
+    /// Use this for account types whose signature is not a plain Stark
+    /// `[r, s]` pair. The signature must cover [`coordination_message_hash`]
+    /// of `message` and must verify through the claimed actor's
+    /// `is_valid_signature` entrypoint.
+    pub fn new(message: MultisigCoordinationMessage, signature: Vec<Felt>) -> Result<Self> {
+        if signature.is_empty() {
+            return Err(KmsError::MultisigError(
+                "signed coordination message requires a non-empty signature".to_string(),
+            ));
+        }
+        Ok(Self {
+            version: MULTISIG_COORDINATION_SCHEMA_VERSION,
+            message,
+            signature,
+        })
+    }
+
+    /// Sign a message with a Stark-curve account key, producing `[r, s]`.
+    pub fn sign_with_stark_key(
+        message: MultisigCoordinationMessage,
+        key: &SigningKey,
+    ) -> Result<Self> {
+        let hash = coordination_message_hash(&message);
+        let signature = key
+            .sign(&core_felt_to_rs(hash))
+            .map_err(|error| KmsError::MultisigError(error.to_string()))?;
+        Self::new(
+            message,
+            vec![rs_felt_to_core(signature.r), rs_felt_to_core(signature.s)],
+        )
+    }
+
+    /// The signing hash covering this envelope's message.
+    #[must_use]
+    pub fn message_hash(&self) -> Felt {
+        coordination_message_hash(&self.message)
+    }
+
+    /// The account whose signature this envelope claims to carry.
+    #[must_use]
+    pub fn claimed_actor(&self) -> Address {
+        self.message.claimed_actor()
+    }
+
+    /// Structural validation: supported schema version, non-empty signature.
+    ///
+    /// This does **not** verify the signature cryptographically; use
+    /// [`Multisig::verify_signed_message`] or
+    /// [`Self::verify_with_stark_public_key`] for that.
+    pub fn validate_structure(&self) -> Result<()> {
+        if self.version != MULTISIG_COORDINATION_SCHEMA_VERSION {
+            return Err(KmsError::MultisigError(format!(
+                "unsupported signed coordination schema version {} (expected {})",
+                self.version, MULTISIG_COORDINATION_SCHEMA_VERSION
+            )));
+        }
+        if self.signature.is_empty() {
+            return Err(KmsError::MultisigError(
+                "signed coordination message carries an empty signature".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Verify a Stark `[r, s]` signature against a known public key, offline.
+    ///
+    /// The caller is responsible for binding `public_key` to the claimed
+    /// actor (e.g. from local key management or a prior authenticated
+    /// exchange). When only the actor's address is known, use
+    /// [`Multisig::verify_signed_message`], which resolves trust through the
+    /// on-chain signer set and the actor's account contract instead.
+    pub fn verify_with_stark_public_key(&self, public_key: Felt) -> Result<()> {
+        self.validate_structure()?;
+        let [r, s] = self.signature.as_slice() else {
+            return Err(KmsError::MultisigError(format!(
+                "expected a Stark [r, s] signature, got {} felts",
+                self.signature.len()
+            )));
+        };
+        let signature = StarkSignature {
+            r: core_felt_to_rs(*r),
+            s: core_felt_to_rs(*s),
+        };
+        let hash = core_felt_to_rs(self.message_hash());
+        match ecdsa_verify(&core_felt_to_rs(public_key), &hash, &signature) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(KmsError::MultisigError(
+                "coordination message signature does not verify against the given public key"
+                    .to_string(),
+            )),
+            Err(error) => Err(KmsError::MultisigError(format!(
+                "coordination message signature verification failed: {error}"
+            ))),
+        }
+    }
+}
+
+/// Versioned wire envelope published to and received from coordinators.
+///
+/// Serialization is self-describing: a signed envelope carries
+/// `version`/`message`/`signature` fields, while a legacy unsigned message is
+/// the bare tagged [`MultisigCoordinationMessage`] JSON (schema version 0).
+/// Receivers should prefer signed envelopes and treat unsigned ones as
+/// unauthenticated hints; a signed envelope with an unknown version is
+/// rejected during send/receive validation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum MultisigCoordinationEnvelope {
+    /// Schema version >= 1: message plus actor signature.
+    Signed(SignedMultisigCoordinationMessage),
+    /// Legacy schema version 0: unauthenticated message.
+    Unsigned(MultisigCoordinationMessage),
+}
+
+impl MultisigCoordinationEnvelope {
+    /// The logical coordination message, regardless of authentication.
+    #[must_use]
+    pub fn message(&self) -> &MultisigCoordinationMessage {
+        match self {
+            Self::Signed(signed) => &signed.message,
+            Self::Unsigned(message) => message,
+        }
+    }
+
+    /// Topic used for pub/sub routing.
+    #[must_use]
+    pub fn topic(&self) -> MultisigTopic {
+        self.message().topic()
+    }
+
+    /// The signed form, when this envelope is authenticated.
+    #[must_use]
+    pub fn as_signed(&self) -> Option<&SignedMultisigCoordinationMessage> {
+        match self {
+            Self::Signed(signed) => Some(signed),
+            Self::Unsigned(_) => None,
+        }
+    }
+}
+
+impl From<MultisigCoordinationMessage> for MultisigCoordinationEnvelope {
+    fn from(message: MultisigCoordinationMessage) -> Self {
+        Self::Unsigned(message)
+    }
+}
+
+impl From<SignedMultisigCoordinationMessage> for MultisigCoordinationEnvelope {
+    fn from(signed: SignedMultisigCoordinationMessage) -> Self {
+        Self::Signed(signed)
+    }
+}
+
+/// Structural validation shared by the send and receive paths.
+///
+/// - a signed envelope must carry a supported schema version and a non-empty
+///   signature, and
+/// - a proposal's `transaction_id` must recompute from its `calls`/`salt`
+///   (defends against confirmations bound to a forged id).
+///
+/// Cryptographic signature verification needs on-chain state and lives in
+/// [`Multisig::verify_signed_message`].
+fn validate_envelope_payload(envelope: &MultisigCoordinationEnvelope) -> Result<()> {
+    if let MultisigCoordinationEnvelope::Signed(signed) = envelope {
+        signed.validate_structure()?;
+    }
+    if let MultisigCoordinationMessage::Proposal(proposal) = envelope.message() {
+        proposal.validate_transaction_id()?;
+    }
+    Ok(())
+}
+
+/// Receive-side validation for envelopes arriving from a coordinator.
 ///
 /// The coordinator is a distribution boundary, not an authorization boundary:
-/// nothing on the receive path is authenticated by the server. Every message
+/// nothing on the receive path is authenticated by the server. Every envelope
 /// pulled from `subscribe`/`messages` must therefore be checked before it
 /// drives an on-chain action:
 ///
 /// - the message topic must match the subscribed topic (defends against
 ///   cross-topic replay/misrouting by a compromised coordinator), and
-/// - a proposal's `transaction_id` must recompute from its `calls`/`salt`
-///   (defends against confirmations bound to a forged id).
-fn validate_incoming_message(
+/// - the shared structural checks in [`validate_envelope_payload`].
+fn validate_incoming_envelope(
     topic: &MultisigTopic,
-    message: &MultisigCoordinationMessage,
+    envelope: &MultisigCoordinationEnvelope,
 ) -> Result<()> {
-    if &message.topic() != topic {
+    if &envelope.topic() != topic {
         return Err(KmsError::MultisigError(
             "coordination message topic does not match the subscribed topic".to_string(),
         ));
     }
-    if let MultisigCoordinationMessage::Proposal(proposal) = message {
-        proposal.validate_transaction_id()?;
-    }
-    Ok(())
+    validate_envelope_payload(envelope)
 }
 
 /// Trusted coordination server boundary.
@@ -333,11 +619,11 @@ fn validate_incoming_message(
 /// on-chain multisig checks still authorize every action.
 #[async_trait]
 pub trait MultisigCoordinator: Send + Sync {
-    /// Publish one coordination message.
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()>;
+    /// Publish one coordination envelope.
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()>;
 
-    /// Return known messages for a transaction topic.
-    async fn messages(&self, _topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationMessage>> {
+    /// Return known envelopes for a transaction topic.
+    async fn messages(&self, _topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationEnvelope>> {
         Err(KmsError::MultisigError(
             "coordinator does not expose retained message history".to_string(),
         ))
@@ -354,8 +640,8 @@ pub trait MultisigCoordinator: Send + Sync {
 /// In-memory coordinator useful for tests and examples.
 #[derive(Default)]
 pub struct InMemoryMultisigCoordinator {
-    messages: RwLock<HashMap<String, Vec<MultisigCoordinationMessage>>>,
-    subscriptions: RwLock<HashMap<String, broadcast::Sender<MultisigCoordinationMessage>>>,
+    messages: RwLock<HashMap<String, Vec<MultisigCoordinationEnvelope>>>,
+    subscriptions: RwLock<HashMap<String, broadcast::Sender<MultisigCoordinationEnvelope>>>,
 }
 
 impl InMemoryMultisigCoordinator {
@@ -367,25 +653,23 @@ impl InMemoryMultisigCoordinator {
 
 #[async_trait]
 impl MultisigCoordinator for InMemoryMultisigCoordinator {
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
-        if let MultisigCoordinationMessage::Proposal(proposal) = &message {
-            proposal.validate_transaction_id()?;
-        }
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()> {
+        validate_envelope_payload(&envelope)?;
 
-        let key = message.topic().key();
+        let key = envelope.topic().key();
         let mut messages = self.messages.write().await;
         messages
             .entry(key.clone())
             .or_default()
-            .push(message.clone());
+            .push(envelope.clone());
         drop(messages);
 
         let sender = self.topic_sender(&key).await;
-        let _ = sender.send(message);
+        let _ = sender.send(envelope);
         Ok(())
     }
 
-    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationMessage>> {
+    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationEnvelope>> {
         let messages = self.messages.read().await;
         Ok(messages.get(&topic.key()).cloned().unwrap_or_default())
     }
@@ -397,7 +681,7 @@ impl MultisigCoordinator for InMemoryMultisigCoordinator {
             receiver,
             |mut receiver| async move {
                 match receiver.recv().await {
-                    Ok(message) => Some((Ok(message), receiver)),
+                    Ok(envelope) => Some((Ok(envelope), receiver)),
                     Err(broadcast::error::RecvError::Lagged(count)) => Some((
                         Err(KmsError::MultisigError(format!(
                             "in-memory multisig subscription lagged by {count} messages"
@@ -412,7 +696,7 @@ impl MultisigCoordinator for InMemoryMultisigCoordinator {
 }
 
 impl InMemoryMultisigCoordinator {
-    async fn topic_sender(&self, key: &str) -> broadcast::Sender<MultisigCoordinationMessage> {
+    async fn topic_sender(&self, key: &str) -> broadcast::Sender<MultisigCoordinationEnvelope> {
         {
             let subscriptions = self.subscriptions.read().await;
             if let Some(sender) = subscriptions.get(key) {
@@ -489,13 +773,11 @@ impl NatsMultisigCoordinator {
 
 #[async_trait]
 impl MultisigCoordinator for NatsMultisigCoordinator {
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
-        if let MultisigCoordinationMessage::Proposal(proposal) = &message {
-            proposal.validate_transaction_id()?;
-        }
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()> {
+        validate_envelope_payload(&envelope)?;
 
-        let subject = self.subject(&message.topic());
-        let payload = serde_json::to_vec(&message)
+        let subject = self.subject(&envelope.topic());
+        let payload = serde_json::to_vec(&envelope)
             .map_err(|error| KmsError::MultisigError(error.to_string()))?;
         self.client
             .publish(subject, Bytes::from(payload))
@@ -518,11 +800,12 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
 
         let topic = topic.clone();
         Ok(Box::pin(subscriber.map(move |message| {
-            let parsed = serde_json::from_slice::<MultisigCoordinationMessage>(&message.payload)
+            let parsed = serde_json::from_slice::<MultisigCoordinationEnvelope>(&message.payload)
                 .map_err(|error| KmsError::MultisigError(error.to_string()))?;
             // The coordinator is untrusted on the receive path: reject
-            // misrouted topics and proposals whose id does not recompute.
-            validate_incoming_message(&topic, &parsed)?;
+            // misrouted topics, unsupported schema versions, and proposals
+            // whose id does not recompute.
+            validate_incoming_envelope(&topic, &parsed)?;
             Ok(parsed)
         })))
     }
@@ -532,9 +815,9 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
 ///
 /// Expected server API:
 ///
-/// - `POST /v1/multisig/messages` with a [`MultisigCoordinationMessage`] JSON body.
+/// - `POST /v1/multisig/messages` with a [`MultisigCoordinationEnvelope`] JSON body.
 /// - `GET /v1/multisig/messages?multisig=<addr>&transaction_id=<id>` returning
-///   `Vec<MultisigCoordinationMessage>`.
+///   `Vec<MultisigCoordinationEnvelope>`.
 #[derive(Clone)]
 pub struct HttpMultisigCoordinator {
     base_url: Url,
@@ -916,14 +1199,12 @@ fn ipv4_from_transition_prefix(v6: Ipv6Addr) -> Option<Ipv4Addr> {
 
 #[async_trait]
 impl MultisigCoordinator for HttpMultisigCoordinator {
-    async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
-        if let MultisigCoordinationMessage::Proposal(proposal) = &message {
-            proposal.validate_transaction_id()?;
-        }
+    async fn publish(&self, envelope: MultisigCoordinationEnvelope) -> Result<()> {
+        validate_envelope_payload(&envelope)?;
 
         self.client
             .post(self.messages_url()?)
-            .json(&message)
+            .json(&envelope)
             .send()
             .await
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
@@ -932,14 +1213,14 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
         Ok(())
     }
 
-    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationMessage>> {
+    async fn messages(&self, topic: &MultisigTopic) -> Result<Vec<MultisigCoordinationEnvelope>> {
         let mut url = self.messages_url()?;
         url.query_pairs_mut()
             .append_pair("multisig", &topic.multisig.to_hex())
             .append_pair("chain_id", topic.chain_id.name())
             .append_pair("transaction_id", &felt_to_hex(topic.transaction_id));
 
-        let messages = self
+        let envelopes = self
             .client
             .get(url)
             .send()
@@ -947,15 +1228,15 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
             .error_for_status()
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
-            .json::<Vec<MultisigCoordinationMessage>>()
+            .json::<Vec<MultisigCoordinationEnvelope>>()
             .await
             .map_err(|error| KmsError::MultisigError(error.to_string()))?;
 
         // Receive-side validation: the coordinator response is untrusted.
-        for message in &messages {
-            validate_incoming_message(topic, message)?;
+        for envelope in &envelopes {
+            validate_incoming_envelope(topic, envelope)?;
         }
-        Ok(messages)
+        Ok(envelopes)
     }
 }
 
@@ -1278,6 +1559,81 @@ impl Multisig {
         self.confirm(wallet, proposal.transaction_id).await
     }
 
+    /// Authenticate a signed coordination message against on-chain state.
+    ///
+    /// Verifies, in order:
+    ///
+    /// 1. envelope structure (supported schema version, non-empty signature),
+    /// 2. the message targets this multisig contract and chain,
+    /// 3. proposal integrity (`transaction_id` recomputes from `calls`/`salt`),
+    /// 4. the claimed actor is currently in the on-chain signer set (the
+    ///    OpenZeppelin multisig requires signers for confirm, revoke, and
+    ///    execute alike, so this applies to every message kind),
+    /// 5. the claimed actor's account contract accepts the signature over
+    ///    [`coordination_message_hash`] via SNIP-6 `is_valid_signature`.
+    ///
+    /// Returns the authenticated actor address, which may then be tallied
+    /// (e.g. counted toward an off-chain quorum estimate or shown as
+    /// attribution). Chain state remains authoritative: a verified notice
+    /// proves who published it, not that the on-chain action succeeded.
+    ///
+    /// Signer-set membership and signature validity are read from the latest
+    /// block; a removed signer's notices stop verifying once the removal
+    /// lands on-chain.
+    pub async fn verify_signed_message(
+        &self,
+        signed: &SignedMultisigCoordinationMessage,
+    ) -> Result<Address> {
+        signed.validate_structure()?;
+
+        let topic = signed.message.topic();
+        if topic.multisig != self.address {
+            return Err(KmsError::MultisigError(format!(
+                "signed message targets multisig {} but this handle is {}",
+                topic.multisig.to_hex(),
+                self.address.to_hex()
+            )));
+        }
+        if topic.chain_id != self.chain_id {
+            return Err(KmsError::MultisigError(format!(
+                "signed message was created for chain {} but this handle is on {}",
+                topic.chain_id, self.chain_id
+            )));
+        }
+        if let MultisigCoordinationMessage::Proposal(proposal) = &signed.message {
+            proposal.validate_transaction_id()?;
+        }
+
+        let actor = signed.claimed_actor();
+        if !self.is_signer(&actor).await? {
+            return Err(KmsError::MultisigError(format!(
+                "claimed actor {} is not a signer of multisig {}",
+                actor.to_hex(),
+                self.address.to_hex()
+            )));
+        }
+
+        let mut calldata = Vec::with_capacity(signed.signature.len() + 2);
+        calldata.push(core_felt_to_rs(signed.message_hash()));
+        calldata.push(core_felt_to_rs(Felt::from(signed.signature.len() as u64)));
+        calldata.extend(signed.signature.iter().copied().map(core_felt_to_rs));
+
+        let result = self
+            .call_at(actor, *abi::account::IS_VALID_SIGNATURE, calldata)
+            .await?;
+        let value = read_felt(&result, "is_valid_signature")?;
+        // SNIP-6 accounts return the short string 'VALID'; some legacy
+        // accounts return boolean 1.
+        if value == Felt::from_bytes_be_slice(b"VALID") || value == Felt::ONE {
+            Ok(actor)
+        } else {
+            Err(KmsError::MultisigError(format!(
+                "account {} rejected the coordination message signature",
+                actor.to_hex()
+            )))
+        }
+    }
+
     /// Revoke a previous confirmation on-chain.
     pub async fn revoke(&self, wallet: &dyn WalletExecutor, id: Felt) -> Result<Tx> {
         wallet.execute(vec![self.populate_revoke(id)]).await
@@ -1300,10 +1656,19 @@ impl Multisig {
         selector: StarknetRsFelt,
         calldata: Vec<StarknetRsFelt>,
     ) -> Result<Vec<StarknetRsFelt>> {
+        self.call_at(self.address, selector, calldata).await
+    }
+
+    async fn call_at(
+        &self,
+        contract: Address,
+        selector: StarknetRsFelt,
+        calldata: Vec<StarknetRsFelt>,
+    ) -> Result<Vec<StarknetRsFelt>> {
         self.provider
             .call(
                 FunctionCall {
-                    contract_address: core_felt_to_rs(self.address.as_felt()),
+                    contract_address: core_felt_to_rs(contract.as_felt()),
                     entry_point_selector: selector,
                     calldata,
                 },
@@ -1638,18 +2003,19 @@ mod tests {
         let topic = proposal.topic();
 
         coordinator
-            .publish(MultisigCoordinationMessage::Proposal(proposal.clone()))
+            .publish(MultisigCoordinationMessage::Proposal(proposal.clone()).into())
             .await
             .unwrap();
         coordinator
-            .publish(MultisigCoordinationMessage::Confirmation(
-                MultisigSignerNotice::new(
+            .publish(
+                MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
                     address(1),
                     ChainId::Sepolia,
                     proposal.transaction_id,
                     address(3),
-                ),
-            ))
+                ))
+                .into(),
+            )
             .await
             .unwrap();
 
@@ -1671,12 +2037,15 @@ mod tests {
         let mut subscription = coordinator.subscribe(&proposal.topic()).await.unwrap();
 
         coordinator
-            .publish(MultisigCoordinationMessage::Proposal(proposal.clone()))
+            .publish(MultisigCoordinationMessage::Proposal(proposal.clone()).into())
             .await
             .unwrap();
 
         let received = subscription.next().await.unwrap().unwrap();
-        assert_eq!(received, MultisigCoordinationMessage::Proposal(proposal));
+        assert_eq!(
+            received,
+            MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(proposal))
+        );
     }
 
     #[tokio::test]
@@ -1694,14 +2063,14 @@ mod tests {
 
         assert!(matches!(
             coordinator
-                .publish(MultisigCoordinationMessage::Proposal(proposal))
+                .publish(MultisigCoordinationMessage::Proposal(proposal).into())
                 .await,
             Err(KmsError::MultisigError(_))
         ));
     }
 
     #[test]
-    fn test_incoming_message_validation() {
+    fn test_incoming_envelope_validation() {
         let proposal = MultisigProposal::new(
             address(1),
             ChainId::Sepolia,
@@ -1711,10 +2080,11 @@ mod tests {
             None,
         );
         let topic = proposal.topic();
-        let message = MultisigCoordinationMessage::Proposal(proposal.clone());
+        let envelope: MultisigCoordinationEnvelope =
+            MultisigCoordinationMessage::Proposal(proposal.clone()).into();
 
         // Consistent proposal passes.
-        validate_incoming_message(&topic, &message).unwrap();
+        validate_incoming_envelope(&topic, &envelope).unwrap();
 
         // Cross-topic replay/misrouting is rejected.
         let other_topic = MultisigTopic {
@@ -1722,7 +2092,7 @@ mod tests {
             chain_id: topic.chain_id,
             transaction_id: topic.transaction_id,
         };
-        assert!(validate_incoming_message(&other_topic, &message).is_err());
+        assert!(validate_incoming_envelope(&other_topic, &envelope).is_err());
 
         // Same multisig and id on another chain is a different topic.
         let other_chain_topic = MultisigTopic {
@@ -1730,14 +2100,273 @@ mod tests {
             chain_id: ChainId::Mainnet,
             transaction_id: topic.transaction_id,
         };
-        assert!(validate_incoming_message(&other_chain_topic, &message).is_err());
+        assert!(validate_incoming_envelope(&other_chain_topic, &envelope).is_err());
 
         // Forged transaction id (id not recomputing from calls/salt) is rejected.
         let mut forged = proposal;
         forged.transaction_id = Felt::from(1u64);
         let forged_topic = forged.topic();
-        let forged_message = MultisigCoordinationMessage::Proposal(forged);
-        assert!(validate_incoming_message(&forged_topic, &forged_message).is_err());
+        let forged_envelope: MultisigCoordinationEnvelope =
+            MultisigCoordinationMessage::Proposal(forged).into();
+        assert!(validate_incoming_envelope(&forged_topic, &forged_envelope).is_err());
+    }
+
+    fn confirmation_notice(signer: u64) -> MultisigCoordinationMessage {
+        MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
+            address(1),
+            ChainId::Sepolia,
+            Felt::from(42u64),
+            address(signer),
+        ))
+    }
+
+    fn test_signing_key(secret: u64) -> SigningKey {
+        SigningKey::from_secret_scalar(core_felt_to_rs(Felt::from(secret)))
+    }
+
+    #[test]
+    fn test_coordination_message_hash_binds_every_field() {
+        let base = confirmation_notice(3);
+        let base_hash = coordination_message_hash(&base);
+
+        // Same fields under a different kind must hash differently.
+        let revocation = MultisigCoordinationMessage::Revocation(MultisigSignerNotice::new(
+            address(1),
+            ChainId::Sepolia,
+            Felt::from(42u64),
+            address(3),
+        ));
+        assert_ne!(base_hash, coordination_message_hash(&revocation));
+
+        // Claimed actor is bound.
+        assert_ne!(
+            base_hash,
+            coordination_message_hash(&confirmation_notice(4))
+        );
+
+        // Chain is bound.
+        let other_chain = MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
+            address(1),
+            ChainId::Mainnet,
+            Felt::from(42u64),
+            address(3),
+        ));
+        assert_ne!(base_hash, coordination_message_hash(&other_chain));
+
+        // Deterministic for identical messages.
+        assert_eq!(
+            base_hash,
+            coordination_message_hash(&confirmation_notice(3))
+        );
+    }
+
+    #[test]
+    fn test_coordination_message_hash_binds_proposer_and_memo() {
+        let proposal = |proposer: u64, memo: Option<&str>| {
+            MultisigCoordinationMessage::Proposal(MultisigProposal::new(
+                address(1),
+                ChainId::Sepolia,
+                vec![call()],
+                Felt::from(99u64),
+                address(proposer),
+                memo.map(str::to_string),
+            ))
+        };
+
+        let base_hash = coordination_message_hash(&proposal(2, Some("rotate signer")));
+        // The reviewer-flagged attribution fields are covered by the hash.
+        assert_ne!(
+            base_hash,
+            coordination_message_hash(&proposal(3, Some("rotate signer")))
+        );
+        assert_ne!(
+            base_hash,
+            coordination_message_hash(&proposal(2, Some("drain treasury")))
+        );
+        assert_ne!(base_hash, coordination_message_hash(&proposal(2, None)));
+        assert_ne!(
+            coordination_message_hash(&proposal(2, None)),
+            coordination_message_hash(&proposal(2, Some("")))
+        );
+    }
+
+    #[test]
+    fn test_signed_message_sign_and_verify_roundtrip() {
+        let key = test_signing_key(0x1234);
+        let public_key = rs_felt_to_core(key.verifying_key().scalar());
+
+        let signed =
+            SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+                .unwrap();
+        assert_eq!(signed.version, MULTISIG_COORDINATION_SCHEMA_VERSION);
+        assert_eq!(signed.claimed_actor(), address(3));
+        signed.verify_with_stark_public_key(public_key).unwrap();
+
+        // Survives a JSON wire roundtrip.
+        let json = serde_json::to_string(&signed).unwrap();
+        let roundtrip: SignedMultisigCoordinationMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtrip, signed);
+        roundtrip.verify_with_stark_public_key(public_key).unwrap();
+    }
+
+    #[test]
+    fn test_signed_message_rejects_tampering_and_wrong_key() {
+        let key = test_signing_key(0x1234);
+        let public_key = rs_felt_to_core(key.verifying_key().scalar());
+
+        let signed =
+            SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+                .unwrap();
+
+        // A coordinator swapping the claimed signer invalidates the signature.
+        let mut forged_actor = signed.clone();
+        forged_actor.message = confirmation_notice(4);
+        assert!(forged_actor
+            .verify_with_stark_public_key(public_key)
+            .is_err());
+
+        // Reinterpreting a confirmation as a revocation invalidates it too.
+        let mut forged_kind = signed.clone();
+        if let MultisigCoordinationMessage::Confirmation(notice) = signed.message.clone() {
+            forged_kind.message = MultisigCoordinationMessage::Revocation(notice);
+        }
+        assert!(forged_kind
+            .verify_with_stark_public_key(public_key)
+            .is_err());
+
+        // A different key's signature does not verify.
+        let other_key = test_signing_key(0x5678);
+        assert!(signed
+            .verify_with_stark_public_key(rs_felt_to_core(other_key.verifying_key().scalar()))
+            .is_err());
+    }
+
+    #[test]
+    fn test_signed_message_structure_validation() {
+        let key = test_signing_key(0x1234);
+        let mut signed =
+            SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+                .unwrap();
+        signed.validate_structure().unwrap();
+
+        signed.version = 2;
+        assert!(signed.validate_structure().is_err());
+
+        assert!(SignedMultisigCoordinationMessage::new(confirmation_notice(3), vec![]).is_err());
+    }
+
+    #[test]
+    fn test_envelope_serde_distinguishes_signed_and_legacy() {
+        let key = test_signing_key(0x1234);
+        let signed =
+            SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+                .unwrap();
+
+        let signed_json =
+            serde_json::to_string(&MultisigCoordinationEnvelope::from(signed.clone())).unwrap();
+        assert!(signed_json.contains("\"version\":1"));
+        let parsed: MultisigCoordinationEnvelope = serde_json::from_str(&signed_json).unwrap();
+        assert_eq!(parsed, MultisigCoordinationEnvelope::Signed(signed));
+
+        // Legacy (schema version 0) payloads are the bare tagged message and
+        // still parse, as the unsigned variant.
+        let legacy_json = serde_json::to_string(&confirmation_notice(3)).unwrap();
+        let parsed: MultisigCoordinationEnvelope = serde_json::from_str(&legacy_json).unwrap();
+        assert_eq!(
+            parsed,
+            MultisigCoordinationEnvelope::Unsigned(confirmation_notice(3))
+        );
+        assert!(parsed.as_signed().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_coordinator_signed_envelope_roundtrip() {
+        let coordinator = InMemoryMultisigCoordinator::new();
+        let key = test_signing_key(0x1234);
+        let proposal = MultisigProposal::new(
+            address(1),
+            ChainId::Sepolia,
+            vec![call()],
+            Felt::from(99u64),
+            address(2),
+            None,
+        );
+        let topic = proposal.topic();
+        let signed = SignedMultisigCoordinationMessage::sign_with_stark_key(
+            MultisigCoordinationMessage::Proposal(proposal),
+            &key,
+        )
+        .unwrap();
+
+        let mut subscription = coordinator.subscribe(&topic).await.unwrap();
+        coordinator.publish(signed.clone().into()).await.unwrap();
+
+        let received = subscription.next().await.unwrap().unwrap();
+        assert_eq!(received.as_signed(), Some(&signed));
+
+        // Unsupported schema versions are rejected at the publish boundary.
+        let mut future_version = signed;
+        future_version.version = 99;
+        assert!(matches!(
+            coordinator.publish(future_version.into()).await,
+            Err(KmsError::MultisigError(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_verify_signed_message_prevalidation() {
+        // These rejections trigger before any RPC call, so a handle with an
+        // unroutable provider exercises them deterministically.
+        let multisig = test_multisig_handle(1);
+        let key = test_signing_key(0x1234);
+        let signed =
+            SignedMultisigCoordinationMessage::sign_with_stark_key(confirmation_notice(3), &key)
+                .unwrap();
+
+        // Unsupported schema version.
+        let mut wrong_version = signed.clone();
+        wrong_version.version = 0;
+        assert!(matches!(
+            multisig.verify_signed_message(&wrong_version).await,
+            Err(KmsError::MultisigError(_))
+        ));
+
+        // Message bound to a different multisig contract.
+        let foreign_multisig = test_multisig_handle(9);
+        assert!(matches!(
+            foreign_multisig.verify_signed_message(&signed).await,
+            Err(KmsError::MultisigError(_))
+        ));
+
+        // Message bound to a different chain.
+        let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+            Url::parse("http://127.0.0.1:0").unwrap(),
+        )));
+        let mainnet_handle = Multisig::new(provider, address(1), ChainId::Mainnet);
+        assert!(matches!(
+            mainnet_handle.verify_signed_message(&signed).await,
+            Err(KmsError::MultisigError(_))
+        ));
+
+        // Signed proposal whose transaction id does not recompute.
+        let mut forged_proposal = MultisigProposal::new(
+            address(1),
+            ChainId::Sepolia,
+            vec![call()],
+            Felt::from(99u64),
+            address(2),
+            None,
+        );
+        forged_proposal.transaction_id = Felt::from(1u64);
+        let forged = SignedMultisigCoordinationMessage {
+            version: MULTISIG_COORDINATION_SCHEMA_VERSION,
+            message: MultisigCoordinationMessage::Proposal(forged_proposal),
+            signature: signed.signature.clone(),
+        };
+        assert!(matches!(
+            multisig.verify_signed_message(&forged).await,
+            Err(KmsError::MultisigError(_))
+        ));
     }
 
     struct RecordingExecutor {

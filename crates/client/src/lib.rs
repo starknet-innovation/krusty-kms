@@ -30,10 +30,12 @@ pub use events::{
 pub use krusty_kms_common::{KmsError, Result};
 pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
 pub use multisig::{
-    hash_transaction, hash_transaction_batch, HttpMultisigCoordinator, InMemoryMultisigCoordinator,
-    Multisig, MultisigCall, MultisigCoordinationMessage, MultisigCoordinator,
-    MultisigExecutionNotice, MultisigMessageStream, MultisigProposal, MultisigSignerNotice,
-    MultisigTopic, MultisigTransactionState, NatsMultisigCoordinator,
+    coordination_message_hash, hash_transaction, hash_transaction_batch, HttpMultisigCoordinator,
+    InMemoryMultisigCoordinator, Multisig, MultisigCall, MultisigCoordinationEnvelope,
+    MultisigCoordinationMessage, MultisigCoordinator, MultisigExecutionNotice,
+    MultisigMessageStream, MultisigProposal, MultisigSignerNotice, MultisigTopic,
+    MultisigTransactionState, NatsMultisigCoordinator, SignedMultisigCoordinationMessage,
+    MULTISIG_COORDINATION_SCHEMA_VERSION,
 };
 pub use operations::{
     build_erc20_approve, build_fund_calls, build_outside_fund_calls, build_ragequit_call,

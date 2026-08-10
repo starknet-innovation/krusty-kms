@@ -14,9 +14,10 @@
 use futures_util::StreamExt;
 use krusty_kms_client::{
     MultisigCall, MultisigCoordinationMessage, MultisigCoordinator, MultisigProposal,
-    NatsMultisigCoordinator,
+    NatsMultisigCoordinator, SignedMultisigCoordinationMessage,
 };
 use krusty_kms_common::Address;
+use starknet_rust::signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::net::TcpListener;
 use std::path::PathBuf;
@@ -49,17 +50,31 @@ async fn nats_multisig_coordinator_live_pubsub_roundtrip() {
         Some("live NATS integration".to_string()),
     );
     let topic = proposal.topic();
-    let message = MultisigCoordinationMessage::Proposal(proposal);
+    let proposer_key = SigningKey::from_secret_scalar(0x1234u64.into());
+    let signed = SignedMultisigCoordinationMessage::sign_with_stark_key(
+        MultisigCoordinationMessage::Proposal(proposal),
+        &proposer_key,
+    )
+    .unwrap();
 
     let mut subscription = coordinator.subscribe(&topic).await.unwrap();
-    coordinator.publish(message.clone()).await.unwrap();
+    coordinator.publish(signed.clone().into()).await.unwrap();
 
     let received = tokio::time::timeout(Duration::from_secs(5), subscription.next())
         .await
         .expect("timed out waiting for NATS coordination message")
         .expect("NATS subscription closed")
         .unwrap();
-    assert_eq!(received, message);
+    assert_eq!(received.as_signed(), Some(&signed));
+
+    // The signature survives the NATS wire roundtrip.
+    let public_key = Felt::from_bytes_be(&proposer_key.verifying_key().scalar().to_bytes_be());
+    received
+        .as_signed()
+        .unwrap()
+        .verify_with_stark_public_key(public_key)
+        .unwrap();
+
     assert_eq!(
         coordinator.subject(&topic),
         NatsMultisigCoordinator::subject_for("krusty.multisig", &topic)
