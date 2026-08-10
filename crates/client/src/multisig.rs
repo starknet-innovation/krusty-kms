@@ -649,9 +649,7 @@ fn build_ssrf_safe_client(url: &Url) -> Result<reqwest::Client> {
     if let Some(url::Host::Domain(domain)) = url.host() {
         let port = url.port_or_known_default().unwrap_or(80);
         let addrs = resolve_public_socket_addrs(domain, port)?;
-        for addr in addrs {
-            builder = builder.resolve(domain, addr);
-        }
+        builder = builder.resolve_to_addrs(domain, &addrs);
     }
 
     builder

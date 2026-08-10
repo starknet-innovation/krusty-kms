@@ -200,6 +200,12 @@ int32_t kms_encode_rollover_calls(const char* params_json, char* out, size_t out
 int32_t kms_encode_withdraw_calls(const char* params_json, char* out, size_t out_len, size_t* out_written);
 int32_t kms_encode_ragequit_calls(const char* params_json, char* out, size_t out_len, size_t* out_written);
 
+/* ====================================================================== */
+/* Swift binding helpers (implemented in CKms, not libkms)                 */
+/* ====================================================================== */
+
+void kms_secure_wipe(void *ptr, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

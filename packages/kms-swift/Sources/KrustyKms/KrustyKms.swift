@@ -159,24 +159,34 @@ public enum Kms {
     }
 
     /// Best-effort wipe of secret bytes before buffer release.
+    ///
+    /// Uses `kms_secure_wipe` (`memset_s` on Apple, `explicit_bzero` on Linux)
+    /// so the store cannot be optimized away when the buffer is about to die.
     private static func secureZero(_ buffer: inout [UInt8]) {
         buffer.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress else { return }
-            memset(base, 0, raw.count)
+            kms_secure_wipe(base, raw.count)
         }
     }
 
     private static func secureZeroCChars(_ buffer: inout [CChar]) {
         buffer.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress else { return }
-            memset(base, 0, raw.count)
+            kms_secure_wipe(base, raw.count)
         }
     }
 
     private static func secureZeroFelt(_ felt: inout KmsFelt) {
         withUnsafeMutableBytes(of: &felt) { raw in
             guard let base = raw.baseAddress else { return }
-            memset(base, 0, raw.count)
+            kms_secure_wipe(base, raw.count)
+        }
+    }
+
+    private static func secureZeroBytes<T>(_ value: inout T) {
+        withUnsafeMutableBytes(of: &value) { raw in
+            guard let base = raw.baseAddress else { return }
+            kms_secure_wipe(base, raw.count)
         }
     }
 
@@ -369,10 +379,7 @@ public enum Kms {
         }
         try check(rc)
         let result = TongoKeyPair(cValue: out)
-        withUnsafeMutableBytes(of: &out) { raw in
-            guard let base = raw.baseAddress else { return }
-            memset(base, 0, raw.count)
-        }
+        secureZeroBytes(&out)
         return result
     }
 
@@ -409,10 +416,7 @@ public enum Kms {
         }
         try check(rc)
         let result = NostrKeyPair(cValue: out)
-        withUnsafeMutableBytes(of: &out) { raw in
-            guard let base = raw.baseAddress else { return }
-            memset(base, 0, raw.count)
-        }
+        secureZeroBytes(&out)
         return result
     }
 
