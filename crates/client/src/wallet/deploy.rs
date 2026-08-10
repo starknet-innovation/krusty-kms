@@ -31,10 +31,10 @@ pub struct DeployResult {
 
 /// Deploy an OpenZeppelin account contract using the canonical derivation path.
 ///
-/// 1. Builds an [`OzDeploymentDescriptor`] from `account_class` (same canonical path
-///    used for address derivation).
+/// 1. Builds an [`krusty_kms::OzDeploymentDescriptor`] from `account_class` (same
+///    canonical path used for address derivation).
 /// 2. Resolves the deploy salt from `salt_policy`.
-/// 3. Checks if the account is already deployed via [`check_deployed`].
+/// 3. Checks whether the account is already deployed on-chain.
 /// 4. If not, submits a `DEPLOY_ACCOUNT` v3 transaction.
 ///
 /// Provider errors are mapped to typed [`KmsError`] variants.

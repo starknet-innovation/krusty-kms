@@ -1,0 +1,153 @@
+crates/wasm/src/account/addresses.rs: deriveOzAccountAddress
+crates/wasm/src/account/addresses.rs: deriveArgentAccountAddress
+crates/wasm/src/account/addresses.rs: deriveBraavosAccountAddress
+crates/wasm/src/account/addresses.rs: calculateContractAddress
+crates/wasm/src/account/addresses.rs: getAccountClassHashes
+crates/wasm/src/account/derivation.rs: generateMnemonic
+crates/wasm/src/account/derivation.rs: validateMnemonic
+crates/wasm/src/account/derivation.rs: deriveKeypair
+crates/wasm/src/account/derivation.rs: derivePublicKey
+crates/wasm/src/account/derivation.rs: deriveStarknetKeypair
+crates/wasm/src/account/derivation.rs: deriveStarknetPublicKey
+crates/wasm/src/account/derivation.rs: getStarknetCoinType
+crates/wasm/src/account/derivation.rs: getTongoCoinType
+crates/wasm/src/account/derivation.rs: getNostrCoinType
+crates/wasm/src/account/derivation.rs: deriveArgentLegacyKeypair
+crates/wasm/src/account/derivation.rs: deriveArgentLegacyPublicKey
+crates/wasm/src/account/nostr.rs: deriveNostrKeypair
+crates/wasm/src/account/nostr.rs: deriveNostrPublicKey
+crates/wasm/src/account/wasm_account.rs: pub struct WasmAccount {
+crates/wasm/src/account/wasm_account.rs: impl WasmAccount {
+crates/wasm/src/account/wasm_account.rs: fromMnemonic
+crates/wasm/src/account/wasm_account.rs: fromPrivateKey
+crates/wasm/src/account/wasm_account.rs: ownerPublicKeyHex
+crates/wasm/src/account/wasm_account.rs: contractAddress
+crates/wasm/src/account/wasm_account.rs: getState
+crates/wasm/src/account/wasm_account.rs: updateState
+crates/wasm/src/account/wasm_account.rs: hasSufficientBalance
+crates/wasm/src/account/wasm_account.rs: totalBalance
+crates/wasm/src/account/wasm_account.rs: decryptToPoint
+crates/wasm/src/account/wasm_account.rs: decryptBalance
+crates/wasm/src/calldata.rs: compileCalls
+crates/wasm/src/calldata.rs: encodeFelt
+crates/wasm/src/calldata.rs: encodeShortString
+crates/wasm/src/calldata.rs: decodeShortString
+crates/wasm/src/discovery.rs: generateAccountCandidates
+crates/wasm/src/discovery.rs: generateAccountCandidatesWithSecrets
+crates/wasm/src/discovery.rs: generateAccountAddresses
+crates/wasm/src/discovery.rs: deriveDiscoveryKeypairs
+crates/wasm/src/discovery.rs: deriveDiscoveryKeypairsWithSecrets
+crates/wasm/src/discovery.rs: discoverAccountsFromMnemonic
+crates/wasm/src/discovery.rs: discoverAccountsFromMnemonicWithSecrets
+crates/wasm/src/encryption.rs: pub struct WasmEncryptedKey {
+crates/wasm/src/encryption.rs: encryptedKey
+crates/wasm/src/encryption.rs: encryptPrivateKey
+crates/wasm/src/encryption.rs: decryptPrivateKey
+crates/wasm/src/encryption.rs: encryptWithKey
+crates/wasm/src/encryption.rs: decryptWithKey
+crates/wasm/src/encryption.rs: encryptKeystore
+crates/wasm/src/encryption.rs: decryptKeystore
+crates/wasm/src/encryption.rs: decryptEthersKeystore
+crates/wasm/src/hashing.rs: pedersenHash
+crates/wasm/src/hashing.rs: pedersenHashMany
+crates/wasm/src/hashing.rs: starknetKeccak
+crates/wasm/src/hashing.rs: getSelectorFromName
+crates/wasm/src/lib.rs: pub fn init() {}
+crates/wasm/src/lib.rs: getVersion
+crates/wasm/src/lib.rs: getBuildInfo
+crates/wasm/src/lib.rs: poseidonHashMany
+crates/wasm/src/lib.rs: poseidonHash
+crates/wasm/src/lib.rs: scalarMul
+crates/wasm/src/lib.rs: scalarMulGenerator
+crates/wasm/src/lib.rs: getGenerator
+crates/wasm/src/lib.rs: pointAdd
+crates/wasm/src/lib.rs: randomFelt
+crates/wasm/src/lib.rs: serializePublicKey
+crates/wasm/src/lib.rs: deserializePublicKey
+crates/wasm/src/proof.rs: pub struct WasmFundParams {
+crates/wasm/src/proof.rs: impl WasmFundParams {
+crates/wasm/src/proof.rs: pub fn new(
+crates/wasm/src/proof.rs: withAuditor
+crates/wasm/src/proof.rs: pub struct WasmFundProofResult {
+crates/wasm/src/proof.rs: generateFundProof
+crates/wasm/src/proof.rs: pub struct WasmTransferParams {
+crates/wasm/src/proof.rs: impl WasmTransferParams {
+crates/wasm/src/proof.rs: pub fn new(
+crates/wasm/src/proof.rs: withBitSize
+crates/wasm/src/proof.rs: withAuditor
+crates/wasm/src/proof.rs: pub struct WasmTransferProofResult {
+crates/wasm/src/proof.rs: generateTransferProof
+crates/wasm/src/proof.rs: pub struct WasmRolloverParams {
+crates/wasm/src/proof.rs: impl WasmRolloverParams {
+crates/wasm/src/proof.rs: pub fn new(
+crates/wasm/src/proof.rs: pub struct WasmRolloverProofResult {
+crates/wasm/src/proof.rs: generateRolloverProof
+crates/wasm/src/proof.rs: pub struct WasmWithdrawParams {
+crates/wasm/src/proof.rs: impl WasmWithdrawParams {
+crates/wasm/src/proof.rs: pub fn new(
+crates/wasm/src/proof.rs: withBitSize
+crates/wasm/src/proof.rs: withAuditor
+crates/wasm/src/proof.rs: pub struct WasmWithdrawProofResult {
+crates/wasm/src/proof.rs: generateWithdrawProof
+crates/wasm/src/proof.rs: pub struct WasmRagequitParams {
+crates/wasm/src/proof.rs: impl WasmRagequitParams {
+crates/wasm/src/proof.rs: pub fn new(
+crates/wasm/src/proof.rs: withAuditor
+crates/wasm/src/proof.rs: pub struct WasmRagequitProofResult {
+crates/wasm/src/proof.rs: generateRagequitProof
+crates/wasm/src/signing.rs: starkPublicKey
+crates/wasm/src/signing.rs: signStarkHash
+crates/wasm/src/signing.rs: nostrPublicKey
+crates/wasm/src/signing.rs: signNostrEventId
+crates/wasm/src/signing.rs: signNostrMessage
+crates/wasm/src/strk20.rs: deriveStrk20ViewingKey
+crates/wasm/src/tx_hash.rs: computeInvokeTransactionHashV1
+crates/wasm/src/tx_hash.rs: computeInvokeTransactionHashV3
+crates/wasm/src/tx_hash.rs: computeDeployAccountTransactionHashV1
+crates/wasm/src/tx_hash.rs: computeDeployAccountTransactionHashV3
+crates/wasm/src/tx_hash.rs: computeDeclareTransactionHashV2
+crates/wasm/src/tx_hash.rs: computeDeclareTransactionHashV3
+crates/wasm/src/tx_hash.rs: computeTypedDataMessageHash
+crates/wasm/src/types.rs: pub struct WasmAccountState {
+crates/wasm/src/types.rs: impl WasmAccountState {
+crates/wasm/src/types.rs: pub fn new(
+crates/wasm/src/types.rs: totalBalance
+crates/wasm/src/types.rs: pub struct WasmPoint {
+crates/wasm/src/types.rs: impl WasmPoint {
+crates/wasm/src/types.rs: pub fn new(x: String, y: String) -> Result<WasmPoint, JsValue> {
+crates/wasm/src/types.rs: pub struct WasmDecryptedPoint {
+crates/wasm/src/types.rs: impl WasmDecryptedPoint {
+crates/wasm/src/types.rs: pub fn new(is_identity: bool, x: Option<String>, y: Option<String>) -> Self {
+crates/wasm/src/types.rs: pub struct WasmCiphertext {
+crates/wasm/src/types.rs: impl WasmCiphertext {
+crates/wasm/src/types.rs: pub fn new(l_x: String, l_y: String, r_x: String, r_y: String) -> Self {
+crates/wasm/src/types.rs: pub struct WasmKeypair {
+crates/wasm/src/types.rs: impl WasmKeypair {
+crates/wasm/src/types.rs: pub fn new(
+crates/wasm/src/types.rs: publicKeyHex
+crates/wasm/src/types.rs: pub struct WasmPublicKey {
+crates/wasm/src/types.rs: pub struct WasmStarkXOnlyKeypair {
+crates/wasm/src/types.rs: impl WasmStarkXOnlyKeypair {
+crates/wasm/src/types.rs: pub fn new(
+crates/wasm/src/types.rs: publicKeyHex
+crates/wasm/src/types.rs: pub struct WasmStarkXOnlyPublicKey {
+crates/wasm/src/types.rs: impl WasmStarkXOnlyPublicKey {
+crates/wasm/src/types.rs: pub fn new(public_key_x: String) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
+crates/wasm/src/types.rs: publicKeyHex
+crates/wasm/src/types.rs: impl WasmPublicKey {
+crates/wasm/src/types.rs: pub fn new(public_key_x: String, public_key_y: String) -> Result<WasmPublicKey, JsValue> {
+crates/wasm/src/types.rs: publicKeyHex
+crates/wasm/src/types.rs: pub enum WasmTxType {
+crates/wasm/src/types.rs: pub struct WasmNostrKeypair {
+crates/wasm/src/types.rs: impl WasmNostrKeypair {
+crates/wasm/src/types.rs: pub fn new(private_key: String, public_key: String) -> Self {
+crates/wasm/src/types.rs: pub struct WasmNostrPublicKey {
+crates/wasm/src/types.rs: impl WasmNostrPublicKey {
+crates/wasm/src/types.rs: pub fn new(public_key: String) -> Self {
+crates/wasm/src/types.rs: pub struct WasmStarkSignature {
+crates/wasm/src/types.rs: publicKey
+crates/wasm/src/types.rs: publicKey
+crates/wasm/src/utils.rs: grindKey
+crates/wasm/src/utils.rs: randomBytesHex
+crates/wasm/src/utils.rs: isValidFelt
+crates/wasm/src/utils.rs: isValidStarkPrivateKey

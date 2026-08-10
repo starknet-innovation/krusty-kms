@@ -1,0 +1,141 @@
+name: Guardrails
+
+on:
+  push:
+    paths:
+      - "crates/**"
+      - "packages/kms-c/**"
+      - "packages/kms-swift/**"
+      - "packages/kms-jvm/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - "docs/design/**"
+      - ".github/guardrails/**"
+      - ".github/scripts/**"
+      - ".github/workflows/guardrails.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "packages/kms-c/**"
+      - "packages/kms-swift/**"
+      - "packages/kms-jvm/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - "docs/design/**"
+      - ".github/guardrails/**"
+      - ".github/scripts/**"
+      - ".github/workflows/guardrails.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fitness:
+    name: Maintainability fitness checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: File-size ratchet
+        run: bash .github/scripts/check-file-size-ratchet.sh
+
+      - name: Dependency layering
+        run: bash .github/scripts/check-dependency-layers.sh
+
+      - name: Unsafe allowlist
+        run: bash .github/scripts/check-unsafe-allowlist.sh
+
+      - name: Secret hygiene
+        run: bash .github/scripts/check-secret-hygiene.sh
+
+      - name: FFI surface freeze
+        run: bash .github/scripts/check-ffi-surface.sh
+
+      - name: WASM export freeze
+        run: bash .github/scripts/check-wasm-exports.sh
+
+      - name: PR size limits
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash .github/scripts/check-pr-size.sh
+
+      - name: Design note for public-surface changes
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash .github/scripts/check-design-note.sh
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: EmbarkStudios/cargo-deny-action@ef80a86e1dc85c6208ad2eef99037b5dae8c5a80 # v2
+        with:
+          command: check
+          arguments: --all-features
+
+  docs:
+    name: rustdoc link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - name: Document publishable crates
+        env:
+          RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links"
+        run: >
+          cargo doc --locked --no-deps
+          -p krusty-kms-common
+          -p krusty-kms-wallet-api
+          -p krusty-kms-domain
+          -p krusty-kms-crypto
+          -p krusty-kms
+          -p krusty-kms-sdk
+          -p krusty-kms-client
+          -p krusty-kms-gateway
+
+  semver:
+    name: cargo-semver-checks
+    runs-on: ubuntu-latest
+    # Compare publishable crate APIs against the PR base (or origin/main) using
+    # locked rustdoc JSON. See .github/scripts/check-semver.sh.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - name: Install nightly (rustdoc JSON)
+        run: rustup toolchain install nightly --component rust-docs
+      - name: Install cargo-semver-checks
+        run: cargo install cargo-semver-checks --locked
+      - name: Prepare git baseline worktree
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF}" ]]; then
+            git fetch --no-tags origin "${BASE_REF}"
+            baseline_rev="origin/${BASE_REF}"
+          else
+            git fetch --no-tags origin main
+            baseline_rev="origin/main"
+          fi
+          if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "${baseline_rev}")" ]]; then
+            baseline_rev="$(git rev-parse HEAD^)"
+          fi
+          echo "Using baseline ${baseline_rev}"
+          git worktree add /tmp/krusty-semver-baseline "${baseline_rev}"
+          echo "BASELINE_ROOT=/tmp/krusty-semver-baseline" >> "$GITHUB_ENV"
+      - name: Check publishable crate semver
+        run: bash .github/scripts/check-semver.sh
+        env:
+          BASELINE_ROOT: ${{ env.BASELINE_ROOT }}

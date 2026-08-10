@@ -29,7 +29,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.8.1"
+version = "0.8.2"
 edition = "2021"
 rust-version = "1.92"
 authors = ["Krusty KMS Contributors"]
@@ -40,7 +40,7 @@ keywords = ["cryptography", "kms", "starknet", "encryption"]
 categories = ["cryptography"]
 
 [workspace.dependencies]
-starknet-types-core = { version = "0.2.0", features = ["hash"] }
+starknet-types-core = { version = "=0.2.0", features = ["hash"] }
 bip39 = "2.2.0"
 hmac = "0.12.1"
 sha2 = "0.10.8"

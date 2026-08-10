@@ -4,6 +4,24 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-08-10
+
+### Added
+
+- Maintainability guardrails: CI fitness checks for file-size ratchet, dependency
+  DAG, `unsafe` allowlist, secret hygiene, FFI/WASM surface freezes, design-note
+  gates, `cargo-deny`, rustdoc link checks, and locked `cargo-semver-checks`
+  (see `docs/maintainability-guardrails.md`).
+
+### Fixed
+
+- Redacted `Debug` for `TongoKeyPair` (no longer relies on a derived impl that
+  could regress secret handling).
+- Broken rustdoc intra-doc links in `SecretFelt`, range helpers, and OZ deploy
+  docs.
+- Pin `starknet-types-core` to `=0.2.0` to avoid API-incompatible `0.2.x`
+  resolutions; set `license` metadata on `krusty-kms-cabi`.
+
 ## [0.8.1] - 2026-08-10
 
 ### Changed

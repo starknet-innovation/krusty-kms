@@ -222,19 +222,23 @@ over a module that:
 
 ### File and change size limits (strict)
 
-These are defaults. If you exceed them, explain why in the PR description.
+These are defaults. CI enforces them as a **ratchet** (see
+[`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md)):
 
-- **PR size**: aim for ≤ **400 changed lines** and ≤ **10 files**.
-  - If larger: split into logical PRs (prep refactor → feature → cleanup).
+- **PR size**: aim for ≤ **400 changed lines** and ≤ **10 production Rust files**.
+  - If larger: split into logical PRs (prep refactor → feature → cleanup), or add a
+    `Why this PR is large` section to the PR body.
 - **Source files**: aim for ≤ **350 lines** per file.
-  - Hard stop at **500 lines** unless there's a strong reason.
+  - Hard stop at **500 lines** for **new** files.
+  - Existing oversized files are baselined; they must not grow without updating the
+    baseline and justifying the change.
 - **Functions**: aim for ≤ **40 lines**.
 - **Classes / types**: aim for ≤ **200 lines** of definition logic.
 - **Nesting**: avoid > **3** nested blocks/closures; refactor instead.
 
 If you must exceed a limit, add one of:
 - a module-level comment: `// NOTE: intentionally long because ...`
-- a short section in the PR: "Why this file is long"
+- a short section in the PR: "Why this file is long" / "Why this PR is large"
 
 ---
 
@@ -345,13 +349,21 @@ Prefer "show one good example" over "explain every possibility."
    ```bash
    git config core.hooksPath .githooks
    ```
-   This enables the pre-commit hook that checks Rust formatting (via `cargo fmt --check`) and will abort the commit if formatting is incorrect so you can run `cargo fmt` and re-stage changes.
+   This enables the pre-commit hook that checks Rust formatting (`cargo fmt --check`)
+   and the fast maintainability fitness scripts (file-size ratchet, dependency
+   layering, `unsafe` allowlist, secret hygiene, FFI/WASM surface snapshots).
+   Formatting failures abort the commit so you can run `cargo fmt` and re-stage.
 2. **Pick an issue** (or open one).
 3. For non-trivial changes, write a **design note** before coding.
 4. Implement in small steps:
    - keep commits coherent
    - keep code compiling / tests passing
-5. Run the full check suite locally (format/lint/tests).
+5. Run the full check suite locally (format/lint/tests) plus:
+   ```bash
+   bash .github/scripts/check-file-size-ratchet.sh
+   bash .github/scripts/check-dependency-layers.sh
+   ```
+   See [`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md).
 6. Open a PR early if you want feedback; mark it as draft.
 
 **Non-trivial** includes:
@@ -427,8 +439,7 @@ If a reviewer asks for a simplification pass, treat it as part of "done," not as
 ## Security
 
 If you believe you've found a security vulnerability, do **not** open a public issue.
-Instead, follow the repository's security policy (e.g., `SECURITY.md`) if present.
-If none exists, contact the maintainers privately via the channel listed in the README.
+Follow [`SECURITY.md`](SECURITY.md) and use private vulnerability reporting.
 
 ---
 

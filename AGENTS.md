@@ -21,6 +21,10 @@ the test suites. Standard commands live in `README.md`, `crates/CLAUDE.md`, and
 
 - Build/lint/test the Rust workspace with the commands in `README.md` and
   `.github/workflows/rust.yml`.
+- Maintainability fitness checks (file-size ratchet, dependency DAG, `unsafe`
+  allowlist, secret hygiene, FFI/WASM freezes, `cargo-deny`, rustdoc links,
+  semver-checks) live in `.github/workflows/guardrails.yml` and are documented in
+  [`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md).
 - **Gotcha:** exclude the WASM crate from normal cargo runs — it only builds/tests under
   `wasm-pack`. CI uses `cargo test --workspace --exclude krusty-kms-wasm`. Running plain
   `cargo test --workspace` will try to native-compile `krusty-kms-wasm`.
@@ -28,6 +32,8 @@ the test suites. Standard commands live in `README.md`, `crates/CLAUDE.md`, and
 - Examples double as the "hello world" smoke test, e.g.
   `cargo run -p krusty-kms --example key_derivation` (also `stark_sign`, `oz_address`,
   and `cargo run -p krusty-kms-sdk --example tongo_proof_generation`).
+- Optional `--ignored` suites are exercised by
+  `.github/workflows/ignored-integration.yml` (weekly compile + manual dispatch).
 
 ### crates.io releases (maintainers and agents)
 

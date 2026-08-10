@@ -36,10 +36,19 @@ const CURVE_ORDER: &str = "0800000000000010ffffffffffffffffb781126dcae7b2321e66a
 ///
 /// The private key is wrapped in `SecretFelt` which ensures it is
 /// zeroized when the keypair is dropped.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TongoKeyPair {
     pub private_key: SecretFelt,
     pub public_key: ProjectivePoint,
+}
+
+impl core::fmt::Debug for TongoKeyPair {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TongoKeyPair")
+            .field("private_key", &self.private_key)
+            .field("public_key", &self.public_key)
+            .finish()
+    }
 }
 
 /// Derive a private key from a mnemonic with a custom coin type.
