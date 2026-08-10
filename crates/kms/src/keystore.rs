@@ -24,6 +24,16 @@ fn parse_u32_kdf_param(value: Option<u64>, field: &str) -> Result<u32> {
     })
 }
 
+// Checked u64 -> usize conversion: a plain `as usize` truncates on wasm32, so
+// e.g. 2^32 + 32 would become 32 and bypass the dklen ceiling below.
+fn parse_usize_kdf_param(value: Option<u64>, field: &str) -> Result<usize> {
+    let n = value
+        .ok_or_else(|| KmsError::DeserializationError(format!("Missing kdfparams.{field}")))?;
+    usize::try_from(n).map_err(|_| {
+        KmsError::DeserializationError(format!("kdfparams.{field} exceeds usize range (got {n})"))
+    })
+}
+
 /// Ethereum-keystore-compatible ceilings for attacker-controlled scrypt params.
 ///
 /// Memory ≈ 128 · N · r bytes. With [`scrypt_log_n`]'s N ≤ 2^20 and r ≤ 32 that
@@ -244,10 +254,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 
     let p = parse_u32_kdf_param(crypto["kdfparams"]["p"].as_u64(), "p")?;
 
-    let dklen = crypto["kdfparams"]["dklen"]
-        .as_u64()
-        .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.dklen".to_string()))?
-        as usize;
+    let dklen = parse_usize_kdf_param(crypto["kdfparams"]["dklen"].as_u64(), "dklen")?;
 
     validate_scrypt_resource_params(n, r, p, dklen)?;
 
@@ -517,4 +524,14 @@ mod tests {
         assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
     }
 
+    #[test]
+    fn decrypt_ethers_keystore_rejects_truncating_dklen() {
+        // 2^32 + 32 truncates to 32 under `as usize` on wasm32; the checked
+        // conversion must reject it before the range validation runs.
+        let keystore_json = ethers_keystore_with_dklen((1u64 << 32) + 32);
+        let result = decrypt_ethers_keystore(&keystore_json, &test_password(0));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
+    }
 }
