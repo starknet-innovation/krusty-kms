@@ -596,6 +596,9 @@ impl reqwest::dns::Resolve for PublicOnlyResolver {
 
 fn build_ssrf_safe_client(url: &Url) -> Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder()
+        // Bypass env/system proxies so DNS pinning and PublicOnlyResolver
+        // apply to the actual coordinator destination (not a proxy hop).
+        .no_proxy()
         .dns_resolver(Arc::new(PublicOnlyResolver))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if attempt.previous().len() >= 10 {
