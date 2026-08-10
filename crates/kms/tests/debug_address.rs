@@ -25,7 +25,7 @@ fn debug_account_address_calculation() {
     println!("  Private (expected): {}", expected_private);
     println!(
         "  Private (derived):  {}",
-        keypair.private_key.expose_secret_hex()
+        keypair.private_key.expose_secret_hex().as_str()
     );
     println!("  Public (expected):  {}", expected_public);
     println!("  Public (derived):   {:#x}", public_key_x);

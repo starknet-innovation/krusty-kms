@@ -283,12 +283,20 @@ fn encode_enum_value(
     value: &serde_json::Value,
     types: &HashMap<String, Vec<TypeMember>>,
 ) -> Result<Vec<Felt>> {
-    // Parse "EnumName(V1,V2,...)" into name and variants.
+    // Parse "EnumName(V1,V2,...)" into name and variants. Dapp-supplied typed
+    // data is untrusted: malformed strings like "a)b(" must error, not panic
+    // on an out-of-bounds or non-char-boundary slice.
     let paren_idx = type_name.find('(').ok_or_else(|| {
         krusty_kms_common::KmsError::SerializationError(format!("Malformed enum type: {type_name}"))
     })?;
-    let _enum_name = &type_name[..paren_idx];
-    let variants_str = &type_name[paren_idx + 1..type_name.len() - 1];
+    let variants_str = type_name
+        .strip_suffix(')')
+        .and_then(|without_close| without_close.get(paren_idx + 1..))
+        .ok_or_else(|| {
+            krusty_kms_common::KmsError::SerializationError(format!(
+                "Malformed enum type: {type_name}"
+            ))
+        })?;
     let variants: Vec<&str> = variants_str.split(',').collect();
 
     let th = starknet_keccak(type_name.as_bytes());
@@ -456,6 +464,21 @@ fn felt_from_biguint(n: &num_bigint::BigUint) -> Felt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Malformed enum type strings from dapp-supplied typed data must error,
+    /// not panic on an out-of-bounds slice (M-08).
+    #[test]
+    fn test_malformed_enum_type_errors_instead_of_panicking() {
+        let types = HashMap::new();
+        let value = serde_json::json!({ "V1": [] });
+        for malformed in ["a)b(", "E(V1", ")E(V1)x", "(", ")("] {
+            let result = encode_value(malformed, &value, &types);
+            assert!(result.is_err(), "expected error for {malformed:?}");
+        }
+        // A well-formed enum still encodes.
+        let ok = encode_value("E(V1,V2)", &value, &types);
+        assert!(ok.is_ok(), "well-formed enum must encode: {ok:?}");
+    }
 
     #[test]
     fn test_encode_type_starknet_domain() {

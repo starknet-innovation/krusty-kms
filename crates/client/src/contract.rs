@@ -156,11 +156,9 @@ impl TongoContract {
             ));
         }
 
-        // Convert felt to u128
-        let bytes = result[0].to_bytes_be();
-        let mut u128_bytes = [0u8; 16];
-        u128_bytes.copy_from_slice(&bytes[16..32]);
-        Ok(u128::from_be_bytes(u128_bytes))
+        // `rate` feeds `approve(amount * rate)`: a silently truncated felt
+        // would inflate the allowance granted to the contract.
+        felt_to_u128_checked(&result[0], "get_rate")
     }
 
     /// Get the bit size used for range proofs.
@@ -187,11 +185,7 @@ impl TongoContract {
             ));
         }
 
-        // Convert felt to u32
-        let bytes = result[0].to_bytes_be();
-        let mut u32_bytes = [0u8; 4];
-        u32_bytes.copy_from_slice(&bytes[28..32]);
-        Ok(u32::from_be_bytes(u32_bytes))
+        felt_to_u32_checked(&result[0], "get_bit_size")
     }
 
     /// Get the ERC20 token contract address.
@@ -442,8 +436,61 @@ impl TongoContract {
     }
 }
 
+/// Convert an RPC felt into `u128`, rejecting values that would truncate.
+///
+/// RPC responses are untrusted input: slicing the low bytes of an oversized
+/// felt silently aliases it to a different number.
+fn felt_to_u128_checked(felt: &StarknetRsFelt, context: &str) -> Result<u128> {
+    let bytes = felt.to_bytes_be();
+    if bytes[..16].iter().any(|byte| *byte != 0) {
+        return Err(krusty_kms_common::KmsError::DeserializationError(format!(
+            "{context}: felt {felt:#x} exceeds u128 range"
+        )));
+    }
+    let mut u128_bytes = [0u8; 16];
+    u128_bytes.copy_from_slice(&bytes[16..32]);
+    Ok(u128::from_be_bytes(u128_bytes))
+}
+
+/// Convert an RPC felt into `u32`, rejecting values that would truncate.
+fn felt_to_u32_checked(felt: &StarknetRsFelt, context: &str) -> Result<u32> {
+    let bytes = felt.to_bytes_be();
+    if bytes[..28].iter().any(|byte| *byte != 0) {
+        return Err(krusty_kms_common::KmsError::DeserializationError(format!(
+            "{context}: felt {felt:#x} exceeds u32 range"
+        )));
+    }
+    let mut u32_bytes = [0u8; 4];
+    u32_bytes.copy_from_slice(&bytes[28..32]);
+    Ok(u32::from_be_bytes(u32_bytes))
+}
+
 #[cfg(test)]
 mod tests {
-    // Note: These tests require a running Starknet node with the Tongo contract deployed
-    // See integration tests for full examples with actual RPC access
+    // Note: Contract-call tests require a running Starknet node with the Tongo
+    // contract deployed. See integration tests for full examples with RPC access.
+    use super::*;
+
+    /// Oversized RPC felts must error instead of silently truncating (M-13):
+    /// a truncated `rate` feeds `approve(amount * rate)`.
+    #[test]
+    fn felt_conversions_reject_truncation() {
+        assert_eq!(
+            felt_to_u128_checked(&StarknetRsFelt::from(42u64), "test").unwrap(),
+            42
+        );
+        assert_eq!(
+            felt_to_u128_checked(&StarknetRsFelt::from(u128::MAX), "test").unwrap(),
+            u128::MAX
+        );
+        let over_u128 = StarknetRsFelt::from(u128::MAX) + StarknetRsFelt::ONE;
+        assert!(felt_to_u128_checked(&over_u128, "test").is_err());
+
+        assert_eq!(
+            felt_to_u32_checked(&StarknetRsFelt::from(u32::MAX), "test").unwrap(),
+            u32::MAX
+        );
+        let over_u32 = StarknetRsFelt::from(u64::from(u32::MAX) + 1);
+        assert!(felt_to_u32_checked(&over_u32, "test").is_err());
+    }
 }

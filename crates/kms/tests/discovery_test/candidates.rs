@@ -14,9 +14,9 @@ use starknet_types_core::felt::Felt;
 /// - 1 Argent  (new direct derivation, v0.4.0)
 /// - 3 ArgentLegacy (legacy double derivation, v0.4.0 + v0.3.1 + v0.3.0)
 /// - 4 ArgentCairo0 (proxy + 4 implementation hashes)
-/// - 1 OpenZeppelin (latest manifest hash)
+/// - 2 OpenZeppelin (latest manifest hash, salt=pubkey + salt=0)
 ///
-/// Total: 10 candidates per index.
+/// Total: 11 candidates per index.
 #[test]
 fn discovery_generates_candidates_for_all_wallet_types() {
     let candidates = generate_candidates(MNEMONIC, 1).unwrap();
@@ -49,11 +49,11 @@ fn discovery_generates_candidates_for_all_wallet_types() {
     );
     assert!(has_oz, "Must have at least one OpenZeppelin candidate");
 
-    // 10 candidates per index: 1 braavos + 1 argent + 3 legacy + 4 cairo0 + 1 oz
+    // 11 candidates per index: 1 braavos + 1 argent + 3 legacy + 4 cairo0 + 2 oz
     assert_eq!(
         candidates.len(),
-        10,
-        "Expected 10 candidates for 1 index, got {}",
+        11,
+        "Expected 11 candidates for 1 index, got {}",
         candidates.len()
     );
 }

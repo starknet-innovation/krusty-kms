@@ -13,7 +13,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate publishing on the same checks CI runs: a tag push must never ship
+  # code that does not build, pass tests, or clear the dependency audit.
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:

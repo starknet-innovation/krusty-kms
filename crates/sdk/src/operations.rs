@@ -303,10 +303,7 @@ pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<Transf
     }
 
     if !account.has_sufficient_balance(params.amount) {
-        return Err(KmsError::InsufficientBalance {
-            available: account.balance(),
-            required: params.amount,
-        });
+        return Err(KmsError::InsufficientBalance);
     }
 
     // Setup variables
@@ -720,10 +717,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     }
 
     if !account.has_sufficient_balance(params.amount) {
-        return Err(KmsError::InsufficientBalance {
-            available: account.balance(),
-            required: params.amount,
-        });
+        return Err(KmsError::InsufficientBalance);
     }
 
     let x: &Felt = account.owner_private_key().expose_secret();

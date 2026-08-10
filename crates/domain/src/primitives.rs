@@ -16,7 +16,19 @@ impl FeltHex {
     /// Parse and canonicalize a felt hex string.
     pub fn parse(value: &str) -> Result<Self, DomainError> {
         let felt = Felt::from_hex(value).map_err(|e| DomainError::InvalidFeltHex(e.to_string()))?;
-        Ok(Self(format!("0x{:064x}", felt)))
+        // Upstream `Felt::from_hex` has an off-by-one at the field prime: it
+        // accepts exactly p and aliases it to 0. Verify the parsed value
+        // round-trips to the input so any aliased (>= p) input is rejected.
+        let canonical = format!("{felt:064x}");
+        let trimmed = value.strip_prefix("0x").unwrap_or(value);
+        let is_canonical =
+            trimmed.len() <= 64 && format!("{:0>64}", trimmed.to_ascii_lowercase()) == canonical;
+        if !is_canonical {
+            return Err(DomainError::InvalidFeltHex(format!(
+                "value is not a canonical field element: {value}"
+            )));
+        }
+        Ok(Self(format!("0x{canonical}")))
     }
 
     /// Convert a felt value to its canonical hex representation.

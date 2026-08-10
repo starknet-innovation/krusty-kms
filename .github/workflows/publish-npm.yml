@@ -20,7 +20,21 @@ permissions:
   id-token: write
 
 jobs:
+  # Gate npm publishing on tests and the dependency audit: a merge to main
+  # must never ship a wasm package whose Rust sources fail CI checks.
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - run: cargo test --workspace --locked
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

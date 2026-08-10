@@ -53,7 +53,7 @@ fn test_keypair_derivation() {
     println!("\n=> Key Pair Derivation:");
     println!(
         "   Private Key: {}",
-        keypair.private_key.expose_secret_hex()
+        keypair.private_key.expose_secret_hex().as_str()
     );
     println!("   Public Key:  {:?}", keypair.public_key);
 }
@@ -77,11 +77,11 @@ fn test_deterministic_key_derivation() {
     println!("\n=> Deterministic Derivation Test:");
     println!(
         "   First derivation:  {}",
-        keypair1.private_key.expose_secret_hex()
+        keypair1.private_key.expose_secret_hex().as_str()
     );
     println!(
         "   Second derivation: {}",
-        keypair2.private_key.expose_secret_hex()
+        keypair2.private_key.expose_secret_hex().as_str()
     );
     println!("   ✓ Keys match (deterministic)");
 }
@@ -106,9 +106,15 @@ fn test_different_account_indices_produce_different_keys() {
 
     println!("\n=> Tongo Keys for Different Accounts:");
     println!("   Account 0 (path m/44'/5454'/0'/0/0):");
-    println!("     Private: {}", keypair0.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        keypair0.private_key.expose_secret_hex().as_str()
+    );
     println!("   Account 1 (path m/44'/5454'/1'/0/0):");
-    println!("     Private: {}", keypair1.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        keypair1.private_key.expose_secret_hex().as_str()
+    );
 }
 
 #[test]
@@ -131,9 +137,15 @@ fn test_different_address_indices_produce_different_keys() {
 
     println!("\n=> Tongo Keys for Different Address Indices:");
     println!("   Address 0 (path m/44'/5454'/0'/0/0):");
-    println!("     Private: {}", keypair0.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        keypair0.private_key.expose_secret_hex().as_str()
+    );
     println!("   Address 1 (path m/44'/5454'/0'/0/1):");
-    println!("     Private: {}", keypair1.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        keypair1.private_key.expose_secret_hex().as_str()
+    );
 }
 
 #[test]
@@ -157,11 +169,11 @@ fn test_passphrase_affects_derivation() {
     println!("\n=> Passphrase Effect on Derivation:");
     println!(
         "   Without passphrase: {}",
-        keypair_no_pass.private_key.expose_secret_hex()
+        keypair_no_pass.private_key.expose_secret_hex().as_str()
     );
     println!(
         "   With passphrase:    {}",
-        keypair_with_pass.private_key.expose_secret_hex()
+        keypair_with_pass.private_key.expose_secret_hex().as_str()
     );
 }
 
@@ -257,15 +269,24 @@ fn test_cross_reference_with_known_vectors() {
     println!("   Coin Type: {} (Tongo)", TONGO_COIN_TYPE);
     println!();
     println!("   m/44'/5454'/0'/0/0:");
-    println!("     Private: {}", account0.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        account0.private_key.expose_secret_hex().as_str()
+    );
     println!("     Public:  {:?}", account0.public_key);
     println!();
     println!("   m/44'/5454'/1'/0/0:");
-    println!("     Private: {}", account1.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        account1.private_key.expose_secret_hex().as_str()
+    );
     println!("     Public:  {:?}", account1.public_key);
     println!();
     println!("   m/44'/5454'/0'/0/1:");
-    println!("     Private: {}", addr1.private_key.expose_secret_hex());
+    println!(
+        "     Private: {}",
+        addr1.private_key.expose_secret_hex().as_str()
+    );
     println!("     Public:  {:?}", addr1.public_key);
 
     // The actual values can be compared with TypeScript output

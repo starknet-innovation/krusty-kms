@@ -47,13 +47,24 @@ pub fn grind_key(seed_hex: &str) -> Result<String, JsValue> {
 /// Uses a cryptographically secure random number generator.
 ///
 /// # Arguments
-/// * `length` - Number of random bytes to generate
+/// * `length` - Number of random bytes to generate (maximum 1024 — this API
+///   exists for keys/nonces/salts, and an unbounded caller-supplied length is
+///   an allocation-DoS vector)
 ///
 /// # Returns
 /// Hex-encoded bytes with `0x` prefix
 #[wasm_bindgen(js_name = "randomBytesHex")]
 pub fn random_bytes_hex(length: usize) -> Result<String, JsValue> {
     use rand_core::TryRngCore;
+
+    /// Largest byte count this convenience API will generate.
+    const MAX_RANDOM_BYTES: usize = 1024;
+
+    if length > MAX_RANDOM_BYTES {
+        return Err(JsValue::from_str(&format!(
+            "length {length} exceeds maximum {MAX_RANDOM_BYTES}"
+        )));
+    }
 
     let mut bytes = vec![0u8; length];
     rand::rngs::OsRng
@@ -77,17 +88,24 @@ pub fn is_valid_felt(hex_str: &str) -> bool {
 
 /// Check whether a hex string is a valid Stark private key.
 ///
-/// A valid private key must parse as a felt and must not be zero.
+/// A valid private key must parse as a felt, must not be zero, and must be
+/// strictly below the Stark curve order `n`. Values in `[n, p)` parse as
+/// felts but silently reduce mod `n` when used for signing — i.e. they alias
+/// to a *different* key — so they are rejected here.
 ///
 /// # Arguments
 /// * `hex_str` - Hex string to validate (with or without `0x` prefix)
 ///
 /// # Returns
-/// `true` if the string is a non-zero valid felt, `false` otherwise
+/// `true` if the string is a valid in-range private key, `false` otherwise
 #[wasm_bindgen(js_name = "isValidStarkPrivateKey")]
 pub fn is_valid_stark_private_key(hex_str: &str) -> bool {
+    /// Stark curve order (the order of the generator point).
+    const CURVE_ORDER_HEX: &str =
+        "0x0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
+    let curve_order = Felt::from_hex_unchecked(CURVE_ORDER_HEX);
     match Felt::from_hex(hex_str) {
-        Ok(felt) => felt != Felt::ZERO,
+        Ok(felt) => felt != Felt::ZERO && felt < curve_order,
         Err(_) => false,
     }
 }

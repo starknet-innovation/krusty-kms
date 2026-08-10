@@ -80,7 +80,7 @@ fn test_bip44_starknet_coin9004() {
 
     println!("✓ BIP-44 Starknet (coin 9004) derivation:");
     println!("  Path: {}", path);
-    println!("  Private Key: {}", private_hex);
+    println!("  Private Key: {}", private_hex.as_str());
     println!("  Public Key:  {}", public_hex);
 }
 
@@ -114,7 +114,10 @@ fn test_derived_key_creates_valid_signer() {
     assert_ne!(public_key_x, Felt::ZERO, "Public key should not be zero");
 
     println!("✓ Derived key creates valid signer:");
-    println!("  Private Key: {}", keypair.private_key.expose_secret_hex());
+    println!(
+        "  Private Key: {}",
+        keypair.private_key.expose_secret_hex().as_str()
+    );
     println!("  Public Key:  {:#x}", public_key_x);
 }
 
@@ -174,7 +177,7 @@ fn test_tongo_derivation_coin5454() {
     assert_ne!(public_key_x, Felt::ZERO, "Public key should not be zero");
 
     println!("✓ Tongo (coin 5454) derivation:");
-    println!("  Private Key: {}", private_hex);
+    println!("  Private Key: {}", private_hex.as_str());
     println!("  Public Key:  {:#x}", public_key_x);
 }
 
@@ -200,7 +203,7 @@ fn test_starknet_spending_key_derivation() {
     println!("✓ Starknet Spending Key Derivation (coin 9004):");
     println!("  Path:     {}", path);
     println!("  Expected: {}", expected);
-    println!("  Derived:  {}", derived_hex);
+    println!("  Derived:  {}", derived_hex.as_str());
 
     assert_eq!(
         keypair.private_key, expected_felt,
@@ -230,7 +233,7 @@ fn test_tongo_spending_key_derivation() {
     println!("✓ Tongo Spending Key Derivation (coin 5454):");
     println!("  Path:     {}", path);
     println!("  Expected: {}", expected);
-    println!("  Derived:  {}", derived_hex);
+    println!("  Derived:  {}", derived_hex.as_str());
 
     assert_eq!(
         keypair.private_key, expected_felt,
@@ -254,11 +257,11 @@ fn test_different_coin_types_produce_different_keys() {
     println!("✓ Different coin types produce different keys:");
     println!(
         "  Starknet (9004): {}",
-        starknet_key.private_key.expose_secret_hex()
+        starknet_key.private_key.expose_secret_hex().as_str()
     );
     println!(
         "  Tongo (5454):    {}",
-        tongo_key.private_key.expose_secret_hex()
+        tongo_key.private_key.expose_secret_hex().as_str()
     );
 
     assert_ne!(

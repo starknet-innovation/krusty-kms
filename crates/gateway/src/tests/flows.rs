@@ -84,7 +84,8 @@ async fn query_account_snapshot_uses_stale_cache_for_background_mode() {
         .await
         .unwrap();
     assert_eq!(stale.value.cache.status, CacheStatus::Stale);
-    assert_eq!(stale.value.cache.generated_at_ms, 1_000);
+    // Exposed cache timestamps are quantized (M-12): floor(1_000, 5_000) = 0.
+    assert_eq!(stale.value.cache.generated_at_ms, 0);
 
     let checks_after_stale = gateway.backend.deployment_checks.load(Ordering::Relaxed);
     assert_eq!(checks_after_stale, 1);
@@ -191,6 +192,72 @@ async fn sign_returns_nostr_signature_and_tracks_completion() {
         }
         other => panic!("unexpected sign result: {other:?}"),
     }
+}
+
+/// Each tracked token costs backend RPC calls, so the per-request token list
+/// must be bounded (M-11).
+#[tokio::test]
+async fn snapshot_rejects_unbounded_token_list() {
+    let clock = TestClock::default();
+    let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
+
+    let mut request = snapshot_request(QueryMode::ActiveView);
+    let token = request.tokens[0].clone();
+    request.tokens = std::iter::repeat_with(|| token.clone())
+        .take(crate::snapshot::MAX_SNAPSHOT_TOKENS + 1)
+        .collect();
+
+    let error = gateway.query_account_snapshot(request).await.unwrap_err();
+    assert_eq!(error.code, GatewayErrorCode::InvalidRequest);
+    // No backend calls should have been spent on the rejected request.
+    assert_eq!(gateway.backend.deployment_checks.load(Ordering::Relaxed), 0);
+}
+
+/// Shared-cache responses must not expose exact generation timestamps: the
+/// cache is global across callers, so precise `generated_at_ms` on a `Hit`
+/// is a cross-tenant activity timing oracle (M-12).
+#[tokio::test]
+async fn snapshot_cache_hit_quantizes_exposed_timestamps() {
+    let clock = TestClock::default();
+    clock.set(11_300);
+    let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
+
+    let miss = gateway
+        .query_account_snapshot(snapshot_request(QueryMode::ActiveView))
+        .await
+        .unwrap();
+    assert_eq!(miss.value.cache.status, CacheStatus::Miss);
+
+    gateway.clock.set(11_900);
+    let hit = gateway
+        .query_account_snapshot(snapshot_request(QueryMode::ActiveView))
+        .await
+        .unwrap();
+    assert_eq!(hit.value.cache.status, CacheStatus::Hit);
+    // Entry was generated at 11_300; the exposed value floors to the 5s grid.
+    assert_eq!(hit.value.cache.generated_at_ms, 10_000);
+    // Real age is 600ms; the exposed value rounds up to the 5s grid.
+    assert_eq!(hit.value.cache.age_ms, 5_000);
+}
+
+/// The provenance record attests the request's chain id as a gateway-signed
+/// fact, so a sign request targeting a different chain than the backend must
+/// be rejected instead of attested (M-09).
+#[tokio::test]
+async fn sign_rejects_chain_id_that_does_not_match_backend() {
+    let clock = TestClock::default();
+    let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
+
+    let mut request = stark_sign_request();
+    match &mut request {
+        krusty_kms_domain::SignRequest::StarkHash { chain_id, .. } => {
+            *chain_id = ChainId::Mainnet;
+        }
+        other => panic!("unexpected fixture shape: {other:?}"),
+    }
+
+    let error = gateway.sign(request).await.unwrap_err();
+    assert_eq!(error.code, GatewayErrorCode::ChainMismatch);
 }
 
 #[tokio::test]

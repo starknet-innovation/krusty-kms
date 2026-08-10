@@ -27,8 +27,10 @@ pub enum KmsError {
     #[error("Invalid amount: {0}")]
     InvalidAmount(String),
 
-    #[error("Insufficient balance: available={available}, required={required}")]
-    InsufficientBalance { available: u128, required: u128 },
+    // Deliberately carries no amounts: the available balance is confidential
+    // plaintext and error strings routinely cross into JS/FFI/logs.
+    #[error("Insufficient balance for requested amount (values withheld)")]
+    InsufficientBalance,
 
     #[error("Invalid derivation path: {0}")]
     InvalidDerivationPath(String),

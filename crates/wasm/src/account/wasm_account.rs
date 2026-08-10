@@ -141,7 +141,10 @@ impl WasmAccount {
     ///
     /// # Arguments
     /// * `ciphertext` - The ciphertext to decrypt
-    /// * `max_search` - Maximum value to search for (default: 1,000,000)
+    /// * `max_search` - Maximum value to search for (default: 1,000,000;
+    ///   capped at 2^32 — each unit of search is a curve operation on the
+    ///   calling thread, so an unbounded value would let one call freeze it
+    ///   near-indefinitely)
     ///
     /// # Returns
     /// The decrypted balance as a string (for large number support in JS)
@@ -151,11 +154,20 @@ impl WasmAccount {
         ciphertext: &WasmCiphertext,
         max_search: Option<u64>,
     ) -> Result<String, JsValue> {
+        /// Upper bound on brute-force discrete-log search (~2^32 curve ops).
+        const MAX_SEARCH_CEILING: u64 = 1 << 32;
+
         let cipher = parse_ciphertext(ciphertext)?;
+
+        let max = max_search.unwrap_or(1_000_000);
+        if max > MAX_SEARCH_CEILING {
+            return Err(JsValue::from_str(&format!(
+                "max_search {max} exceeds ceiling {MAX_SEARCH_CEILING}"
+            )));
+        }
 
         let decrypted_point =
             from_sdk_result(self.inner.decrypt(&cipher)).map_err(JsValue::from)?;
-        let max = max_search.unwrap_or(1_000_000);
         let balance =
             krusty_kms_crypto::recover_small_discrete_log(&decrypted_point, u128::from(max))
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;

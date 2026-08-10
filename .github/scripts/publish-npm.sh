@@ -30,4 +30,7 @@ fi
 rm -f "$registry_output"
 echo "Publishing $package_spec"
 cd "$package_dir"
-npm publish --access public --registry=https://registry.npmjs.org
+# --provenance: attach a signed build attestation (the workflow already grants
+# id-token: write) so consumers can verify the package was built by this repo's
+# CI rather than an arbitrary publisher token.
+npm publish --access public --provenance --registry=https://registry.npmjs.org

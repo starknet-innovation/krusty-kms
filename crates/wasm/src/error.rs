@@ -21,8 +21,8 @@ pub enum WasmError {
     CryptoError(String),
     /// Serialization/deserialization error
     SerializationError(String),
-    /// Insufficient balance for operation
-    InsufficientBalance { available: u128, required: u128 },
+    /// Insufficient balance for operation (amounts withheld — confidential)
+    InsufficientBalance,
     /// Invalid amount specified
     InvalidAmount(String),
     /// Proof generation or verification failed
@@ -40,11 +40,8 @@ impl WasmError {
             Self::InvalidPublicKey(s) => format!("Invalid public key: {s}"),
             Self::CryptoError(s) => format!("Crypto error: {s}"),
             Self::SerializationError(s) => format!("Serialization error: {s}"),
-            Self::InsufficientBalance {
-                available,
-                required,
-            } => {
-                format!("Insufficient balance: available={available}, required={required}")
+            Self::InsufficientBalance => {
+                "Insufficient balance for requested amount (values withheld)".to_string()
             }
             Self::InvalidAmount(s) => format!("Invalid amount: {s}"),
             Self::ProofError(s) => format!("Proof error: {s}"),
@@ -62,7 +59,7 @@ impl WasmError {
             Self::InvalidPublicKey(_) => "INVALID_PUBLIC_KEY",
             Self::CryptoError(_) => "CRYPTO_ERROR",
             Self::SerializationError(_) => "SERIALIZATION_ERROR",
-            Self::InsufficientBalance { .. } => "INSUFFICIENT_BALANCE",
+            Self::InsufficientBalance => "INSUFFICIENT_BALANCE",
             Self::InvalidAmount(_) => "INVALID_AMOUNT",
             Self::ProofError(_) => "PROOF_ERROR",
             Self::InternalError(_) => "INTERNAL_ERROR",
@@ -85,13 +82,7 @@ impl From<krusty_kms_common::KmsError> for WasmError {
             krusty_kms_common::KmsError::CryptoError(s) => Self::CryptoError(s),
             krusty_kms_common::KmsError::SerializationError(s) => Self::SerializationError(s),
             krusty_kms_common::KmsError::DeserializationError(s) => Self::SerializationError(s),
-            krusty_kms_common::KmsError::InsufficientBalance {
-                available,
-                required,
-            } => Self::InsufficientBalance {
-                available,
-                required,
-            },
+            krusty_kms_common::KmsError::InsufficientBalance => Self::InsufficientBalance,
             krusty_kms_common::KmsError::InvalidAmount(s) => Self::InvalidAmount(s),
             krusty_kms_common::KmsError::InvalidProof(s) => Self::ProofError(s),
             krusty_kms_common::KmsError::PointAtInfinity => {

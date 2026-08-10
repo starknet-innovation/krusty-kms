@@ -20,8 +20,16 @@ use tokio::sync::RwLock;
 /// Gateway-global ceiling for snapshot cache entries.
 /// Per-request `CachePolicy.max_entries` is deprecated and ignored for eviction.
 const DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES: usize = 256;
-/// Maximum accepted `WaitForAcceptance` timeout (24h).
-const MAX_WAIT_TIMEOUT_MS: u64 = 24 * 60 * 60 * 1000;
+/// Maximum accepted `WaitForAcceptance` timeout (15 minutes).
+///
+/// Transports serve requests sequentially (see the stdio oracle), so this is
+/// also the worst case one request can monopolize the pipe. Callers that need
+/// to track slower deployments should use `SubmitOnly` and poll
+/// `GetOperationStatus` instead of holding a wait open.
+const MAX_WAIT_TIMEOUT_MS: u64 = 15 * 60 * 1000;
+/// Minimum accepted `WaitForAcceptance` poll interval: a caller-supplied
+/// 1ms interval would turn the wait loop into an RPC flood.
+const MIN_WAIT_POLL_INTERVAL_MS: u64 = 250;
 
 /// Gateway runtime with explicit secret, chain, and clock dependencies.
 pub struct Gateway<B, S, C = SystemClock> {
@@ -186,11 +194,13 @@ where
 
     pub(crate) fn validate_wait_mode(&self, mode: DeployMode) -> GatewayResult<()> {
         if let DeployMode::WaitForAcceptance(wait) = mode {
-            if wait.poll_interval_ms == 0 {
+            if wait.poll_interval_ms < MIN_WAIT_POLL_INTERVAL_MS {
                 return Err(GatewayError::new(
                     GatewayErrorCode::InvalidWaitPolicy,
                     false,
-                    Some("wait poll_interval_ms must be greater than zero".to_string()),
+                    Some(format!(
+                        "wait poll_interval_ms must be at least {MIN_WAIT_POLL_INTERVAL_MS}"
+                    )),
                 ));
             }
             // The wait loop caps each sleep at the remaining deadline, but an

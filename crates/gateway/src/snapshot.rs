@@ -37,6 +37,20 @@ where
             self.reject_operation(&queued, error.clone(), None).await;
             return Err(error);
         }
+        // Each tracked token costs backend RPC calls; an unbounded list is a
+        // request-amplification vector.
+        if request.tokens.len() > MAX_SNAPSHOT_TOKENS {
+            let error = krusty_kms_domain::GatewayError::new(
+                krusty_kms_domain::GatewayErrorCode::InvalidRequest,
+                false,
+                Some(format!(
+                    "snapshot request tracks {} tokens (maximum {MAX_SNAPSHOT_TOKENS})",
+                    request.tokens.len()
+                )),
+            );
+            self.reject_operation(&queued, error.clone(), None).await;
+            return Err(error);
+        }
 
         let key = SnapshotCacheKey::from_request(&request);
         let now_ms = self.clock.now_ms();
@@ -179,11 +193,23 @@ where
     }
 }
 
+/// Maximum tracked tokens per snapshot request: each token costs an RPC call,
+/// so an unbounded caller-supplied list amplifies one request into arbitrary
+/// backend load (M-11).
+pub(crate) const MAX_SNAPSHOT_TOKENS: usize = 16;
 /// Server-side ceiling for per-request snapshot freshness (`ttl_ms`).
 pub(crate) const MAX_SNAPSHOT_TTL_MS: u64 = 60 * 60 * 1000;
 /// Server-side ceiling for serving entries past their TTL
 /// (`stale_while_revalidate_ms`).
 const MAX_SNAPSHOT_STALE_MS: u64 = 24 * 60 * 60 * 1000;
+/// Quantum for cache timestamps exposed on shared-cache responses.
+///
+/// The snapshot cache is shared across all callers of a gateway, so a `Hit`
+/// carrying the exact `generated_at_ms` tells one caller precisely when some
+/// *other* caller last queried the same address — a cross-tenant activity
+/// timing oracle. Quantizing the exposed metadata to a coarse grid keeps the
+/// freshness contract useful while destroying the oracle's precision.
+pub(crate) const SNAPSHOT_TIME_QUANTUM_MS: u64 = 5_000;
 
 /// Cache lookup: serve a fresh `Hit` within the clamped TTL, or a `Stale`
 /// entry for background views still inside the stale-while-revalidate window.
@@ -254,12 +280,26 @@ fn apply_cache_metadata(
     generated_at_ms: u64,
     age_ms: u64,
 ) -> AccountSnapshot {
+    // Freshness/TTL decisions above use exact values; only the metadata that
+    // leaves the gateway is quantized. Generation time rounds down and age
+    // rounds up so a consumer never over-estimates freshness.
     snapshot.cache = CacheMetadata {
         status,
-        generated_at_ms,
-        age_ms,
+        generated_at_ms: quantize_down(generated_at_ms),
+        age_ms: quantize_up(age_ms),
     };
     snapshot
+}
+
+fn quantize_down(value_ms: u64) -> u64 {
+    value_ms - (value_ms % SNAPSHOT_TIME_QUANTUM_MS)
+}
+
+fn quantize_up(value_ms: u64) -> u64 {
+    match value_ms % SNAPSHOT_TIME_QUANTUM_MS {
+        0 => value_ms,
+        rem => value_ms.saturating_add(SNAPSHOT_TIME_QUANTUM_MS - rem),
+    }
 }
 
 #[derive(Default)]

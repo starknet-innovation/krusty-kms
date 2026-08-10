@@ -105,6 +105,21 @@ zig-out/
 .zig-cache/
 
 # =============================================================================
+# Key material — never commit wallets, keystores, or seed phrases
+# =============================================================================
+*.keystore
+keystore*.json
+*keystore.json
+UTC--*
+*.mnemonic
+*.seed
+*.pem
+*.p12
+*.pfx
+id_ed25519*
+id_rsa*
+
+# =============================================================================
 # Generated test vectors
 # =============================================================================
 cross-compat-vectors.json

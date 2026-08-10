@@ -91,10 +91,11 @@ pub fn generate_account_candidates_with_secrets(
     let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Discovery failed: {e}")))?;
 
-    let with_secrets: Vec<_> = candidates
+    let with_secrets = candidates
         .iter()
         .map(CandidateAccount::with_secrets)
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| JsValue::from_str(&format!("Discovery failed: {e}")))?;
     to_json_string(&with_secrets)
 }
 
@@ -190,7 +191,11 @@ pub fn derive_discovery_keypairs_with_secrets(
     let keypairs = krusty_kms::discovery::derive_discovery_keypairs(mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
 
-    let with_secrets: Vec<_> = keypairs.iter().map(DerivedKeypair::with_secrets).collect();
+    let with_secrets = keypairs
+        .iter()
+        .map(DerivedKeypair::with_secrets)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
     to_json_string(&with_secrets)
 }
 
@@ -242,9 +247,19 @@ pub fn discover_accounts_from_mnemonic_with_secrets(
     let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Candidate generation failed: {e}")))?;
 
+    let keypairs_with_secrets = keypairs
+        .iter()
+        .map(DerivedKeypair::with_secrets)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
+    let candidates_with_secrets = candidates
+        .iter()
+        .map(CandidateAccount::with_secrets)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| JsValue::from_str(&format!("Candidate generation failed: {e}")))?;
     let result = serde_json::json!({
-        "keypairs": keypairs.iter().map(DerivedKeypair::with_secrets).collect::<Vec<_>>(),
-        "candidates": candidates.iter().map(CandidateAccount::with_secrets).collect::<Vec<_>>(),
+        "keypairs": keypairs_with_secrets,
+        "candidates": candidates_with_secrets,
     });
 
     to_json_string(&result)

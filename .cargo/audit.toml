@@ -1,16 +1,11 @@
-# Advisories from transitive dependencies of `account_sdk` (git-only, in
-# krusty-kms-controller which is publish = false).  These cannot be updated
-# until upstream cartridge-gg/controller-rs upgrades its dependency stack.
+# Audit policy for the workspace lockfile (production crates).
+#
+# Keep this ignore list EMPTY unless an advisory affects the root Cargo.lock
+# and genuinely cannot be fixed. Ignores motivated by the workspace-excluded
+# `krusty-kms-controller` crate (git-only `account_sdk` dependency stack) live
+# in `crates/controller/.cargo/audit.toml` — carrying them here would silently
+# mask the same advisories if a production dependency ever regressed onto an
+# affected version.
 
 [advisories]
-ignore = [
-    "RUSTSEC-2024-0421", # idna 0.3  – Punycode label acceptance (via reqwest 0.11 → cookie_store)
-    "RUSTSEC-2024-0388", # derivative – unmaintained (via ark-ff → ruint → alloy-primitives)
-    "RUSTSEC-2024-0436", # paste      – unmaintained (via ark-ff → ruint → alloy-primitives)
-    "RUSTSEC-2024-0370", # proc-macro-error – unmaintained (via cainome-rs-macro)
-    "RUSTSEC-2025-0134", # rustls-pemfile   – unmaintained (via reqwest 0.11)
-    "RUSTSEC-2025-0048", # tsify-next       – unmaintained (direct dep of account_sdk)
-    "RUSTSEC-2026-0098", # rustls-webpki    – reqwest 0.11/rustls 0.21 via account_sdk
-    "RUSTSEC-2026-0099", # rustls-webpki    – reqwest 0.11/rustls 0.21 via account_sdk
-    "RUSTSEC-2026-0104", # rustls-webpki    – reqwest 0.11/rustls 0.21 via account_sdk
-]
+ignore = []

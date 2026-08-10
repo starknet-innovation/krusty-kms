@@ -37,7 +37,7 @@ pub use elgamal::{recover_small_discrete_log, ElGamal, ElGamalEncryption};
 pub use hash::{extend_pedersen_prefix, extend_poseidon_prefix, poseidon_hash_many};
 pub use poe::ProofOfExponentiation;
 pub use poe2::ProofOfExponentiation2;
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 pub use random::{clear_deterministic_rng, set_deterministic_rng};
 pub use random::{
     fill_random_bytes, random_bytes, random_felt, random_felts, try_fill_random_bytes,
