@@ -7,7 +7,7 @@ fn main() -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     let message_hash = Felt::from_hex("0x1234").map_err(|error| error.to_string())?;
 
-    let public_key = stark_public_key(&private_key);
+    let public_key = stark_public_key(&private_key).map_err(|error| error.to_string())?;
     let signature =
         sign_stark_hash(&private_key, &message_hash).map_err(|error| error.to_string())?;
 

@@ -1,4 +1,7 @@
 // C helpers used by the Swift binding that are not part of libkms itself.
+// Request C11 Annex K (memset_s) before any system header pulls in string.h.
+#define __STDC_WANT_LIB_EXT1__ 1
+
 #include <stddef.h>
 #include <string.h>
 

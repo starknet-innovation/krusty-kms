@@ -496,6 +496,8 @@ public enum Kms {
         var cPrivateKey = privateKey.toCValue()
         var cAddr = contractAddress.toCValue()
         var handle: KmsAccountHandle = 0
+        // Wipe the C-side copy of the private key once the FFI call returns.
+        defer { secureZeroFelt(&cPrivateKey) }
         try check(kms_account_create_from_private_key(&cPrivateKey, &cAddr, &handle))
         return AccountHandle(rawValue: handle)
     }
@@ -559,11 +561,36 @@ public enum Kms {
 
     // MARK: - ElGamal
 
+    /// Encrypts with the legacy Fiat-Shamir transcript `H(prefix, L, R, AL)`,
+    /// which does not bind the public key or the `AR` commitment. Only use for
+    /// verifiers pinned to the legacy transcript (e.g. deployed Cairo
+    /// contracts); otherwise prefer `elgamalEncryptStrong`.
     public static func elgamalEncrypt(
         message: Felt,
         publicKey: ProjectivePoint,
         random: Felt,
         prefix: Felt
+    ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
+        try elgamalEncryptImpl(message: message, publicKey: publicKey, random: random, prefix: prefix, strong: false)
+    }
+
+    /// Encrypts with the fully transcript-bound proof
+    /// `H(prefix, pk, L, R, AL, AR)`. Rejected by legacy-transcript verifiers.
+    public static func elgamalEncryptStrong(
+        message: Felt,
+        publicKey: ProjectivePoint,
+        random: Felt,
+        prefix: Felt
+    ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
+        try elgamalEncryptImpl(message: message, publicKey: publicKey, random: random, prefix: prefix, strong: true)
+    }
+
+    private static func elgamalEncryptImpl(
+        message: Felt,
+        publicKey: ProjectivePoint,
+        random: Felt,
+        prefix: Felt,
+        strong: Bool
     ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
         var cMsg = message.toCValue()
         var cPub = publicKey.toCValue()
@@ -571,17 +598,26 @@ public enum Kms {
         var cPrefix = prefix.toCValue()
         var outL = KmsProjectivePoint()
         var outR = KmsProjectivePoint()
+        // Wipe confidential scalars once the FFI calls return: the message is
+        // often a confidential amount, and the blinding scalar reveals the
+        // plaintext point (L - pk^r).
+        defer {
+            secureZeroFelt(&cMsg)
+            secureZeroFelt(&cRand)
+        }
+
+        let encryptFn = strong ? kms_elgamal_encrypt_strong : kms_elgamal_encrypt
 
         // Two-call pattern for the proof JSON
         var written = 0
-        try check(kms_elgamal_encrypt(
+        try check(encryptFn(
             &cMsg, &cPub, &cRand, &cPrefix,
             &outL, &outR,
             nil, 0, &written
         ))
 
         var proofBuf = [CChar](repeating: 0, count: written + 1)
-        try check(kms_elgamal_encrypt(
+        try check(encryptFn(
             &cMsg, &cPub, &cRand, &cPrefix,
             &outL, &outR,
             &proofBuf, proofBuf.count, &written
@@ -603,6 +639,8 @@ public enum Kms {
         var cR = ciphertextR.toCValue()
         var cKey = privateKey.toCValue()
         var out = KmsProjectivePoint()
+        // Wipe the C-side copy of the private key once the FFI call returns.
+        defer { secureZeroFelt(&cKey) }
         try check(kms_elgamal_decrypt(&cL, &cR, &cKey, &out))
         return ProjectivePoint(cValue: out)
     }
@@ -614,14 +652,26 @@ public enum Kms {
         var cKey = privateKey.toCValue()
         var outR = KmsFelt()
         var outS = KmsFelt()
+        // Wipe the C-side copy of the private key once the FFI call returns.
+        defer { secureZeroFelt(&cKey) }
         try check(kms_stark_sign(&cHash, &cKey, &outR, &outS))
         return (r: Felt(cValue: outR), s: Felt(cValue: outS))
     }
 
     public static func ethSign(hash: Felt, privateKeyBytes: [UInt8]) throws -> EthSignature {
+        // The C ABI reads exactly 32 bytes from the pointer without any length
+        // metadata; a shorter array would read out of bounds, a longer one
+        // would silently truncate. Reject both before crossing the boundary.
+        guard privateKeyBytes.count == 32 else {
+            throw KmsError.invalidFeltLength(privateKeyBytes.count)
+        }
         var cHash = hash.toCValue()
         var keyBytes = privateKeyBytes
         var out = KmsEthSignature()
+        // Wipe the Swift-side copy of the private key once the FFI call returns.
+        // kms_secure_wipe (memset_s / explicit_bzero) cannot be dead-store
+        // eliminated, unlike replaceSubrange on a buffer about to die.
+        defer { secureZero(&keyBytes) }
         let rc = keyBytes.withUnsafeMutableBufferPointer { ptr in
             kms_eth_sign(&cHash, ptr.baseAddress, &out)
         }

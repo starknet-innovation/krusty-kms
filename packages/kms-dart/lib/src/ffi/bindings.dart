@@ -266,6 +266,7 @@ class KmsBindings {
 
   // ElGamal
   late final _ElgamalEncryptDart elgamalEncrypt;
+  late final _ElgamalEncryptDart elgamalEncryptStrong;
   late final _ElgamalDecryptDart elgamalDecrypt;
 
   // Signing
@@ -394,6 +395,9 @@ class KmsBindings {
     elgamalEncrypt =
         lib.lookupFunction<_ElgamalEncryptC, _ElgamalEncryptDart>(
             'kms_elgamal_encrypt');
+    elgamalEncryptStrong =
+        lib.lookupFunction<_ElgamalEncryptC, _ElgamalEncryptDart>(
+            'kms_elgamal_encrypt_strong');
     elgamalDecrypt =
         lib.lookupFunction<_ElgamalDecryptC, _ElgamalDecryptDart>(
             'kms_elgamal_decrypt');

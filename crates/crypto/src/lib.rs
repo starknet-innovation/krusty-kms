@@ -39,4 +39,7 @@ pub use poe::ProofOfExponentiation;
 pub use poe2::ProofOfExponentiation2;
 #[cfg(feature = "test-utils")]
 pub use random::{clear_deterministic_rng, set_deterministic_rng};
-pub use random::{fill_random_bytes, random_bytes, random_felt, random_felts};
+pub use random::{
+    fill_random_bytes, random_bytes, random_felt, random_felts, try_fill_random_bytes,
+    try_random_bytes,
+};

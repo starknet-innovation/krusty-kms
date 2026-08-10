@@ -531,7 +531,8 @@ pub fn derive_argent_legacy_keypair(
         krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
             .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
     );
-    let pubk = krusty_kms::stark_public_key(pk.expose_secret());
+    let pubk = krusty_kms::stark_public_key(pk.expose_secret())
+        .map_err(|e| JsValue::from_str(&format!("Argent legacy key is invalid: {e}")))?;
 
     Ok(WasmStarkXOnlyKeypair {
         private_key: format!("{:#066x}", pk.expose_secret()),
@@ -554,7 +555,8 @@ pub fn derive_argent_legacy_public_key(
         krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
             .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
     );
-    let pubk = krusty_kms::stark_public_key(pk.expose_secret());
+    let pubk = krusty_kms::stark_public_key(pk.expose_secret())
+        .map_err(|e| JsValue::from_str(&format!("Argent legacy key is invalid: {e}")))?;
 
     Ok(WasmStarkXOnlyPublicKey {
         public_key_x: format!("{:#x}", pubk),

@@ -109,6 +109,17 @@ fun elgamalEncrypt(
     prefix: Felt,
 ): Kms.ElgamalEncryptResult = Kms.elgamalEncrypt(message, publicKey, random, prefix)
 
+/**
+ * Strong-transcript variant: the Fiat-Shamir challenge additionally binds the
+ * public key and the AR commitment. Rejected by legacy-transcript verifiers.
+ */
+fun elgamalEncryptStrong(
+    message: Felt,
+    publicKey: ProjectivePoint,
+    random: Felt,
+    prefix: Felt,
+): Kms.ElgamalEncryptResult = Kms.elgamalEncryptStrong(message, publicKey, random, prefix)
+
 fun elgamalDecrypt(
     ciphertextL: ProjectivePoint,
     ciphertextR: ProjectivePoint,

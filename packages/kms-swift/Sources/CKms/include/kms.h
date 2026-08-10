@@ -180,6 +180,9 @@ int32_t kms_generate_ragequit_proof(KmsAccountHandle handle, const char* params_
 /* ====================================================================== */
 
 int32_t kms_elgamal_encrypt(const KmsFelt* message, const KmsProjectivePoint* public_key, const KmsFelt* random, const KmsFelt* prefix, KmsProjectivePoint* out_l, KmsProjectivePoint* out_r, char* out_proof_json, size_t out_proof_json_len, size_t* out_proof_json_written);
+/* Strong-transcript variant: binds pk and AR into the Fiat-Shamir challenge.
+   Not accepted by verifiers pinned to the legacy transcript. */
+int32_t kms_elgamal_encrypt_strong(const KmsFelt* message, const KmsProjectivePoint* public_key, const KmsFelt* random, const KmsFelt* prefix, KmsProjectivePoint* out_l, KmsProjectivePoint* out_r, char* out_proof_json, size_t out_proof_json_len, size_t* out_proof_json_written);
 int32_t kms_elgamal_decrypt(const KmsProjectivePoint* ciphertext_l, const KmsProjectivePoint* ciphertext_r, const KmsFelt* private_key, KmsProjectivePoint* out_point);
 
 /* ====================================================================== */

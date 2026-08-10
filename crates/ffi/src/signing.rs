@@ -110,6 +110,8 @@ mod tests {
         let mut r = KmsFelt { bytes: [0; 32] };
         let mut s = KmsFelt { bytes: [0; 32] };
 
+        // SAFETY: all pointers reference initialized `KmsFelt` values; `r` and
+        // `s` are writable output storage for the duration of the call.
         let rc = unsafe { kms_stark_sign(&hash, &sk, &mut r, &mut s) };
         assert_eq!(rc, KMS_OK);
         // r and s should be non-zero
@@ -126,6 +128,8 @@ mod tests {
         let mut r2 = KmsFelt { bytes: [0; 32] };
         let mut s2 = KmsFelt { bytes: [0; 32] };
 
+        // SAFETY: all pointers reference initialized `KmsFelt` values; `r1`/`s1`
+        // and `r2`/`s2` are distinct writable outputs for each call.
         let rc1 = unsafe { kms_stark_sign(&hash, &sk, &mut r1, &mut s1) };
         let rc2 = unsafe { kms_stark_sign(&hash, &sk, &mut r2, &mut s2) };
         assert_eq!(rc1, KMS_OK);
@@ -149,6 +153,8 @@ mod tests {
             v: KmsFelt { bytes: [0; 32] },
         };
 
+        // SAFETY: `hash` is an initialized `KmsFelt`; `pk_bytes` is a 32-byte
+        // buffer as the callee requires; `sig` is writable output storage.
         let rc = unsafe { kms_eth_sign(&hash, pk_bytes.as_ptr(), &mut sig) };
         assert_eq!(rc, KMS_OK);
     }
@@ -159,7 +165,25 @@ mod tests {
         let sk = felt_to_kms(&Felt::from(42u64));
         let mut r = KmsFelt { bytes: [0; 32] };
 
+        // SAFETY: `hash`, `sk`, and `r` reference initialized `KmsFelt`
+        // values; the null `s` is the case under test and the callee checks
+        // for null before dereferencing.
         let rc = unsafe { kms_stark_sign(&hash, &sk, &mut r, std::ptr::null_mut()) };
         assert_eq!(rc, KMS_ERR_NULL_POINTER);
+    }
+
+    #[test]
+    fn test_stark_sign_zero_key_returns_error_not_panic() {
+        // The zero key hits the identity point inside the public-key
+        // derivation; the FFI boundary must return an error, never unwind.
+        let hash = felt_to_kms(&Felt::from(0x1234u64));
+        let zero = felt_to_kms(&Felt::ZERO);
+        let mut r = KmsFelt { bytes: [0; 32] };
+        let mut s = KmsFelt { bytes: [0; 32] };
+
+        // SAFETY: all pointers reference initialized `KmsFelt` values; `r` and
+        // `s` are writable output storage for the duration of the call.
+        let rc = unsafe { kms_stark_sign(&hash, &zero, &mut r, &mut s) };
+        assert_eq!(rc, KMS_ERR_CRYPTO);
     }
 }

@@ -13,7 +13,7 @@ use crate::wallet::WalletExecutor;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::{stream, Stream, StreamExt};
-use krusty_kms_common::{Address, KmsError, Result};
+use krusty_kms_common::{Address, ChainId, KmsError, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
@@ -90,10 +90,16 @@ pub enum MultisigTransactionState {
 }
 
 /// Pub/sub topic for one multisig transaction.
+///
+/// The chain is part of the routing key so a proposal replayed to a shared
+/// coordinator cannot leak onto another network's topic, and a subscriber on
+/// one chain never sees the other chain's messages for the same
+/// multisig/transaction-id pair.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MultisigTopic {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
 }
@@ -102,7 +108,8 @@ impl MultisigTopic {
     #[must_use]
     fn key(&self) -> String {
         format!(
-            "{}:{}",
+            "{}:{}:{}",
+            self.chain_id,
             self.multisig.to_hex(),
             felt_to_hex(self.transaction_id)
         )
@@ -118,6 +125,11 @@ impl MultisigTopic {
 pub struct MultisigProposal {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    /// Chain the proposal was created for. The transaction id hash covers
+    /// only `calls`/`salt`, so without this field a proposal replayed through
+    /// a shared or compromised coordinator would also validate on another
+    /// network where the same multisig address/id exists.
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
     pub calls: Vec<MultisigCall>,
@@ -131,9 +143,13 @@ pub struct MultisigProposal {
 
 impl MultisigProposal {
     /// Build a proposal and compute the canonical OpenZeppelin transaction ID.
+    ///
+    /// The transaction id intentionally matches the on-chain hash (calls and
+    /// salt only); the chain binding lives in the `chain_id` envelope field.
     #[must_use]
     pub fn new(
         multisig: Address,
+        chain_id: ChainId,
         calls: Vec<MultisigCall>,
         salt: Felt,
         proposer: Address,
@@ -142,6 +158,7 @@ impl MultisigProposal {
         let transaction_id = hash_transaction_batch(&calls, salt);
         Self {
             multisig,
+            chain_id,
             transaction_id,
             calls,
             salt,
@@ -155,6 +172,7 @@ impl MultisigProposal {
     pub fn topic(&self) -> MultisigTopic {
         MultisigTopic {
             multisig: self.multisig,
+            chain_id: self.chain_id,
             transaction_id: self.transaction_id,
         }
     }
@@ -178,6 +196,8 @@ impl MultisigProposal {
 pub struct MultisigSignerNotice {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    /// Chain this notice belongs to; part of the routing topic.
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
     #[serde(with = "serde_address_hex")]
@@ -186,9 +206,15 @@ pub struct MultisigSignerNotice {
 
 impl MultisigSignerNotice {
     #[must_use]
-    pub fn new(multisig: Address, transaction_id: Felt, signer: Address) -> Self {
+    pub fn new(
+        multisig: Address,
+        chain_id: ChainId,
+        transaction_id: Felt,
+        signer: Address,
+    ) -> Self {
         Self {
             multisig,
+            chain_id,
             transaction_id,
             signer,
         }
@@ -198,6 +224,7 @@ impl MultisigSignerNotice {
     pub fn topic(&self) -> MultisigTopic {
         MultisigTopic {
             multisig: self.multisig,
+            chain_id: self.chain_id,
             transaction_id: self.transaction_id,
         }
     }
@@ -208,6 +235,8 @@ impl MultisigSignerNotice {
 pub struct MultisigExecutionNotice {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    /// Chain this notice belongs to; part of the routing topic.
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
     #[serde(with = "serde_address_hex")]
@@ -216,9 +245,15 @@ pub struct MultisigExecutionNotice {
 
 impl MultisigExecutionNotice {
     #[must_use]
-    pub fn new(multisig: Address, transaction_id: Felt, executor: Address) -> Self {
+    pub fn new(
+        multisig: Address,
+        chain_id: ChainId,
+        transaction_id: Felt,
+        executor: Address,
+    ) -> Self {
         Self {
             multisig,
+            chain_id,
             transaction_id,
             executor,
         }
@@ -228,12 +263,22 @@ impl MultisigExecutionNotice {
     pub fn topic(&self) -> MultisigTopic {
         MultisigTopic {
             multisig: self.multisig,
+            chain_id: self.chain_id,
             transaction_id: self.transaction_id,
         }
     }
 }
 
 /// Message envelope exchanged through the trusted coordinator.
+///
+/// All variants are advisory: the claimed `signer`/`executor`/`proposer` is
+/// not authenticated by the coordinator, so a compromised coordinator can
+/// forge notices. This is safe only because no on-chain action is authorized
+/// by these messages — the multisig contract re-checks quorum and signer
+/// authorization on-chain, and [`Multisig::confirm_proposal`] re-derives the
+/// transaction id from the proposal payload before signing. Consumers must
+/// treat notices as hints (e.g. "check chain state"), never as proof that an
+/// action happened.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MultisigCoordinationMessage {
@@ -253,6 +298,32 @@ impl MultisigCoordinationMessage {
             Self::Execution(notice) => notice.topic(),
         }
     }
+}
+
+/// Receive-side validation for messages arriving from a coordinator.
+///
+/// The coordinator is a distribution boundary, not an authorization boundary:
+/// nothing on the receive path is authenticated by the server. Every message
+/// pulled from `subscribe`/`messages` must therefore be checked before it
+/// drives an on-chain action:
+///
+/// - the message topic must match the subscribed topic (defends against
+///   cross-topic replay/misrouting by a compromised coordinator), and
+/// - a proposal's `transaction_id` must recompute from its `calls`/`salt`
+///   (defends against confirmations bound to a forged id).
+fn validate_incoming_message(
+    topic: &MultisigTopic,
+    message: &MultisigCoordinationMessage,
+) -> Result<()> {
+    if &message.topic() != topic {
+        return Err(KmsError::MultisigError(
+            "coordination message topic does not match the subscribed topic".to_string(),
+        ));
+    }
+    if let MultisigCoordinationMessage::Proposal(proposal) = message {
+        proposal.validate_transaction_id()?;
+    }
+    Ok(())
 }
 
 /// Trusted coordination server boundary.
@@ -401,11 +472,15 @@ impl NatsMultisigCoordinator {
     }
 
     /// Return the NATS subject for a prefix and transaction topic.
+    ///
+    /// The chain id is a subject token so one shared NATS deployment can serve
+    /// multiple networks without cross-chain message leakage.
     #[must_use]
     pub fn subject_for(subject_prefix: &str, topic: &MultisigTopic) -> String {
         format!(
-            "{}.{}.{}",
+            "{}.{}.{}.{}",
             subject_prefix.trim_end_matches('.'),
+            topic.chain_id.name(),
             address_subject_token(topic.multisig),
             felt_subject_token(topic.transaction_id)
         )
@@ -441,9 +516,14 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
             .await
             .map_err(|error| KmsError::MultisigError(error.to_string()))?;
 
-        Ok(Box::pin(subscriber.map(|message| {
-            serde_json::from_slice::<MultisigCoordinationMessage>(&message.payload)
-                .map_err(|error| KmsError::MultisigError(error.to_string()))
+        let topic = topic.clone();
+        Ok(Box::pin(subscriber.map(move |message| {
+            let parsed = serde_json::from_slice::<MultisigCoordinationMessage>(&message.payload)
+                .map_err(|error| KmsError::MultisigError(error.to_string()))?;
+            // The coordinator is untrusted on the receive path: reject
+            // misrouted topics and proposals whose id does not recompute.
+            validate_incoming_message(&topic, &parsed)?;
+            Ok(parsed)
         })))
     }
 }
@@ -856,9 +936,11 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
         let mut url = self.messages_url()?;
         url.query_pairs_mut()
             .append_pair("multisig", &topic.multisig.to_hex())
+            .append_pair("chain_id", topic.chain_id.name())
             .append_pair("transaction_id", &felt_to_hex(topic.transaction_id));
 
-        self.client
+        let messages = self
+            .client
             .get(url)
             .send()
             .await
@@ -867,7 +949,13 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
             .json::<Vec<MultisigCoordinationMessage>>()
             .await
-            .map_err(|error| KmsError::MultisigError(error.to_string()))
+            .map_err(|error| KmsError::MultisigError(error.to_string()))?;
+
+        // Receive-side validation: the coordinator response is untrusted.
+        for message in &messages {
+            validate_incoming_message(topic, message)?;
+        }
+        Ok(messages)
     }
 }
 
@@ -875,19 +963,39 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
 pub struct Multisig {
     provider: Arc<JsonRpcClient<HttpTransport>>,
     address: Address,
+    chain_id: ChainId,
 }
 
 impl Multisig {
     /// Create a multisig contract handle.
+    ///
+    /// `chain_id` is the network the contract lives on; [`Self::confirm_proposal`]
+    /// refuses to sign with a wallet bound to a different chain, so a proposal
+    /// replayed across networks (the transaction id hash does not bind a chain)
+    /// cannot collect confirmations there.
     #[must_use]
-    pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, address: Address) -> Self {
-        Self { provider, address }
+    pub fn new(
+        provider: Arc<JsonRpcClient<HttpTransport>>,
+        address: Address,
+        chain_id: ChainId,
+    ) -> Self {
+        Self {
+            provider,
+            address,
+            chain_id,
+        }
     }
 
     /// The multisig contract address.
     #[must_use]
     pub fn address(&self) -> Address {
         self.address
+    }
+
+    /// The chain this handle expects the contract and signers to live on.
+    #[must_use]
+    pub fn chain_id(&self) -> ChainId {
+        self.chain_id
     }
 
     /// Build a coordination proposal for a batch of calls.
@@ -899,7 +1007,7 @@ impl Multisig {
         proposer: Address,
         memo: Option<String>,
     ) -> MultisigProposal {
-        MultisigProposal::new(self.address, calls, salt, proposer, memo)
+        MultisigProposal::new(self.address, self.chain_id, calls, salt, proposer, memo)
     }
 
     /// Query the current quorum.
@@ -1121,8 +1229,53 @@ impl Multisig {
     }
 
     /// Confirm a submitted transaction on-chain through a registered signer wallet.
+    ///
+    /// `id` is trusted as-is and signed without any validation. **Do not** pass
+    /// an id taken from a coordinator message: those arrive unauthenticated and
+    /// a compromised coordinator can forge them. Use [`Self::confirm_proposal`]
+    /// for coordinator-delivered proposals — it recomputes the id from the
+    /// proposal payload and binds the multisig address and chain before
+    /// signing. Reserve this method for ids from trusted sources (on-chain
+    /// reads, locally constructed proposals).
     pub async fn confirm(&self, wallet: &dyn WalletExecutor, id: Felt) -> Result<Tx> {
         wallet.execute(vec![self.populate_confirm(id)]).await
+    }
+
+    /// Confirm a coordination proposal, validating it before signing.
+    ///
+    /// Rejects the confirmation when the proposal's `transaction_id` does not
+    /// recompute from `calls`/`salt`, when the proposal targets a different
+    /// multisig contract than this handle, when the proposal was created for a
+    /// different chain, or when the signing wallet is bound to a different
+    /// chain than this handle. This is the safe entry point for acting on
+    /// coordinator-delivered proposals.
+    pub async fn confirm_proposal(
+        &self,
+        wallet: &dyn WalletExecutor,
+        proposal: &MultisigProposal,
+    ) -> Result<Tx> {
+        proposal.validate_transaction_id()?;
+        if proposal.multisig != self.address {
+            return Err(KmsError::MultisigError(format!(
+                "proposal targets multisig {} but this handle is {}",
+                proposal.multisig.to_hex(),
+                self.address.to_hex()
+            )));
+        }
+        if proposal.chain_id != self.chain_id {
+            return Err(KmsError::MultisigError(format!(
+                "proposal was created for chain {} but this handle is on {}",
+                proposal.chain_id, self.chain_id
+            )));
+        }
+        let wallet_chain = wallet.chain_id();
+        if wallet_chain != self.chain_id {
+            return Err(KmsError::MultisigError(format!(
+                "wallet chain {} does not match multisig chain {}",
+                wallet_chain, self.chain_id
+            )));
+        }
+        self.confirm(wallet, proposal.transaction_id).await
     }
 
     /// Revoke a previous confirmation on-chain.
@@ -1458,6 +1611,7 @@ mod tests {
     fn test_proposal_json_uses_hex_felts() {
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1475,6 +1629,7 @@ mod tests {
         let coordinator = InMemoryMultisigCoordinator::new();
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1488,7 +1643,12 @@ mod tests {
             .unwrap();
         coordinator
             .publish(MultisigCoordinationMessage::Confirmation(
-                MultisigSignerNotice::new(address(1), proposal.transaction_id, address(3)),
+                MultisigSignerNotice::new(
+                    address(1),
+                    ChainId::Sepolia,
+                    proposal.transaction_id,
+                    address(3),
+                ),
             ))
             .await
             .unwrap();
@@ -1502,6 +1662,7 @@ mod tests {
         let coordinator = InMemoryMultisigCoordinator::new();
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1523,6 +1684,7 @@ mod tests {
         let coordinator = InMemoryMultisigCoordinator::new();
         let mut proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1536,6 +1698,187 @@ mod tests {
                 .await,
             Err(KmsError::MultisigError(_))
         ));
+    }
+
+    #[test]
+    fn test_incoming_message_validation() {
+        let proposal = MultisigProposal::new(
+            address(1),
+            ChainId::Sepolia,
+            vec![call()],
+            Felt::from(99u64),
+            address(2),
+            None,
+        );
+        let topic = proposal.topic();
+        let message = MultisigCoordinationMessage::Proposal(proposal.clone());
+
+        // Consistent proposal passes.
+        validate_incoming_message(&topic, &message).unwrap();
+
+        // Cross-topic replay/misrouting is rejected.
+        let other_topic = MultisigTopic {
+            multisig: address(9),
+            chain_id: topic.chain_id,
+            transaction_id: topic.transaction_id,
+        };
+        assert!(validate_incoming_message(&other_topic, &message).is_err());
+
+        // Same multisig and id on another chain is a different topic.
+        let other_chain_topic = MultisigTopic {
+            multisig: topic.multisig,
+            chain_id: ChainId::Mainnet,
+            transaction_id: topic.transaction_id,
+        };
+        assert!(validate_incoming_message(&other_chain_topic, &message).is_err());
+
+        // Forged transaction id (id not recomputing from calls/salt) is rejected.
+        let mut forged = proposal;
+        forged.transaction_id = Felt::from(1u64);
+        let forged_topic = forged.topic();
+        let forged_message = MultisigCoordinationMessage::Proposal(forged);
+        assert!(validate_incoming_message(&forged_topic, &forged_message).is_err());
+    }
+
+    struct RecordingExecutor {
+        network: krusty_kms_common::network::NetworkPreset,
+        wallet_address: Address,
+        chain_id: ChainId,
+        executed: std::sync::Mutex<Vec<Vec<Call>>>,
+    }
+
+    impl RecordingExecutor {
+        fn sepolia(wallet_address: Address) -> Self {
+            Self {
+                network: krusty_kms_common::network::NetworkPreset::sepolia(),
+                wallet_address,
+                chain_id: ChainId::Sepolia,
+                executed: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        fn executed_count(&self) -> usize {
+            self.executed.lock().unwrap().len()
+        }
+    }
+
+    #[async_trait]
+    impl WalletExecutor for RecordingExecutor {
+        async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
+            self.executed.lock().unwrap().push(calls);
+            Err(KmsError::CryptoError("recorded".to_string()))
+        }
+
+        async fn estimate_fee(
+            &self,
+            _calls: Vec<Call>,
+        ) -> Result<starknet_rust::core::types::FeeEstimate> {
+            unreachable!("confirm_proposal tests never estimate fees")
+        }
+
+        fn address(&self) -> &Address {
+            &self.wallet_address
+        }
+
+        fn chain_id(&self) -> ChainId {
+            self.chain_id
+        }
+
+        fn network(&self) -> &krusty_kms_common::network::NetworkPreset {
+            &self.network
+        }
+
+        async fn is_deployed(&self) -> Result<bool> {
+            Ok(true)
+        }
+    }
+
+    fn test_multisig_handle(address_value: u64) -> Multisig {
+        let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+            Url::parse("http://127.0.0.1:0").unwrap(),
+        )));
+        Multisig::new(provider, address(address_value), ChainId::Sepolia)
+    }
+
+    #[tokio::test]
+    async fn test_confirm_proposal_reaches_executor_with_recomputed_id() {
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
+        let proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+
+        let result = multisig.confirm_proposal(&executor, &proposal).await;
+        assert!(matches!(result, Err(KmsError::CryptoError(_))));
+        let executed = executor.executed.lock().unwrap();
+        assert_eq!(
+            executed.as_slice(),
+            &[vec![multisig.populate_confirm(proposal.transaction_id)]]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_forged_transaction_id() {
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
+        let mut forged = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+        forged.transaction_id = Felt::from(1u64);
+
+        assert!(matches!(
+            multisig.confirm_proposal(&executor, &forged).await,
+            Err(KmsError::MultisigError(_))
+        ));
+        assert_eq!(executor.executed_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_foreign_multisig() {
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
+        let foreign = MultisigProposal::new(
+            address(77),
+            ChainId::Sepolia,
+            vec![call()],
+            Felt::from(99u64),
+            address(2),
+            None,
+        );
+
+        assert!(matches!(
+            multisig.confirm_proposal(&executor, &foreign).await,
+            Err(KmsError::MultisigError(_))
+        ));
+        assert_eq!(executor.executed_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_wallet_on_wrong_chain() {
+        // The transaction id hash binds calls and salt but no chain, so a
+        // replayed proposal must be stopped at the chain check instead.
+        let multisig = test_multisig_handle(1);
+        let mut executor = RecordingExecutor::sepolia(address(2));
+        executor.chain_id = ChainId::Mainnet;
+        let proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+
+        assert!(matches!(
+            multisig.confirm_proposal(&executor, &proposal).await,
+            Err(KmsError::MultisigError(_))
+        ));
+        assert_eq!(executor.executed_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_proposal_from_wrong_chain() {
+        // A proposal created for mainnet replayed through the coordinator to
+        // a Sepolia handle must be rejected even when address and id match.
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
+        let mut proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+        proposal.chain_id = ChainId::Mainnet;
+
+        assert!(matches!(
+            multisig.confirm_proposal(&executor, &proposal).await,
+            Err(KmsError::MultisigError(_))
+        ));
+        assert_eq!(executor.executed_count(), 0);
     }
 
     #[test]
@@ -1588,12 +1931,13 @@ mod tests {
     fn test_nats_subject_is_deterministic() {
         let topic = MultisigTopic {
             multisig: address(1),
+            chain_id: ChainId::Sepolia,
             transaction_id: Felt::from(2u64),
         };
 
         assert_eq!(
             NatsMultisigCoordinator::subject_for("krusty.multisig.", &topic),
-            "krusty.multisig.0000000000000000000000000000000000000000000000000000000000000001.0000000000000000000000000000000000000000000000000000000000000002"
+            "krusty.multisig.SN_SEPOLIA.0000000000000000000000000000000000000000000000000000000000000001.0000000000000000000000000000000000000000000000000000000000000002"
         );
     }
 }

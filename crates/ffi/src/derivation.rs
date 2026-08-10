@@ -3,6 +3,9 @@
 use std::ffi::c_char;
 use std::panic::catch_unwind;
 
+use krusty_kms_common::SecretFelt;
+use zeroize::Zeroizing;
+
 use crate::error::*;
 use crate::helpers::*;
 use crate::types::*;
@@ -38,7 +41,9 @@ pub unsafe extern "C" fn kms_derive_private_key_with_coin_type(
             pass,
         ) {
             Ok(key) => {
-                *out = felt_to_kms(&key);
+                // Zeroize the Rust-side key copy after copying it out.
+                let key = SecretFelt::new(key);
+                *out = felt_to_kms(key.expose_secret());
                 KMS_OK
             }
             Err(_) => KMS_ERR_CRYPTO,
@@ -116,6 +121,8 @@ pub unsafe extern "C" fn kms_derive_nostr_private_key(
         let pass = if p.is_empty() { None } else { Some(p) };
         match krusty_kms::derive_nostr_private_key(m, index, account_index, pass) {
             Ok(key) => {
+                // Zeroize the Rust-side key copy after copying it out.
+                let key = Zeroizing::new(key);
                 debug_assert_eq!(key.len(), 32, "Nostr private key must be 32 bytes");
                 std::ptr::copy_nonoverlapping(key.as_ptr(), out, 32);
                 KMS_OK
@@ -150,8 +157,10 @@ pub unsafe extern "C" fn kms_derive_nostr_keypair(
         let pass = if p.is_empty() { None } else { Some(p) };
         match krusty_kms::derive_nostr_keypair(m, index, account_index, pass) {
             Ok(kp) => {
+                // Zeroize the Rust-side private-key copy after moving it out.
+                let private_key = Zeroizing::new(kp.private_key);
                 *out = KmsNostrKeyPair {
-                    private_key: kp.private_key,
+                    private_key: *private_key,
                     public_key_xonly: kp.public_key,
                 };
                 KMS_OK

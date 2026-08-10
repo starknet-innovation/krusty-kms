@@ -273,7 +273,15 @@ async fn wait_for_acceptance(
     poll_interval_ms: u64,
     timeout_ms: u64,
 ) -> Result<(), KmsError> {
-    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+    // `Instant + Duration` panics on overflow: reject absurd timeouts before
+    // they reach the arithmetic (attacker-controlled via `WaitPolicy`).
+    let deadline = Instant::now()
+        .checked_add(Duration::from_millis(timeout_ms))
+        .ok_or_else(|| {
+            KmsError::Timeout(format!(
+                "wait timeout_ms={timeout_ms} exceeds the schedulable clock range"
+            ))
+        })?;
     let interval = Duration::from_millis(poll_interval_ms);
 
     loop {
@@ -285,7 +293,13 @@ async fn wait_for_acceptance(
         }
 
         match observe_transaction(provider, tx_hash).await? {
-            TransactionObservation::Pending => tokio::time::sleep(interval).await,
+            // Never sleep past the deadline: `poll_interval_ms` is
+            // caller-controlled, so a huge interval would otherwise park the
+            // task far beyond the requested timeout.
+            TransactionObservation::Pending => {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                tokio::time::sleep(interval.min(remaining)).await
+            }
             TransactionObservation::Accepted => return Ok(()),
             TransactionObservation::Reverted { reason } => {
                 return Err(KmsError::TransactionReverted(format!(

@@ -125,6 +125,14 @@ fn tracked_result<T>(value: GatewayResponse<T>) -> TrackedCommandResult<T> {
 }
 
 /// Newline-delimited JSON stdio oracle server.
+///
+/// # Trust model
+///
+/// The oracle does not authenticate callers and secret labels are global:
+/// anyone who can write a request line can derive/sign/deploy with every
+/// secret the wired-in handler resolves. Run it only behind a trusted peer
+/// boundary (local supervisor, OS user isolation), never on a network socket.
+/// See `docs/oracle-stdio-v1.md` § Trust Model.
 pub struct StdioOracle<H> {
     handler: H,
 }

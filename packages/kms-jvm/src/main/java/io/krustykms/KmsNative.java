@@ -66,6 +66,7 @@ public final class KmsNative {
 
     // ElGamal
     public static native byte[][] elgamalEncrypt(byte[] message, byte[] pubX, byte[] pubY, byte[] pubZ, byte[] random, byte[] prefix);
+    public static native byte[][] elgamalEncryptStrong(byte[] message, byte[] pubX, byte[] pubY, byte[] pubZ, byte[] random, byte[] prefix);
     public static native byte[] elgamalDecrypt(byte[] ciphLX, byte[] ciphLY, byte[] ciphLZ, byte[] ciphRX, byte[] ciphRY, byte[] ciphRZ, byte[] privateKey);
 
     // Signing

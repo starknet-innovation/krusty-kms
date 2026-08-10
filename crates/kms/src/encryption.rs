@@ -233,7 +233,7 @@ mod tests {
         // `XNonce::from_slice` asserts on a length mismatch, so a nonce taken
         // from untrusted JSON used to abort the process instead of erroring.
         let key = test_key(0);
-        for len in [0usize, 4, 23, 25, 64] {
+        for len in [0usize, 4, 12, 23, 25, 64] {
             let payload = EncryptedPayload {
                 nonce: vec![0u8; len],
                 ciphertext: vec![0u8; 48],
@@ -248,7 +248,7 @@ mod tests {
 
     #[test]
     fn decrypt_private_key_rejects_wrong_nonce_length_without_panicking() {
-        for len in [0usize, 4, 23, 25] {
+        for len in [0usize, 4, 12, 23, 25] {
             let encrypted = EncryptedKey {
                 nonce: vec![0u8; len],
                 salt: vec![0u8; 16],

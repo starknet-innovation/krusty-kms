@@ -89,7 +89,7 @@ const BRAAVOS_BASE_CLASS_HASH: &str =
 #[test]
 fn argent_double_derivation_key_matches() {
     let stark_key = krusty_kms::derive_argent_legacy_private_key(MNEMONIC, 0, 0).unwrap();
-    let stark_pubkey = stark_public_key(&stark_key);
+    let stark_pubkey = stark_public_key(&stark_key).unwrap();
 
     assert_eq!(
         stark_key,
@@ -177,7 +177,7 @@ fn argent_standard_account_address_is_derivable() {
 fn argent_standard_discovery_end_to_end() {
     // Step 1: Derive keys using Argent's double derivation
     let pk = krusty_kms::derive_argent_legacy_private_key(MNEMONIC, 0, 0).unwrap();
-    let pubk = stark_public_key(&pk);
+    let pubk = stark_public_key(&pk).unwrap();
     assert_eq!(pubk, Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap());
 
     // Step 2: Compute the standard account address
@@ -244,7 +244,7 @@ fn argent_smart_account_salt_is_not_derivable() {
 #[test]
 fn braavos_key_derivation_matches() {
     let pk = derive_private_key_with_coin_type(MNEMONIC, 0, 0, 9004, None).unwrap();
-    let pubk = stark_public_key(&pk);
+    let pubk = stark_public_key(&pk).unwrap();
 
     assert_eq!(
         pk,
@@ -379,7 +379,7 @@ fn braavos_multi_index_discovery() {
 
     for idx in 0..5u32 {
         let pk = derive_private_key_with_coin_type(MNEMONIC, idx, 0, 9004, None).unwrap();
-        let pubk = stark_public_key(&pk);
+        let pubk = stark_public_key(&pk).unwrap();
         let braavos = BraavosAccount::with_class_hash(base_class);
         let addr = braavos
             .calculate_address(&pubk, SaltPolicy::PublicKey)
