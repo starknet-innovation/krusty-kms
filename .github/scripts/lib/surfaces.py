@@ -40,6 +40,172 @@ def load_baseline(path: Path | None = None) -> dict:
     return json.loads(baseline_path.read_text())
 
 
+def baseline_paths(data: dict) -> dict[str, int]:
+    return {entry["path"]: int(entry["lines"]) for entry in data["files"]}
+
+
+def count_file_lines(path: Path) -> int:
+    return sum(1 for _ in path.open("rb"))
+
+
+def load_git_baseline_paths(base_ref: str, root: Path) -> dict[str, int] | None:
+    rel = ".github/guardrails/file-size-baseline.json"
+    try:
+        text = subprocess.check_output(
+            ["git", "show", f"{base_ref}:{rel}"],
+            cwd=root,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    return baseline_paths(json.loads(text))
+
+
+def path_exists_on_ref(base_ref: str | None, rel: str, root: Path) -> bool:
+    """Return True when ``rel`` exists on ``base_ref`` (or when no ref is given)."""
+    if not base_ref:
+        return True
+    try:
+        subprocess.check_output(
+            ["git", "cat-file", "-e", f"{base_ref}:{rel}"],
+            cwd=root,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
+def check_file_size_ratchet(
+    head_baseline: dict,
+    root: Path,
+    *,
+    base_known: dict[str, int] | None = None,
+    base_ref: str | None = None,
+) -> tuple[int, list[str]]:
+    """Return ``(exit_code, lines)`` for the file-size ratchet fitness check."""
+    soft = soft_limit(head_baseline)
+    hard_new = hard_new_limit(head_baseline)
+    known = baseline_paths(head_baseline)
+
+    failed = 0
+    out: list[str] = []
+    grown: list[tuple[str, int, int]] = []
+    new_oversized: list[tuple[str, int, int]] = []
+    missing: list[str] = []
+
+    for rel, baseline_lines in sorted(known.items()):
+        path = root / rel
+        if not path.is_file():
+            missing.append(rel)
+            continue
+        lines = count_file_lines(path)
+        if lines > baseline_lines:
+            grown.append((rel, baseline_lines, lines))
+
+    for path in sorted((root / "crates").rglob("*.rs")):
+        if "target" in path.parts:
+            continue
+        rel = str(path.relative_to(root))
+        lines = count_file_lines(path)
+        existed_on_base = path_exists_on_ref(base_ref, rel, root)
+
+        # Hard cap always applies to files that did not exist on the base ref,
+        # even if the PR also adds them to file-size-baseline.json.
+        if not existed_on_base:
+            if lines > hard_new:
+                new_oversized.append((rel, lines, hard_new))
+            elif lines > soft:
+                out.append(
+                    f"::warning file={rel}::{rel} is {lines} lines "
+                    f"(soft limit {soft}); prefer splitting before it hits {hard_new}"
+                )
+            continue
+
+        if rel in known:
+            # Grandfathered / already-tracked on base: growth handled above.
+            # Also reject newly baselined existing files that jump over hard_new
+            # when the base baseline is available and did not list them.
+            if (
+                base_known is not None
+                and rel not in base_known
+                and lines > hard_new
+            ):
+                new_oversized.append((rel, lines, hard_new))
+            continue
+
+        if lines > hard_new:
+            new_oversized.append((rel, lines, hard_new))
+        elif lines > soft:
+            out.append(
+                f"::warning file={rel}::{rel} is {lines} lines "
+                f"(soft limit {soft}); prefer splitting before it hits {hard_new}"
+            )
+
+    if missing:
+        out.append(
+            "::error::baseline entries missing on disk "
+            "(update baseline if intentional removals/renames):"
+        )
+        for rel in missing:
+            out.append(f"  - {rel}")
+        failed = 1
+
+    if grown:
+        out.append("::error::oversized files grew past their ratchet baseline:")
+        for rel, before, after in grown:
+            out.append(f"  - {rel}: {before} -> {after} (+{after - before})")
+            out.append(
+                "    Split the file or bump the baseline with justification in the PR."
+            )
+        failed = 1
+
+    if new_oversized:
+        # Deduplicate while preserving order.
+        seen: set[str] = set()
+        unique: list[tuple[str, int, int]] = []
+        for item in new_oversized:
+            if item[0] in seen:
+                continue
+            seen.add(item[0])
+            unique.append(item)
+        out.append(
+            "::error::new files exceed the hard size limit for new sources "
+            "(baselining does not waive this cap):"
+        )
+        for rel, lines, limit in unique:
+            out.append(f"  - {rel}: {lines} lines (limit {limit})")
+        failed = 1
+
+    if failed:
+        return failed, out
+
+    out.append(
+        f"file-size ratchet ok ({len(known)} baselined files, "
+        f"soft={soft}, hard_new={hard_new})"
+    )
+    return 0, out
+
+
+def run_file_size_ratchet_check(
+    baseline_path: Path,
+    root: Path,
+    *,
+    base_ref: str | None = None,
+) -> int:
+    head_baseline = json.loads(baseline_path.read_text())
+    base_known: dict[str, int] | None = None
+    if base_ref:
+        base_known = load_git_baseline_paths(base_ref, root)
+    code, lines = check_file_size_ratchet(
+        head_baseline, root, base_known=base_known, base_ref=base_ref
+    )
+    for line in lines:
+        print(line)
+    return code
+
+
 def soft_limit(baseline: dict | None = None) -> int:
     data = baseline if baseline is not None else load_baseline()
     return int(data.get("soft_limit", SOFT_LIMIT_DEFAULT))
@@ -694,5 +860,62 @@ pub use operations::{
     assert extract_public_surface(use_a) != extract_public_surface(use_b)
 
 
+def _assert_file_size_ratchet_checks() -> None:
+    import tempfile
+
+    head = {
+        "soft_limit": 350,
+        "hard_limit_new_files": 500,
+        "files": [
+            {"path": "crates/old/src/lib.rs", "lines": 400},
+            {"path": "crates/new/src/huge.rs", "lines": 600},
+        ],
+    }
+    base_known = {"crates/old/src/lib.rs": 400}
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        old = root / "crates/old/src"
+        new = root / "crates/new/src"
+        old.mkdir(parents=True)
+        new.mkdir(parents=True)
+        (old / "lib.rs").write_text("\n" * 400)
+        (new / "huge.rs").write_text("\n" * 600)
+
+        # Existing-on-base but newly baselined over hard_new → fail.
+        code, lines = check_file_size_ratchet(head, root, base_known=base_known)
+        assert code == 1
+        assert any("hard size limit" in line for line in lines)
+        assert any("crates/new/src/huge.rs" in line for line in lines)
+
+        # Without base baseline/ref, grandfathered known files are not re-checked.
+        code, lines = check_file_size_ratchet(head, root, base_known=None, base_ref=None)
+        assert code == 0
+        assert any(line.startswith("file-size ratchet ok") for line in lines)
+
+        unbaselined = root / "crates/fresh/src"
+        unbaselined.mkdir(parents=True)
+        (unbaselined / "big.rs").write_text("\n" * 501)
+        code, lines = check_file_size_ratchet(head, root, base_known=base_known)
+        assert code == 1
+        assert any("hard size limit" in line for line in lines)
+
+        # Brand-new file over hard_new is rejected even when baselined, when
+        # base_ref reports the path as absent (simulate with a bogus ref and
+        # direct path_exists override via missing base_ref semantics: use a
+        # base_ref that makes cat-file fail for the new path).
+        # Here we call with base_ref set to an empty tree-ish that won't have
+        # the path: use HEAD with a synthetic relative path check by temporarily
+        # pointing base_ref at a commit that lacks crates/new.
+        # Simpler: monkey-check via path_exists_on_ref returning False when
+        # base_ref is "__missing__" (git cat-file fails).
+        code, lines = check_file_size_ratchet(
+            head, root, base_known=None, base_ref="__missing_ref__"
+        )
+        assert code == 1
+        assert any("crates/new/src/huge.rs" in line for line in lines)
+        assert any("baselining does not waive" in line for line in lines)
+
+
 if __name__ == "__main__":
     _assert_surfaces_self_checks()
+    _assert_file_size_ratchet_checks()
