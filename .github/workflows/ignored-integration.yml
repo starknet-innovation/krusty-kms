@@ -3,9 +3,10 @@ name: Ignored integration tests
 # Optional / bitrot-protection suite for `--ignored` tests that need external
 # services (devnet, NATS, Sepolia RPC, scarb). Default CI never runs these.
 #
-# `list` / `compile` run on hosted runners. `nats` provisions a NATS service
-# container. `sepolia` and `multisig-devnet` require network secrets / a local
-# stack and are expected to be run on a suitably provisioned runner.
+# `list` / `compile` run on hosted runners. `nats` starts a NATS container on
+# demand. `sepolia` and `multisig-devnet` require network secrets / a local
+# stack and must be dispatched with a provisioned self-hosted runner label via
+# the `runner` input (hosted `ubuntu-latest` will fail fast for those suites).
 
 on:
   workflow_dispatch:
@@ -24,6 +25,14 @@ on:
           - nats
           - sepolia
           - multisig-devnet
+      runner:
+        description: >
+          Runner label. Use ubuntu-latest for list/compile/nats. sepolia and
+          multisig-devnet require a provisioned self-hosted runner (e.g. a label
+          matching your pre-installed devnet/RPC stack).
+        required: false
+        default: "ubuntu-latest"
+        type: string
   schedule:
     # Mondays 06:15 UTC — compile-only bitrot check (no external services).
     - cron: "15 6 * * 1"
@@ -34,12 +43,7 @@ permissions:
 jobs:
   ignored:
     name: Ignored suite (${{ inputs.suite || 'compile' }})
-    runs-on: ubuntu-latest
-    services:
-      nats:
-        image: nats:2.10
-        ports:
-          - 4222:4222
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -62,16 +66,30 @@ jobs:
         env:
           NATS_URL: nats://127.0.0.1:4222
         run: |
+          docker run -d --name nats --rm -p 4222:4222 nats:2.10
+          trap 'docker stop nats' EXIT
           cargo test -p krusty-kms-client --features nats --test nats_multisig_coordinator -- --ignored --nocapture
 
-      - name: Live Sepolia Tongo integration (requires RPC access)
+      - name: Live Sepolia Tongo integration (requires provisioned runner)
         if: ${{ inputs.suite == 'sepolia' }}
+        env:
+          RUNNER_LABEL: ${{ inputs.runner || 'ubuntu-latest' }}
         run: |
-          echo "Requires network access to Starknet Sepolia RPC / secrets on the runner."
+          if [ "$RUNNER_LABEL" = "ubuntu-latest" ]; then
+            echo "::error::Suite 'sepolia' requires a provisioned runner with Starknet Sepolia RPC access."
+            echo "Re-dispatch this workflow and set the 'runner' input to your self-hosted runner label."
+            exit 1
+          fi
           cargo test -p krusty-kms-client --test tongo_sepolia_integration -- --ignored --nocapture
 
-      - name: OpenZeppelin multisig on starknet-devnet (requires local stack)
+      - name: OpenZeppelin multisig on starknet-devnet (requires provisioned runner)
         if: ${{ inputs.suite == 'multisig-devnet' }}
+        env:
+          RUNNER_LABEL: ${{ inputs.runner || 'ubuntu-latest' }}
         run: |
-          echo "Requires starknet-devnet on 127.0.0.1:5050 plus scarb/sncast for contracts/."
+          if [ "$RUNNER_LABEL" = "ubuntu-latest" ]; then
+            echo "::error::Suite 'multisig-devnet' requires a provisioned runner (starknet-devnet on 127.0.0.1:5050, scarb, sncast)."
+            echo "Re-dispatch this workflow and set the 'runner' input to your self-hosted runner label."
+            exit 1
+          fi
           cargo test -p krusty-kms-client --test oz_multisig_devnet -- --ignored --nocapture

@@ -30,7 +30,10 @@ baseline = {
     "version": 1,
     "soft_limit": soft,
     "hard_limit_new_files": hard_new,
-    "notes": "Baseline of existing oversized files. CI fails if any listed file grows, or if a new file exceeds hard_limit_new_files.",
+    "notes": existing.get(
+        "notes",
+        "Baseline of existing oversized files. CI fails if any listed file grows, or if a new file exceeds hard_limit_new_files.",
+    ),
     "files": rows,
 }
 path = root / ".github/guardrails/file-size-baseline.json"

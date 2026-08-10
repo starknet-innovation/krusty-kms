@@ -11,7 +11,7 @@ HARD_NEW_DEFAULT = 500
 
 
 def repo_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    return Path(__file__).resolve().parents[3]
 
 
 def load_baseline(path: Path | None = None) -> dict:
@@ -42,25 +42,86 @@ def oversized_rust_files(root: Path | None = None, min_lines: int | None = None)
     return rows
 
 
+_DECL_RE = re.compile(
+    r"^\s*(pub\s+)?(async\s+)?(unsafe\s+)?(fn|struct|enum|type|const|static)\b"
+)
+_IMPL_RE = re.compile(r"^\s*impl\b")
+
+
+def _normalize_ws(text: str) -> str:
+    text = re.sub(r"\s+", " ", text.strip())
+    text = re.sub(r"\(\s+", "(", text)
+    text = re.sub(r"\s+\)", ")", text)
+    text = re.sub(r"\s+,", ",", text)
+    text = re.sub(r",\s+", ", ", text)
+    text = re.sub(r",\s*\)", ")", text)
+    return text
+
+
+def _paren_depth(text: str) -> int:
+    return text.count("(") - text.count(")")
+
+
+def _collect_rust_signature(lines: list[str], start: int) -> str:
+    """Collect a single-line normalized Rust declaration (fn/struct/enum/impl)."""
+    first = lines[start]
+
+    if _IMPL_RE.match(first):
+        text = first.split("{", 1)[0].strip()
+        return _normalize_ws(f"{text} {{")
+
+    if re.match(r"^\s*(pub\s+)?(struct|enum)\b", first):
+        parts: list[str] = []
+        for j in range(start, len(lines)):
+            parts.append(lines[j].strip())
+            if "{" in lines[j]:
+                before = " ".join(parts).split("{", 1)[0].strip()
+                return _normalize_ws(f"{before} {{")
+        return _normalize_ws(" ".join(parts))
+
+    parts: list[str] = []
+    for j in range(start, len(lines)):
+        line = lines[j].strip()
+        if "{" in line:
+            before = line.split("{", 1)[0].strip()
+            if parts:
+                return _normalize_ws(" ".join(parts) + (" " + before if before else ""))
+            return _normalize_ws(before)
+        parts.append(line)
+        combined = " ".join(parts)
+        if "(" in combined and _paren_depth(combined) == 0:
+            if "->" in combined:
+                return _normalize_ws(combined)
+            if j + 1 < len(lines) and lines[j + 1].strip().startswith("->"):
+                parts.append(lines[j + 1].strip())
+                return _normalize_ws(" ".join(parts))
+            return _normalize_ws(combined)
+    return _normalize_ws(" ".join(parts))
+
+
+def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
+    m = re.search(r'js_name\s*=\s*"([^"]+)"', attrs)
+    if m:
+        return f"{rel_path}: js_name={m.group(1)} | {signature}"
+    return f"{rel_path}: {signature}"
+
+
 def extract_wasm_exports(root: Path | None = None) -> list[str]:
     root = root or repo_root()
     exports: list[str] = []
     for path in sorted((root / "crates/wasm/src").rglob("*.rs")):
         lines = path.read_text().splitlines()
+        rel = str(path.relative_to(root))
         i = 0
         while i < len(lines):
             if "#[wasm_bindgen" in lines[i] and "wasm_bindgen_test" not in lines[i]:
                 j = i
-                while j < len(lines) and not re.match(
-                    r"^\s*(pub\s+)?(async\s+)?(unsafe\s+)?(fn|struct|enum|type|const|static)\b",
-                    lines[j],
-                ) and not re.match(r"^\s*impl\b", lines[j]):
+                while j < len(lines) and not _DECL_RE.match(lines[j]) and not _IMPL_RE.match(lines[j]):
                     j += 1
                 if j < len(lines):
-                    attrs = "\n".join(lines[i : j + 1])
-                    m = re.search(r'js_name\s*=\s*"([^"]+)"', attrs)
-                    name = m.group(1) if m else lines[j].strip()
-                    exports.append(f"{path.relative_to(root)}: {name}")
+                    attrs = "\n".join(lines[i:j])
+                    signature = _collect_rust_signature(lines, j)
+                    exports.append(_format_wasm_export(rel, attrs, signature))
                 i = j + 1
             else:
                 i += 1
