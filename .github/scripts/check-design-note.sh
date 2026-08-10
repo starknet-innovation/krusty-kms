@@ -5,6 +5,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$root"
+export PYTHONPATH="$root/.github/scripts${PYTHONPATH:+:$PYTHONPATH}"
 
 base_ref="${GUARDRAILS_BASE_REF:-}"
 pr_body="${PR_BODY:-}"
@@ -84,15 +85,93 @@ root_cargo_workspace_deps_changed() {
     >/dev/null 2>&1
 }
 
+crate_production_dep_entries() {
+  python3 - "$1" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+_DEP_KEY = re.compile(r"^([a-zA-Z0-9_-]+)\s*=")
+_DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
+
+
+def _is_production_dep_section(header: str) -> bool:
+    return (
+        header == "[dependencies]"
+        or header.startswith("[dependencies.")
+        or ".dependencies]" in header
+        or re.match(r"^\[target\..+\.dependencies\]$", header) is not None
+    )
+
+
+def _normalize_body(body: str) -> str:
+    lines = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        lines.append(stripped)
+    return "\n".join(lines)
+
+
+def production_dep_entries(text: str) -> list[str]:
+    entries: list[str] = []
+    for section in re.split(r"\n(?=\[)", text):
+        if not section.strip():
+            continue
+        header = section.split("\n", 1)[0].strip()
+        if "dev-dependencies" in header or "build-dependencies" in header:
+            continue
+        table = _DEP_TABLE.match(header)
+        if table:
+            body = section.split("\n", 1)[1] if "\n" in section else ""
+            norm = _normalize_body(body)
+            entries.append(f"{header}\n{norm}" if norm else header)
+            continue
+        if not _is_production_dep_section(header):
+            continue
+        for line in section.splitlines()[1:]:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if _DEP_KEY.match(stripped):
+                entries.append(stripped)
+    return sorted(entries)
+
+
+for entry in production_dep_entries(text):
+    print(entry)
+PY
+}
+
+crate_cargo_production_deps_changed() {
+  local f="$1"
+  local base_file
+  base_file="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap 'rm -f "$base_file"' RETURN
+
+  if ! git show "$base_ref:$f" >"$base_file" 2>/dev/null; then
+    crate_production_dep_entries "$f" | grep -q .
+    return $?
+  fi
+
+  ! diff -q \
+    <(crate_production_dep_entries "$base_file" | LC_ALL=C sort) \
+    <(crate_production_dep_entries "$f" | LC_ALL=C sort) \
+    >/dev/null 2>&1
+}
+
 for f in "${changed[@]}"; do
   case "$f" in
     crates/experimental/*) continue ;;
   esac
 
   if is_src_rs "$f"; then
-    if git diff "$base_ref"...HEAD -- "$f" | grep -E '^\+\s*pub(\s|\()' >/dev/null; then
+    if git diff "$base_ref"...HEAD -- "$f" | grep -E '^[+-]\s*pub(\s|\()' >/dev/null; then
       needs_note=1
-      reasons+=("new/changed pub items in $f")
+      reasons+=("new/changed/removed pub items in $f")
     fi
   fi
 
@@ -104,7 +183,7 @@ for f in "${changed[@]}"; do
       fi
       ;;
     crates/*/Cargo.toml)
-      if git diff "$base_ref"...HEAD -- "$f" | grep -E '^\+[a-zA-Z0-9_-]+\s*=' >/dev/null; then
+      if crate_cargo_production_deps_changed "$f"; then
         needs_note=1
         reasons+=("dependency manifest changed: $f")
       fi
