@@ -66,6 +66,35 @@ jobs:
           gradle-version: "8.10"
       - run: gradle classes
 
+  # The Gradle build only compiles Java; kms_jni.c is built out-of-band.
+  # Syntax-check it on both platforms so the __APPLE__ (memset_s) and
+  # __linux__ (explicit_bzero) branches both stay compilable.
+  jni-c-syntax:
+    needs: changes
+    if: needs.changes.outputs.jvm == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Syntax-check JNI C sources
+        run: |
+          JNI_INCLUDE="$JAVA_HOME/include"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            JNI_OS_INCLUDE="$JAVA_HOME/include/darwin"
+          else
+            JNI_OS_INCLUDE="$JAVA_HOME/include/linux"
+          fi
+          cc -fsyntax-only -Wall -Wextra \
+            -I"$JNI_INCLUDE" -I"$JNI_OS_INCLUDE" \
+            -Ipackages/kms-jvm/src/main/c \
+            packages/kms-jvm/src/main/c/kms_jni.c
+
   dart:
     needs: changes
     if: needs.changes.outputs.dart == 'true'
