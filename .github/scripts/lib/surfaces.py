@@ -298,6 +298,20 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
                 return header
         return _normalize_ws(" ".join(parts))
 
+    if re.match(r"^\s*(pub\s+)?use\b", first):
+        parts: list[str] = []
+        depth = 0
+        for j in range(start, len(lines)):
+            line = lines[j].strip()
+            parts.append(line)
+            depth += _brace_delta(line)
+            if "{" in " ".join(parts):
+                if depth <= 0:
+                    return _normalize_ws(" ".join(parts))
+            elif ";" in line:
+                return _normalize_ws(" ".join(parts))
+        return _normalize_ws(" ".join(parts))
+
     parts: list[str] = []
     for j in range(start, len(lines)):
         line = lines[j].strip()
@@ -666,6 +680,18 @@ pub trait WalletExecutor: Send + Sync {
 """.strip()
     changed_trait = trait_src.replace("estimate_fee", "estimate_fee_v2")
     assert extract_public_surface(trait_src) != extract_public_surface(changed_trait)
+
+    use_a = """
+pub use operations::{
+    fund, transfer,
+};
+""".strip()
+    use_b = """
+pub use operations::{
+    fund, transfer, withdraw,
+};
+""".strip()
+    assert extract_public_surface(use_a) != extract_public_surface(use_b)
 
 
 if __name__ == "__main__":
