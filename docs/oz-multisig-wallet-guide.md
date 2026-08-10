@@ -121,6 +121,11 @@ execution commands.
 Enable the `krusty-kms-client/nats` feature and use NATS for the standard live
 pub/sub path:
 
+```toml
+[dependencies]
+krusty-kms-client = { version = "0.7", features = ["nats"] }
+```
+
 ```rust
 use krusty_kms_client::{MultisigCoordinator, NatsMultisigCoordinator};
 

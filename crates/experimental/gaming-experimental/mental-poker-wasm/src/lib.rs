@@ -98,7 +98,9 @@ pub fn get_build_info() -> JsValue {
         "version": env!("CARGO_PKG_VERSION"),
         "name": env!("CARGO_PKG_NAME"),
         "target": "wasm32-unknown-unknown",
-        "features": {}
+        "features": {
+            "console_error_panic_hook": false,
+        }
     });
 
     serde_wasm_bindgen::to_value(&info).unwrap_or(JsValue::NULL)

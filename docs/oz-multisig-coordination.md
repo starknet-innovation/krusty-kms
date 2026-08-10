@@ -82,6 +82,13 @@ subject layout is:
 krusty.multisig.<chain-id>.<multisig-address-64-hex>.<transaction-id-64-hex>
 ```
 
+Enable the feature in the consuming crate:
+
+```toml
+[dependencies]
+krusty-kms-client = { version = "0.7", features = ["nats"] }
+```
+
 The chain-id token (`SN_MAIN` / `SN_SEPOLIA`) namespaces subjects so a shared
 coordinator cannot leak or replay messages across networks for the same
 multisig/transaction-id pair.
