@@ -492,6 +492,8 @@ public enum Kms {
         var cPrivateKey = privateKey.toCValue()
         var cAddr = contractAddress.toCValue()
         var handle: KmsAccountHandle = 0
+        // Wipe the C-side copy of the private key once the FFI call returns.
+        defer { secureZeroFelt(&cPrivateKey) }
         try check(kms_account_create_from_private_key(&cPrivateKey, &cAddr, &handle))
         return AccountHandle(rawValue: handle)
     }
@@ -599,6 +601,8 @@ public enum Kms {
         var cR = ciphertextR.toCValue()
         var cKey = privateKey.toCValue()
         var out = KmsProjectivePoint()
+        // Wipe the C-side copy of the private key once the FFI call returns.
+        defer { secureZeroFelt(&cKey) }
         try check(kms_elgamal_decrypt(&cL, &cR, &cKey, &out))
         return ProjectivePoint(cValue: out)
     }
@@ -610,14 +614,24 @@ public enum Kms {
         var cKey = privateKey.toCValue()
         var outR = KmsFelt()
         var outS = KmsFelt()
+        // Wipe the C-side copy of the private key once the FFI call returns.
+        defer { secureZeroFelt(&cKey) }
         try check(kms_stark_sign(&cHash, &cKey, &outR, &outS))
         return (r: Felt(cValue: outR), s: Felt(cValue: outS))
     }
 
     public static func ethSign(hash: Felt, privateKeyBytes: [UInt8]) throws -> EthSignature {
+        // The C ABI reads exactly 32 bytes from the pointer without any length
+        // metadata; a shorter array would read out of bounds, a longer one
+        // would silently truncate. Reject both before crossing the boundary.
+        guard privateKeyBytes.count == 32 else {
+            throw KmsError.invalidFeltLength(privateKeyBytes.count)
+        }
         var cHash = hash.toCValue()
         var keyBytes = privateKeyBytes
         var out = KmsEthSignature()
+        // Wipe the Swift-side copy of the private key once the FFI call returns.
+        defer { keyBytes.replaceSubrange(0..<32, with: repeatElement(0, count: 32)) }
         let rc = keyBytes.withUnsafeMutableBufferPointer { ptr in
             kms_eth_sign(&cHash, ptr.baseAddress, &out)
         }

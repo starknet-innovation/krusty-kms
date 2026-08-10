@@ -3,7 +3,7 @@
 use std::ffi::c_char;
 use std::panic::catch_unwind;
 
-use krusty_kms_common::ElGamalCiphertext;
+use krusty_kms_common::{ElGamalCiphertext, SecretFelt};
 use krusty_kms_crypto::ElGamal;
 
 use crate::error::*;
@@ -108,10 +108,11 @@ pub unsafe extern "C" fn kms_elgamal_decrypt(
             Ok(p) => p,
             Err(e) => return e,
         };
-        let sk = kms_to_felt(&*private_key);
+        // SecretFelt zeroizes on drop (volatile write); plain assignment can be DCE'd.
+        let sk = SecretFelt::new(kms_to_felt(&*private_key));
 
         let cipher = ElGamalCiphertext { l, r };
-        match ElGamal::decrypt(&cipher, &sk) {
+        match ElGamal::decrypt(&cipher, sk.expose_secret()) {
             Ok(pt) => {
                 *out_point = proj_to_kms(&pt);
                 KMS_OK

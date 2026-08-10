@@ -300,7 +300,7 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
         // Direct derivation (Braavos / new Argent / OZ all share this key)
         let direct_pk =
             derive_private_key_with_coin_type(mnemonic, index, 0, STARKNET_COIN_TYPE, None)?;
-        let direct_pubk = stark_public_key(&direct_pk);
+        let direct_pubk = stark_public_key(&direct_pk)?;
         keypairs.push(DerivedKeypair {
             derivation_type: DerivationType::Direct,
             public_key: felt_hex(&direct_pubk),
@@ -311,7 +311,7 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
 
         // Argent legacy double derivation
         let legacy_pk = derive_argent_legacy_private_key(mnemonic, index, 0)?;
-        let legacy_pubk = stark_public_key(&legacy_pk);
+        let legacy_pubk = stark_public_key(&legacy_pk)?;
         keypairs.push(DerivedKeypair {
             derivation_type: DerivationType::ArgentLegacy,
             public_key: felt_hex(&legacy_pubk),
@@ -380,7 +380,7 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         // ---------------------------------------------------------------
         let direct_pk =
             derive_private_key_with_coin_type(mnemonic, index, 0, STARKNET_COIN_TYPE, None)?;
-        let direct_pubk = stark_public_key(&direct_pk);
+        let direct_pubk = stark_public_key(&direct_pk)?;
         let direct_path = format!("m/44'/9004'/0'/0/{index}");
 
         // Braavos
@@ -429,7 +429,7 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         // (b) Legacy double derivation — old Argent
         // ---------------------------------------------------------------
         let legacy_pk = derive_argent_legacy_private_key(mnemonic, index, 0)?;
-        let legacy_pubk = stark_public_key(&legacy_pk);
+        let legacy_pubk = stark_public_key(&legacy_pk)?;
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
 
         // Cairo 1 class hashes via legacy derivation

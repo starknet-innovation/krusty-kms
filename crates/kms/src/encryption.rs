@@ -133,6 +133,13 @@ pub fn decrypt_private_key(
     // Derive key from password + salt
     let mut key = derive_scrypt_key(password.as_bytes(), &encrypted.salt, scrypt_n)?;
 
+    if encrypted.nonce.len() != 24 {
+        return Err(KmsError::DeserializationError(format!(
+            "Invalid XChaCha20 nonce length: {} (expected 24)",
+            encrypted.nonce.len()
+        )));
+    }
+
     // Decrypt
     let cipher = XChaCha20Poly1305::new_from_slice(&key)
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {e}")))?;
@@ -184,6 +191,13 @@ pub fn encrypt_with_key(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPay
 /// # Returns
 /// The decrypted plaintext bytes.
 pub fn decrypt_with_key(payload: &EncryptedPayload, key: &[u8; 32]) -> Result<Vec<u8>> {
+    if payload.nonce.len() != 24 {
+        return Err(KmsError::DeserializationError(format!(
+            "Invalid XChaCha20 nonce length: {} (expected 24)",
+            payload.nonce.len()
+        )));
+    }
+
     let cipher = XChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {e}")))?;
     let nonce = XNonce::from_slice(&payload.nonce);
@@ -266,6 +280,31 @@ mod tests {
 
         let decrypted = decrypt_with_key(&payload, &key).unwrap();
         assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn decrypt_with_key_rejects_wrong_length_nonce_without_panicking() {
+        let key = test_key(0);
+        for nonce in [vec![], vec![0u8; 12], vec![0u8; 23], vec![0u8; 25]] {
+            let payload = EncryptedPayload {
+                nonce,
+                ciphertext: vec![0u8; 16],
+            };
+            assert!(decrypt_with_key(&payload, &key).is_err());
+        }
+    }
+
+    #[test]
+    fn decrypt_private_key_rejects_wrong_length_nonce_without_panicking() {
+        let password = test_password(0);
+        for nonce in [vec![], vec![0u8; 12], vec![0u8; 23], vec![0u8; 25]] {
+            let encrypted = EncryptedKey {
+                nonce,
+                salt: vec![0u8; 16],
+                encrypted_key: vec![0u8; 16],
+            };
+            assert!(decrypt_private_key(&encrypted, &password, TEST_SCRYPT_N).is_err());
+        }
     }
 
     #[test]

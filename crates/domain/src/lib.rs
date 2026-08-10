@@ -174,6 +174,11 @@ impl From<HexBytes> for String {
 }
 
 /// Stable identifier for a secret kept behind the trusted boundary.
+///
+/// Labels are global and unauthenticated: any caller that can reach the
+/// gateway/oracle can reference any label. There is no tenant namespacing —
+/// the transport boundary is the only isolation. See
+/// `docs/oracle-stdio-v1.md` § Trust Model.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct SecretRef(String);

@@ -43,7 +43,9 @@ pub use multisig::{OpenZeppelinMultisig, OzMultisigDeploymentDescriptor};
 pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
 };
-pub use stark_signing::{sign_stark_hash, stark_public_key, StarkSignature};
+pub use stark_signing::{
+    sign_stark_hash, stark_public_key, validate_stark_private_key, StarkSignature,
+};
 pub use strk20::{derive_strk20_viewing_key, STRK20_VIEWING_KEY_DOMAIN};
 pub use tx_hash::{
     compute_declare_v2_hash, compute_declare_v3_hash, compute_deploy_account_v1_hash,

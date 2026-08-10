@@ -215,7 +215,7 @@ fn stark_signing_release_vectors_match() {
         let signature = sign_stark_hash(&private_key, &message_hash).unwrap();
 
         assert_eq!(
-            stark_public_key(&private_key),
+            stark_public_key(&private_key).unwrap(),
             StarkSignatureFelt::from_hex(&vector.expected_public_key).unwrap()
         );
         assert_eq!(

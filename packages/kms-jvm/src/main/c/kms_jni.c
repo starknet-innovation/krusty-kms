@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(__linux__)
 #include <strings.h>
 #endif
 
@@ -18,7 +18,10 @@ static void secure_wipe(void *ptr, size_t len) {
     if (ptr == NULL || len == 0) {
         return;
     }
-#if defined(__APPLE__) || defined(__linux__)
+#if defined(__APPLE__)
+    /* macOS has no explicit_bzero; memset_s is the non-optimizable equivalent. */
+    memset_s(ptr, len, 0, len);
+#elif defined(__linux__)
     explicit_bzero(ptr, len);
 #else
     {
@@ -81,8 +84,25 @@ static jbyteArray felt_to_jbytearray(JNIEnv *env, const KmsFelt *felt) {
     return arr;
 }
 
-static void jbytearray_to_felt(JNIEnv *env, jbyteArray arr, KmsFelt *out) {
+/* Read exactly 32 bytes from a Java byte array into a felt.
+ * Returns 0 on success; on NULL, wrong length, or a pending JNI exception it
+ * throws and returns non-zero. Callers MUST check the return value:
+ * GetByteArrayRegion on a NULL/short array crashes the JVM, and continuing
+ * after a pending exception is undefined behavior. */
+static int jbytearray_to_felt(JNIEnv *env, jbyteArray arr, KmsFelt *out) {
+    if (arr == NULL) {
+        throw_kms_error(env, KMS_ERR_NULL_POINTER);
+        return -1;
+    }
+    if ((*env)->GetArrayLength(env, arr) != 32) {
+        throw_kms_error(env, KMS_ERR_INVALID_INPUT);
+        return -1;
+    }
     (*env)->GetByteArrayRegion(env, arr, 0, 32, (jbyte *)out->bytes);
+    if ((*env)->ExceptionCheck(env)) {
+        return -1;
+    }
+    return 0;
 }
 
 /* Returns a concatenated byte array of N*32 bytes for a projective point (x,y,z) */
@@ -95,10 +115,11 @@ static jbyteArray projective_to_jbytearray(JNIEnv *env, const KmsProjectivePoint
     return arr;
 }
 
-static void jbytearrays_to_projective(JNIEnv *env, jbyteArray x, jbyteArray y, jbyteArray z, KmsProjectivePoint *out) {
-    (*env)->GetByteArrayRegion(env, x, 0, 32, (jbyte *)out->x.bytes);
-    (*env)->GetByteArrayRegion(env, y, 0, 32, (jbyte *)out->y.bytes);
-    (*env)->GetByteArrayRegion(env, z, 0, 32, (jbyte *)out->z.bytes);
+static int jbytearrays_to_projective(JNIEnv *env, jbyteArray x, jbyteArray y, jbyteArray z, KmsProjectivePoint *out) {
+    if (jbytearray_to_felt(env, x, &out->x)) return -1;
+    if (jbytearray_to_felt(env, y, &out->y)) return -1;
+    if (jbytearray_to_felt(env, z, &out->z)) return -1;
+    return 0;
 }
 
 /* Two-call dynamic string pattern: returns a newly allocated Java String */
@@ -219,7 +240,7 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_feltToHex(
     JNIEnv *env, jclass cls, jbyteArray value) {
     (void)cls;
     KmsFelt felt;
-    jbytearray_to_felt(env, value, &felt);
+    if (jbytearray_to_felt(env, value, &felt)) return NULL;
 
     size_t written = 0;
     int32_t rc = kms_felt_to_hex(&felt, NULL, 0, &written);
@@ -253,7 +274,7 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_feltToBytesBe(
     JNIEnv *env, jclass cls, jbyteArray value) {
     (void)cls;
     KmsFelt felt;
-    jbytearray_to_felt(env, value, &felt);
+    if (jbytearray_to_felt(env, value, &felt)) return NULL;
     uint8_t out[32];
     size_t written = 0;
     int32_t rc = kms_felt_to_bytes_be(&felt, out, 32, &written);
@@ -272,8 +293,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_projectiveFromAffine(
     JNIEnv *env, jclass cls, jbyteArray affineX, jbyteArray affineY) {
     (void)cls;
     KmsAffinePoint affine;
-    (*env)->GetByteArrayRegion(env, affineX, 0, 32, (jbyte *)affine.x.bytes);
-    (*env)->GetByteArrayRegion(env, affineY, 0, 32, (jbyte *)affine.y.bytes);
+    if (jbytearray_to_felt(env, affineX, &affine.x)) return NULL;
+    if (jbytearray_to_felt(env, affineY, &affine.y)) return NULL;
     KmsProjectivePoint out;
     int32_t rc = kms_projective_from_affine(&affine, &out);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
@@ -284,7 +305,7 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_projectiveToAffine(
     JNIEnv *env, jclass cls, jbyteArray pointX, jbyteArray pointY, jbyteArray pointZ) {
     (void)cls;
     KmsProjectivePoint pt;
-    jbytearrays_to_projective(env, pointX, pointY, pointZ, &pt);
+    if (jbytearrays_to_projective(env, pointX, pointY, pointZ, &pt)) return NULL;
     KmsAffinePoint out;
     int32_t rc = kms_projective_to_affine(&pt, &out);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
@@ -303,8 +324,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_pedersenHash(
     JNIEnv *env, jclass cls, jbyteArray left, jbyteArray right) {
     (void)cls;
     KmsFelt l, r, out;
-    jbytearray_to_felt(env, left, &l);
-    jbytearray_to_felt(env, right, &r);
+    if (jbytearray_to_felt(env, left, &l)) return NULL;
+    if (jbytearray_to_felt(env, right, &r)) return NULL;
     int32_t rc = kms_pedersen_hash(&l, &r, &out);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
     return felt_to_jbytearray(env, &out);
@@ -313,6 +334,7 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_pedersenHash(
 JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_poseidonHashMany(
     JNIEnv *env, jclass cls, jobjectArray values) {
     (void)cls;
+    if (values == NULL) { throw_kms_error(env, KMS_ERR_NULL_POINTER); return NULL; }
     jsize count = (*env)->GetArrayLength(env, values);
     KmsFelt *felts = NULL;
     if (count > 0) {
@@ -320,7 +342,14 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_poseidonHashMany(
         if (felts == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
         for (jsize i = 0; i < count; i++) {
             jbyteArray elem = (jbyteArray)(*env)->GetObjectArrayElement(env, values, i);
-            jbytearray_to_felt(env, elem, &felts[i]);
+            if (elem == NULL || jbytearray_to_felt(env, elem, &felts[i])) {
+                if (elem != NULL) (*env)->DeleteLocalRef(env, elem);
+                free(felts);
+                if (!(*env)->ExceptionCheck(env)) {
+                    throw_kms_error(env, KMS_ERR_NULL_POINTER);
+                }
+                return NULL;
+            }
             (*env)->DeleteLocalRef(env, elem);
         }
     }
@@ -628,9 +657,10 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_calculateContractAddres
     jobjectArray constructorCalldata, jbyteArray deployerAddress) {
     (void)cls;
     KmsFelt cSalt, cClassHash, cDeployer, out;
-    jbytearray_to_felt(env, salt, &cSalt);
-    jbytearray_to_felt(env, classHash, &cClassHash);
-    jbytearray_to_felt(env, deployerAddress, &cDeployer);
+    if (jbytearray_to_felt(env, salt, &cSalt)) return NULL;
+    if (jbytearray_to_felt(env, classHash, &cClassHash)) return NULL;
+    if (jbytearray_to_felt(env, deployerAddress, &cDeployer)) return NULL;
+    if (constructorCalldata == NULL) { throw_kms_error(env, KMS_ERR_NULL_POINTER); return NULL; }
 
     jsize count = (*env)->GetArrayLength(env, constructorCalldata);
     KmsFelt *calldata = NULL;
@@ -639,7 +669,14 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_calculateContractAddres
         if (calldata == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
         for (jsize i = 0; i < count; i++) {
             jbyteArray elem = (jbyteArray)(*env)->GetObjectArrayElement(env, constructorCalldata, i);
-            jbytearray_to_felt(env, elem, &calldata[i]);
+            if (elem == NULL || jbytearray_to_felt(env, elem, &calldata[i])) {
+                if (elem != NULL) (*env)->DeleteLocalRef(env, elem);
+                free(calldata);
+                if (!(*env)->ExceptionCheck(env)) {
+                    throw_kms_error(env, KMS_ERR_NULL_POINTER);
+                }
+                return NULL;
+            }
             (*env)->DeleteLocalRef(env, elem);
         }
     }
@@ -656,13 +693,13 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveOzAccountAddress(
     JNIEnv *env, jclass cls, jbyteArray publicKeyX, jbyteArray classHash, jbyteArray salt) {
     (void)cls;
     KmsFelt cPubKey, cClassHash, out;
-    jbytearray_to_felt(env, publicKeyX, &cPubKey);
-    jbytearray_to_felt(env, classHash, &cClassHash);
+    if (jbytearray_to_felt(env, publicKeyX, &cPubKey)) return NULL;
+    if (jbytearray_to_felt(env, classHash, &cClassHash)) return NULL;
 
     KmsFelt cSalt;
     KmsFelt *pSalt = NULL;
     if (salt != NULL) {
-        jbytearray_to_felt(env, salt, &cSalt);
+        if (jbytearray_to_felt(env, salt, &cSalt)) return NULL;
         pSalt = &cSalt;
     }
 
@@ -725,7 +762,13 @@ JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromMnemonic(
         return 0;
     }
     KmsFelt cAddr;
-    jbytearray_to_felt(env, contractAddress, &cAddr);
+    if (jbytearray_to_felt(env, contractAddress, &cAddr)) {
+        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
+        if (!pp_literal) {
+            (*env)->ReleaseStringUTFChars(env, passphrase, pp);
+        }
+        return 0;
+    }
     KmsAccountHandle handle = 0;
 
     int32_t rc = kms_account_create_from_mnemonic(
@@ -745,11 +788,15 @@ JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromPrivateKey(
     jbyteArray contractAddress) {
     (void)cls;
     KmsFelt cPrivateKey, cAddr;
-    jbytearray_to_felt(env, privateKey, &cPrivateKey);
-    jbytearray_to_felt(env, contractAddress, &cAddr);
+    if (jbytearray_to_felt(env, privateKey, &cPrivateKey)) return 0;
+    if (jbytearray_to_felt(env, contractAddress, &cAddr)) {
+        secure_wipe(&cPrivateKey, sizeof(cPrivateKey));
+        return 0;
+    }
     KmsAccountHandle handle = 0;
 
     int32_t rc = kms_account_create_from_private_key(&cPrivateKey, &cAddr, &handle);
+    secure_wipe(&cPrivateKey, sizeof(cPrivateKey));
     if (rc != KMS_OK) { throw_kms_error(env, rc); return 0; }
     return (jlong)handle;
 }
@@ -867,10 +914,10 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
     (void)cls;
     KmsFelt cMsg, cRand, cPrefix;
     KmsProjectivePoint cPub;
-    jbytearray_to_felt(env, message, &cMsg);
-    jbytearrays_to_projective(env, pubX, pubY, pubZ, &cPub);
-    jbytearray_to_felt(env, random, &cRand);
-    jbytearray_to_felt(env, prefix, &cPrefix);
+    if (jbytearray_to_felt(env, message, &cMsg)) return NULL;
+    if (jbytearrays_to_projective(env, pubX, pubY, pubZ, &cPub)) return NULL;
+    if (jbytearray_to_felt(env, random, &cRand)) return NULL;
+    if (jbytearray_to_felt(env, prefix, &cPrefix)) return NULL;
 
     KmsProjectivePoint outL, outR;
 
@@ -919,12 +966,13 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_elgamalDecrypt(
     (void)cls;
     KmsProjectivePoint cL, cR;
     KmsFelt cKey;
-    jbytearrays_to_projective(env, ciphLX, ciphLY, ciphLZ, &cL);
-    jbytearrays_to_projective(env, ciphRX, ciphRY, ciphRZ, &cR);
-    jbytearray_to_felt(env, privateKey, &cKey);
+    if (jbytearrays_to_projective(env, ciphLX, ciphLY, ciphLZ, &cL)) return NULL;
+    if (jbytearrays_to_projective(env, ciphRX, ciphRY, ciphRZ, &cR)) return NULL;
+    if (jbytearray_to_felt(env, privateKey, &cKey)) return NULL;
 
     KmsProjectivePoint out;
     int32_t rc = kms_elgamal_decrypt(&cL, &cR, &cKey, &out);
+    secure_wipe(&cKey, sizeof(cKey));
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
     return projective_to_jbytearray(env, &out);
 }
@@ -937,10 +985,11 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_starkSign(
     JNIEnv *env, jclass cls, jbyteArray hash, jbyteArray privateKey) {
     (void)cls;
     KmsFelt cHash, cKey, outR, outS;
-    jbytearray_to_felt(env, hash, &cHash);
-    jbytearray_to_felt(env, privateKey, &cKey);
+    if (jbytearray_to_felt(env, hash, &cHash)) return NULL;
+    if (jbytearray_to_felt(env, privateKey, &cKey)) return NULL;
 
     int32_t rc = kms_stark_sign(&cHash, &cKey, &outR, &outS);
+    secure_wipe(&cKey, sizeof(cKey));
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
 
     jclass byteArrayClass = (*env)->FindClass(env, "[B");
@@ -955,12 +1004,21 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_ethSign(
     JNIEnv *env, jclass cls, jbyteArray hash, jbyteArray ethPrivateKeyBytes) {
     (void)cls;
     KmsFelt cHash;
-    jbytearray_to_felt(env, hash, &cHash);
+    if (jbytearray_to_felt(env, hash, &cHash)) return NULL;
     uint8_t keyBytes[32];
+    if (ethPrivateKeyBytes == NULL || (*env)->GetArrayLength(env, ethPrivateKeyBytes) != 32) {
+        throw_kms_error(env, ethPrivateKeyBytes == NULL ? KMS_ERR_NULL_POINTER : KMS_ERR_INVALID_INPUT);
+        return NULL;
+    }
     (*env)->GetByteArrayRegion(env, ethPrivateKeyBytes, 0, 32, (jbyte *)keyBytes);
+    if ((*env)->ExceptionCheck(env)) {
+        secure_wipe(keyBytes, sizeof(keyBytes));
+        return NULL;
+    }
 
     KmsEthSignature sig;
     int32_t rc = kms_eth_sign(&cHash, keyBytes, &sig);
+    secure_wipe(keyBytes, sizeof(keyBytes));
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
 
     jclass byteArrayClass = (*env)->FindClass(env, "[B");

@@ -4,6 +4,8 @@ use std::ffi::c_char;
 use std::panic::catch_unwind;
 use std::slice;
 
+use zeroize::Zeroizing;
+
 use crate::error::*;
 use crate::helpers::{
     read_cstr, read_cstr_optional, write_bytes_output, write_string_output, KMS_MAX_ENTROPY_LEN,
@@ -18,7 +20,8 @@ pub unsafe extern "C" fn kms_generate_mnemonic(
 ) -> i32 {
     catch_unwind(
         || match krusty_kms::generate_mnemonic(word_count as usize) {
-            Ok(m) => write_string_output(&m, out, out_len, out_written),
+            // Mnemonic is secret key material: zeroize the Rust-side copy on drop.
+            Ok(m) => write_string_output(&Zeroizing::new(m), out, out_len, out_written),
             Err(_) => KMS_ERR_INVALID_INPUT,
         },
     )
@@ -43,7 +46,7 @@ pub unsafe extern "C" fn kms_generate_mnemonic_from_entropy(
         let data = slice::from_raw_parts(entropy, entropy_len);
         match bip39::Mnemonic::from_entropy(data) {
             Ok(m) => {
-                let s = m.to_string();
+                let s = Zeroizing::new(m.to_string());
                 write_string_output(&s, out, out_len, out_written)
             }
             Err(_) => KMS_ERR_INVALID_INPUT,
@@ -86,7 +89,8 @@ pub unsafe extern "C" fn kms_mnemonic_to_seed(
         };
 
         match krusty_kms::mnemonic_to_seed(mnemonic_str, pass_str) {
-            Ok(seed) => write_bytes_output(&seed, out, out_len, out_written),
+            // Seed is the root of every derived key: zeroize the Rust-side copy.
+            Ok(seed) => write_bytes_output(&Zeroizing::new(seed)[..], out, out_len, out_written),
             Err(_) => KMS_ERR_INVALID_INPUT,
         }
     })

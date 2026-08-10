@@ -24,7 +24,8 @@ pub fn stark_public_key(private_key: &str) -> Result<String, JsValue> {
     let sk = Felt::from_hex(private_key)
         .map_err(|e| JsValue::from_str(&format!("Invalid private key hex: {e}")))?;
 
-    let pk = krusty_kms::stark_public_key(&sk);
+    let pk = krusty_kms::stark_public_key(&sk)
+        .map_err(|e| JsValue::from_str(&format!("Invalid private key: {e}")))?;
     Ok(format!("{:#x}", pk))
 }
 
@@ -216,6 +217,22 @@ mod tests {
         let err = stark_public_key("not-hex").unwrap_err();
         let msg = js_error_message(err);
         assert!(msg.contains("Invalid private key hex"));
+    }
+
+    #[wasm_bindgen_test]
+    fn test_stark_public_key_rejects_zero_key() {
+        // Zero is a felt-parsable key; the public-key computation must error
+        // instead of panicking on the identity point.
+        assert!(stark_public_key("0x0").is_err());
+        assert!(sign_stark_hash("0x0", TEST_STARK_HASH).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn test_stark_public_key_rejects_curve_order_key() {
+        // Felt-valid but >= curve order n: must not silently reduce mod n.
+        let order = "0x0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
+        assert!(stark_public_key(order).is_err());
+        assert!(sign_stark_hash(order, TEST_STARK_HASH).is_err());
     }
 
     #[wasm_bindgen_test]

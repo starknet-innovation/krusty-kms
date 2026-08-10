@@ -162,4 +162,17 @@ mod tests {
         let rc = unsafe { kms_stark_sign(&hash, &sk, &mut r, std::ptr::null_mut()) };
         assert_eq!(rc, KMS_ERR_NULL_POINTER);
     }
+
+    #[test]
+    fn test_stark_sign_zero_key_returns_error_not_panic() {
+        // The zero key hits the identity point inside the public-key
+        // derivation; the FFI boundary must return an error, never unwind.
+        let hash = felt_to_kms(&Felt::from(0x1234u64));
+        let zero = felt_to_kms(&Felt::ZERO);
+        let mut r = KmsFelt { bytes: [0; 32] };
+        let mut s = KmsFelt { bytes: [0; 32] };
+
+        let rc = unsafe { kms_stark_sign(&hash, &zero, &mut r, &mut s) };
+        assert_eq!(rc, KMS_ERR_CRYPTO);
+    }
 }

@@ -38,7 +38,6 @@ use krusty_kms_domain::{
 };
 use starknet_types_core::felt::Felt;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use zeroize::Zeroizing;
 
@@ -49,8 +48,24 @@ const DEFAULT_OPERATION_RETENTION_MAX_ENTRIES: usize = 1_024;
 /// Gateway-global ceiling for snapshot cache entries.
 /// Per-request `CachePolicy.max_entries` is deprecated and ignored for eviction.
 const DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES: usize = 256;
+/// Maximum accepted `WaitForAcceptance` timeout (24h).
+const MAX_WAIT_TIMEOUT_MS: u64 = 24 * 60 * 60 * 1000;
+/// Server-side ceiling for per-request snapshot freshness (`ttl_ms`).
+const MAX_SNAPSHOT_TTL_MS: u64 = 60 * 60 * 1000;
+/// Server-side ceiling for serving entries past their TTL
+/// (`stale_while_revalidate_ms`).
+const MAX_SNAPSHOT_STALE_MS: u64 = 24 * 60 * 60 * 1000;
 
 /// Trusted-boundary dependency that resolves a private key for the requested domain/path.
+///
+/// # Trust model
+///
+/// The gateway (and the stdio oracle built on it) performs **no caller
+/// authentication or tenant isolation**: any party that can invoke gateway
+/// methods can derive and sign with every secret this resolver exposes.
+/// `SecretRef` labels are global, not tenant-scoped. Deploy only behind a
+/// trusted peer boundary (local supervisor, OS user isolation); never expose
+/// to untrusted callers. See `docs/oracle-stdio-v1.md` § Trust Model.
 #[async_trait]
 pub trait SecretResolver: Send + Sync {
     async fn resolve_private_key(
@@ -158,7 +173,6 @@ pub struct Gateway<B, S, C = SystemClock> {
     snapshot_cache: RwLock<SnapshotCache>,
     /// Hard ceiling used for shared snapshot-cache eviction (not request-controlled).
     snapshot_cache_max_entries: usize,
-    next_operation: AtomicU64,
 }
 
 impl<B, S> Gateway<B, S, SystemClock>
@@ -207,7 +221,6 @@ where
             operations: RwLock::new(OperationStore::new(operation_retention)),
             snapshot_cache: RwLock::new(SnapshotCache::default()),
             snapshot_cache_max_entries: DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES,
-            next_operation: AtomicU64::new(1),
         }
     }
 
@@ -617,7 +630,9 @@ where
 
         if let Some(entry) = &cached {
             let age_ms = now_ms.saturating_sub(entry.generated_at_ms);
-            if age_ms <= request.cache_policy.ttl_ms {
+            // Server-side clamp: a caller-supplied `ttl_ms` is a hint, not a
+            // license to serve arbitrarily old data as a fresh `Hit`.
+            if age_ms <= request.cache_policy.ttl_ms.min(MAX_SNAPSHOT_TTL_MS) {
                 let value = apply_cache_metadata(
                     entry.snapshot.clone(),
                     CacheStatus::Hit,
@@ -853,22 +868,42 @@ where
                     Some("wait timeout_ms must be greater than zero".to_string()),
                 ));
             }
+            // A bounded timeout keeps the poll loop schedulable (`Instant +
+            // Duration` overflows on absurd values) and pins worst-case queue
+            // occupancy for the FIFO operation backlog.
+            if wait.timeout_ms > MAX_WAIT_TIMEOUT_MS {
+                return Err(GatewayError::new(
+                    GatewayErrorCode::InvalidWaitPolicy,
+                    false,
+                    Some(format!(
+                        "wait timeout_ms must be at most {MAX_WAIT_TIMEOUT_MS}"
+                    )),
+                ));
+            }
         }
 
         Ok(())
     }
 
     async fn begin_operation(&self, kind: OperationKind) -> GatewayResult<OperationStatus> {
-        let sequence = self.next_operation.fetch_add(1, Ordering::Relaxed);
-        let id = OperationId::new(format!("{}-{}", operation_prefix(kind), sequence)).map_err(
-            |error| {
-                GatewayError::new(
-                    GatewayErrorCode::Internal,
-                    false,
-                    Some(format!("failed to generate operation id: {error}")),
-                )
-            },
-        )?;
+        // Operation ids double as bearer handles for `GetOperationStatus`.
+        // Sequential ids (`derive-1`, `sign-2`, ...) let any caller that can
+        // reach the status endpoint enumerate and observe other callers'
+        // operations; 128 bits of OS entropy keep ids unguessable while the
+        // prefix keeps them readable in logs.
+        let entropy: [u8; 16] = krusty_kms_crypto::random_bytes();
+        let id = OperationId::new(format!(
+            "{}-{}",
+            operation_prefix(kind),
+            hex::encode(entropy)
+        ))
+        .map_err(|error| {
+            GatewayError::new(
+                GatewayErrorCode::Internal,
+                false,
+                Some(format!("failed to generate operation id: {error}")),
+            )
+        })?;
         let status = OperationStatus {
             id: id.clone(),
             kind,
@@ -1229,9 +1264,12 @@ fn to_salt_policy(spec: &SaltPolicySpec) -> SaltPolicy {
 }
 
 fn max_cache_age(policy: CachePolicy) -> u64 {
+    // Clamp caller-controlled windows to server ceilings so no request can
+    // keep an ancient entry eligible for `Stale` service indefinitely.
     policy
         .ttl_ms
-        .saturating_add(policy.stale_while_revalidate_ms)
+        .min(MAX_SNAPSHOT_TTL_MS)
+        .saturating_add(policy.stale_while_revalidate_ms.min(MAX_SNAPSHOT_STALE_MS))
 }
 
 fn apply_cache_metadata(
@@ -1452,7 +1490,7 @@ impl From<&krusty_kms_domain::TrackedToken> for CachedTrackedToken {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
-    use std::sync::atomic::{AtomicU64, AtomicUsize};
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     #[derive(Default)]
@@ -1780,6 +1818,68 @@ mod tests {
         let error = gateway.derive_account(request).await.unwrap_err();
         assert_eq!(error.code, GatewayErrorCode::InvalidDerivationPath);
         assert!(!error.retryable);
+    }
+
+    #[tokio::test]
+    async fn operation_ids_are_unique_unpredictable_and_prefixed() {
+        let clock = TestClock::default();
+        let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
+
+        let first = gateway.derive_account(derivation_request()).await.unwrap();
+        let second = gateway.derive_account(derivation_request()).await.unwrap();
+
+        let first_id = first.operation.id.as_str();
+        let second_id = second.operation.id.as_str();
+
+        assert!(first_id.starts_with("derive-"));
+        assert!(second_id.starts_with("derive-"));
+        // 128 bits of entropy: no sequential `-1`/`-2` suffixes to enumerate.
+        assert_eq!(first_id.len(), "derive-".len() + 32);
+        assert_ne!(first_id, second_id);
+    }
+
+    #[tokio::test]
+    async fn deploy_rejects_excessive_wait_timeout() {
+        let clock = TestClock::default();
+        let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
+        let request = DeployAccountRequest {
+            derivation: derivation_request(),
+            mode: DeployMode::WaitForAcceptance(krusty_kms_domain::WaitPolicy {
+                poll_interval_ms: 500,
+                timeout_ms: u64::MAX,
+            }),
+        };
+
+        let error = gateway.deploy_account(request).await.unwrap_err();
+        assert_eq!(error.code, GatewayErrorCode::InvalidWaitPolicy);
+        assert!(!error.retryable);
+    }
+
+    #[tokio::test]
+    async fn snapshot_ttl_is_clamped_to_server_ceiling() {
+        let clock = TestClock::default();
+        clock.set(1_000);
+        let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
+
+        let mut request = snapshot_request(QueryMode::ActiveView);
+        request.cache_policy = CachePolicy::new(u64::MAX, u64::MAX, 8).unwrap();
+
+        let first = gateway
+            .query_account_snapshot(request.clone())
+            .await
+            .unwrap();
+        assert_eq!(first.value.cache.status, CacheStatus::Miss);
+
+        // Age the entry past the server TTL ceiling: despite the request's
+        // u64::MAX ttl, the entry must not come back as a fresh Hit.
+        gateway.clock.set(1_000 + MAX_SNAPSHOT_TTL_MS + 1);
+        let second = gateway.query_account_snapshot(request).await.unwrap();
+        assert_eq!(second.value.cache.status, CacheStatus::Miss);
+        assert_eq!(
+            gateway.backend.deployment_checks.load(Ordering::Relaxed),
+            2,
+            "clamped TTL must force a re-fetch instead of a fresh Hit"
+        );
     }
 
     #[tokio::test]
