@@ -561,11 +561,36 @@ public enum Kms {
 
     // MARK: - ElGamal
 
+    /// Encrypts with the legacy Fiat-Shamir transcript `H(prefix, L, R, AL)`,
+    /// which does not bind the public key or the `AR` commitment. Only use for
+    /// verifiers pinned to the legacy transcript (e.g. deployed Cairo
+    /// contracts); otherwise prefer `elgamalEncryptStrong`.
     public static func elgamalEncrypt(
         message: Felt,
         publicKey: ProjectivePoint,
         random: Felt,
         prefix: Felt
+    ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
+        try elgamalEncryptImpl(message: message, publicKey: publicKey, random: random, prefix: prefix, strong: false)
+    }
+
+    /// Encrypts with the fully transcript-bound proof
+    /// `H(prefix, pk, L, R, AL, AR)`. Rejected by legacy-transcript verifiers.
+    public static func elgamalEncryptStrong(
+        message: Felt,
+        publicKey: ProjectivePoint,
+        random: Felt,
+        prefix: Felt
+    ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
+        try elgamalEncryptImpl(message: message, publicKey: publicKey, random: random, prefix: prefix, strong: true)
+    }
+
+    private static func elgamalEncryptImpl(
+        message: Felt,
+        publicKey: ProjectivePoint,
+        random: Felt,
+        prefix: Felt,
+        strong: Bool
     ) throws -> (l: ProjectivePoint, r: ProjectivePoint, proofJson: String) {
         var cMsg = message.toCValue()
         var cPub = publicKey.toCValue()
@@ -573,17 +598,22 @@ public enum Kms {
         var cPrefix = prefix.toCValue()
         var outL = KmsProjectivePoint()
         var outR = KmsProjectivePoint()
+        // The blinding scalar reveals the plaintext point (L - pk^r); wipe the
+        // Swift-side copy once the FFI calls return.
+        defer { secureZeroFelt(&cRand) }
+
+        let encryptFn = strong ? kms_elgamal_encrypt_strong : kms_elgamal_encrypt
 
         // Two-call pattern for the proof JSON
         var written = 0
-        try check(kms_elgamal_encrypt(
+        try check(encryptFn(
             &cMsg, &cPub, &cRand, &cPrefix,
             &outL, &outR,
             nil, 0, &written
         ))
 
         var proofBuf = [CChar](repeating: 0, count: written + 1)
-        try check(kms_elgamal_encrypt(
+        try check(encryptFn(
             &cMsg, &cPub, &cRand, &cPrefix,
             &outL, &outR,
             &proofBuf, proofBuf.count, &written
