@@ -24,6 +24,43 @@ fn parse_u32_kdf_param(value: Option<u64>, field: &str) -> Result<u32> {
     })
 }
 
+/// Ethereum-keystore-compatible ceilings for attacker-controlled scrypt params.
+///
+/// Memory ≈ 128 · N · r bytes. With [`scrypt_log_n`]'s N ≤ 2^20 and r ≤ 32 that
+/// caps at ~4 GiB; we additionally reject products that would exceed 256 MiB so
+/// malicious keystores cannot turn import into a DoS.
+const SCRYPT_R_MAX: u32 = 32;
+const SCRYPT_P_MAX: u32 = 16;
+const SCRYPT_DKLEN_MAX: usize = 64;
+const SCRYPT_MEMORY_CEILING_BYTES: u64 = 256 * 1024 * 1024;
+
+fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Result<()> {
+    let _log_n = scrypt_log_n(n)?;
+    if !(1..=SCRYPT_R_MAX).contains(&r) {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.r={r} outside allowed range 1..={SCRYPT_R_MAX}"
+        )));
+    }
+    if !(1..=SCRYPT_P_MAX).contains(&p) {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.p={p} outside allowed range 1..={SCRYPT_P_MAX}"
+        )));
+    }
+    if !(1..=SCRYPT_DKLEN_MAX).contains(&dklen) {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.dklen={dklen} outside allowed range 1..={SCRYPT_DKLEN_MAX}"
+        )));
+    }
+    // scrypt memory ≈ 128 * N * r
+    let memory = (n as u64).saturating_mul(r as u64).saturating_mul(128);
+    if memory > SCRYPT_MEMORY_CEILING_BYTES {
+        return Err(KmsError::DeserializationError(format!(
+            "scrypt params request ~{memory} bytes of memory (ceiling {SCRYPT_MEMORY_CEILING_BYTES})"
+        )));
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Native keystore (version 1)
 // ---------------------------------------------------------------------------
@@ -209,6 +246,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
         .ok_or_else(|| KmsError::DeserializationError("Missing kdfparams.dklen".to_string()))?
         as usize;
 
+    validate_scrypt_resource_params(n, r, p, dklen)?;
+
     // Parse cipher params
     let iv =
         hex::decode(crypto["cipherparams"]["iv"].as_str().ok_or_else(|| {
@@ -230,7 +269,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid mac hex: {e}")))?;
 
-    // Derive key via scrypt (validate N is a power of two in the allowed range)
+    // Derive key via scrypt (N/r/p already resource-capped above)
     let log_n = scrypt_log_n(n)?;
     let params = ScryptParams::new(log_n, r, p, dklen)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
@@ -425,5 +464,17 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("MAC verification failed"));
+    }
+
+    #[test]
+    fn decrypt_ethers_keystore_rejects_resource_exhausting_params() {
+        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, 32).is_ok());
+        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, SCRYPT_R_MAX + 1, 1, 32).is_err());
+        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, 8, SCRYPT_P_MAX + 1, 32).is_err());
+        assert!(
+            validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MAX + 1).is_err()
+        );
+        // N=2^20 with r=32 exceeds the 256 MiB memory ceiling.
+        assert!(validate_scrypt_resource_params(1 << 20, 32, 1, 32).is_err());
     }
 }
