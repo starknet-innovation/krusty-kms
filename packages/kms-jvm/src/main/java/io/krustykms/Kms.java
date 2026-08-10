@@ -235,12 +235,37 @@ public final class Kms {
     // ElGamal
     // ---------------------------------------------------------------------------
 
+    /**
+     * Encrypts with the legacy Fiat-Shamir transcript {@code H(prefix, L, R, AL)},
+     * which does not bind the public key or the AR commitment. Only use for
+     * verifiers pinned to the legacy transcript (e.g. deployed Cairo contracts);
+     * otherwise prefer {@link #elgamalEncryptStrong}.
+     */
     public static ElgamalEncryptResult elgamalEncrypt(
             Felt message, ProjectivePoint publicKey, Felt random, Felt prefix) {
-        byte[][] result = KmsNative.elgamalEncrypt(
-            message.bytes(),
-            publicKey.x().bytes(), publicKey.y().bytes(), publicKey.z().bytes(),
-            random.bytes(), prefix.bytes());
+        return elgamalEncryptImpl(message, publicKey, random, prefix, false);
+    }
+
+    /**
+     * Encrypts with the fully transcript-bound proof
+     * {@code H(prefix, pk, L, R, AL, AR)}. Rejected by legacy-transcript verifiers.
+     */
+    public static ElgamalEncryptResult elgamalEncryptStrong(
+            Felt message, ProjectivePoint publicKey, Felt random, Felt prefix) {
+        return elgamalEncryptImpl(message, publicKey, random, prefix, true);
+    }
+
+    private static ElgamalEncryptResult elgamalEncryptImpl(
+            Felt message, ProjectivePoint publicKey, Felt random, Felt prefix, boolean strong) {
+        byte[][] result = strong
+            ? KmsNative.elgamalEncryptStrong(
+                message.bytes(),
+                publicKey.x().bytes(), publicKey.y().bytes(), publicKey.z().bytes(),
+                random.bytes(), prefix.bytes())
+            : KmsNative.elgamalEncrypt(
+                message.bytes(),
+                publicKey.x().bytes(), publicKey.y().bytes(), publicKey.z().bytes(),
+                random.bytes(), prefix.bytes());
         // result[0..2] = outL (x,y,z), result[3..5] = outR (x,y,z), result[6] = proofJson bytes
         ProjectivePoint l = new ProjectivePoint(
             new Felt(result[0]), new Felt(result[1]), new Felt(result[2]));

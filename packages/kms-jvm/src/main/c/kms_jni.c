@@ -932,11 +932,11 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateRagequitProof(
 /* ElGamal                                                                 */
 /* ====================================================================== */
 
-JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
-    JNIEnv *env, jclass cls,
+/* Shared two-call encrypt path for the legacy and strong JNI exports. */
+static jobjectArray elgamal_encrypt_jni(
+    JNIEnv *env,
     jbyteArray message, jbyteArray pubX, jbyteArray pubY, jbyteArray pubZ,
-    jbyteArray random, jbyteArray prefix) {
-    (void)cls;
+    jbyteArray random, jbyteArray prefix, int strong) {
     KmsFelt cMsg, cRand, cPrefix;
     KmsProjectivePoint cPub;
     if (jbytearray_to_felt(env, message, &cMsg)) return NULL;
@@ -951,8 +951,11 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
 
     /* First call: get proof size */
     size_t written = 0;
-    int32_t rc = kms_elgamal_encrypt(
-        &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR, NULL, 0, &written);
+    int32_t rc = strong
+        ? kms_elgamal_encrypt_strong(
+            &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR, NULL, 0, &written)
+        : kms_elgamal_encrypt(
+            &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR, NULL, 0, &written);
     if (rc != KMS_OK) {
         secure_wipe(&cRand, sizeof(cRand));
         throw_kms_error(env, rc);
@@ -967,9 +970,13 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
     }
 
     /* Second call: fill proof and ciphertext */
-    rc = kms_elgamal_encrypt(
-        &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR,
-        proofBuf, written + 1, &written);
+    rc = strong
+        ? kms_elgamal_encrypt_strong(
+            &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR,
+            proofBuf, written + 1, &written)
+        : kms_elgamal_encrypt(
+            &cMsg, &cPub, &cRand, &cPrefix, &outL, &outR,
+            proofBuf, written + 1, &written);
     secure_wipe(&cRand, sizeof(cRand));
     if (rc != KMS_OK) { free(proofBuf); throw_kms_error(env, rc); return NULL; }
 
@@ -993,6 +1000,22 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
 
     free(proofBuf);
     return result;
+}
+
+JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncrypt(
+    JNIEnv *env, jclass cls,
+    jbyteArray message, jbyteArray pubX, jbyteArray pubY, jbyteArray pubZ,
+    jbyteArray random, jbyteArray prefix) {
+    (void)cls;
+    return elgamal_encrypt_jni(env, message, pubX, pubY, pubZ, random, prefix, 0);
+}
+
+JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_elgamalEncryptStrong(
+    JNIEnv *env, jclass cls,
+    jbyteArray message, jbyteArray pubX, jbyteArray pubY, jbyteArray pubZ,
+    jbyteArray random, jbyteArray prefix) {
+    (void)cls;
+    return elgamal_encrypt_jni(env, message, pubX, pubY, pubZ, random, prefix, 1);
 }
 
 JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_elgamalDecrypt(
