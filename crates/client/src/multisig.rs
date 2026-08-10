@@ -118,6 +118,11 @@ impl MultisigTopic {
 pub struct MultisigProposal {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    /// Chain the proposal was created for. The transaction id hash covers
+    /// only `calls`/`salt`, so without this field a proposal replayed through
+    /// a shared or compromised coordinator would also validate on another
+    /// network where the same multisig address/id exists.
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
     pub calls: Vec<MultisigCall>,
@@ -131,9 +136,13 @@ pub struct MultisigProposal {
 
 impl MultisigProposal {
     /// Build a proposal and compute the canonical OpenZeppelin transaction ID.
+    ///
+    /// The transaction id intentionally matches the on-chain hash (calls and
+    /// salt only); the chain binding lives in the `chain_id` envelope field.
     #[must_use]
     pub fn new(
         multisig: Address,
+        chain_id: ChainId,
         calls: Vec<MultisigCall>,
         salt: Felt,
         proposer: Address,
@@ -142,6 +151,7 @@ impl MultisigProposal {
         let transaction_id = hash_transaction_batch(&calls, salt);
         Self {
             multisig,
+            chain_id,
             transaction_id,
             calls,
             salt,
@@ -966,7 +976,7 @@ impl Multisig {
         proposer: Address,
         memo: Option<String>,
     ) -> MultisigProposal {
-        MultisigProposal::new(self.address, calls, salt, proposer, memo)
+        MultisigProposal::new(self.address, self.chain_id, calls, salt, proposer, memo)
     }
 
     /// Query the current quorum.
@@ -1204,9 +1214,10 @@ impl Multisig {
     ///
     /// Rejects the confirmation when the proposal's `transaction_id` does not
     /// recompute from `calls`/`salt`, when the proposal targets a different
-    /// multisig contract than this handle, or when the signing wallet is bound
-    /// to a different chain than this handle. This is the safe entry point for
-    /// acting on coordinator-delivered proposals.
+    /// multisig contract than this handle, when the proposal was created for a
+    /// different chain, or when the signing wallet is bound to a different
+    /// chain than this handle. This is the safe entry point for acting on
+    /// coordinator-delivered proposals.
     pub async fn confirm_proposal(
         &self,
         wallet: &dyn WalletExecutor,
@@ -1218,6 +1229,12 @@ impl Multisig {
                 "proposal targets multisig {} but this handle is {}",
                 proposal.multisig.to_hex(),
                 self.address.to_hex()
+            )));
+        }
+        if proposal.chain_id != self.chain_id {
+            return Err(KmsError::MultisigError(format!(
+                "proposal was created for chain {} but this handle is on {}",
+                proposal.chain_id, self.chain_id
             )));
         }
         let wallet_chain = wallet.chain_id();
@@ -1563,6 +1580,7 @@ mod tests {
     fn test_proposal_json_uses_hex_felts() {
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1580,6 +1598,7 @@ mod tests {
         let coordinator = InMemoryMultisigCoordinator::new();
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1607,6 +1626,7 @@ mod tests {
         let coordinator = InMemoryMultisigCoordinator::new();
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1628,6 +1648,7 @@ mod tests {
         let coordinator = InMemoryMultisigCoordinator::new();
         let mut proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1647,6 +1668,7 @@ mod tests {
     fn test_incoming_message_validation() {
         let proposal = MultisigProposal::new(
             address(1),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1768,6 +1790,7 @@ mod tests {
         let executor = RecordingExecutor::sepolia(address(2));
         let foreign = MultisigProposal::new(
             address(77),
+            ChainId::Sepolia,
             vec![call()],
             Felt::from(99u64),
             address(2),
@@ -1789,6 +1812,22 @@ mod tests {
         let mut executor = RecordingExecutor::sepolia(address(2));
         executor.chain_id = ChainId::Mainnet;
         let proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+
+        assert!(matches!(
+            multisig.confirm_proposal(&executor, &proposal).await,
+            Err(KmsError::MultisigError(_))
+        ));
+        assert_eq!(executor.executed_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_proposal_from_wrong_chain() {
+        // A proposal created for mainnet replayed through the coordinator to
+        // a Sepolia handle must be rejected even when address and id match.
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
+        let mut proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+        proposal.chain_id = ChainId::Mainnet;
 
         assert!(matches!(
             multisig.confirm_proposal(&executor, &proposal).await,

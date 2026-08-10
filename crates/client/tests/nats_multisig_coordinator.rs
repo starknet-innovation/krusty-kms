@@ -42,6 +42,7 @@ async fn nats_multisig_coordinator_live_pubsub_roundtrip() {
     );
     let proposal = MultisigProposal::new(
         address(0x401),
+        krusty_kms_common::ChainId::Sepolia,
         vec![call],
         Felt::from(0x55u64),
         address(0x101),
