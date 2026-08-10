@@ -14,11 +14,51 @@ pub struct ElGamalEncryption {
     pub proof: ElGamalProof,
 }
 
+/// Fiat-Shamir transcript shape for the encryption proof.
+///
+/// A bare `bool` at call sites reads as a meaningless trailing literal, and a
+/// transposed literal would silently downgrade a strong proof to the legacy
+/// transcript; the compiler cannot catch that, but it can catch a misnamed
+/// enum variant.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Transcript {
+    /// `H(prefix, L, R, AL)` — pinned by deployed verifiers.
+    Legacy,
+    /// `H(prefix, pk, L, R, AL, AR)` — binds the full statement.
+    Strong,
+}
+
+impl Transcript {
+    fn challenge(
+        self,
+        prefix: &Felt,
+        public_key: &ProjectivePoint,
+        l: &ProjectivePoint,
+        r: &ProjectivePoint,
+        a_l: &ProjectivePoint,
+        a_r: &ProjectivePoint,
+    ) -> Result<Felt> {
+        // SECURITY / COMPATIBILITY: the legacy shape omits `pk` and `AR` from
+        // the challenge hash to preserve compatibility with existing verifiers
+        // / vectors. `AR` is a prover-generated commitment and therefore
+        // cannot be folded into the caller-supplied `prefix` instead.
+        match self {
+            Self::Legacy => compute_challenge_triple(prefix, l, r, a_l),
+            Self::Strong => crate::hash::compute_challenge(prefix, &[public_key, l, r, a_l, a_r]),
+        }
+    }
+}
+
 /// ElGamal encryption scheme on the Stark curve.
 pub struct ElGamal;
 
 impl ElGamal {
-    /// Encrypt a message with a public key and generate a zero-knowledge proof.
+    /// Encrypt a message with a public key and generate a zero-knowledge proof
+    /// under the legacy transcript `H(prefix, L, R, AL)`.
+    ///
+    /// The legacy transcript does not bind `pk` or the `AR` commitment. Prefer
+    /// [`ElGamal::encrypt_strong`] unless the proof must be accepted by a
+    /// verifier pinned to the legacy transcript (e.g. a deployed contract).
     ///
     /// # Arguments
     /// * `message` - The message to encrypt (as scalar)
@@ -36,18 +76,7 @@ impl ElGamal {
         random: &Felt,
         prefix: &Felt,
     ) -> Result<ElGamalEncryption> {
-        let g = StarkCurve::generator();
-
-        // Compute ciphertext: L = g^m + pk^r, R = g^r (Tongo standard format)
-        let g_m = StarkCurve::mul(message, Some(&g));
-        let pk_r = StarkCurve::mul(random, Some(public_key));
-        let l = StarkCurve::add(&g_m, &pk_r); // L = g^m + pk^r (ciphertext)
-        let r = StarkCurve::mul(random, Some(&g)); // R = g^r (randomness)
-
-        // Generate proof of correct encryption
-        let proof = Self::prove_encryption(message, random, public_key, &l, &r, prefix, false)?;
-
-        Ok(ElGamalEncryption { l, r, proof })
+        Self::encrypt_with_transcript(message, public_key, random, prefix, Transcript::Legacy)
     }
 
     /// Encrypt with a fully transcript-bound Fiat-Shamir proof.
@@ -71,6 +100,18 @@ impl ElGamal {
         random: &Felt,
         prefix: &Felt,
     ) -> Result<ElGamalEncryption> {
+        Self::encrypt_with_transcript(message, public_key, random, prefix, Transcript::Strong)
+    }
+
+    /// Shared ciphertext derivation for both transcript shapes:
+    /// `L = g^m + pk^r`, `R = g^r` (Tongo standard format).
+    fn encrypt_with_transcript(
+        message: &Felt,
+        public_key: &ProjectivePoint,
+        random: &Felt,
+        prefix: &Felt,
+        transcript: Transcript,
+    ) -> Result<ElGamalEncryption> {
         let g = StarkCurve::generator();
 
         let g_m = StarkCurve::mul(message, Some(&g));
@@ -78,7 +119,8 @@ impl ElGamal {
         let l = StarkCurve::add(&g_m, &pk_r);
         let r = StarkCurve::mul(random, Some(&g));
 
-        let proof = Self::prove_encryption(message, random, public_key, &l, &r, prefix, true)?;
+        let proof =
+            Self::prove_encryption(message, random, public_key, &l, &r, prefix, transcript)?;
 
         Ok(ElGamalEncryption { l, r, proof })
     }
@@ -89,9 +131,8 @@ impl ElGamal {
     /// - L = g^m + pk^r (ciphertext)
     /// - R = g^r (randomness)
     ///
-    /// When `strong_transcript` is false the legacy challenge
-    /// `H(prefix, L, R, AL)` is used; when true the challenge additionally binds
-    /// the public key and the `AR` commitment: `H(prefix, pk, L, R, AL, AR)`.
+    /// The `transcript` selects the Fiat-Shamir challenge shape; see
+    /// [`Transcript`].
     ///
     /// # Cyclomatic Complexity: 2
     fn prove_encryption(
@@ -101,7 +142,7 @@ impl ElGamal {
         l: &ProjectivePoint,
         r: &ProjectivePoint,
         prefix: &Felt,
-        strong_transcript: bool,
+        transcript: Transcript,
     ) -> Result<ElGamalProof> {
         let g = StarkCurve::generator();
 
@@ -117,18 +158,7 @@ impl ElGamal {
         let a_l = StarkCurve::add(&g_rb, &pk_rr);
         let a_r = StarkCurve::mul(r_r.expose_secret(), Some(&g));
 
-        // Compute Fiat-Shamir challenge.
-        //
-        // SECURITY / COMPATIBILITY: the legacy shape omits `pk` and `AR` from
-        // the challenge hash to preserve compatibility with existing verifiers
-        // / vectors. The strong shape binds the full statement and both
-        // commitments; `AR` is a prover-generated commitment and therefore
-        // cannot be folded into the caller-supplied `prefix` instead.
-        let c = if strong_transcript {
-            crate::hash::compute_challenge(prefix, &[public_key, l, r, &a_l, &a_r])?
-        } else {
-            compute_challenge_triple(prefix, l, r, &a_l)?
-        };
+        let c = transcript.challenge(prefix, public_key, l, r, &a_l, &a_r)?;
 
         // Compute responses (mod curve order)
         let c_message = scalar::scalar_mul(&c, message)?;
@@ -159,7 +189,7 @@ impl ElGamal {
         proof: &ElGamalProof,
         prefix: &Felt,
     ) -> Result<bool> {
-        Self::verify_inner(l, r, public_key, proof, prefix, false)
+        Self::verify_inner(l, r, public_key, proof, prefix, Transcript::Legacy)
     }
 
     /// Verify an ElGamal encryption proof against the strong transcript
@@ -176,7 +206,7 @@ impl ElGamal {
         proof: &ElGamalProof,
         prefix: &Felt,
     ) -> Result<bool> {
-        Self::verify_inner(l, r, public_key, proof, prefix, true)
+        Self::verify_inner(l, r, public_key, proof, prefix, Transcript::Strong)
     }
 
     /// Shared verification: recompute the challenge under the requested
@@ -189,7 +219,7 @@ impl ElGamal {
         public_key: &ProjectivePoint,
         proof: &ElGamalProof,
         prefix: &Felt,
-        strong_transcript: bool,
+        transcript: Transcript,
     ) -> Result<bool> {
         let g = StarkCurve::generator();
 
@@ -203,11 +233,7 @@ impl ElGamal {
         let c = proof.c;
 
         // Recompute challenge
-        let c_computed = if strong_transcript {
-            crate::hash::compute_challenge(prefix, &[public_key, l, r, &a_l_proj, &a_r_proj])?
-        } else {
-            compute_challenge_triple(prefix, l, r, &a_l_proj)?
-        };
+        let c_computed = transcript.challenge(prefix, public_key, l, r, &a_l_proj, &a_r_proj)?;
         if c != c_computed {
             return Ok(false);
         }
@@ -496,16 +522,54 @@ mod tests {
     }
 
     #[test]
+    fn test_elgamal_transcript_separation_law() {
+        // Law of the abstraction: for any inputs, a strong proof must not
+        // verify under the legacy transcript and a legacy proof must not
+        // verify under the strong one. Fixed scalar set keeps the test
+        // deterministic.
+        for (m, sk, rand, prefix) in [
+            (10u64, 42u64, 999u64, 42u64),
+            (0, 1, 2, 3),
+            (7, 0xdeadbeef, 0xcafe, 0xfeed),
+            (u64::MAX, 0x12345, 777, 13),
+        ] {
+            let message = Felt::from(m);
+            let secret = Felt::from(sk);
+            let pk = StarkCurve::mul_generator(&secret);
+            let random = Felt::from(rand);
+            let prefix = Felt::from(prefix);
+
+            let strong = ElGamal::encrypt_strong(&message, &pk, &random, &prefix).unwrap();
+            assert!(
+                ElGamal::verify_strong(&strong.l, &strong.r, &pk, &strong.proof, &prefix).unwrap(),
+                "strong roundtrip failed for ({m}, {sk}, {rand}, {prefix})"
+            );
+            assert!(
+                !ElGamal::verify(&strong.l, &strong.r, &pk, &strong.proof, &prefix).unwrap(),
+                "legacy accepted a strong proof for ({m}, {sk}, {rand}, {prefix})"
+            );
+
+            let legacy = ElGamal::encrypt(&message, &pk, &random, &prefix).unwrap();
+            assert!(
+                ElGamal::verify(&legacy.l, &legacy.r, &pk, &legacy.proof, &prefix).unwrap(),
+                "legacy roundtrip failed for ({m}, {sk}, {rand}, {prefix})"
+            );
+            assert!(
+                !ElGamal::verify_strong(&legacy.l, &legacy.r, &pk, &legacy.proof, &prefix).unwrap(),
+                "strong accepted a legacy proof for ({m}, {sk}, {rand}, {prefix})"
+            );
+        }
+    }
+
+    #[test]
     fn test_elgamal_strong_binds_ar_to_challenge() {
-        // Attack recipe enabled by the legacy transcript's missing AR binding:
-        // for ANY chosen challenge c and responses (s_b, s_r), setting
-        //   AR = g^s_r - R^c        satisfies the R-leg equation, and
+        // For ANY chosen challenge c and responses (s_b, s_r), setting
+        //   AR = g^s_r - R^c          satisfies the R-leg equation, and
         //   AL = g^s_b + pk^s_r - L^c satisfies the L-leg equation.
-        // Under the legacy transcript the attacker can shop for (s_b, s_r)
-        // until H(prefix, L, R, AL) lands on the pre-chosen c is infeasible,
-        // but the R-leg remains satisfiable for arbitrary c. Under the strong
-        // transcript the crafted AR changes the challenge itself, so the
-        // pre-chosen c never matches and the proof is rejected outright.
+        // Both algebraic checks therefore pass. The strong transcript still
+        // rejects the proof because the crafted AL and AR are inputs to the
+        // challenge hash, so the recomputed challenge cannot equal the
+        // pre-chosen c.
         let message = Felt::from(10u64);
         let sk = Felt::from(42u64);
         let pk = StarkCurve::mul_generator(&sk);
