@@ -63,6 +63,11 @@ jobs:
       - name: WASM export freeze
         run: bash .github/scripts/check-wasm-exports.sh
 
+      - name: Baselines are in sync
+        run: |
+          bash .github/scripts/regenerate-guardrail-baselines.sh
+          git diff --exit-code .github/guardrails/
+
       - name: PR size limits
         if: github.event_name == 'pull_request'
         env:
