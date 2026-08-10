@@ -61,10 +61,25 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   unchanged — all checked-in prover and cross-language parity vectors still
   pass.
 - Snapshot cache metadata leaving the gateway is quantized to a 5-second
-  grid (`generated_at_ms` floors, `age_ms` ceils). The cache is shared across
-  all callers, so exact timestamps on a `Hit` revealed when another caller
-  last queried the same address (M-12). Internal freshness and TTL decisions
-  still use exact values.
+  grid. The cache is shared across all callers, so exact timestamps on a
+  `Hit` revealed when another caller last queried the same address (M-12).
+  Internal freshness and TTL decisions still use exact values, and the cache
+  entry retains the exact generation time so TTL deadlines are unaffected.
+
+  `age_ms` is **not** the quantized true age. Quantizing the true age leaves
+  the oracle intact, because the bucket *transition* is itself the signal: a
+  caller polling a shared entry sees age flip at the instant `now` crosses
+  `generated_at + 5s`, and knowing its own clock it can pin `generated_at` to
+  its polling resolution. Both exposed fields are instead derived from
+  independently quantized buckets —
+  `generated = floor(generated_at / 5s)` and `age = ceil(now / 5s) - generated`
+  — so every term is already known to the caller (its own clock, plus the
+  `generated` bucket in the same response), `age_ms` conveys no additional
+  information, and its transitions occur on absolute wall-clock boundaries
+  simultaneously for every entry. Rounding `now` up keeps the reported age
+  conservative: it may over-state age by up to one quantum but never
+  under-states it, so a consumer cannot conclude an entry is fresher than it
+  is.
 - Snapshot requests are limited to 16 tracked tokens, since each token costs
   backend RPC calls (M-11).
 - Only `https://` RPC endpoints are accepted by `create_provider`, with a
