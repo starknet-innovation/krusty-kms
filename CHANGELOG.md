@@ -16,6 +16,16 @@ All notable changes to the published Rust crates are documented here.
   dependencies across the workspace.
 - Removed the archived `console_error_panic_hook` from the WASM packages.
 
+## [0.6.1] - 2026-08-10
+
+### Changed
+
+- Internal refactor only: split oversized source files into focused modules
+  (`gateway` runtime, `client` multisig, `domain`, `oracle`, `wasm`
+  account/signing, `kms` discovery, `crypto` ElGamal tests) per the PR #45
+  review follow-up (#51). No public API or behavior changes; all crate-root
+  paths are preserved via re-exports.
+
 ## [0.6.0] - 2026-08-10
 
 ### Changed
