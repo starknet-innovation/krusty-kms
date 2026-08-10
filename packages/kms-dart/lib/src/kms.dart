@@ -763,7 +763,9 @@ class Kms {
         calloc.free(pProof);
       }
     } finally {
-      calloc.free(pMsg);
+      // Wipe plaintext amount and blinding scalar; neither is safe to leave
+      // in the native heap after encrypt (L - pk^r recovers the message).
+      _secureFree(pMsg, sizeOf<c.KmsFelt>());
       calloc.free(pPub);
       _secureFree(pRand, sizeOf<c.KmsFelt>());
       calloc.free(pPrefix);

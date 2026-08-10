@@ -43,18 +43,19 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let msg = kms_to_felt(&*message);
+        // SecretFelt zeroizes on drop (volatile write). Plain Felt copies of
+        // the plaintext amount and blinding scalar would linger in stack
+        // memory on every path; knowing either reveals the plaintext point
+        // (L - pk^r).
+        let msg = SecretFelt::new(kms_to_felt(&*message));
         let pk = match kms_to_proj(&*public_key) {
             Ok(p) => p,
             Err(e) => return e,
         };
-        // SecretFelt zeroizes on drop (volatile write); a plain Felt copy of
-        // the blinding scalar would linger in stack memory on every path, and
-        // knowing it reveals the plaintext point (L - pk^r).
         let rnd = SecretFelt::new(kms_to_felt(&*random));
         let pfx = kms_to_felt(&*prefix);
 
-        let enc = match ElGamal::encrypt(&msg, &pk, rnd.expose_secret(), &pfx) {
+        let enc = match ElGamal::encrypt(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx) {
             Ok(e) => e,
             Err(_) => return KMS_ERR_CRYPTO,
         };
@@ -116,17 +117,18 @@ pub unsafe extern "C" fn kms_elgamal_encrypt_strong(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let msg = kms_to_felt(&*message);
+        // See kms_elgamal_encrypt: wipe both the plaintext amount and the
+        // blinding scalar on every return path.
+        let msg = SecretFelt::new(kms_to_felt(&*message));
         let pk = match kms_to_proj(&*public_key) {
             Ok(p) => p,
             Err(e) => return e,
         };
-        // See kms_elgamal_encrypt: keep the blinding scalar in a zeroizing
-        // guard so it is wiped on every return path.
         let rnd = SecretFelt::new(kms_to_felt(&*random));
         let pfx = kms_to_felt(&*prefix);
 
-        let enc = match ElGamal::encrypt_strong(&msg, &pk, rnd.expose_secret(), &pfx) {
+        let enc = match ElGamal::encrypt_strong(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx)
+        {
             Ok(e) => e,
             Err(_) => return KMS_ERR_CRYPTO,
         };
