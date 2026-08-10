@@ -66,7 +66,10 @@ fn serialize_call_span(calls: &[MultisigCall]) -> Vec<StarknetRsFelt> {
     calldata
 }
 
-pub(super) fn serialize_quorum_and_signers(new_quorum: u32, signers: &[Address]) -> Vec<StarknetRsFelt> {
+pub(super) fn serialize_quorum_and_signers(
+    new_quorum: u32,
+    signers: &[Address],
+) -> Vec<StarknetRsFelt> {
     let mut calldata = Vec::with_capacity(signers.len() + 2);
     calldata.push(core_felt_to_rs(Felt::from(new_quorum)));
     calldata.push(core_felt_to_rs(Felt::from(signers.len() as u64)));
@@ -137,7 +140,9 @@ pub(super) fn read_address_span(result: &[StarknetRsFelt], name: &str) -> Result
         .collect())
 }
 
-pub(super) fn read_transaction_state(result: &[StarknetRsFelt]) -> Result<MultisigTransactionState> {
+pub(super) fn read_transaction_state(
+    result: &[StarknetRsFelt],
+) -> Result<MultisigTransactionState> {
     match read_u32(result, "get_transaction_state")? {
         0 => Ok(MultisigTransactionState::NotFound),
         1 => Ok(MultisigTransactionState::Pending),

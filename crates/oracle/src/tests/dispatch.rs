@@ -88,11 +88,9 @@ async fn serve_writes_jsonl_responses() {
         version: ProtocolVersion::V1_0,
         id: RequestId::new("req-3").unwrap(),
         confirm: false,
-        command: OracleCommand::GetOperationStatus(
-            krusty_kms_domain::GetOperationStatusRequest {
-                operation_id: OperationId::new("op-1").unwrap(),
-            },
-        ),
+        command: OracleCommand::GetOperationStatus(krusty_kms_domain::GetOperationStatusRequest {
+            operation_id: OperationId::new("op-1").unwrap(),
+        }),
     })
     .unwrap();
     client_in.write_all(&request).await.unwrap();

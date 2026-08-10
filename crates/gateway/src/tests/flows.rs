@@ -237,4 +237,3 @@ async fn sign_supports_raw_nostr_messages() {
         other => panic!("unexpected sign result: {other:?}"),
     }
 }
-

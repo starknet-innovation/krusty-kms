@@ -97,11 +97,7 @@ impl GatewayBackend for FakeBackend {
         Ok(self.deploy_execution.lock().unwrap().clone())
     }
 
-    async fn nonce(
-        &self,
-        _address: &FeltHex,
-        _block: &BlockSelector,
-    ) -> GatewayResult<FeltHex> {
+    async fn nonce(&self, _address: &FeltHex, _block: &BlockSelector) -> GatewayResult<FeltHex> {
         self.nonce_reads.fetch_add(1, Ordering::Relaxed);
         Ok(self.nonce.clone())
     }
@@ -120,10 +116,7 @@ impl GatewayBackend for FakeBackend {
             .unwrap_or_default())
     }
 
-    async fn block_metadata(
-        &self,
-        _block: &BlockSelector,
-    ) -> GatewayResult<SnapshotBlockMetadata> {
+    async fn block_metadata(&self, _block: &BlockSelector) -> GatewayResult<SnapshotBlockMetadata> {
         self.block_reads.fetch_add(1, Ordering::Relaxed);
         Ok(self.block.clone())
     }
@@ -161,9 +154,9 @@ fn gateway_with_retention(
         FixedSecretResolver {
             private_key: SecretFelt::new(Felt::from(123u64)),
             nostr_private_key: [
-                0x1d, 0xce, 0x8d, 0x2e, 0xc6, 0x18, 0x4c, 0xca, 0x94, 0x33, 0xf8, 0xf7, 0xb2,
-                0x70, 0x2d, 0x90, 0x14, 0x93, 0x66, 0x27, 0xce, 0x0f, 0x50, 0x92, 0x6f, 0x47,
-                0x1e, 0x52, 0x94, 0x6d, 0x0f, 0x4c,
+                0x1d, 0xce, 0x8d, 0x2e, 0xc6, 0x18, 0x4c, 0xca, 0x94, 0x33, 0xf8, 0xf7, 0xb2, 0x70,
+                0x2d, 0x90, 0x14, 0x93, 0x66, 0x27, 0xce, 0x0f, 0x50, 0x92, 0x6f, 0x47, 0x1e, 0x52,
+                0x94, 0x6d, 0x0f, 0x4c,
             ],
         },
         clock,

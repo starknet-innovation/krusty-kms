@@ -195,7 +195,11 @@ impl Multisig {
             .map_err(|error| KmsError::RpcError(error.to_string()))
     }
 
-    pub(super) fn call_to_multisig(&self, selector: StarknetRsFelt, calldata: Vec<StarknetRsFelt>) -> Call {
+    pub(super) fn call_to_multisig(
+        &self,
+        selector: StarknetRsFelt,
+        calldata: Vec<StarknetRsFelt>,
+    ) -> Call {
         Call {
             to: core_felt_to_rs(self.address.as_felt()),
             selector,

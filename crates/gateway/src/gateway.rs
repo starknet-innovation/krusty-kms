@@ -11,8 +11,8 @@ use crate::types::{GatewayResult, OperationRetentionPolicy, SecretResolver};
 use krusty_kms_common::{ChainId, SecretFelt};
 use krusty_kms_domain::{
     AccountDescriptor, CachePolicy, DeployMode, DerivationRequest, FeltHex, GatewayError,
-    GatewayErrorCode, KeyDomain, OperationId, OperationKind, OperationLookupResult,
-    OperationState, OperationStatus, Provenance,
+    GatewayErrorCode, KeyDomain, OperationId, OperationKind, OperationLookupResult, OperationState,
+    OperationStatus, Provenance,
 };
 use starknet_types_core::felt::Felt;
 use tokio::sync::RwLock;
@@ -228,7 +228,10 @@ where
         Ok(())
     }
 
-    pub(crate) async fn begin_operation(&self, kind: OperationKind) -> GatewayResult<OperationStatus> {
+    pub(crate) async fn begin_operation(
+        &self,
+        kind: OperationKind,
+    ) -> GatewayResult<OperationStatus> {
         // Operation ids double as bearer handles for `GetOperationStatus`.
         // Sequential ids (`derive-1`, `sign-2`, ...) let any caller that can
         // reach the status endpoint enumerate and observe other callers'

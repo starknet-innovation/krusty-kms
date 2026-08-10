@@ -34,6 +34,4 @@ pub use runtime::{
     OperationState, OperationStatus, QueryMode, SnapshotBlockMetadata, TokenBalanceSnapshot,
     TrackedToken, WaitPolicy,
 };
-pub use signing::{
-    RawMessagePayload, SignRequest, SignResult, StarkKeyDomain, StarkSignDomain,
-};
+pub use signing::{RawMessagePayload, SignRequest, SignResult, StarkKeyDomain, StarkSignDomain};

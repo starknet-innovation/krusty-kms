@@ -255,8 +255,7 @@ fn test_elgamal_strong_binds_ar_to_challenge() {
     };
 
     let valid =
-        ElGamal::verify_strong(&encryption.l, &encryption.r, &pk, &forged_proof, &prefix)
-            .unwrap();
+        ElGamal::verify_strong(&encryption.l, &encryption.r, &pk, &forged_proof, &prefix).unwrap();
     assert!(!valid, "strong transcript must reject after-the-fact AR");
 }
 

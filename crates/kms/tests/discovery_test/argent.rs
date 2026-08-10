@@ -1,8 +1,7 @@
 //! Argent key derivation and address computation tests.
 
 use crate::vectors::{
-    ARGENT_ACCOUNT_ADDRESS, ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, ARGENT_V040_CLASS_HASH,
-    MNEMONIC,
+    ARGENT_ACCOUNT_ADDRESS, ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, ARGENT_V040_CLASS_HASH, MNEMONIC,
 };
 use krusty_kms::{
     derive_private_key_with_coin_type, stark_public_key, AccountClass, ArgentAccount, SaltPolicy,

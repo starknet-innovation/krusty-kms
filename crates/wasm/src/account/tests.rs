@@ -97,8 +97,7 @@ fn test_total_balance_rejects_invalid_state_fields() {
 fn test_account_total_balance_rejects_overflow() {
     let contract = "0x1234";
     let mut account = WasmAccount::from_private_key("0x2a", contract).unwrap();
-    let overflow_state =
-        WasmAccountState::new(u128::MAX.to_string(), "1".to_string(), 0).unwrap();
+    let overflow_state = WasmAccountState::new(u128::MAX.to_string(), "1".to_string(), 0).unwrap();
     account.update_state(overflow_state).unwrap();
 
     let err = account.total_balance().unwrap_err();
@@ -277,8 +276,7 @@ fn test_calculate_contract_address() {
     let class_hash = "0xdeadbeef";
     let calldata = vec!["0x1".to_string(), "0x2".to_string()];
     let deployer = "0x0";
-    let addr =
-        calculate_contract_address(&address_salt, class_hash, calldata, deployer).unwrap();
+    let addr = calculate_contract_address(&address_salt, class_hash, calldata, deployer).unwrap();
     assert!(addr.starts_with("0x"));
     assert_ne!(addr, "0x0");
 }

@@ -139,13 +139,8 @@ fn class_hash_allowlist_override_allows_unknown_hash() {
 fn class_hash_allowlist_accepts_known_argent_versions() {
     for hash in ArgentAccount::known_class_hashes() {
         assert!(
-            enforce_class_hash_allowlist(
-                hash,
-                AccountClassKind::Argent,
-                ChainId::Sepolia,
-                false,
-            )
-            .is_ok(),
+            enforce_class_hash_allowlist(hash, AccountClassKind::Argent, ChainId::Sepolia, false,)
+                .is_ok(),
             "expected known Argent hash {hash:#x} to be allowed"
         );
     }
