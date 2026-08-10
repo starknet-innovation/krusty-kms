@@ -1,5 +1,4 @@
 import Foundation
-import Darwin
 import CKms
 
 public enum KmsError: Error {
@@ -161,33 +160,33 @@ public enum Kms {
 
     /// Best-effort wipe of secret bytes before buffer release.
     ///
-    /// Uses `explicit_bzero` so the store cannot be optimized away when the
-    /// buffer is about to die (unlike `memset`).
+    /// Uses `kms_secure_wipe` (`explicit_bzero` on Apple/Linux) so the store
+    /// cannot be optimized away when the buffer is about to die.
     private static func secureZero(_ buffer: inout [UInt8]) {
         buffer.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress else { return }
-            explicit_bzero(base, raw.count)
+            kms_secure_wipe(base, raw.count)
         }
     }
 
     private static func secureZeroCChars(_ buffer: inout [CChar]) {
         buffer.withUnsafeMutableBytes { raw in
             guard let base = raw.baseAddress else { return }
-            explicit_bzero(base, raw.count)
+            kms_secure_wipe(base, raw.count)
         }
     }
 
     private static func secureZeroFelt(_ felt: inout KmsFelt) {
         withUnsafeMutableBytes(of: &felt) { raw in
             guard let base = raw.baseAddress else { return }
-            explicit_bzero(base, raw.count)
+            kms_secure_wipe(base, raw.count)
         }
     }
 
     private static func secureZeroBytes<T>(_ value: inout T) {
         withUnsafeMutableBytes(of: &value) { raw in
             guard let base = raw.baseAddress else { return }
-            explicit_bzero(base, raw.count)
+            kms_secure_wipe(base, raw.count)
         }
     }
 
