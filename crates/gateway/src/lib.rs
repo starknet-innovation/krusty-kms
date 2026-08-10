@@ -1184,7 +1184,7 @@ fn known_class_hashes(kind: AccountClassKind, chain_id: ChainId) -> Vec<Felt> {
             }
             hashes
         }
-        AccountClassKind::Argent => vec![Felt::from_hex(ArgentAccount::CLASS_HASH).unwrap()],
+        AccountClassKind::Argent => ArgentAccount::known_class_hashes(),
         AccountClassKind::Braavos => {
             let mut hashes = vec![Felt::from_hex(BraavosAccount::CLASS_HASH).unwrap()];
             if let Ok(legacy) = Felt::from_hex(BraavosAccount::LEGACY_CLASS_HASH) {
@@ -1972,5 +1972,21 @@ mod tests {
             true,
         )
         .is_ok());
+    }
+
+    #[test]
+    fn class_hash_allowlist_accepts_known_argent_versions() {
+        for hash in ArgentAccount::known_class_hashes() {
+            assert!(
+                enforce_class_hash_allowlist(
+                    hash,
+                    AccountClassKind::Argent,
+                    ChainId::Sepolia,
+                    false,
+                )
+                .is_ok(),
+                "expected known Argent hash {hash:#x} to be allowed"
+            );
+        }
     }
 }

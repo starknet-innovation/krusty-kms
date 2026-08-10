@@ -678,8 +678,8 @@ pub fn get_account_class_hashes() -> String {
         },
         "argent": {
             "0.4.0": krusty_kms::ArgentAccount::CLASS_HASH,
-            "0.3.1": "0x29927c8af6bccf3f6fda035981e765a7bdbf18a2dc0d630494f8758aa908e2b",
-            "0.3.0": "0x1a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003"
+            "0.3.1": krusty_kms::ArgentAccount::CLASS_HASH_V031,
+            "0.3.0": krusty_kms::ArgentAccount::CLASS_HASH_V030
         },
         "argent_legacy": {
             "proxy": "0x025ec026985a3bf9d0cc1fe17326b245dfdc3ff89b8fde106542a3ea56c5a918",

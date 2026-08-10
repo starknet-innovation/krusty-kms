@@ -21,13 +21,14 @@ use std::fmt;
 const BRAAVOS_BASE: &str = "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201";
 
 /// Argent Cairo 1 v0.4.0 class hash.
-const ARGENT_V040: &str = "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f";
+/// Argent Cairo 1 v0.4.0 class hash.
+const ARGENT_V040: &str = ArgentAccount::CLASS_HASH;
 
 /// Argent Cairo 1 v0.3.1 class hash.
-const ARGENT_V031: &str = "0x029927c8af6bccf3f6fda035981e765a7bdbf18a2dc0d630494f8758aa908e2b";
+const ARGENT_V031: &str = ArgentAccount::CLASS_HASH_V031;
 
 /// Argent Cairo 1 v0.3.0 class hash.
-const ARGENT_V030: &str = "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
+const ARGENT_V030: &str = ArgentAccount::CLASS_HASH_V030;
 
 /// Argent Cairo 0 proxy class hash.
 const ARGENT_PROXY: &str = "0x025ec026985a3bf9d0cc1fe17326b245dfdc3ff89b8fde106542a3ea56c5a918";

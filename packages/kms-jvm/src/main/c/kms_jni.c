@@ -369,9 +369,20 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateMnemonic(
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateMnemonicFromEntropy(
     JNIEnv *env, jclass cls, jbyteArray entropy) {
     (void)cls;
+    if (entropy == NULL) {
+        throw_kms_error(env, KMS_ERR_NULL_POINTER);
+        return NULL;
+    }
+
     jsize len = (*env)->GetArrayLength(env, entropy);
     jbyte *data = (*env)->GetByteArrayElements(env, entropy, NULL);
-    if (data == NULL) { throw_kms_error(env, KMS_ERR_INTERNAL); return NULL; }
+    if (data == NULL) {
+        /* Preserve a pending JVM exception (e.g. OOM) from GetByteArrayElements. */
+        if (!(*env)->ExceptionCheck(env)) {
+            throw_kms_error(env, KMS_ERR_INTERNAL);
+        }
+        return NULL;
+    }
 
     size_t needed = 0;
     int32_t rc = kms_generate_mnemonic_from_entropy(

@@ -29,6 +29,23 @@ fn require_felt_hex(value: &str, field: &str) -> Result<(), JsValue> {
         .map_err(|_| JsValue::from_str(&format!("invalid {field}: expected felt hex")))
 }
 
+fn validate_affine_public_key(public_key_x: &str, public_key_y: &str) -> Result<(), String> {
+    use starknet_types_core::curve::ProjectivePoint;
+
+    let x = Felt::from_hex(public_key_x)
+        .map_err(|_| "invalid public_key_x: expected felt hex".to_string())?;
+    let y = Felt::from_hex(public_key_y)
+        .map_err(|_| "invalid public_key_y: expected felt hex".to_string())?;
+    ProjectivePoint::from_affine(x, y)
+        .map(|_| ())
+        .map_err(|_| "invalid public key: coordinates are not on the Stark curve".to_string())
+}
+
+fn require_affine_public_key(public_key_x: &str, public_key_y: &str) -> Result<(), JsValue> {
+    validate_affine_public_key(public_key_x, public_key_y)
+        .map_err(|message| JsValue::from_str(&message))
+}
+
 /// Account state returned from on-chain queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]
@@ -243,8 +260,7 @@ impl WasmKeypair {
         public_key_x: String,
         public_key_y: String,
     ) -> Result<WasmKeypair, JsValue> {
-        require_felt_hex(&public_key_x, "public_key_x")?;
-        require_felt_hex(&public_key_y, "public_key_y")?;
+        require_affine_public_key(&public_key_x, &public_key_y)?;
         Ok(Self {
             private_key,
             public_key_x,
@@ -353,8 +369,7 @@ impl WasmStarkXOnlyPublicKey {
 impl WasmPublicKey {
     #[wasm_bindgen(constructor)]
     pub fn new(public_key_x: String, public_key_y: String) -> Result<WasmPublicKey, JsValue> {
-        require_felt_hex(&public_key_x, "public_key_x")?;
-        require_felt_hex(&public_key_y, "public_key_y")?;
+        require_affine_public_key(&public_key_x, &public_key_y)?;
         Ok(Self {
             public_key_x,
             public_key_y,
@@ -503,14 +518,35 @@ mod tests {
 
     #[test]
     fn wasm_keypair_debug_redacts_private_key() {
+        let g = krusty_kms_crypto::StarkCurve::generator();
+        let affine = krusty_kms_crypto::StarkCurve::projective_to_affine(&g).unwrap();
         let kp = WasmKeypair::new(
             "0xdeadbeef".to_string(),
-            "0x1".to_string(),
-            "0x2".to_string(),
-        );
+            format!("{:#x}", affine.x()),
+            format!("{:#x}", affine.y()),
+        )
+        .expect("generator is a valid Stark curve point");
         let debug = format!("{kp:?}");
         assert!(debug.contains("***"));
         assert!(!debug.contains("deadbeef"));
+    }
+
+    #[test]
+    fn wasm_keypair_rejects_off_curve_coordinates() {
+        let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
+        assert!(
+            err.contains("not on the Stark curve"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn wasm_public_key_rejects_off_curve_coordinates() {
+        let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
+        assert!(
+            err.contains("not on the Stark curve"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
