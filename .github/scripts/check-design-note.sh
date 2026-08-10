@@ -50,22 +50,48 @@ is_src_rs() {
 
 # Root Cargo.toml centralizes production deps under [workspace.dependencies].
 workspace_dep_entries() {
-  awk '
-    BEGIN { in_section=0 }
-    /^\[/ {
-      if ($0 == "[workspace.dependencies]") {
-        in_section=1
-        next
-      }
-      if (in_section) exit
-      next
-    }
-    in_section {
-      sub(/^[[:space:]]+/, "")
-      if ($0 ~ /^#/ || $0 == "") next
-      if ($0 ~ /^[a-zA-Z0-9_.-]+[[:space:]]*=/) print
-    }
-  ' "$1"
+  python3 - "$1" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text()
+_DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
+
+
+def _normalize_body(body: str) -> str:
+    lines = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        lines.append(stripped)
+    return "\n".join(lines)
+
+
+def workspace_dep_entries(cargo_text: str) -> list[str]:
+    entries: list[str] = []
+    for section in re.split(r"\n(?=\[)", cargo_text):
+        if not section.strip():
+            continue
+        header = section.split("\n", 1)[0].strip()
+        if header == "[workspace.dependencies]":
+            for line in section.splitlines()[1:]:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if _DEP_KEY.match(stripped):
+                    entries.append(stripped)
+        elif header.startswith("[workspace.dependencies."):
+            body = section.split("\n", 1)[1] if "\n" in section else ""
+            norm = _normalize_body(body)
+            entries.append(f"{header}\n{norm}" if norm else header)
+    return entries
+
+
+for entry in workspace_dep_entries(text):
+    print(entry)
+PY
 }
 
 root_cargo_workspace_deps_changed() {

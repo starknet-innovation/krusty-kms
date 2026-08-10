@@ -66,6 +66,9 @@ _DECL_RE = re.compile(
     r"^\s*(pub\s+)?(async\s+)?(unsafe\s+)?(fn|struct|enum|type|const|static)\b"
 )
 _IMPL_RE = re.compile(r"^\s*impl\b")
+_PUB_FN_RE = re.compile(
+    r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))(?:async\s+)?(?:unsafe\s+)?fn\b"
+)
 _FIELD_DECL_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))([\w]+)\s*:\s*(.+?)\s*,?\s*$"
 )
@@ -92,6 +95,66 @@ def _brace_delta(text: str) -> int:
 
 def _is_field_declaration(line: str) -> bool:
     return bool(_FIELD_DECL_RE.match(line))
+
+
+def _is_pub_fn_declaration(line: str) -> bool:
+    return bool(_PUB_FN_RE.match(line))
+
+
+def _find_impl_block_end(lines: list[str], impl_line: int) -> int:
+    """Return the line index of the closing ``}`` for an ``impl`` block."""
+    depth = 0
+    started = False
+    for j in range(impl_line, len(lines)):
+        if not started:
+            if "{" not in lines[j]:
+                continue
+            started = True
+        depth += _brace_delta(lines[j])
+        if started and depth <= 0:
+            return j
+    return len(lines) - 1
+
+
+def _collect_impl_pub_fns(
+    lines: list[str], impl_line: int, end_line: int
+) -> list[tuple[int, str, str]]:
+    """Collect ``pub fn`` exports from a ``#[wasm_bindgen] impl`` body."""
+    methods: list[tuple[int, str, str]] = []
+    depth = 0
+    started = False
+    pending_attrs: list[str] = []
+
+    for j in range(impl_line, end_line + 1):
+        line = lines[j]
+        stripped = line.strip()
+
+        if not started:
+            if "{" not in line:
+                continue
+            depth += _brace_delta(line)
+            started = True
+            if depth <= 0:
+                break
+            continue
+
+        if depth == 1:
+            if stripped.startswith("#["):
+                pending_attrs.append(stripped)
+                continue
+            if not stripped or stripped.startswith("//"):
+                continue
+            if _is_pub_fn_declaration(line):
+                attrs = "\n".join(pending_attrs)
+                signature = _collect_rust_signature(lines, j)
+                methods.append((j, attrs, signature))
+                pending_attrs = []
+            else:
+                pending_attrs = []
+
+        depth += _brace_delta(line)
+
+    return methods
 
 
 def _format_field(attrs: str, signature: str) -> str:
@@ -296,9 +359,21 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
                     j += 1
                 if j < len(lines):
                     attrs = "\n".join(lines[i:j])
-                    signature = _collect_rust_signature(lines, j)
-                    exports.append(_format_wasm_export(rel, attrs, signature))
-                    i = j + 1
+                    if _IMPL_RE.match(lines[j]):
+                        signature = _collect_rust_signature(lines, j)
+                        exports.append(_format_wasm_export(rel, attrs, signature))
+                        end = _find_impl_block_end(lines, j)
+                        for _, method_attrs, method_sig in _collect_impl_pub_fns(
+                            lines, j, end
+                        ):
+                            exports.append(
+                                _format_wasm_export(rel, method_attrs, method_sig)
+                            )
+                        i = end + 1
+                    else:
+                        signature = _collect_rust_signature(lines, j)
+                        exports.append(_format_wasm_export(rel, attrs, signature))
+                        i = j + 1
                 else:
                     i += 1
             else:
