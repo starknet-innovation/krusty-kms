@@ -4,6 +4,15 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-10
+
+### Changed
+
+- Internal refactor only: split the gateway `backend.rs` module into focused
+  submodules (backend interface, Starknet JSON-RPC implementation, acceptance
+  polling, deploy error mapping, RPC helpers). Follow-up to #51/#55; no public
+  API or behavior changes.
+
 ## [0.8.0] - 2026-08-10
 
 ### Changed
