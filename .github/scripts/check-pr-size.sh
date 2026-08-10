@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Soft size gate for Rust production sources in a PR.
 # Counts added+deleted lines and touched files under crates/** (excluding
-# experimental/). Large PRs must include a justification marker in the PR body.
+# experimental/, tests/, examples/, benches/, and src/tests/). Large PRs must
+# include a justification marker in the PR body.
 #
 # Scope trade-off: this intentionally measures production Rust sources only,
 # not guardrail shell/Python. Documented in docs/maintainability-guardrails.md.
@@ -43,7 +44,15 @@ if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
 fi
 
 mapfile -t files < <(git diff --name-only "$base_ref"...HEAD -- 'crates/**/*.rs' \
-  | grep -v '/experimental/' || true)
+  | awk '
+      /\/experimental\// { next }
+      /\/tests(\/|$)/ { next }
+      /\/examples\// { next }
+      /\/benches\// { next }
+      /\/src\/tests\// { next }
+      /_test\.rs$/ { next }
+      { print }
+    ' || true)
 
 if [[ ${#files[@]} -eq 0 ]]; then
   echo "PR size check: no production Rust sources changed"

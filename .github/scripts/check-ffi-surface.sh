@@ -34,19 +34,43 @@ if [[ -f "$swift_header" ]]; then
 import sys
 from pathlib import Path
 
-canonical = Path(sys.argv[1]).read_text()
-swift = Path(sys.argv[2]).read_text()
-canon_lines = [ln for ln in canonical.splitlines() if ln.strip()]
-swift_lines = swift.splitlines()
-si = 0
-for line in canon_lines:
-    while si < len(swift_lines) and swift_lines[si] != line:
-        si += 1
-    if si >= len(swift_lines):
+SWIFT_ONLY = {
+    "void kms_secure_wipe(void *ptr, size_t len);",
+}
+
+
+def significant_lines(text: str) -> set[str]:
+    lines: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("/*") or line.startswith("//") or line.startswith("*"):
+            continue
+        if line.endswith("*/") and not line.startswith("#"):
+            continue
+        lines.add(line)
+    return lines
+
+
+canonical = significant_lines(Path(sys.argv[1]).read_text())
+swift = significant_lines(Path(sys.argv[2]).read_text())
+swift_abi = swift - SWIFT_ONLY
+
+missing = sorted(canonical - swift_abi)
+extra = sorted(swift_abi - canonical)
+
+if missing:
+    for line in missing:
         print(f"::error::Swift kms.h is missing canonical ABI line: {line}")
-        sys.exit(1)
-    si += 1
-print("Swift header contains canonical ABI as ordered subset")
+if extra:
+    for line in extra:
+        print(f"::error::Swift kms.h has stale/extra ABI line: {line}")
+
+if missing or extra:
+    sys.exit(1)
+
+print("Swift header ABI matches canonical surface (plus Swift-only helpers)")
 PY
   then
     failed=1
