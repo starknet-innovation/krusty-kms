@@ -48,10 +48,13 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
             Ok(p) => p,
             Err(e) => return e,
         };
-        let rnd = kms_to_felt(&*random);
+        // SecretFelt zeroizes on drop (volatile write); a plain Felt copy of
+        // the blinding scalar would linger in stack memory on every path, and
+        // knowing it reveals the plaintext point (L - pk^r).
+        let rnd = SecretFelt::new(kms_to_felt(&*random));
         let pfx = kms_to_felt(&*prefix);
 
-        let enc = match ElGamal::encrypt(&msg, &pk, &rnd, &pfx) {
+        let enc = match ElGamal::encrypt(&msg, &pk, rnd.expose_secret(), &pfx) {
             Ok(e) => e,
             Err(_) => return KMS_ERR_CRYPTO,
         };
@@ -118,10 +121,12 @@ pub unsafe extern "C" fn kms_elgamal_encrypt_strong(
             Ok(p) => p,
             Err(e) => return e,
         };
-        let rnd = kms_to_felt(&*random);
+        // See kms_elgamal_encrypt: keep the blinding scalar in a zeroizing
+        // guard so it is wiped on every return path.
+        let rnd = SecretFelt::new(kms_to_felt(&*random));
         let pfx = kms_to_felt(&*prefix);
 
-        let enc = match ElGamal::encrypt_strong(&msg, &pk, &rnd, &pfx) {
+        let enc = match ElGamal::encrypt_strong(&msg, &pk, rnd.expose_secret(), &pfx) {
             Ok(e) => e,
             Err(_) => return KMS_ERR_CRYPTO,
         };
