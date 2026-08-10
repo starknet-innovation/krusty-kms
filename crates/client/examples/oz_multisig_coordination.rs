@@ -75,17 +75,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     coordinator
         .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(multisig_address, id, bob),
+            MultisigSignerNotice::new(multisig_address, ChainId::Sepolia, id, bob),
         ))
         .await?;
     coordinator
         .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(multisig_address, id, charlie),
+            MultisigSignerNotice::new(multisig_address, ChainId::Sepolia, id, charlie),
         ))
         .await?;
     coordinator
         .publish(MultisigCoordinationMessage::Execution(
-            MultisigExecutionNotice::new(multisig_address, id, charlie),
+            MultisigExecutionNotice::new(multisig_address, ChainId::Sepolia, id, charlie),
         ))
         .await?;
 

@@ -90,10 +90,16 @@ pub enum MultisigTransactionState {
 }
 
 /// Pub/sub topic for one multisig transaction.
+///
+/// The chain is part of the routing key so a proposal replayed to a shared
+/// coordinator cannot leak onto another network's topic, and a subscriber on
+/// one chain never sees the other chain's messages for the same
+/// multisig/transaction-id pair.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MultisigTopic {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
 }
@@ -102,7 +108,8 @@ impl MultisigTopic {
     #[must_use]
     fn key(&self) -> String {
         format!(
-            "{}:{}",
+            "{}:{}:{}",
+            self.chain_id,
             self.multisig.to_hex(),
             felt_to_hex(self.transaction_id)
         )
@@ -165,6 +172,7 @@ impl MultisigProposal {
     pub fn topic(&self) -> MultisigTopic {
         MultisigTopic {
             multisig: self.multisig,
+            chain_id: self.chain_id,
             transaction_id: self.transaction_id,
         }
     }
@@ -188,6 +196,8 @@ impl MultisigProposal {
 pub struct MultisigSignerNotice {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    /// Chain this notice belongs to; part of the routing topic.
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
     #[serde(with = "serde_address_hex")]
@@ -196,9 +206,15 @@ pub struct MultisigSignerNotice {
 
 impl MultisigSignerNotice {
     #[must_use]
-    pub fn new(multisig: Address, transaction_id: Felt, signer: Address) -> Self {
+    pub fn new(
+        multisig: Address,
+        chain_id: ChainId,
+        transaction_id: Felt,
+        signer: Address,
+    ) -> Self {
         Self {
             multisig,
+            chain_id,
             transaction_id,
             signer,
         }
@@ -208,6 +224,7 @@ impl MultisigSignerNotice {
     pub fn topic(&self) -> MultisigTopic {
         MultisigTopic {
             multisig: self.multisig,
+            chain_id: self.chain_id,
             transaction_id: self.transaction_id,
         }
     }
@@ -218,6 +235,8 @@ impl MultisigSignerNotice {
 pub struct MultisigExecutionNotice {
     #[serde(with = "serde_address_hex")]
     pub multisig: Address,
+    /// Chain this notice belongs to; part of the routing topic.
+    pub chain_id: ChainId,
     #[serde(with = "serde_felt_hex")]
     pub transaction_id: Felt,
     #[serde(with = "serde_address_hex")]
@@ -226,9 +245,15 @@ pub struct MultisigExecutionNotice {
 
 impl MultisigExecutionNotice {
     #[must_use]
-    pub fn new(multisig: Address, transaction_id: Felt, executor: Address) -> Self {
+    pub fn new(
+        multisig: Address,
+        chain_id: ChainId,
+        transaction_id: Felt,
+        executor: Address,
+    ) -> Self {
         Self {
             multisig,
+            chain_id,
             transaction_id,
             executor,
         }
@@ -238,6 +263,7 @@ impl MultisigExecutionNotice {
     pub fn topic(&self) -> MultisigTopic {
         MultisigTopic {
             multisig: self.multisig,
+            chain_id: self.chain_id,
             transaction_id: self.transaction_id,
         }
     }
@@ -446,11 +472,15 @@ impl NatsMultisigCoordinator {
     }
 
     /// Return the NATS subject for a prefix and transaction topic.
+    ///
+    /// The chain id is a subject token so one shared NATS deployment can serve
+    /// multiple networks without cross-chain message leakage.
     #[must_use]
     pub fn subject_for(subject_prefix: &str, topic: &MultisigTopic) -> String {
         format!(
-            "{}.{}.{}",
+            "{}.{}.{}.{}",
             subject_prefix.trim_end_matches('.'),
+            topic.chain_id.name(),
             address_subject_token(topic.multisig),
             felt_subject_token(topic.transaction_id)
         )
@@ -906,6 +936,7 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
         let mut url = self.messages_url()?;
         url.query_pairs_mut()
             .append_pair("multisig", &topic.multisig.to_hex())
+            .append_pair("chain_id", topic.chain_id.name())
             .append_pair("transaction_id", &felt_to_hex(topic.transaction_id));
 
         let messages = self
@@ -1612,7 +1643,12 @@ mod tests {
             .unwrap();
         coordinator
             .publish(MultisigCoordinationMessage::Confirmation(
-                MultisigSignerNotice::new(address(1), proposal.transaction_id, address(3)),
+                MultisigSignerNotice::new(
+                    address(1),
+                    ChainId::Sepolia,
+                    proposal.transaction_id,
+                    address(3),
+                ),
             ))
             .await
             .unwrap();
@@ -1683,9 +1719,18 @@ mod tests {
         // Cross-topic replay/misrouting is rejected.
         let other_topic = MultisigTopic {
             multisig: address(9),
+            chain_id: topic.chain_id,
             transaction_id: topic.transaction_id,
         };
         assert!(validate_incoming_message(&other_topic, &message).is_err());
+
+        // Same multisig and id on another chain is a different topic.
+        let other_chain_topic = MultisigTopic {
+            multisig: topic.multisig,
+            chain_id: ChainId::Mainnet,
+            transaction_id: topic.transaction_id,
+        };
+        assert!(validate_incoming_message(&other_chain_topic, &message).is_err());
 
         // Forged transaction id (id not recomputing from calls/salt) is rejected.
         let mut forged = proposal;
@@ -1886,12 +1931,13 @@ mod tests {
     fn test_nats_subject_is_deterministic() {
         let topic = MultisigTopic {
             multisig: address(1),
+            chain_id: ChainId::Sepolia,
             transaction_id: Felt::from(2u64),
         };
 
         assert_eq!(
             NatsMultisigCoordinator::subject_for("krusty.multisig.", &topic),
-            "krusty.multisig.0000000000000000000000000000000000000000000000000000000000000001.0000000000000000000000000000000000000000000000000000000000000002"
+            "krusty.multisig.SN_SEPOLIA.0000000000000000000000000000000000000000000000000000000000000001.0000000000000000000000000000000000000000000000000000000000000002"
         );
     }
 }

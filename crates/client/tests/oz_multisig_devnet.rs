@@ -145,7 +145,12 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         .unwrap();
     coordinator
         .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(multisig_address, proposal.transaction_id, bob),
+            MultisigSignerNotice::new(
+                multisig_address,
+                network.chain_id,
+                proposal.transaction_id,
+                bob,
+            ),
         ))
         .await
         .unwrap();
@@ -166,7 +171,12 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         .unwrap();
     coordinator
         .publish(MultisigCoordinationMessage::Confirmation(
-            MultisigSignerNotice::new(multisig_address, proposal.transaction_id, charlie),
+            MultisigSignerNotice::new(
+                multisig_address,
+                network.chain_id,
+                proposal.transaction_id,
+                charlie,
+            ),
         ))
         .await
         .unwrap();
@@ -187,7 +197,12 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         .unwrap();
     coordinator
         .publish(MultisigCoordinationMessage::Execution(
-            MultisigExecutionNotice::new(multisig_address, proposal.transaction_id, charlie),
+            MultisigExecutionNotice::new(
+                multisig_address,
+                network.chain_id,
+                proposal.transaction_id,
+                charlie,
+            ),
         ))
         .await
         .unwrap();

@@ -78,8 +78,12 @@ subject-based message bus instead of a bespoke socket protocol. The default
 subject layout is:
 
 ```text
-krusty.multisig.<multisig-address-64-hex>.<transaction-id-64-hex>
+krusty.multisig.<chain-id>.<multisig-address-64-hex>.<transaction-id-64-hex>
 ```
+
+The chain-id token (`SN_MAIN` / `SN_SEPOLIA`) namespaces subjects so a shared
+coordinator cannot leak or replay messages across networks for the same
+multisig/transaction-id pair.
 
 Core NATS pub/sub is live delivery, so subscribers should call `subscribe`
 before the proposal or signer notice is published. Deployments that need durable
