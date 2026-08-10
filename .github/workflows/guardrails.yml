@@ -133,12 +133,19 @@ jobs:
       - name: Prepare git baseline worktree
         env:
           BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
           if [[ -n "${BASE_REF}" ]]; then
+            # Pull requests: compare against the target branch tip.
             git fetch --no-tags origin "${BASE_REF}"
             baseline_rev="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            # Push to main: compare against the pre-push commit (not HEAD^).
+            git fetch --no-tags origin "${BEFORE_SHA}"
+            baseline_rev="${BEFORE_SHA}"
           else
+            # workflow_dispatch, new-branch push, or missing before: fall back to main.
             git fetch --no-tags origin main
             baseline_rev="origin/main"
           fi

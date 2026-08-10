@@ -57,6 +57,8 @@ from pathlib import Path
 
 text = Path(sys.argv[1]).read_text()
 _DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
+# One logical table entry per output line (bash sort/diff must not split headers/bodies).
+_ENTRY_SEP = "\x1e"
 
 
 def _normalize_body(body: str) -> str:
@@ -66,7 +68,7 @@ def _normalize_body(body: str) -> str:
         if not stripped or stripped.startswith("#"):
             continue
         lines.append(stripped)
-    return "\n".join(lines)
+    return _ENTRY_SEP.join(lines)
 
 
 def workspace_dep_entries(cargo_text: str) -> list[str]:
@@ -85,7 +87,7 @@ def workspace_dep_entries(cargo_text: str) -> list[str]:
         elif header.startswith("[workspace.dependencies."):
             body = section.split("\n", 1)[1] if "\n" in section else ""
             norm = _normalize_body(body)
-            entries.append(f"{header}\n{norm}" if norm else header)
+            entries.append(f"{header}{_ENTRY_SEP}{norm}" if norm else header)
     return entries
 
 
@@ -120,6 +122,8 @@ from pathlib import Path
 text = Path(sys.argv[1]).read_text()
 _DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
 _DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
+# One logical table entry per output line (bash sort/diff must not split headers/bodies).
+_ENTRY_SEP = "\x1e"
 
 
 def _is_production_dep_section(header: str) -> bool:
@@ -138,7 +142,7 @@ def _normalize_body(body: str) -> str:
         if not stripped or stripped.startswith("#"):
             continue
         lines.append(stripped)
-    return "\n".join(lines)
+    return _ENTRY_SEP.join(lines)
 
 
 def production_dep_entries(text: str) -> list[str]:
@@ -153,7 +157,7 @@ def production_dep_entries(text: str) -> list[str]:
         if table:
             body = section.split("\n", 1)[1] if "\n" in section else ""
             norm = _normalize_body(body)
-            entries.append(f"{header}\n{norm}" if norm else header)
+            entries.append(f"{header}{_ENTRY_SEP}{norm}" if norm else header)
             continue
         if not _is_production_dep_section(header):
             continue
