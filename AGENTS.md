@@ -29,6 +29,22 @@ the test suites. Standard commands live in `README.md`, `crates/CLAUDE.md`, and
   `cargo run -p krusty-kms --example key_derivation` (also `stark_sign`, `oz_address`,
   and `cargo run -p krusty-kms-sdk --example tongo_proof_generation`).
 
+### crates.io releases (maintainers and agents)
+
+Read [`docs/crates-release.md`](docs/crates-release.md) before preparing or operating
+a crates.io release. The workflow in `.github/workflows/publish.yml` is the source of
+truth.
+
+- Never run `cargo publish` locally and never add or request a long-lived crates.io
+  token. Publishing uses GitHub Actions OIDC and the protected `crates-io` environment.
+- Bump the root `[workspace.package].version`, update `Cargo.lock`, and complete the
+  package preflight before opening the release PR.
+- Only tag the merged `main` commit as `v<workspace-version>`; pushing that immutable
+  tag starts the release. Do not move, recreate, or force-push a release tag.
+- A transient or partial release is recovered by rerunning the existing workflow run.
+  The publish script skips crates that already exist. If code must change, prepare a
+  new patch version and tag instead.
+
 ### Optional integration tests (external services required)
 
 Some tests are gated behind `-- --ignored` and are **not** part of the default suite.
