@@ -31,6 +31,9 @@ fn parse_u32_kdf_param(value: Option<u64>, field: &str) -> Result<u32> {
 /// malicious keystores cannot turn import into a DoS.
 const SCRYPT_R_MAX: u32 = 32;
 const SCRYPT_P_MAX: u32 = 16;
+// Decryption unconditionally splits the derived key at [..16] and [16..32],
+// so anything shorter than 32 bytes would panic instead of erroring.
+const SCRYPT_DKLEN_MIN: usize = 32;
 const SCRYPT_DKLEN_MAX: usize = 64;
 const SCRYPT_MEMORY_CEILING_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -46,9 +49,9 @@ fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Resu
             "kdfparams.p={p} outside allowed range 1..={SCRYPT_P_MAX}"
         )));
     }
-    if !(1..=SCRYPT_DKLEN_MAX).contains(&dklen) {
+    if !(SCRYPT_DKLEN_MIN..=SCRYPT_DKLEN_MAX).contains(&dklen) {
         return Err(KmsError::DeserializationError(format!(
-            "kdfparams.dklen={dklen} outside allowed range 1..={SCRYPT_DKLEN_MAX}"
+            "kdfparams.dklen={dklen} outside allowed range {SCRYPT_DKLEN_MIN}..={SCRYPT_DKLEN_MAX}"
         )));
     }
     // scrypt memory ≈ 128 * N * r
@@ -474,7 +477,44 @@ mod tests {
         assert!(
             validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MAX + 1).is_err()
         );
+        // dklen < 32 must be rejected: decryption indexes derived_key[16..32].
+        assert!(
+            validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MIN - 1).is_err()
+        );
         // N=2^20 with r=32 exceeds the 256 MiB memory ceiling.
         assert!(validate_scrypt_resource_params(1 << 20, 32, 1, 32).is_err());
     }
+
+    fn ethers_keystore_with_dklen(dklen: u64) -> String {
+        let keystore = serde_json::json!({
+            "version": 3,
+            "crypto": {
+                "cipher": "aes-128-ctr",
+                "kdf": "scrypt",
+                "kdfparams": {
+                    "n": TEST_SCRYPT_N,
+                    "r": 8,
+                    "p": 1,
+                    "dklen": dklen,
+                    "salt": hex::encode([0xab; 32]),
+                },
+                "cipherparams": { "iv": hex::encode([0xcd; 16]) },
+                "ciphertext": hex::encode([0u8; 32]),
+                "mac": hex::encode([0u8; 32]),
+            }
+        });
+        serde_json::to_string(&keystore).unwrap()
+    }
+
+    #[test]
+    fn decrypt_ethers_keystore_rejects_dklen_below_32() {
+        // A crafted keystore with dklen < 32 must return an error instead of
+        // panicking on derived_key[16..32].
+        let keystore_json = ethers_keystore_with_dklen(16);
+        let result = decrypt_ethers_keystore(&keystore_json, &test_password(0));
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
+    }
+
 }
