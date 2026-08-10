@@ -13,14 +13,15 @@ usage() {
 Usage: ensure_declared.sh [--network sepolia|mainnet] [--rpc-url URL] [--version VERSION] [--declare]
 
 Checks whether the manifest-backed OpenZeppelin account class hash is declared
-on the target network. If `--declare` is passed, submits `sncast declare` when
-the class is missing.
+on the target network. Check-only mode (default) only queries RPC using the
+pinned manifest hash and does not require `sncast`.
 
-After `scarb build`, the local Sierra class hash is computed via
-`sncast utils class-hash` and must match the manifest hash before any declare
-is attempted.
+If `--declare` is passed and the class is missing, the script builds locally,
+verifies the Sierra class hash matches the manifest via `sncast utils class-hash`,
+then submits `sncast declare`.
 
-Requirements for declaration:
+Requirements for declaration (`--declare` only):
+- `scarb` and `sncast` must be available.
 - `sncast` must already be configured with an account/profile able to declare.
 - The current shell environment must provide any required auth for `sncast`.
 EOF
@@ -93,11 +94,34 @@ if [[ -z "$class_hash" ]]; then
   exit 1
 fi
 
+rpc_payload=$(jq -cn --arg class_hash "$class_hash" '{
+  jsonrpc: "2.0",
+  id: 1,
+  method: "starknet_getClass",
+  params: ["latest", $class_hash]
+}')
+
+rpc_response=$(curl -s "$rpc_url" -H 'content-type: application/json' -d "$rpc_payload")
+
+if jq -e '.result' >/dev/null <<<"$rpc_response"; then
+  echo "Class hash already declared on $network: $class_hash"
+  exit 0
+fi
+
+error_message=$(jq -r '.error.message // "unknown rpc error"' <<<"$rpc_response")
+echo "Class hash not declared on $network: $class_hash"
+echo "RPC response: $error_message"
+
+if [[ "$declare_if_missing" != "true" ]]; then
+  exit 2
+fi
+
+# --declare path: reproduce the local Sierra hash before submitting.
 echo "Building $PACKAGE_NAME ($version)..."
 scarb --manifest-path "$MANIFEST_PATH" build
 
 if ! command -v sncast >/dev/null 2>&1; then
-  echo "sncast is required to compute the local class hash after build" >&2
+  echo "sncast is required to compute the local class hash before declare" >&2
   exit 1
 fi
 
@@ -170,29 +194,6 @@ if [[ "$manifest_norm" != "$local_norm" ]]; then
 fi
 
 echo "Local class hash matches manifest: $class_hash"
-
-rpc_payload=$(jq -cn --arg class_hash "$class_hash" '{
-  jsonrpc: "2.0",
-  id: 1,
-  method: "starknet_getClass",
-  params: ["latest", $class_hash]
-}')
-
-rpc_response=$(curl -s "$rpc_url" -H 'content-type: application/json' -d "$rpc_payload")
-
-if jq -e '.result' >/dev/null <<<"$rpc_response"; then
-  echo "Class hash already declared on $network: $class_hash"
-  exit 0
-fi
-
-error_message=$(jq -r '.error.message // "unknown rpc error"' <<<"$rpc_response")
-echo "Class hash not declared on $network: $class_hash"
-echo "RPC response: $error_message"
-
-if [[ "$declare_if_missing" != "true" ]]; then
-  exit 2
-fi
-
 echo "Declaring $CONTRACT_NAME via sncast..."
 sncast declare \
   --contract-name "$CONTRACT_NAME" \
