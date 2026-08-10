@@ -13,7 +13,7 @@ use crate::wallet::WalletExecutor;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::{stream, Stream, StreamExt};
-use krusty_kms_common::{Address, KmsError, Result};
+use krusty_kms_common::{Address, ChainId, KmsError, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
@@ -234,6 +234,15 @@ impl MultisigExecutionNotice {
 }
 
 /// Message envelope exchanged through the trusted coordinator.
+///
+/// All variants are advisory: the claimed `signer`/`executor`/`proposer` is
+/// not authenticated by the coordinator, so a compromised coordinator can
+/// forge notices. This is safe only because no on-chain action is authorized
+/// by these messages — the multisig contract re-checks quorum and signer
+/// authorization on-chain, and [`Multisig::confirm_proposal`] re-derives the
+/// transaction id from the proposal payload before signing. Consumers must
+/// treat notices as hints (e.g. "check chain state"), never as proof that an
+/// action happened.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MultisigCoordinationMessage {
@@ -913,19 +922,39 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
 pub struct Multisig {
     provider: Arc<JsonRpcClient<HttpTransport>>,
     address: Address,
+    chain_id: ChainId,
 }
 
 impl Multisig {
     /// Create a multisig contract handle.
+    ///
+    /// `chain_id` is the network the contract lives on; [`Self::confirm_proposal`]
+    /// refuses to sign with a wallet bound to a different chain, so a proposal
+    /// replayed across networks (the transaction id hash does not bind a chain)
+    /// cannot collect confirmations there.
     #[must_use]
-    pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, address: Address) -> Self {
-        Self { provider, address }
+    pub fn new(
+        provider: Arc<JsonRpcClient<HttpTransport>>,
+        address: Address,
+        chain_id: ChainId,
+    ) -> Self {
+        Self {
+            provider,
+            address,
+            chain_id,
+        }
     }
 
     /// The multisig contract address.
     #[must_use]
     pub fn address(&self) -> Address {
         self.address
+    }
+
+    /// The chain this handle expects the contract and signers to live on.
+    #[must_use]
+    pub fn chain_id(&self) -> ChainId {
+        self.chain_id
     }
 
     /// Build a coordination proposal for a batch of calls.
@@ -1170,8 +1199,9 @@ impl Multisig {
     /// Confirm a coordination proposal, validating it before signing.
     ///
     /// Rejects the confirmation when the proposal's `transaction_id` does not
-    /// recompute from `calls`/`salt`, or when the proposal targets a different
-    /// multisig contract than this handle. This is the safe entry point for
+    /// recompute from `calls`/`salt`, when the proposal targets a different
+    /// multisig contract than this handle, or when the signing wallet is bound
+    /// to a different chain than this handle. This is the safe entry point for
     /// acting on coordinator-delivered proposals.
     pub async fn confirm_proposal(
         &self,
@@ -1184,6 +1214,13 @@ impl Multisig {
                 "proposal targets multisig {} but this handle is {}",
                 proposal.multisig.to_hex(),
                 self.address.to_hex()
+            )));
+        }
+        let wallet_chain = wallet.chain_id();
+        if wallet_chain != self.chain_id {
+            return Err(KmsError::MultisigError(format!(
+                "wallet chain {} does not match multisig chain {}",
+                wallet_chain, self.chain_id
             )));
         }
         self.confirm(wallet, proposal.transaction_id).await
@@ -1635,7 +1672,23 @@ mod tests {
     struct RecordingExecutor {
         network: krusty_kms_common::network::NetworkPreset,
         wallet_address: Address,
+        chain_id: ChainId,
         executed: std::sync::Mutex<Vec<Vec<Call>>>,
+    }
+
+    impl RecordingExecutor {
+        fn sepolia(wallet_address: Address) -> Self {
+            Self {
+                network: krusty_kms_common::network::NetworkPreset::sepolia(),
+                wallet_address,
+                chain_id: ChainId::Sepolia,
+                executed: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        fn executed_count(&self) -> usize {
+            self.executed.lock().unwrap().len()
+        }
     }
 
     #[async_trait]
@@ -1656,8 +1709,8 @@ mod tests {
             &self.wallet_address
         }
 
-        fn chain_id(&self) -> krusty_kms_common::ChainId {
-            krusty_kms_common::ChainId::Sepolia
+        fn chain_id(&self) -> ChainId {
+            self.chain_id
         }
 
         fn network(&self) -> &krusty_kms_common::network::NetworkPreset {
@@ -1673,41 +1726,42 @@ mod tests {
         let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
             Url::parse("http://127.0.0.1:0").unwrap(),
         )));
-        Multisig::new(provider, address(address_value))
+        Multisig::new(provider, address(address_value), ChainId::Sepolia)
     }
 
     #[tokio::test]
-    async fn test_confirm_proposal_validates_before_signing() {
+    async fn test_confirm_proposal_reaches_executor_with_recomputed_id() {
         let multisig = test_multisig_handle(1);
-        let executor = RecordingExecutor {
-            network: krusty_kms_common::network::NetworkPreset::sepolia(),
-            wallet_address: address(2),
-            executed: std::sync::Mutex::new(Vec::new()),
-        };
-
+        let executor = RecordingExecutor::sepolia(address(2));
         let proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
 
-        // Valid proposal reaches the executor with the recomputed id bound.
         let result = multisig.confirm_proposal(&executor, &proposal).await;
         assert!(matches!(result, Err(KmsError::CryptoError(_))));
-        {
-            let executed = executor.executed.lock().unwrap();
-            assert_eq!(executed.len(), 1);
-            assert_eq!(
-                executed[0],
-                vec![multisig.populate_confirm(proposal.transaction_id)]
-            );
-        }
+        let executed = executor.executed.lock().unwrap();
+        assert_eq!(
+            executed.as_slice(),
+            &[vec![multisig.populate_confirm(proposal.transaction_id)]]
+        );
+    }
 
-        // Forged id never reaches the executor.
-        let mut forged = proposal.clone();
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_forged_transaction_id() {
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
+        let mut forged = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
         forged.transaction_id = Felt::from(1u64);
+
         assert!(matches!(
             multisig.confirm_proposal(&executor, &forged).await,
             Err(KmsError::MultisigError(_))
         ));
+        assert_eq!(executor.executed_count(), 0);
+    }
 
-        // Proposal targeting another multisig never reaches the executor.
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_foreign_multisig() {
+        let multisig = test_multisig_handle(1);
+        let executor = RecordingExecutor::sepolia(address(2));
         let foreign = MultisigProposal::new(
             address(77),
             vec![call()],
@@ -1715,12 +1769,28 @@ mod tests {
             address(2),
             None,
         );
+
         assert!(matches!(
             multisig.confirm_proposal(&executor, &foreign).await,
             Err(KmsError::MultisigError(_))
         ));
+        assert_eq!(executor.executed_count(), 0);
+    }
 
-        assert_eq!(executor.executed.lock().unwrap().len(), 1);
+    #[tokio::test]
+    async fn test_confirm_proposal_rejects_wallet_on_wrong_chain() {
+        // The transaction id hash binds calls and salt but no chain, so a
+        // replayed proposal must be stopped at the chain check instead.
+        let multisig = test_multisig_handle(1);
+        let mut executor = RecordingExecutor::sepolia(address(2));
+        executor.chain_id = ChainId::Mainnet;
+        let proposal = multisig.proposal(vec![call()], Felt::from(99u64), address(2), None);
+
+        assert!(matches!(
+            multisig.confirm_proposal(&executor, &proposal).await,
+            Err(KmsError::MultisigError(_))
+        ));
+        assert_eq!(executor.executed_count(), 0);
     }
 
     #[test]

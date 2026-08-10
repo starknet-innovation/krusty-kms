@@ -89,7 +89,7 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         network.clone(),
     );
 
-    let multisig = Multisig::new(provider, multisig_address);
+    let multisig = Multisig::new(provider, multisig_address, network.chain_id);
     assert_eq!(multisig.get_quorum().await.unwrap(), 2);
     assert!(multisig.is_signer(&alice).await.unwrap());
     assert!(multisig.is_signer(&bob).await.unwrap());

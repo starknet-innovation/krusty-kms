@@ -4,7 +4,7 @@ use krusty_kms_client::{
     MultisigCoordinationMessage, MultisigCoordinator, MultisigExecutionNotice,
     MultisigSignerNotice, NatsMultisigCoordinator,
 };
-use krusty_kms_common::Address;
+use krusty_kms_common::{Address, ChainId};
 use starknet_rust::core::utils::get_selector_from_name;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::felt::Felt;
@@ -31,7 +31,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![Felt::from(42u64)],
     );
 
-    let multisig = Multisig::new(provider, multisig_address);
+    // starknet-devnet reports SN_SEPOLIA as its chain id.
+    let multisig = Multisig::new(provider, multisig_address, ChainId::Sepolia);
     let coordinator = InMemoryMultisigCoordinator::new();
     let salt = Felt::from(7u64);
     let proposal = multisig.proposal(
