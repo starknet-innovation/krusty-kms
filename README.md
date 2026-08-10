@@ -14,6 +14,8 @@ Krusty provides BIP-39/44 key derivation for Starknet and Nostr domains, determi
 
 ## Published Crates
 
+Maintainers should follow the [crates.io release playbook](docs/crates-release.md).
+
 ```
 krusty-kms-common     Shared value types, errors, and exact serialization helpers
 krusty-kms-wallet-api Shared wallet execution contract: transaction tracking, wait options,

@@ -46,6 +46,8 @@ jobs:
             echo "::error::release tag ${GITHUB_REF_NAME} does not match workspace version ${expected_tag}"
             exit 1
           fi
+      - name: Verify release changelog
+        run: bash .github/scripts/verify-release-changelog.sh
       - name: Verify publishable workspace crates
         run: >
           cargo package --locked --workspace
