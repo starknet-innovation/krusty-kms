@@ -94,6 +94,14 @@ jobs:
             -I"$JNI_INCLUDE" -I"$JNI_OS_INCLUDE" \
             -Ipackages/kms-jvm/src/main/c \
             packages/kms-jvm/src/main/c/kms_jni.c
+      # The UTF-16 -> standard UTF-8 conversion is JNI-free precisely so it can
+      # be executed here: it decides which bytes the passphrase KDF sees, and a
+      # divergence from Swift/Dart/Rust makes funds unreachable (M-22).
+      - name: Run JNI UTF-8 conversion tests
+        run: |
+          cc -Wall -Wextra -Werror -o /tmp/utf16_to_utf8_test \
+            packages/kms-jvm/src/test/c/utf16_to_utf8_test.c
+          /tmp/utf16_to_utf8_test
 
   dart:
     needs: changes

@@ -26,7 +26,12 @@ jobs:
           components: clippy, rustfmt
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace --locked
+      # Mirror the `check` job in rust.yml exactly: krusty-kms-wasm is covered
+      # by `wasm-pack test`, not native cargo test. This job only runs on tag
+      # pushes, so it never gets exercised on a PR — keep it identical to the
+      # command CI proves on every commit rather than a variant of it.
+      - run: cargo test --workspace --locked --exclude krusty-kms-wasm
+      - run: cargo test -p krusty-kms-client --locked --features nats
       - run: cargo install cargo-audit --locked
       - run: cargo audit
 

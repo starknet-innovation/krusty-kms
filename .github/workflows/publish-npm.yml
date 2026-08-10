@@ -29,7 +29,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - run: cargo test --workspace --locked
+      # See publish.yml: krusty-kms-wasm is covered by `wasm-pack test`, not
+      # native cargo test. The wasm package itself is built and inspected by
+      # the publish job below.
+      - run: cargo test --workspace --locked --exclude krusty-kms-wasm
       - run: cargo install cargo-audit --locked
       - run: cargo audit
 

@@ -11,6 +11,7 @@
 #endif
 
 #include "kms.h"
+#include "utf16_to_utf8.h"
 
 /* ====================================================================== */
 /* Helpers                                                                  */
@@ -57,69 +58,10 @@ static void throw_kms_error(JNIEnv *env, int32_t code) {
 /* ---------------------------------------------------------------------- */
 /* Standard UTF-8 string extraction                                        */
 /*                                                                          */
-/* GetStringUTFChars returns JNI *modified* UTF-8 (CESU-8): non-BMP code    */
-/* points (e.g. emoji in a BIP-39 passphrase) encode as 6-byte surrogate    */
-/* pairs instead of standard 4-byte UTF-8. Rust, Swift, and Dart all hand   */
-/* the KMS core standard UTF-8, so a JVM caller using modified UTF-8 would  */
-/* derive DIFFERENT keys from the same passphrase — a cross-platform        */
-/* funds-availability divergence. All strings therefore go through an       */
-/* explicit UTF-16 → standard UTF-8 conversion.                             */
+/* The conversion itself lives in utf16_to_utf8.h (JNI-free, so a           */
+/* standalone test can execute it); see that header for why modified UTF-8  */
+/* is unusable here.                                                        */
 /* ---------------------------------------------------------------------- */
-
-/* Compute the standard UTF-8 byte length of a UTF-16 string.
- * Returns 0 on success, -1 on an unpaired surrogate (invalid input:
- * rejecting is safer than silently substituting a replacement char that
- * other platforms would not produce). */
-static int utf16_to_utf8_size(const jchar *chars, jsize len, size_t *out) {
-    size_t total = 0;
-    for (jsize i = 0; i < len; i++) {
-        jchar c = chars[i];
-        if (c < 0x80) {
-            total += 1;
-        } else if (c < 0x800) {
-            total += 2;
-        } else if (c >= 0xD800 && c <= 0xDBFF) {
-            if (i + 1 >= len || chars[i + 1] < 0xDC00 || chars[i + 1] > 0xDFFF) {
-                return -1;
-            }
-            total += 4;
-            i++;
-        } else if (c >= 0xDC00 && c <= 0xDFFF) {
-            return -1;
-        } else {
-            total += 3;
-        }
-    }
-    *out = total;
-    return 0;
-}
-
-/* Encode a UTF-16 string (pre-validated by utf16_to_utf8_size) as UTF-8. */
-static void utf16_to_utf8_write(const jchar *chars, jsize len, char *out) {
-    unsigned char *p = (unsigned char *)out;
-    for (jsize i = 0; i < len; i++) {
-        uint32_t cp = chars[i];
-        if (cp >= 0xD800 && cp <= 0xDBFF) {
-            uint32_t low = chars[++i];
-            cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
-        }
-        if (cp < 0x80) {
-            *p++ = (unsigned char)cp;
-        } else if (cp < 0x800) {
-            *p++ = (unsigned char)(0xC0 | (cp >> 6));
-            *p++ = (unsigned char)(0x80 | (cp & 0x3F));
-        } else if (cp < 0x10000) {
-            *p++ = (unsigned char)(0xE0 | (cp >> 12));
-            *p++ = (unsigned char)(0x80 | ((cp >> 6) & 0x3F));
-            *p++ = (unsigned char)(0x80 | (cp & 0x3F));
-        } else {
-            *p++ = (unsigned char)(0xF0 | (cp >> 18));
-            *p++ = (unsigned char)(0x80 | ((cp >> 12) & 0x3F));
-            *p++ = (unsigned char)(0x80 | ((cp >> 6) & 0x3F));
-            *p++ = (unsigned char)(0x80 | (cp & 0x3F));
-        }
-    }
-}
 
 /* Convert a Java String to a malloc'd, NUL-terminated, standard UTF-8
  * buffer. Sets *out_capacity to the allocated size so callers can
@@ -140,7 +82,10 @@ static char *require_utf8_chars(JNIEnv *env, jstring s, size_t *out_capacity) {
         return NULL;
     }
     size_t len8 = 0;
-    if (utf16_to_utf8_size(chars, len16, &len8) != 0) {
+    /* Rejects unpaired surrogates and embedded U+0000; the latter would be
+     * truncated by the `CStr::from_ptr` on the Rust side of this ABI, silently
+     * deriving the key for the string's prefix. */
+    if (kms_utf16_to_utf8_size((const uint16_t *)chars, (size_t)len16, &len8) != KMS_UTF16_OK) {
         (*env)->ReleaseStringChars(env, s, chars);
         throw_kms_error(env, KMS_ERR_INVALID_INPUT);
         return NULL;
@@ -151,7 +96,7 @@ static char *require_utf8_chars(JNIEnv *env, jstring s, size_t *out_capacity) {
         throw_kms_error(env, KMS_ERR_INTERNAL);
         return NULL;
     }
-    utf16_to_utf8_write(chars, len16, buf);
+    kms_utf16_to_utf8_write((const uint16_t *)chars, (size_t)len16, buf);
     buf[len8] = '\0';
     (*env)->ReleaseStringChars(env, s, chars);
     *out_capacity = len8 + 1;
