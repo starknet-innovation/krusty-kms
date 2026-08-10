@@ -48,21 +48,40 @@ is_src_rs() {
 }
 
 # Root Cargo.toml centralizes production deps under [workspace.dependencies].
-root_cargo_workspace_deps_changed() {
-  git diff "$base_ref"...HEAD -- Cargo.toml | awk '
-    BEGIN { in_ws=0; found=0 }
-    /^(\+\+\+|---|@@)/ { next }
-    /^[ +\-]\[/ {
-      if ($0 ~ /\[workspace\.dependencies\]/) {
-        in_ws=1
-      } else {
-        in_ws=0
+workspace_dep_entries() {
+  awk '
+    BEGIN { in_section=0 }
+    /^\[/ {
+      if ($0 == "[workspace.dependencies]") {
+        in_section=1
+        next
       }
+      if (in_section) exit
       next
     }
-    in_ws && /^[+-]/ && $0 !~ /^[+-][[:space:]]*#/ && $0 ~ /^[+-][a-zA-Z0-9_.-]+[[:space:]]*=/ { found=1 }
-    END { exit found ? 0 : 1 }
-  '
+    in_section {
+      sub(/^[[:space:]]+/, "")
+      if ($0 ~ /^#/ || $0 == "") next
+      if ($0 ~ /^[a-zA-Z0-9_.-]+[[:space:]]*=/) print
+    }
+  ' "$1"
+}
+
+root_cargo_workspace_deps_changed() {
+  local base_file
+  base_file="$(mktemp)"
+  # shellcheck disable=SC2064
+  trap 'rm -f "$base_file"' RETURN
+
+  if ! git show "$base_ref:Cargo.toml" >"$base_file" 2>/dev/null; then
+    workspace_dep_entries Cargo.toml | grep -q .
+    return $?
+  fi
+
+  ! diff -q \
+    <(workspace_dep_entries "$base_file" | LC_ALL=C sort) \
+    <(workspace_dep_entries Cargo.toml | LC_ALL=C sort) \
+    >/dev/null 2>&1
 }
 
 for f in "${changed[@]}"; do

@@ -194,10 +194,88 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
     return _normalize_ws(" ".join(parts))
 
 
+_WASM_BINDGEN_ATTR_RE = re.compile(r"#\[wasm_bindgen(?:\((.*?)\))?\]", re.DOTALL)
+
+
+def _split_bindgen_args(text: str) -> list[str]:
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_string = False
+    quote = ""
+
+    for ch in text:
+        if in_string:
+            current.append(ch)
+            if ch == quote:
+                in_string = False
+            continue
+        if ch in ('"', "'"):
+            in_string = True
+            quote = ch
+            current.append(ch)
+            continue
+        if ch == "(":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch == ")":
+            depth -= 1
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(ch)
+
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _normalize_bindgen_option(option: str) -> str:
+    option = _normalize_ws(option)
+    if "=" not in option:
+        return option
+    key, _, value = option.partition("=")
+    value = value.strip().strip('"').strip("'")
+    return f"{key.strip()}={value}"
+
+
+def _parse_wasm_bindgen_options(attrs: str) -> list[str]:
+    raw: list[str] = []
+    for match in _WASM_BINDGEN_ATTR_RE.finditer(attrs):
+        inner = (match.group(1) or "").strip()
+        if inner:
+            raw.extend(_split_bindgen_args(inner))
+    flags: list[str] = []
+    keyed: list[str] = []
+    for option in raw:
+        normalized = _normalize_bindgen_option(option)
+        if "=" in normalized:
+            keyed.append(normalized)
+        else:
+            flags.append(normalized)
+    flags.sort()
+    keyed.sort()
+    return flags + keyed
+
+
+def _format_bindgen_attrs(attrs: str) -> str:
+    options = _parse_wasm_bindgen_options(attrs)
+    if not options:
+        return ""
+    return f"wasm_bindgen({', '.join(options)})"
+
+
 def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
-    m = re.search(r'js_name\s*=\s*"([^"]+)"', attrs)
-    if m:
-        return f"{rel_path}: js_name={m.group(1)} | {signature}"
+    bindgen = _format_bindgen_attrs(attrs)
+    if bindgen:
+        return f"{rel_path}: {bindgen} | {signature}"
     return f"{rel_path}: {signature}"
 
 
