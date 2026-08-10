@@ -1,3 +1,6 @@
+/* Request C11 Annex K (memset_s) before any system header pulls in string.h. */
+#define __STDC_WANT_LIB_EXT1__ 1
+
 #include <jni.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -261,8 +264,19 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_feltToHex(
 JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_feltFromBytesBe(
     JNIEnv *env, jclass cls, jbyteArray bytes) {
     (void)cls;
+    if (bytes == NULL) {
+        throw_kms_error(env, KMS_ERR_NULL_POINTER);
+        return NULL;
+    }
     jsize len = (*env)->GetArrayLength(env, bytes);
     jbyte *data = (*env)->GetByteArrayElements(env, bytes, NULL);
+    if (data == NULL) {
+        /* Preserve a pending JVM exception (e.g. OOM) from GetByteArrayElements. */
+        if (!(*env)->ExceptionCheck(env)) {
+            throw_kms_error(env, KMS_ERR_INTERNAL);
+        }
+        return NULL;
+    }
     KmsFelt out;
     int32_t rc = kms_felt_from_bytes_be((const uint8_t *)data, (size_t)len, &out);
     (*env)->ReleaseByteArrayElements(env, bytes, data, JNI_ABORT);
