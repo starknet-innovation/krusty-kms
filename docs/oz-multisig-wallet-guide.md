@@ -135,7 +135,7 @@ let coordinator = NatsMultisigCoordinator::connect("nats://127.0.0.1:4222").awai
 Subjects are deterministic:
 
 ```text
-krusty.multisig.<multisig-address-64-hex>.<transaction-id-64-hex>
+krusty.multisig.<chain-id>.<multisig-address-64-hex>.<transaction-id-64-hex>
 ```
 
 Core NATS is live delivery, so a CLI inbox should subscribe before publishing or

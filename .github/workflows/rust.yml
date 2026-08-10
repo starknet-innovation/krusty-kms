@@ -45,6 +45,7 @@ jobs:
         with:
           toolchain: 1.92.0
       - run: cargo check --all-targets --locked
+      - run: cargo check -p krusty-kms-client --all-targets --features nats --locked
       - run: cargo check -p krusty-kms --examples --locked
       - run: cargo check -p krusty-kms-sdk --examples --locked
 
