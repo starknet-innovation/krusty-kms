@@ -4,7 +4,7 @@
 //!
 //! ```bash
 //! NATS_SERVER_BIN=/path/to/nats-server \
-//!   cargo test -p krusty-kms-client --test nats_multisig_coordinator -- --ignored --nocapture
+//!   cargo test -p krusty-kms-client --features nats --test nats_multisig_coordinator -- --ignored --nocapture
 //! ```
 //!
 //! If `NATS_SERVER_BIN` and `nats-server` are unavailable, the test tries a

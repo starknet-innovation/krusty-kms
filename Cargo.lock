@@ -411,16 +411,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
-name = "console_error_panic_hook"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
-dependencies = [
- "cfg-if",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1476,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "aes",
  "bip39",
@@ -1496,16 +1486,15 @@ dependencies = [
  "serde_json",
  "sha2",
  "sha3",
- "starknet-crypto",
+ "starknet-rust-crypto",
  "starknet-types-core",
  "subtle",
- "thiserror 1.0.69",
  "zeroize",
 ]
 
 [[package]]
 name = "krusty-kms-cabi"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "bip39",
  "hex",
@@ -1516,14 +1505,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
- "starknet-crypto",
  "starknet-types-core",
  "zeroize",
 ]
 
 [[package]]
 name = "krusty-kms-client"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "async-nats",
  "async-trait",
@@ -1541,19 +1529,15 @@ dependencies = [
  "serde_json",
  "starknet-rust",
  "starknet-types-core",
- "thiserror 1.0.69",
  "tokio",
  "url",
 ]
 
 [[package]]
 name = "krusty-kms-common"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "hex",
- "num-bigint",
- "num-traits",
- "proptest",
  "serde",
  "serde_json",
  "starknet-types-core",
@@ -1564,31 +1548,26 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-crypto"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
- "hex",
  "krusty-kms-common",
  "num-bigint",
- "num-integer",
  "num-traits",
- "proptest",
  "rayon",
  "serde",
  "serde_json",
  "sha2",
- "sha3",
  "starknet-types-core",
  "subtle",
- "thiserror 1.0.69",
  "zeroize",
 ]
 
 [[package]]
 name = "krusty-kms-domain"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "hex",
  "krusty-kms-common",
@@ -1600,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-gateway"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "hex",
@@ -1617,7 +1596,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-oracle"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
@@ -1629,26 +1608,23 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-sdk"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "chacha20poly1305",
  "criterion",
- "hex",
  "krusty-kms",
  "krusty-kms-common",
  "krusty-kms-crypto",
- "rand 0.9.4",
  "rayon",
  "serde",
  "serde_json",
  "sha2",
  "starknet-types-core",
- "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "krusty-kms-wallet-api"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
@@ -1658,9 +1634,8 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-wasm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
- "console_error_panic_hook",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
  "hex",
@@ -1676,11 +1651,8 @@ dependencies = [
  "serde_json",
  "sha3",
  "starknet-types-core",
- "thiserror 1.0.69",
  "wasm-bindgen",
- "wasm-bindgen-futures",
  "wasm-bindgen-test",
- "web-sys",
 ]
 
 [[package]]
@@ -1764,36 +1736,28 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "mental-poker"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "criterion",
  "getrandom 0.2.17",
  "hex",
  "krusty-kms-common",
  "krusty-kms-crypto",
- "num-bigint",
- "num-traits",
  "proptest",
  "rand 0.9.4",
- "rand_core 0.9.5",
  "rayon",
  "serde",
- "serde_json",
  "sha2",
- "sha3",
  "starknet-types-core",
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "mental-poker-wasm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
- "console_error_panic_hook",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
- "hex",
- "js-sys",
  "krusty-kms-common",
  "krusty-kms-crypto",
  "mental-poker",
@@ -1805,9 +1769,7 @@ dependencies = [
  "starknet-types-core",
  "thiserror 1.0.69",
  "wasm-bindgen",
- "wasm-bindgen-futures",
  "wasm-bindgen-test",
- "web-sys",
 ]
 
 [[package]]
@@ -2202,19 +2164,14 @@ dependencies = [
 
 [[package]]
 name = "qb-game"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "hex",
- "krusty-kms-common",
  "krusty-kms-crypto",
- "proptest",
  "rand 0.9.4",
- "rand_core 0.9.5",
  "serde",
  "serde_json",
  "sha2",
- "starknet-types-core",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -2994,34 +2951,6 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
-
-[[package]]
-name = "starknet-crypto"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1004a16c25dc6113c19d4f9d0c19ff97d85804829894bba22c0d0e9e7b249812"
-dependencies = [
- "crypto-bigint",
- "hex",
- "hmac",
- "num-bigint",
- "num-integer",
- "num-traits",
- "rfc6979",
- "sha2",
- "starknet-curve",
- "starknet-types-core",
- "zeroize",
-]
-
-[[package]]
-name = "starknet-curve"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22c898ae81b6409532374cf237f1bd752d068b96c6ad500af9ebbd0d9bb712f6"
-dependencies = [
- "starknet-types-core",
-]
 
 [[package]]
 name = "starknet-rust"

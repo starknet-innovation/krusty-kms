@@ -11,8 +11,11 @@ use crate::tx::Tx;
 use crate::wallet::utils::{core_felt_to_rs, rs_felt_to_core};
 use crate::wallet::WalletExecutor;
 use async_trait::async_trait;
+#[cfg(feature = "nats")]
 use bytes::Bytes;
-use futures_util::{stream, Stream, StreamExt};
+#[cfg(feature = "nats")]
+use futures_util::StreamExt;
+use futures_util::{stream, Stream};
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
@@ -437,11 +440,13 @@ impl InMemoryMultisigCoordinator {
 /// before publishing when callers need to observe messages through this backend.
 /// Use NATS JetStream at deployment time when durable retention is required.
 #[derive(Clone)]
+#[cfg(feature = "nats")]
 pub struct NatsMultisigCoordinator {
     client: async_nats::Client,
     subject_prefix: String,
 }
 
+#[cfg(feature = "nats")]
 impl NatsMultisigCoordinator {
     /// Connect to a NATS server using the default subject prefix.
     pub async fn connect(url: &str) -> Result<Self> {
@@ -488,6 +493,7 @@ impl NatsMultisigCoordinator {
 }
 
 #[async_trait]
+#[cfg(feature = "nats")]
 impl MultisigCoordinator for NatsMultisigCoordinator {
     async fn publish(&self, message: MultisigCoordinationMessage) -> Result<()> {
         if let MultisigCoordinationMessage::Proposal(proposal) = &message {
@@ -1468,10 +1474,12 @@ fn felt_to_hex(felt: Felt) -> String {
     format!("0x{:064x}", felt)
 }
 
+#[cfg(feature = "nats")]
 fn felt_subject_token(felt: Felt) -> String {
     felt_to_hex(felt).trim_start_matches("0x").to_string()
 }
 
+#[cfg(feature = "nats")]
 fn address_subject_token(address: Address) -> String {
     felt_subject_token(address.as_felt())
 }
@@ -1544,6 +1552,7 @@ mod serde_address_hex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::StreamExt;
 
     fn address(value: u64) -> Address {
         Address::from(Felt::from(value))
@@ -1928,6 +1937,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "nats")]
     fn test_nats_subject_is_deterministic() {
         let topic = MultisigTopic {
             multisig: address(1),
