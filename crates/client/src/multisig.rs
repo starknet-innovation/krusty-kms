@@ -555,10 +555,9 @@ impl reqwest::dns::Resolve for PublicOnlyResolver {
 
             if let Ok(ip) = host.parse::<IpAddr>() {
                 if is_blocked_ip(ip) {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("coordinator host '{host}' is a blocked IP address"),
-                    ))
+                    return Err(Box::new(std::io::Error::other(format!(
+                        "coordinator host '{host}' is a blocked IP address"
+                    )))
                         as Box<dyn std::error::Error + Send + Sync>);
                 }
                 let iter: reqwest::dns::Addrs = Box::new(std::iter::once(SocketAddr::new(ip, 0)));
@@ -568,27 +567,24 @@ impl reqwest::dns::Resolve for PublicOnlyResolver {
             let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, 0))
                 .await
                 .map_err(|error| {
-                    Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("DNS resolve failed for '{host}': {error}"),
-                    )) as Box<dyn std::error::Error + Send + Sync>
+                    Box::new(std::io::Error::other(format!(
+                        "DNS resolve failed for '{host}': {error}"
+                    ))) as Box<dyn std::error::Error + Send + Sync>
                 })?
                 .collect();
 
             if addrs.is_empty() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("coordinator host '{host}' resolved to no addresses"),
-                ))
+                return Err(Box::new(std::io::Error::other(format!(
+                    "coordinator host '{host}' resolved to no addresses"
+                )))
                     as Box<dyn std::error::Error + Send + Sync>);
             }
 
             // Fail closed if any address is non-public (rebinding / mixed RRset).
             if addrs.iter().any(|addr| is_blocked_ip(addr.ip())) {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("coordinator host '{host}' resolved to a blocked address"),
-                ))
+                return Err(Box::new(std::io::Error::other(format!(
+                    "coordinator host '{host}' resolved to a blocked address"
+                )))
                     as Box<dyn std::error::Error + Send + Sync>);
             }
 
@@ -727,6 +723,11 @@ fn is_blocked_ip(ip: IpAddr) -> bool {
             if is_local_use_nat64_prefix(v6) {
                 return true;
             }
+            // Legacy transition formats (6to4, IPv4-compatible) embed an IPv4
+            // destination the same way NAT64 does.
+            if let Some(v4) = ipv4_from_transition_prefix(v6) {
+                return is_blocked_ipv4(v4);
+            }
             is_blocked_ipv6(v6)
         }
     }
@@ -759,6 +760,9 @@ fn is_blocked_ipv6(v6: Ipv6Addr) -> bool {
         || v6.is_multicast()
         || v6.is_unicast_link_local()
         || v6.is_unique_local()
+        // Deprecated site-local fec0::/10 (RFC 3879) — still routed internally
+        // on some networks, so treat it like the other private ranges.
+        || (v6.segments()[0] & 0xffc0) == 0xfec0
         // Documentation 2001:db8::/32
         || v6.segments()[0] == 0x2001 && v6.segments()[1] == 0x0db8
         // Discard prefix 100::/64
@@ -806,6 +810,27 @@ fn ipv4_from_nat64_prefix(v6: Ipv6Addr) -> Option<Ipv4Addr> {
 fn is_local_use_nat64_prefix(v6: Ipv6Addr) -> bool {
     let s = v6.segments();
     s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0x0001
+}
+
+/// Extract an IPv4 address embedded in a legacy IPv6 transition format.
+///
+/// Handles:
+/// - 6to4 `2002::/16` (RFC 3056), IPv4 in bits 16-47
+/// - deprecated IPv4-compatible `::a.b.c.d` (RFC 4291), IPv4 in the low 32 bits
+fn ipv4_from_transition_prefix(v6: Ipv6Addr) -> Option<Ipv4Addr> {
+    let s = v6.segments();
+
+    // 6to4 2002::/16 — e.g. `2002:0a00:0001::` → 10.0.0.1
+    if s[0] == 0x2002 {
+        return Some(ipv4_from_u16_pair(s[1], s[2]));
+    }
+
+    // IPv4-compatible ::a.b.c.d — e.g. `::a00:1` → 10.0.0.1
+    if s[..6] == [0, 0, 0, 0, 0, 0] && (s[6], s[7]) != (0, 0) {
+        return Some(ipv4_from_u16_pair(s[6], s[7]));
+    }
+
+    None
 }
 
 #[async_trait]
@@ -1541,6 +1566,21 @@ mod tests {
         // Public embedding via well-known NAT64 prefix remains allowed.
         assert!(HttpMultisigCoordinator::from_url("http://[64:ff9b::808:808]/").is_ok());
         assert!(HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1/").is_ok());
+    }
+
+    #[test]
+    fn test_http_coordinator_rejects_non_public_ipv6_ranges() {
+        // Deprecated site-local fec0::/10 (RFC 3879).
+        assert!(HttpMultisigCoordinator::from_url("http://[fec0::1]/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://[feff:ffff::1]/").is_err());
+        // Legacy transition formats embedding private IPv4 (10.0.0.1).
+        assert!(HttpMultisigCoordinator::from_url("http://[2002:a00:1::1]/").is_err());
+        assert!(HttpMultisigCoordinator::from_url("http://[::a00:1]/").is_err());
+        // Equivalent public embeddings (8.8.8.8) stay allowed.
+        assert!(HttpMultisigCoordinator::from_url("http://[2002:808:808::1]/").is_ok());
+        assert!(HttpMultisigCoordinator::from_url("http://[::808:808]/").is_ok());
+        // Global unicast outside the blocked ranges is unaffected.
+        assert!(HttpMultisigCoordinator::from_url("http://[2606:4700::1111]/").is_ok());
     }
 
     #[test]

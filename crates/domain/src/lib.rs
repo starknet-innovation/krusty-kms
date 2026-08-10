@@ -211,14 +211,20 @@ fn looks_like_raw_secret_material(value: &str) -> bool {
     };
 
     if !hex_body.is_empty() && hex_body.chars().all(|c| c.is_ascii_hexdigit()) {
+        // Leading zeroes do not change the underlying scalar, so a padded
+        // encoding (`0x0` + 64 digits) must be treated like its unpadded form.
+        // Check both the literal width and the significant width.
+        let significant_len = hex_body.trim_start_matches('0').len();
+        let widths = [hex_body.len(), significant_len];
+
         // `0x`-prefixed values in the felt/scalar width range are key material
         // (including unpadded Stark scalars from `expose_secret_hex`).
-        if has_0x && (1..=64).contains(&hex_body.len()) {
+        if has_0x && widths.iter().any(|w| *w <= 64) {
             return true;
         }
         // Bare hex long enough to be a near-full 32-byte key; keep short opaque
         // hex IDs (e.g. "abc123") allowed.
-        if !has_0x && (48..=64).contains(&hex_body.len()) {
+        if !has_0x && widths.iter().any(|w| (48..=64).contains(w)) {
             return true;
         }
     }
@@ -1025,6 +1031,21 @@ mod tests {
         .is_err());
         assert!(SecretRef::new("wallet-1").is_ok());
         assert!(SecretRef::new("abc123").is_ok());
+    }
+
+    #[test]
+    fn secret_ref_rejects_zero_padded_key_material() {
+        // Leading zeroes encode the same scalar, so padded forms must be
+        // rejected just like the unpadded ones.
+        assert!(SecretRef::new("0x0".to_string() + &"ab".repeat(32)).is_err());
+        assert!(SecretRef::new("0x".to_string() + &"0".repeat(40) + &"ab".repeat(32)).is_err());
+        assert!(SecretRef::new("0x".to_string() + &"0".repeat(63) + "2a").is_err());
+        assert!(SecretRef::new("0".repeat(8) + &"ab".repeat(32)).is_err());
+        // All-zero scalar stays rejected regardless of padding width.
+        assert!(SecretRef::new("0x".to_string() + &"0".repeat(65)).is_err());
+        // Opaque identifiers that merely start with a zero remain usable.
+        assert!(SecretRef::new("0wallet").is_ok());
+        assert!(SecretRef::new("0abc12").is_ok());
     }
 
     #[test]

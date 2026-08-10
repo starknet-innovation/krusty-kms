@@ -1206,7 +1206,7 @@ fn enforce_class_hash_allowlist(
     }
 
     let allowed = known_class_hashes(kind, chain_id);
-    if allowed.iter().any(|h| *h == class_hash) {
+    if allowed.contains(&class_hash) {
         return Ok(());
     }
 
