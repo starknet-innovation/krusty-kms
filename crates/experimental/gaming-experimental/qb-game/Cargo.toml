@@ -15,27 +15,18 @@ default = []
 
 [dependencies]
 # Internal crates
-krusty-kms-common = { path = "../../../common" }
 krusty-kms-crypto = { path = "../../../crypto", default-features = false }
-
-# Starknet types
-starknet-types-core.workspace = true
 
 # Cryptography
 sha2.workspace = true
 rand.workspace = true
-rand_core.workspace = true
 
 # Serialization
 serde.workspace = true
-serde_json.workspace = true
 hex.workspace = true
 
-# Error handling
-thiserror.workspace = true
-
 [dev-dependencies]
-proptest.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

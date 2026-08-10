@@ -49,6 +49,7 @@ Check the client test and example targets:
 
 ```bash
 cargo check -p krusty-kms-client --tests --examples
+cargo check -p krusty-kms-client --features nats --tests --examples
 ```
 
 Build the Cairo wrapper contract:
@@ -73,7 +74,7 @@ Run the live NATS test with a local broker binary:
 
 ```bash
 NATS_SERVER_BIN="$(go env GOPATH)/bin/nats-server" \
-  cargo test -p krusty-kms-client --test nats_multisig_coordinator -- --ignored --nocapture
+  cargo test -p krusty-kms-client --features nats --test nats_multisig_coordinator -- --ignored --nocapture
 ```
 
 If `NATS_SERVER_BIN` is not set and no `nats-server` is on `PATH`, the test tries
@@ -117,7 +118,13 @@ execution commands.
 
 ## Coordinator Setup
 
-Use NATS for the standard live pub/sub path:
+Enable the `krusty-kms-client/nats` feature and use NATS for the standard live
+pub/sub path:
+
+```toml
+[dependencies]
+krusty-kms-client = { version = "0.8", features = ["nats"] }
+```
 
 ```rust
 use krusty_kms_client::{MultisigCoordinator, NatsMultisigCoordinator};
@@ -128,7 +135,7 @@ let coordinator = NatsMultisigCoordinator::connect("nats://127.0.0.1:4222").awai
 Subjects are deterministic:
 
 ```text
-krusty.multisig.<multisig-address-64-hex>.<transaction-id-64-hex>
+krusty.multisig.<chain-id>.<multisig-address-64-hex>.<transaction-id-64-hex>
 ```
 
 Core NATS is live delivery, so a CLI inbox should subscribe before publishing or

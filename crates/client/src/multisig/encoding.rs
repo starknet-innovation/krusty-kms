@@ -1,5 +1,6 @@
 //! Hex encodings and serde adapters shared by the multisig wire types.
 
+#[cfg(feature = "nats")]
 use krusty_kms_common::Address;
 use starknet_types_core::felt::Felt;
 
@@ -7,10 +8,12 @@ pub(super) fn felt_to_hex(felt: Felt) -> String {
     format!("0x{:064x}", felt)
 }
 
+#[cfg(feature = "nats")]
 pub(super) fn felt_subject_token(felt: Felt) -> String {
     felt_to_hex(felt).trim_start_matches("0x").to_string()
 }
 
+#[cfg(feature = "nats")]
 pub(super) fn address_subject_token(address: Address) -> String {
     felt_subject_token(address.as_felt())
 }

@@ -20,25 +20,16 @@ wasm-opt = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[features]
-default = ["console_error_panic_hook"]
-
 [dependencies]
 # Internal crates
-krusty-kms-sdk = { version = "0.7.0", path = "../sdk", default-features = false }
-krusty-kms-common = { version = "0.7.0", path = "../common" }
-krusty-kms-crypto = { version = "0.7.0", path = "../crypto", default-features = false }
-krusty-kms = { version = "0.7.0", path = "../kms", default-features = false }
+krusty-kms-sdk = { version = "0.8.0", path = "../sdk", default-features = false }
+krusty-kms-common = { version = "0.8.0", path = "../common" }
+krusty-kms-crypto = { version = "0.8.0", path = "../crypto", default-features = false }
+krusty-kms = { version = "0.8.0", path = "../kms", default-features = false }
 
 # WASM bindings
 wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
-web-sys = { version = "0.3", features = [
-    "console",
-    "Window",
-    "Performance",
-] }
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
@@ -46,12 +37,6 @@ serde_json.workspace = true
 serde-wasm-bindgen = "0.6"
 hex.workspace = true
 sha3.workspace = true
-
-# Error handling
-thiserror.workspace = true
-
-# Better panic messages in WASM
-console_error_panic_hook = { version = "0.1", optional = true }
 
 # Starknet types (need for Felt operations)
 starknet-types-core.workspace = true

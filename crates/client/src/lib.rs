@@ -29,12 +29,14 @@ pub use events::{
 };
 pub use krusty_kms_common::{KmsError, Result};
 pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
+#[cfg(feature = "nats")]
+pub use multisig::NatsMultisigCoordinator;
 pub use multisig::{
     coordination_message_hash, hash_transaction, hash_transaction_batch, HttpMultisigCoordinator,
     InMemoryMultisigCoordinator, Multisig, MultisigCall, MultisigCoordinationEnvelope,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigExecutionNotice,
     MultisigMessageStream, MultisigProposal, MultisigSignerNotice, MultisigTopic,
-    MultisigTransactionState, NatsMultisigCoordinator, SignedMultisigCoordinationMessage,
+    MultisigTransactionState, SignedMultisigCoordinationMessage,
     MULTISIG_COORDINATION_SCHEMA_VERSION,
 };
 pub use operations::{

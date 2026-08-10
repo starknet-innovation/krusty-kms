@@ -77,12 +77,20 @@ This matches OpenZeppelin's Cairo `hash_transaction_batch`.
 ## Coordinator Backends
 
 The preferred live pub/sub backend is NATS, exposed by
-`NatsMultisigCoordinator`. NATS gives the SDK a well-known, widely deployed
+`NatsMultisigCoordinator` when the `krusty-kms-client/nats` feature is enabled.
+NATS gives the SDK a well-known, widely deployed
 subject-based message bus instead of a bespoke socket protocol. The default
 subject layout is:
 
 ```text
 krusty.multisig.<chain-id>.<multisig-address-64-hex>.<transaction-id-64-hex>
+```
+
+Enable the feature in the consuming crate:
+
+```toml
+[dependencies]
+krusty-kms-client = { version = "0.8", features = ["nats"] }
 ```
 
 The chain-id token (`SN_MAIN` / `SN_SEPOLIA`) namespaces subjects so a shared
@@ -242,5 +250,5 @@ verifies `NatsMultisigCoordinator` subscribe/publish delivery:
 
 ```bash
 NATS_SERVER_BIN=/path/to/nats-server \
-  cargo test -p krusty-kms-client --test nats_multisig_coordinator -- --ignored --nocapture
+  cargo test -p krusty-kms-client --features nats --test nats_multisig_coordinator -- --ignored --nocapture
 ```

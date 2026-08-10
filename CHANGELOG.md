@@ -4,7 +4,7 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
-## [0.7.0] - 2026-08-10
+## [0.8.0] - 2026-08-10
 
 ### Changed
 
@@ -29,6 +29,18 @@ All notable changes to the published Rust crates are documented here.
   prove actor authorization only — not publisher identity, freshness, or
   uniqueness — so consumers that tally them must deduplicate by
   `(actor, topic, message kind)`.
+
+## [0.7.0] - 2026-08-10
+
+### Changed
+
+- **Breaking:** NATS multisig coordination is now opt-in through the
+  `krusty-kms-client/nats` feature, removing its dependency subtree from the
+  default client graph.
+- Deduplicated Starknet signing onto Software Mansion's
+  `starknet-rust-crypto` package and removed unused direct, test-only, and WASM
+  dependencies across the workspace.
+- Removed the archived `console_error_panic_hook` from the WASM packages.
 
 ## [0.6.1] - 2026-08-10
 

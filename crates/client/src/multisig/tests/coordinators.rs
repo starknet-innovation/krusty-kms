@@ -3,10 +3,12 @@
 
 use super::{address, call, test_signing_key};
 use crate::multisig::types::validate_incoming_envelope;
+#[cfg(feature = "nats")]
+use crate::multisig::NatsMultisigCoordinator;
 use crate::multisig::{
     HttpMultisigCoordinator, InMemoryMultisigCoordinator, MultisigCoordinationEnvelope,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigProposal, MultisigSignerNotice,
-    MultisigTopic, NatsMultisigCoordinator, SignedMultisigCoordinationMessage,
+    MultisigTopic, SignedMultisigCoordinationMessage,
 };
 use futures_util::StreamExt;
 use krusty_kms_common::{ChainId, KmsError};
@@ -215,6 +217,7 @@ fn test_http_coordinator_rejects_non_public_ipv6_ranges() {
 }
 
 #[test]
+#[cfg(feature = "nats")]
 fn test_nats_subject_is_deterministic() {
     let topic = MultisigTopic {
         multisig: address(1),

@@ -38,14 +38,8 @@ pub use types::{
 };
 
 /// Initialize the WASM module.
-///
-/// Sets up panic hook for better error messages in console.
-/// Call this before using any other functions.
 #[wasm_bindgen(start)]
-pub fn init() {
-    #[cfg(feature = "console_error_panic_hook")]
-    console_error_panic_hook::set_once();
-}
+pub fn init() {}
 
 /// Get the SDK version.
 #[wasm_bindgen(js_name = "getVersion")]
@@ -63,7 +57,7 @@ pub fn get_build_info() -> JsValue {
         "name": env!("CARGO_PKG_NAME"),
         "target": "wasm32-unknown-unknown",
         "features": {
-            "console_error_panic_hook": cfg!(feature = "console_error_panic_hook"),
+            "console_error_panic_hook": false,
         }
     });
 
