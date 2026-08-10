@@ -51,6 +51,14 @@ let descriptor = multisig.deployment_descriptor(
    `submit_transaction_batch`.
 4. Each approving signer sends `confirm_transaction(id)` on-chain and may publish
    `Confirmation` to the coordinator.
+
+   **Warning:** when the id came from a coordinator message, do not call
+   `Multisig::confirm(id)` with it directly — the id arrives unauthenticated
+   and could be forged by a compromised coordinator. Use
+   `Multisig::confirm_proposal`, which recomputes the id from the proposal
+   payload and binds the multisig address and chain before signing. Raw
+   `confirm(id)` is only for ids obtained from a trusted source (e.g. an
+   on-chain read or a locally constructed proposal).
 5. Once `get_transaction_state(id)` returns `Confirmed`, any registered signer
    can send `execute_transaction_batch`.
 

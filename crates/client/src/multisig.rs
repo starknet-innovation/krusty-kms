@@ -1189,9 +1189,13 @@ impl Multisig {
 
     /// Confirm a submitted transaction on-chain through a registered signer wallet.
     ///
-    /// `id` is trusted as-is. When the id came from a coordination message,
-    /// prefer [`Self::confirm_proposal`], which recomputes the id from the
-    /// proposal payload before signing.
+    /// `id` is trusted as-is and signed without any validation. **Do not** pass
+    /// an id taken from a coordinator message: those arrive unauthenticated and
+    /// a compromised coordinator can forge them. Use [`Self::confirm_proposal`]
+    /// for coordinator-delivered proposals — it recomputes the id from the
+    /// proposal payload and binds the multisig address and chain before
+    /// signing. Reserve this method for ids from trusted sources (on-chain
+    /// reads, locally constructed proposals).
     pub async fn confirm(&self, wallet: &dyn WalletExecutor, id: Felt) -> Result<Tx> {
         wallet.execute(vec![self.populate_confirm(id)]).await
     }
