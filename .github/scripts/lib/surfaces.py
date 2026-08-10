@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 SOFT_LIMIT_DEFAULT = 350
@@ -73,6 +74,17 @@ _FIELD_DECL_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))([\w]+)\s*:\s*(.+?)\s*,?\s*$"
 )
 _ENUM_VARIANT_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(=\s*[^,{]+)?\s*,?\s*$")
+_UNRESTRICTED_PUB_ITEM_RE = re.compile(
+    r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
+    r"(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?"
+    r"(fn|struct|enum|trait|type|const|static|use|mod|impl)\b"
+)
+_TRAIT_METHOD_RE = re.compile(
+    r"^\s*(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?fn\b"
+)
+_UNRESTRICTED_PUB_DIFF_RE = re.compile(
+    r"^[+-]\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
+)
 
 
 def _normalize_ws(text: str) -> str:
@@ -214,6 +226,41 @@ def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[st
     return fields
 
 
+def _collect_trait_methods(lines: list[str], open_line: int) -> list[str]:
+    """Collect normalized method signatures from a trait body."""
+    methods: list[str] = []
+    depth = 0
+
+    for j in range(open_line, len(lines)):
+        line = lines[j]
+        stripped = line.strip()
+
+        if depth == 0:
+            if "{" not in line:
+                continue
+            depth += _brace_delta(line)
+            if depth <= 0:
+                break
+            continue
+
+        if depth == 1:
+            if stripped.startswith("#["):
+                continue
+            if not stripped or stripped.startswith("//"):
+                depth += _brace_delta(line)
+                if depth <= 0:
+                    break
+                continue
+            if _TRAIT_METHOD_RE.match(line):
+                methods.append(_collect_rust_signature(lines, j))
+
+        depth += _brace_delta(line)
+        if depth <= 0:
+            break
+
+    return methods
+
+
 def _collect_rust_signature(lines: list[str], start: int) -> str:
     """Collect a single-line normalized Rust declaration (fn/struct/enum/impl)."""
     first = lines[start]
@@ -221,6 +268,20 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
     if _IMPL_RE.match(first):
         text = first.split("{", 1)[0].strip()
         return _normalize_ws(f"{text} {{")
+
+    trait_match = re.match(r"^\s*(pub\s+)?trait\b", first)
+    if trait_match:
+        parts: list[str] = []
+        for j in range(start, len(lines)):
+            parts.append(lines[j].strip())
+            if "{" in lines[j]:
+                before = " ".join(parts).split("{", 1)[0].strip()
+                header = _normalize_ws(f"{before} {{")
+                body_methods = _collect_trait_methods(lines, j)
+                if body_methods:
+                    return _normalize_ws(f"{header} {'; '.join(body_methods)} }}")
+                return header
+        return _normalize_ws(" ".join(parts))
 
     struct_enum = re.match(r"^\s*(pub\s+)?(struct|enum)\b", first)
     if struct_enum:
@@ -255,6 +316,57 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
                 return _normalize_ws(" ".join(parts))
             return _normalize_ws(combined)
     return _normalize_ws(" ".join(parts))
+
+
+def extract_public_surface(text: str) -> frozenset[str]:
+    """Canonical fingerprint of unrestricted ``pub`` API items in Rust source."""
+    lines = text.splitlines()
+    surface: set[str] = set()
+    for i, line in enumerate(lines):
+        if not _UNRESTRICTED_PUB_ITEM_RE.match(line):
+            continue
+        sig = _collect_rust_signature(lines, i)
+        if sig:
+            surface.add(sig)
+    return frozenset(surface)
+
+
+def public_api_change_reasons(
+    base_ref: str,
+    files: list[str],
+    *,
+    root: Path | None = None,
+) -> list[str]:
+    """Return design-note trigger reasons for changed production ``src/**/*.rs`` files."""
+    repo = root or repo_root()
+    reasons: list[str] = []
+    for rel in files:
+        try:
+            base_text = subprocess.check_output(
+                ["git", "show", f"{base_ref}:{rel}"],
+                cwd=repo,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError:
+            base_text = ""
+        head_path = repo / rel
+        head_text = head_path.read_text() if head_path.is_file() else ""
+        if extract_public_surface(base_text) != extract_public_surface(head_text):
+            reasons.append(f"public API surface changed in {rel}")
+            continue
+        try:
+            diff = subprocess.check_output(
+                ["git", "diff", f"{base_ref}...HEAD", "--", rel],
+                cwd=repo,
+                text=True,
+                stderr=subprocess.DEVNULL,
+            )
+        except subprocess.CalledProcessError:
+            diff = ""
+        if _UNRESTRICTED_PUB_DIFF_RE.search(diff):
+            reasons.append(f"new/changed/removed pub items in {rel}")
+    return reasons
 
 
 _WASM_BINDGEN_ATTR_RE = re.compile(r"#\[wasm_bindgen(?:\((.*?)\))?\]", re.DOTALL)
@@ -387,6 +499,8 @@ _KRUSTY_PACKAGE = re.compile(rf'package\s*=\s*"({_KRUSTY_NAME})"')
 _DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
 _DEP_WS_INLINE = re.compile(r"^([a-zA-Z0-9_-]+)\.workspace\s*=\s*true\b")
 _DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
+_WS_DEP_TABLE = re.compile(r"^\[workspace\.dependencies\.([a-zA-Z0-9_.-]+)\]")
+_WS_TRUE = re.compile(r"\bworkspace\s*=\s*true\b")
 
 
 def _is_krusty_dependency_section(header: str) -> bool:
@@ -398,16 +512,77 @@ def _is_krusty_dependency_section(header: str) -> bool:
     )
 
 
-def _add_krusty_dep_from_entry(deps: set[str], name: str, body: str) -> None:
+def _workspace_dep_package_name(key: str, body: str) -> str:
     pkg = _KRUSTY_PACKAGE.search(body)
     if pkg:
+        return pkg.group(1)
+    return key
+
+
+def parse_workspace_dependencies(cargo_text: str) -> dict[str, str]:
+    """Map ``[workspace.dependencies]`` keys to resolved crate package names."""
+    mapping: dict[str, str] = {}
+    sections = re.split(r"\n(?=\[)", cargo_text)
+    for section in sections:
+        if not section.strip():
+            continue
+        header = section.split("\n", 1)[0].strip()
+        body = section.split("\n", 1)[1] if "\n" in section else ""
+        if header == "[workspace.dependencies]":
+            for line in section.splitlines()[1:]:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                key_match = _DEP_KEY.match(stripped)
+                if not key_match:
+                    continue
+                key = key_match.group(1)
+                entry_body = stripped[key_match.end() :].lstrip("= ").strip()
+                mapping[key] = _workspace_dep_package_name(key, entry_body)
+            continue
+        table = _WS_DEP_TABLE.match(header)
+        if table:
+            key = table.group(1)
+            mapping[key] = _workspace_dep_package_name(key, body)
+    return mapping
+
+
+def _uses_workspace(body: str) -> bool:
+    return bool(_WS_TRUE.search(body))
+
+
+def _add_krusty_dep_from_entry(
+    deps: set[str],
+    name: str,
+    body: str,
+    workspace_deps: dict[str, str],
+) -> None:
+    pkg = _KRUSTY_PACKAGE.search(body)
+    if pkg and _KRUSTY_NAME_RE.match(pkg.group(1)):
         deps.add(pkg.group(1))
-    elif _KRUSTY_NAME_RE.match(name):
-        deps.add(name)
+        return
+
+    resolved = name
+    if _uses_workspace(body) or _DEP_WS_INLINE.match(body):
+        resolved = workspace_deps.get(name, name)
+
+    if _KRUSTY_NAME_RE.match(resolved):
+        deps.add(resolved)
 
 
-def krusty_deps_from_cargo_toml(text: str) -> set[str]:
+def krusty_deps_from_cargo_toml(
+    text: str,
+    workspace_deps: dict[str, str] | None = None,
+) -> set[str]:
     """Collect krusty-* deps from [dependencies] / target.*.dependencies (not dev/build)."""
+    if workspace_deps is None:
+        root_cargo = repo_root() / "Cargo.toml"
+        workspace_deps = (
+            parse_workspace_dependencies(root_cargo.read_text())
+            if root_cargo.is_file()
+            else {}
+        )
+
     deps: set[str] = set()
     sections = re.split(r"\n(?=\[)", text)
     for section in sections:
@@ -417,7 +592,7 @@ def krusty_deps_from_cargo_toml(text: str) -> set[str]:
         table = _DEP_TABLE.match(header)
         if table:
             body = section.split("\n", 1)[1] if "\n" in section else ""
-            _add_krusty_dep_from_entry(deps, table.group(1), body)
+            _add_krusty_dep_from_entry(deps, table.group(1), body, workspace_deps)
             continue
         if not _is_krusty_dependency_section(header):
             continue
@@ -427,12 +602,14 @@ def krusty_deps_from_cargo_toml(text: str) -> set[str]:
                 continue
             ws_match = _DEP_WS_INLINE.match(stripped)
             if ws_match:
-                _add_krusty_dep_from_entry(deps, ws_match.group(1), stripped)
+                _add_krusty_dep_from_entry(
+                    deps, ws_match.group(1), stripped, workspace_deps
+                )
                 continue
             key_match = _DEP_KEY.match(stripped)
             if not key_match:
                 continue
-            _add_krusty_dep_from_entry(deps, key_match.group(1), stripped)
+            _add_krusty_dep_from_entry(deps, key_match.group(1), stripped, workspace_deps)
     return deps
 
 
@@ -460,6 +637,35 @@ def _assert_surfaces_self_checks() -> None:
     assert krusty_deps_from_cargo_toml(
         "[dependencies.krusty-kms-common]\nworkspace = true\n"
     ) == {"krusty-kms-common"}
+    ws_map = {"kms": "krusty-kms"}
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkms.workspace = true\n",
+        workspace_deps=ws_map,
+    ) == {"krusty-kms"}
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkms = { workspace = true }\n",
+        workspace_deps=ws_map,
+    ) == {"krusty-kms"}
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkms.workspace = true\n",
+        workspace_deps={},
+    ) == set()
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkms = { workspace = true }\n",
+        workspace_deps={},
+    ) == set()
+    assert parse_workspace_dependencies(
+        '[workspace.dependencies]\nkms = { package = "krusty-kms", path = "crates/kms" }\n'
+    ) == {"kms": "krusty-kms"}
+
+    trait_src = """
+pub trait WalletExecutor: Send + Sync {
+    async fn execute(&self, calls: Vec<Call>) -> Result<Tx>;
+    async fn estimate_fee(&self, calls: Vec<Call>) -> Result<FeeEstimate>;
+}
+""".strip()
+    changed_trait = trait_src.replace("estimate_fee", "estimate_fee_v2")
+    assert extract_public_surface(trait_src) != extract_public_surface(changed_trait)
 
 
 if __name__ == "__main__":

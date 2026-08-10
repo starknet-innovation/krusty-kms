@@ -189,16 +189,14 @@ crate_cargo_production_deps_changed() {
     >/dev/null 2>&1
 }
 
+src_rs_files=()
 for f in "${changed[@]}"; do
   case "$f" in
     crates/experimental/*) continue ;;
   esac
 
   if is_src_rs "$f"; then
-    if git diff "$base_ref"...HEAD -- "$f" | grep -E '^[+-]\s*pub\s' >/dev/null; then
-      needs_note=1
-      reasons+=("new/changed/removed pub items in $f")
-    fi
+    src_rs_files+=("$f")
   fi
 
   case "$f" in
@@ -223,6 +221,21 @@ for f in "${changed[@]}"; do
       ;;
   esac
 done
+
+if ((${#src_rs_files[@]} > 0)); then
+  while IFS= read -r reason; do
+    needs_note=1
+    reasons+=("$reason")
+  done < <(
+    python3 - "$base_ref" "${src_rs_files[@]}" <<'PY'
+import sys
+from lib.surfaces import public_api_change_reasons
+
+for reason in public_api_change_reasons(sys.argv[1], sys.argv[2:]):
+    print(reason)
+PY
+  )
+fi
 
 if (( needs_note == 0 )); then
   echo "design-note check: no triggering public-surface changes"
