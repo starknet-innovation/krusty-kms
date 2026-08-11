@@ -35,6 +35,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   fitness:
@@ -93,6 +94,7 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
           GUARDRAILS_FAIL_CLOSED: "1"
         run: |
           set -euo pipefail
@@ -101,6 +103,9 @@ jobs:
           elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
             git fetch --no-tags origin "${BEFORE_SHA}" || true
             export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
+          fi
+          if [[ -z "${PR_BODY:-}" && "${{ github.event_name }}" == "push" ]]; then
+            export PR_BODY="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].body // empty')"
           fi
           bash .github/scripts/check-design-note.sh
 

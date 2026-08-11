@@ -252,6 +252,7 @@ _UNRESTRICTED_PUB_DIFF_RE = re.compile(
     r"^[+-]\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
     r"(?:async\s+)?(?:unsafe\s+)?(?:extern\s+(?:\"[^\"]*\"|'[^']*')\s+)?"
 )
+_CFG_ATTR_RE = re.compile(r"^#\[cfg\b")
 
 
 def _normalize_ws(text: str) -> str:
@@ -583,6 +584,25 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
     return _normalize_ws(" ".join(parts))
 
 
+def _collect_preceding_cfg_attrs(lines: list[str], start: int) -> str:
+    """Return contiguous ``#[cfg(...)]`` attribute lines immediately above ``start``."""
+    attrs: list[str] = []
+    i = start - 1
+    while i >= 0:
+        stripped = lines[i].strip()
+        if not stripped:
+            i -= 1
+            continue
+        if _CFG_ATTR_RE.match(stripped):
+            attrs.insert(0, stripped)
+            i -= 1
+            continue
+        if stripped.startswith("#["):
+            break
+        break
+    return "\n".join(attrs)
+
+
 def extract_public_surface(text: str) -> frozenset[str]:
     """Canonical fingerprint of unrestricted ``pub`` API items in Rust source."""
     lines = text.splitlines()
@@ -591,8 +611,12 @@ def extract_public_surface(text: str) -> frozenset[str]:
         if not _UNRESTRICTED_PUB_ITEM_RE.match(line):
             continue
         sig = _collect_rust_signature(lines, i)
-        if sig:
-            surface.add(sig)
+        if not sig:
+            continue
+        cfg_attrs = _collect_preceding_cfg_attrs(lines, i)
+        if cfg_attrs:
+            sig = f"{cfg_attrs} {sig}"
+        surface.add(sig)
     return frozenset(surface)
 
 
@@ -1004,16 +1028,13 @@ def parse_workspace_dependencies(cargo_text: str) -> dict[str, str]:
         header = section.split("\n", 1)[0].strip()
         body = section.split("\n", 1)[1] if "\n" in section else ""
         if header == "[workspace.dependencies]":
-            for line in section.splitlines()[1:]:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                key_match = _DEP_KEY.match(stripped)
-                if not key_match:
-                    continue
-                key = key_match.group(1)
-                entry_body = stripped[key_match.end() :].lstrip("= ").strip()
-                mapping[key] = _workspace_dep_package_name(key, entry_body)
+            inline_lines = [
+                line.strip()
+                for line in section.splitlines()[1:]
+                if line.strip() and not line.strip().startswith("#")
+            ]
+            for name, body in _group_inline_dep_lines(inline_lines):
+                mapping[name] = _workspace_dep_package_name(name, body)
             continue
         table = _WS_DEP_TABLE.match(header)
         if table:
@@ -1221,6 +1242,16 @@ def _assert_surfaces_self_checks() -> None:
     assert parse_workspace_dependencies(
         '[workspace.dependencies]\nkms = { package = "krusty-kms", path = "crates/kms" }\n'
     ) == {"kms": "krusty-kms"}
+    assert parse_workspace_dependencies(
+        '[workspace.dependencies]\nkms.package = "krusty-kms"\nkms.path = "crates/kms"\n'
+    ) == {"kms": "krusty-kms"}
+    ws_map_dotted = parse_workspace_dependencies(
+        '[workspace.dependencies]\nkms.package = "krusty-kms"\nkms.path = "crates/kms"\n'
+    )
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkms.workspace = true\n",
+        workspace_deps=ws_map_dotted,
+    ) == {"krusty-kms"}
     assert krusty_deps_from_cargo_toml(
         '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms"\n'
     ) == {"krusty-kms"}
@@ -1272,6 +1303,14 @@ pub use operations::{
 };
 """.strip()
     assert extract_public_surface(use_a) != extract_public_surface(use_b)
+
+    cfg_use = """
+#[cfg(feature = "nats")]
+pub use multisig::NatsMultisigCoordinator;
+""".strip()
+    no_cfg_use = "pub use multisig::NatsMultisigCoordinator;"
+    assert extract_public_surface(cfg_use) != extract_public_surface(no_cfg_use)
+    assert any('#[cfg(feature = "nats")]' in s for s in extract_public_surface(cfg_use))
 
     mod_a = """
 pub mod secret_felt;
