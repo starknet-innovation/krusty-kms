@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-08-11
+
+### Changed
+
+- Migrate scalar modular arithmetic to `crypto-bigint` 0.7 `ConstMontyForm`
+  (replacing the removed `Residue` API).
+
 ## [0.9.1] - 2026-08-11
 
 ### Added
