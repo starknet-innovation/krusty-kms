@@ -9,21 +9,21 @@
 //! big-integer arithmetic, so proof responses computed from secret scalars
 //! (`s = r + c*x`) do not leak key material through timing side channels.
 
-use crypto_bigint::modular::constant_mod::Residue;
-use crypto_bigint::{impl_modulus, Encoding, U256};
+use crypto_bigint::modular::ConstMontyForm;
+use crypto_bigint::{const_monty_params, U256};
 use krusty_kms_common::Result;
 use starknet_types_core::felt::Felt;
 use zeroize::Zeroize;
 
 // Stark curve order (the order of the generator point) — the modulus for all
 // scalar arithmetic in elliptic curve operations.
-impl_modulus!(
+const_monty_params!(
     CurveOrder,
     U256,
     "0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f"
 );
 
-type OrderResidue = Residue<CurveOrder, { U256::LIMBS }>;
+type OrderResidue = ConstMontyForm<CurveOrder, { U256::LIMBS }>;
 
 /// Convert a Felt into a Montgomery residue mod the curve order (constant time).
 fn residue_from_felt(value: &Felt) -> OrderResidue {
@@ -38,7 +38,8 @@ fn residue_from_felt(value: &Felt) -> OrderResidue {
 /// Convert a Montgomery residue back into a canonical Felt (constant time).
 fn felt_from_residue(residue: &OrderResidue) -> Felt {
     let mut integer = residue.retrieve();
-    let mut bytes = integer.to_be_bytes();
+    // crypto-bigint 0.7 returns `EncodedUint`; convert to a fixed array for Felt + zeroize.
+    let mut bytes: [u8; 32] = integer.to_be_bytes().into();
     let felt = Felt::from_bytes_be(&bytes);
     bytes.zeroize();
     integer.zeroize();
@@ -93,11 +94,12 @@ pub fn random_felt() -> Felt {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto_bigint::modular::constant_mod::ResidueParams;
+    use crypto_bigint::modular::ConstMontyParams;
 
     /// Curve order as a Felt for boundary tests.
     fn curve_order_felt() -> Felt {
-        Felt::from_bytes_be(&CurveOrder::MODULUS.to_be_bytes())
+        let bytes: [u8; 32] = CurveOrder::PARAMS.modulus().to_be_bytes().into();
+        Felt::from_bytes_be(&bytes)
     }
 
     #[test]
