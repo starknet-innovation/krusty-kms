@@ -66,4 +66,6 @@ Addressed on the same PR after review:
   accordingly. FFI freeze also compares Dart `lookupFunction` bindings to `kms.h`.
 - Fingerprints collect multiline field types and prefix items with inline `mod`
   paths; guardrails path filters include `packages/kms-dart/**`.
+- FFI freeze also compares Rust `#[repr(C)]` / `Kms*` type-alias layouts to the
+  matching `typedef`s in `kms.h` (field order and types).
 
