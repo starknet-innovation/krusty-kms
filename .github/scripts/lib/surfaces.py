@@ -770,11 +770,13 @@ class _CrateExportIndex:
         self.src_dir = src_dir
         self._public_reachable: set[str] = set()
         self._export_touched: set[str] = set()
+        self._module_pub_uses: dict[str, set[str]] = {}
         root_rs = src_dir / "lib.rs"
         if not root_rs.is_file():
             root_rs = src_dir / "main.rs"
         if root_rs.is_file():
             self._walk_module("", root_rs, is_public=True)
+            self._propagate_export_touched()
 
     def is_exported_file(self, rel_path: str) -> bool:
         module_path = _module_path_from_rel(rel_path)
@@ -790,8 +792,9 @@ class _CrateExportIndex:
         if is_public:
             self._public_reachable.add(module_path)
         text = file_path.read_text()
-        if is_public:
-            self._export_touched.update(_collect_pub_use_module_paths(text, module_path))
+        self._module_pub_uses[module_path] = _collect_pub_use_module_paths(
+            text, module_path
+        )
         for name, child_public, external in _parse_mod_declarations(text):
             child_path = f"{module_path}/{name}" if module_path else name
             if not external:
@@ -804,6 +807,19 @@ class _CrateExportIndex:
                 child_file,
                 is_public=is_public and child_public,
             )
+
+    def _propagate_export_touched(self) -> None:
+        """Mark modules reached via ``pub use`` chains, including through private mods."""
+        for mod in self._public_reachable:
+            self._export_touched.update(self._module_pub_uses.get(mod, ()))
+        changed = True
+        while changed:
+            changed = False
+            for mod in list(self._export_touched):
+                for path in self._module_pub_uses.get(mod, ()):
+                    if path not in self._export_touched:
+                        self._export_touched.add(path)
+                        changed = True
 
 
 _export_index_cache: dict[str, _CrateExportIndex] = {}
@@ -1557,12 +1573,40 @@ pub enum KmsError {
         assert is_exported_crate_source(rel_wallet_mod, root)
         assert extract_public_surface(wallet_text) != extract_public_surface(wallet_changed)
 
+        nested = root / "crates/nested/src"
+        nested.mkdir(parents=True)
+        (nested / "lib.rs").write_text(
+            "mod backend;\npub use backend::{GatewayBackend, StarknetGatewayBackend};\n"
+        )
+        (nested / "backend.rs").write_text(
+            "mod interface;\nmod starknet;\nmod rpc;\n"
+            "pub use interface::GatewayBackend;\n"
+            "pub use starknet::StarknetGatewayBackend;\n"
+        )
+        (nested / "backend").mkdir()
+        (nested / "backend/interface.rs").write_text("pub trait GatewayBackend {}\n")
+        (nested / "backend/starknet.rs").write_text("pub struct StarknetGatewayBackend;\n")
+        (nested / "backend/rpc.rs").write_text("pub fn helper() {}\n")
+        assert is_exported_crate_source("crates/nested/src/backend.rs", root)
+        assert is_exported_crate_source("crates/nested/src/backend/interface.rs", root)
+        assert is_exported_crate_source("crates/nested/src/backend/starknet.rs", root)
+        assert not is_exported_crate_source("crates/nested/src/backend/rpc.rs", root)
+
         client_utils = "crates/client/src/wallet/utils.rs"
         client_wallet_mod = "crates/client/src/wallet/mod.rs"
         client_discovery = "crates/client/src/discovery.rs"
         assert not is_exported_crate_source(client_utils, repo_root())
         assert is_exported_crate_source(client_wallet_mod, repo_root())
         assert is_exported_crate_source(client_discovery, repo_root())
+        assert is_exported_crate_source(
+            "crates/gateway/src/backend/interface.rs", repo_root()
+        )
+        assert is_exported_crate_source(
+            "crates/gateway/src/backend/starknet.rs", repo_root()
+        )
+        assert not is_exported_crate_source(
+            "crates/gateway/src/backend/rpc.rs", repo_root()
+        )
 
 
 def _assert_file_size_ratchet_checks() -> None:
