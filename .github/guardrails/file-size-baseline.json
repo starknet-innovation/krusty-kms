@@ -6,7 +6,7 @@
   "files": [
     {
       "path": "crates/client/src/contract.rs",
-      "lines": 449
+      "lines": 496
     },
     {
       "path": "crates/client/src/events.rs",
@@ -21,16 +21,12 @@
       "lines": 629
     },
     {
-      "path": "crates/client/src/wallet/eth.rs",
-      "lines": 661
-    },
-    {
       "path": "crates/client/tests/oz_multisig_devnet.rs",
       "lines": 504
     },
     {
       "path": "crates/client/tests/tongo_sepolia_integration.rs",
-      "lines": 1219
+      "lines": 1225
     },
     {
       "path": "crates/common/src/utils.rs",
@@ -134,11 +130,11 @@
     },
     {
       "path": "crates/kms/src/derivation.rs",
-      "lines": 677
+      "lines": 703
     },
     {
       "path": "crates/kms/src/encryption.rs",
-      "lines": 358
+      "lines": 359
     },
     {
       "path": "crates/kms/src/keystore.rs",
@@ -150,7 +146,7 @@
     },
     {
       "path": "crates/kms/src/typed_data.rs",
-      "lines": 791
+      "lines": 814
     },
     {
       "path": "crates/kms/tests/tx_hash_parity.rs",

@@ -26,6 +26,7 @@ mod gateway;
 mod operations;
 mod signing;
 mod snapshot;
+mod snapshot_cache;
 mod types;
 
 #[cfg(test)]

@@ -77,3 +77,15 @@ Addressed on the same PR after review:
 - Design-note gate also fingerprints inherent methods on re-exported types that
   live in private modules; FFI freeze compares ABI/error constants to `#define`s.
 
+## Merge follow-up (2026-08-11)
+
+After rebasing onto main's 0.9.0 security-hardening release:
+
+- Dropped the baseline entry for deleted `crates/client/src/wallet/eth.rs`.
+- Ratcheted baselines for files that grew on main (`contract.rs`,
+  `tongo_sepolia_integration.rs`, `derivation.rs`, `encryption.rs`,
+  `typed_data.rs`) — growth is from the audit fixes, not this PR's features.
+- Split `crates/gateway/src/snapshot.rs` (547 lines from main) into
+  `snapshot.rs` + `snapshot_cache.rs` so the new-file hard cap (500) holds;
+  baselining cannot waive that cap for paths absent from the base baseline.
+
