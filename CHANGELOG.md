@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-08-11
+
+### Changed
+
+- Split the Tongo SDK proof operations and their tests into focused per-operation
+  modules while preserving the existing public API.
+
 ## [0.9.6] - 2026-08-11
 
 ### Changed

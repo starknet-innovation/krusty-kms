@@ -161,8 +161,8 @@
       "lines": 439
     },
     {
-      "path": "crates/sdk/src/operations.rs",
-      "lines": 1549
+      "path": "crates/sdk/src/operations/transfer.rs",
+      "lines": 389
     },
     {
       "path": "crates/sdk/tests/cross_compat.rs",
