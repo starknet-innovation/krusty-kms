@@ -543,14 +543,19 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
         kind = struct_enum.group(2)
         parts: list[str] = []
         for j in range(start, len(lines)):
-            parts.append(lines[j].strip())
-            if "{" in lines[j]:
-                before = " ".join(parts).split("{", 1)[0].strip()
+            line = lines[j]
+            parts.append(line.strip())
+            combined = " ".join(parts)
+            if "{" in line:
+                before = combined.split("{", 1)[0].strip()
                 header = _normalize_ws(f"{before} {{")
                 body_fields = _collect_type_fields(lines, j, kind)
                 if body_fields:
                     return _normalize_ws(f"{header} {'; '.join(body_fields)} }}")
                 return header
+            # Unit / tuple structs terminate at `;` (no brace body).
+            if ";" in line and _paren_depth(combined) == 0:
+                return _normalize_ws(combined)
         return _normalize_ws(" ".join(parts))
 
     if re.match(r"^\s*(pub\s+)?use\b", first):
@@ -1411,8 +1416,18 @@ def _group_inline_dep_lines(lines: list[str]) -> list[tuple[str, str]]:
             name, field = _unquote_toml_key(dotted.group(1)), dotted.group(2)
             if field in _DEP_KNOWN_FIELDS:
                 _, _, value = stripped.partition("=")
-                pending.setdefault(name, []).append(f"{field} = {value.strip()}")
+                value = value.strip()
+                field_lines = [f"{field} = {value}"]
+                bracket_depth = value.count("[") - value.count("]")
+                brace_depth = value.count("{") - value.count("}")
                 i += 1
+                while (bracket_depth > 0 or brace_depth > 0) and i < len(lines):
+                    cont = lines[i]
+                    field_lines.append(cont)
+                    bracket_depth += cont.count("[") - cont.count("]")
+                    brace_depth += cont.count("{") - cont.count("}")
+                    i += 1
+                pending.setdefault(name, []).append("\n".join(field_lines))
                 continue
         key_match = _DEP_KEY.match(stripped)
         if not key_match:
@@ -1698,6 +1713,21 @@ default = [
 ]
 """.strip()
     assert production_dep_entries(feats_a) != production_dep_entries(feats_multiline)
+    dotted_features_a = """
+[dependencies]
+foo.path = "../foo"
+foo.features = [
+  "a",
+]
+""".strip()
+    dotted_features_b = dotted_features_a.replace('"a"', '"a",\n  "b"')
+    assert production_dep_entries(dotted_features_a) != production_dep_entries(
+        dotted_features_b
+    )
+    assert any(
+        "features = [" in e and '"a"' in e
+        for e in production_dep_entries(dotted_features_a)
+    )
 
     multiline_impl = """
 impl Foo {
@@ -1919,6 +1949,22 @@ pub enum KmsError {
 """.strip()
     enum_struct_changed = enum_struct.replace("message: String", "message: Felt")
     assert extract_public_surface(enum_struct) != extract_public_surface(enum_struct_changed)
+
+    unit_struct = """
+pub struct StarkCurve;
+const G_X: Felt = Felt::ZERO;
+""".strip()
+    unit_surface = extract_public_surface(unit_struct)
+    assert unit_surface == frozenset({"pub struct StarkCurve;"})
+    tuple_struct = """
+pub struct Point(
+    u8,
+);
+const SECRET: u8 = 1;
+""".strip()
+    assert extract_public_surface(tuple_struct) == frozenset(
+        {_normalize_ws("pub struct Point( u8, );")}
+    )
 
     import tempfile
 
