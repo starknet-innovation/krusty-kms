@@ -18,6 +18,11 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
 - Every release needs a dated `CHANGELOG.md` entry named `## [<workspace-version>] -
   YYYY-MM-DD` with at least one release-note bullet. CI checks it on a version-bump PR
   and the publishing workflow checks it again before authentication.
+- Normal feature and fix PRs must not bump the root workspace version. Keep their
+  notes under `## [Unreleased]`; create the dated entry and bump the version only in a
+  focused release PR. CI compares the release PR's base version with the latest
+  published `krusty-kms` version on crates.io, so a second release bump cannot merge
+  while the previous version is still unpublished.
 - Release tags are immutable. Never delete, move, recreate, or force-push one.
 
 The workflow publishes these crates in dependency order:
@@ -38,9 +43,13 @@ do not fall back to an API token.
 
 ## Prepare a release
 
-1. Begin from current `main` and make a focused release branch.
-2. Change only the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
+1. Begin from current `main`, whose workspace version must match the latest published
+   `krusty-kms` version, and make a focused release branch. Do not create a second
+   version bump while a previous release version is pending publication.
+2. Change the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
    inherit this version; do not assign a one-off version to an individual published crate.
+   For a pre-1.0 minor release, update any internal path dependency requirements whose
+   caret range does not include the new workspace version.
 3. Create the release entry in `CHANGELOG.md` using the workspace version and release
    date. Include at least one concise bullet describing the user-visible change:
 
@@ -115,3 +124,8 @@ order.
 If the failure requires changing source, package metadata, or the workflow, do not reuse
 the existing tag. Make the fix on a new branch, increment the patch version, merge it,
 and create a new tag. Crates.io releases and Git tags are immutable.
+
+If a tag is cancelled before publishing, keep the tag intact. The next release PR must
+reconcile the workspace version with the latest published crate version; the CI release
+version check permits only that downward reconciliation, never another upward version
+bump from an unpublished base.
