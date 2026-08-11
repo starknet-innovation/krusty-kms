@@ -64,4 +64,6 @@ Addressed on the same PR after review:
 - Public/WASM fingerprints keep API-bearing attrs (`cfg`/`derive`/`serde`/`repr`/
   `non_exhaustive`), including field-level `#[serde(...)]`; WASM snapshot refreshed
   accordingly. FFI freeze also compares Dart `lookupFunction` bindings to `kms.h`.
+- Fingerprints collect multiline field types and prefix items with inline `mod`
+  paths; guardrails path filters include `packages/kms-dart/**`.
 
