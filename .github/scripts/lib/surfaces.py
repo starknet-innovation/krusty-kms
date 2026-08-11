@@ -2440,8 +2440,14 @@ pub struct Foo {
         '#[cfg(feature = "zz_never_enabled")]\n#[wasm_bindgen]',
         "pub fn gated_export()",
     )
+    wasm_plain = _format_wasm_export(
+        "crates/wasm/src/x.rs",
+        "#[wasm_bindgen]",
+        "pub fn gated_export()",
+    )
     assert '#[cfg(feature = "zz_never_enabled")]' in wasm_cfg_line
-    assert "wasm_bindgen" in wasm_cfg_line
+    assert wasm_cfg_line != wasm_plain
+    assert "gated_export" in wasm_cfg_line
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]
