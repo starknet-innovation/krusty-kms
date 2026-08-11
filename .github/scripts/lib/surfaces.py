@@ -717,37 +717,124 @@ def _resolve_qualified_path(segments: list[str], module_path: str) -> list[str]:
     return base + segments
 
 
-def _use_statement_module_paths(use_stmt: str, module_path: str) -> set[str]:
-    body = re.sub(r"^\s*(?:#\[[^\]]*\]\s*)*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))use\s+", "", use_stmt)
+def _split_top_level_comma_items(inner: str) -> list[str]:
+    items: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for ch in inner:
+        if ch == "{":
+            depth += 1
+            current.append(ch)
+            continue
+        if ch == "}":
+            depth -= 1
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
+            token = "".join(current).strip()
+            if token:
+                items.append(token)
+            current = []
+            continue
+        current.append(ch)
+    token = "".join(current).strip()
+    if token:
+        items.append(token)
+    return items
+
+
+def _use_source_item_name(token: str) -> str:
+    name = token.split(" as ", 1)[0].strip()
+    return name.split("::")[-1].strip()
+
+
+def _use_statement_targets(
+    use_stmt: str, module_path: str
+) -> list[tuple[str, set[str] | None]]:
+    """Return ``(target_module_path, item_names|None)`` for one ``pub use``.
+
+    ``item_names is None`` means a glob (``*``) re-export of that module.
+    """
+    body = re.sub(
+        r"^\s*(?:#\[[^\]]*\]\s*)*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))use\s+",
+        "",
+        use_stmt,
+    )
     body = body.strip().rstrip(";").strip()
     if not body:
-        return set()
+        return []
 
     brace_idx = body.find("{")
     if brace_idx >= 0:
-        path_part = body[:brace_idx].rstrip()
-    else:
-        path_part = re.sub(r"\s+as\s+\w+\s*$", "", body).strip()
+        path_part = body[:brace_idx].strip().rstrip(":")
+        inner = body[brace_idx + 1 :]
+        close = inner.rfind("}")
+        if close >= 0:
+            inner = inner[:close]
+        tokens = _split_top_level_comma_items(inner)
+        if any(tok.strip() == "*" for tok in tokens):
+            segments = [part.strip() for part in path_part.split("::") if part.strip()]
+            resolved = _resolve_qualified_path(segments, module_path)
+            if not resolved:
+                return []
+            return [("/".join(resolved), None)]
+        targets: list[tuple[str, set[str] | None]] = []
+        for tok in tokens:
+            tok = tok.strip()
+            if not tok or "{" in tok:
+                continue
+            name = _use_source_item_name(tok)
+            if not name or name == "*":
+                continue
+            item_path = path_part
+            if "::" in tok.split(" as ", 1)[0]:
+                item_path = f"{path_part}::{tok.split(' as ', 1)[0].strip()}" if path_part else tok.split(" as ", 1)[0].strip()
+                item_segments = [part.strip() for part in item_path.split("::") if part.strip()]
+                if item_segments and item_segments[-1] == name:
+                    item_segments = item_segments[:-1]
+                resolved = _resolve_qualified_path(item_segments, module_path)
+            else:
+                segments = [part.strip() for part in path_part.split("::") if part.strip()]
+                resolved = _resolve_qualified_path(segments, module_path)
+            if not resolved:
+                continue
+            targets.append(("/".join(resolved), {name}))
+        return targets
 
+    path_part = re.sub(r"\s+as\s+\w+\s*$", "", body).strip()
     segments = [part.strip() for part in path_part.split("::") if part.strip()]
     if not segments:
-        return set()
-
+        return []
+    item: set[str] | None = None
+    if segments[-1] == "*":
+        segments = segments[:-1]
+        item = None
+    elif len(segments) >= 2 and (
+        segments[-1][0].isupper() or segments[-1][0].islower()
+    ):
+        # Treat final path segment as the item name for non-brace uses.
+        item = {segments[-1]}
+        segments = segments[:-1]
     resolved = _resolve_qualified_path(segments, module_path)
-    if brace_idx < 0 and len(resolved) >= 2 and resolved[-1][0].isupper():
-        resolved = resolved[:-1]
     if not resolved:
-        return set()
+        return []
+    return [("/".join(resolved), item)]
 
+
+def _use_statement_module_paths(use_stmt: str, module_path: str) -> set[str]:
     paths: set[str] = set()
-    for i in range(1, len(resolved) + 1):
-        paths.add("/".join(resolved[:i]))
+    for target, _items in _use_statement_targets(use_stmt, module_path):
+        parts = target.split("/") if target else []
+        for i in range(1, len(parts) + 1):
+            paths.add("/".join(parts[:i]))
     return paths
 
 
-def _collect_pub_use_module_paths(text: str, module_path: str) -> set[str]:
+def _collect_pub_use_targets(
+    text: str, module_path: str
+) -> list[tuple[str, set[str] | None]]:
     lines = text.splitlines()
-    paths: set[str] = set()
+    targets: list[tuple[str, set[str] | None]] = []
     idx = 0
     while idx < len(lines):
         if not _PUB_USE_START_RE.match(lines[idx]):
@@ -758,9 +845,50 @@ def _collect_pub_use_module_paths(text: str, module_path: str) -> set[str]:
             idx += 1
             parts.append(lines[idx].strip())
         stmt = " ".join(parts)
-        paths.update(_use_statement_module_paths(stmt, module_path))
+        targets.extend(_use_statement_targets(stmt, module_path))
         idx += 1
+    return targets
+
+
+def _collect_pub_use_module_paths(text: str, module_path: str) -> set[str]:
+    paths: set[str] = set()
+    for target, _items in _collect_pub_use_targets(text, module_path):
+        parts = target.split("/") if target else []
+        for i in range(1, len(parts) + 1):
+            paths.add("/".join(parts[:i]))
     return paths
+
+
+_PUB_ITEM_NAME_RE = re.compile(
+    r"\b(?:fn|struct|enum|trait|type|const|static|mod)\s+([A-Za-z_][\w]*)"
+)
+
+
+def _public_surface_item_name(sig: str) -> str | None:
+    match = _PUB_ITEM_NAME_RE.search(sig)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _signature_matches_exported_items(sig: str, allowed: set[str]) -> bool:
+    name = _public_surface_item_name(sig)
+    if name and name in allowed:
+        return True
+    if re.search(r"\buse\b", sig):
+        return any(re.search(rf"\b{re.escape(item)}\b", sig) for item in allowed)
+    return False
+
+
+def filter_public_surface(
+    surface: frozenset[str], allowed: set[str] | None
+) -> frozenset[str]:
+    """If ``allowed`` is set, keep only fingerprints for those exported item names."""
+    if allowed is None:
+        return surface
+    return frozenset(
+        sig for sig in surface if _signature_matches_exported_items(sig, allowed)
+    )
 
 
 class _CrateExportIndex:
@@ -769,14 +897,15 @@ class _CrateExportIndex:
     def __init__(self, src_dir: Path) -> None:
         self.src_dir = src_dir
         self._public_reachable: set[str] = set()
-        self._export_touched: set[str] = set()
-        self._module_pub_uses: dict[str, set[str]] = {}
+        # Private modules reached via pub use: None => glob/all items, set => names.
+        self._export_items: dict[str, set[str] | None] = {}
+        self._module_pub_uses: dict[str, list[tuple[str, set[str] | None]]] = {}
         root_rs = src_dir / "lib.rs"
         if not root_rs.is_file():
             root_rs = src_dir / "main.rs"
         if root_rs.is_file():
             self._walk_module("", root_rs, is_public=True)
-            self._propagate_export_touched()
+            self._propagate_export_items()
 
     def is_exported_file(self, rel_path: str) -> bool:
         module_path = _module_path_from_rel(rel_path)
@@ -786,15 +915,22 @@ class _CrateExportIndex:
             return True
         if module_path in self._public_reachable:
             return True
-        return module_path in self._export_touched
+        return module_path in self._export_items
+
+    def exported_item_filter(self, rel_path: str) -> set[str] | None:
+        """Return ``None`` for full-module export, or the selective item name set."""
+        module_path = _module_path_from_rel(rel_path)
+        if module_path is None:
+            return set()
+        if module_path == "" or module_path in self._public_reachable:
+            return None
+        return self._export_items.get(module_path, set())
 
     def _walk_module(self, module_path: str, file_path: Path, *, is_public: bool) -> None:
         if is_public:
             self._public_reachable.add(module_path)
         text = file_path.read_text()
-        self._module_pub_uses[module_path] = _collect_pub_use_module_paths(
-            text, module_path
-        )
+        self._module_pub_uses[module_path] = _collect_pub_use_targets(text, module_path)
         for name, child_public, external in _parse_mod_declarations(text):
             child_path = f"{module_path}/{name}" if module_path else name
             if not external:
@@ -808,17 +944,42 @@ class _CrateExportIndex:
                 is_public=is_public and child_public,
             )
 
-    def _propagate_export_touched(self) -> None:
-        """Mark modules reached via ``pub use`` chains, including through private mods."""
+    def _merge_export_items(self, mod: str, items: set[str] | None) -> bool:
+        if mod in self._public_reachable:
+            return False
+        if mod not in self._export_items:
+            self._export_items[mod] = None if items is None else set(items)
+            return True
+        current = self._export_items[mod]
+        if current is None:
+            return False
+        if items is None:
+            self._export_items[mod] = None
+            return True
+        before = len(current)
+        current |= items
+        return len(current) > before
+
+    def _propagate_export_items(self) -> None:
+        """Propagate selective ``pub use`` item names through private module chains."""
         for mod in self._public_reachable:
-            self._export_touched.update(self._module_pub_uses.get(mod, ()))
+            for target, items in self._module_pub_uses.get(mod, []):
+                self._merge_export_items(target, items)
         changed = True
         while changed:
             changed = False
-            for mod in list(self._export_touched):
-                for path in self._module_pub_uses.get(mod, ()):
-                    if path not in self._export_touched:
-                        self._export_touched.add(path)
+            for from_mod in list(self._export_items):
+                from_set = self._export_items[from_mod]
+                for target, use_items in self._module_pub_uses.get(from_mod, []):
+                    if from_set is None:
+                        forwarded = use_items
+                    elif use_items is None:
+                        forwarded = None
+                    else:
+                        forwarded = use_items & from_set
+                        if not forwarded:
+                            continue
+                    if self._merge_export_items(target, forwarded):
                         changed = True
 
 
@@ -844,6 +1005,17 @@ def is_exported_crate_source(rel_path: str, root: Path | None = None) -> bool:
     return index.is_exported_file(rel_path)
 
 
+def exported_item_filter_for_source(
+    rel_path: str, root: Path | None = None
+) -> set[str] | None:
+    """Item-name filter for ``rel_path``, or ``None`` when the whole module is public."""
+    repo = root or repo_root()
+    index = _export_index_for_file(rel_path, repo)
+    if index is None:
+        return set()
+    return index.exported_item_filter(rel_path)
+
+
 def public_api_change_reasons(
     base_ref: str,
     files: list[str],
@@ -857,6 +1029,7 @@ def public_api_change_reasons(
     for rel in files:
         if not is_exported_crate_source(rel, repo):
             continue
+        allowed = exported_item_filter_for_source(rel, repo)
         try:
             base_text = subprocess.check_output(
                 ["git", "show", f"{base_ref}:{rel}"],
@@ -868,8 +1041,13 @@ def public_api_change_reasons(
             base_text = ""
         head_path = repo / rel
         head_text = head_path.read_text() if head_path.is_file() else ""
-        if extract_public_surface(base_text) != extract_public_surface(head_text):
+        base_surface = filter_public_surface(extract_public_surface(base_text), allowed)
+        head_surface = filter_public_surface(extract_public_surface(head_text), allowed)
+        if base_surface != head_surface:
             reasons.append(f"public API surface changed in {rel}")
+            continue
+        if allowed is not None:
+            # Selective re-exports: ignore unrelated pub churn in the private module.
             continue
         try:
             diff = subprocess.check_output(
@@ -1584,13 +1762,54 @@ pub enum KmsError {
             "pub use starknet::StarknetGatewayBackend;\n"
         )
         (nested / "backend").mkdir()
-        (nested / "backend/interface.rs").write_text("pub trait GatewayBackend {}\n")
+        (nested / "backend/interface.rs").write_text(
+            "pub trait GatewayBackend {}\npub trait InternalBackend {}\n"
+        )
         (nested / "backend/starknet.rs").write_text("pub struct StarknetGatewayBackend;\n")
         (nested / "backend/rpc.rs").write_text("pub fn helper() {}\n")
         assert is_exported_crate_source("crates/nested/src/backend.rs", root)
         assert is_exported_crate_source("crates/nested/src/backend/interface.rs", root)
         assert is_exported_crate_source("crates/nested/src/backend/starknet.rs", root)
         assert not is_exported_crate_source("crates/nested/src/backend/rpc.rs", root)
+        assert exported_item_filter_for_source(
+            "crates/nested/src/backend/interface.rs", root
+        ) == {"GatewayBackend"}
+        nested_iface = filter_public_surface(
+            extract_public_surface((nested / "backend/interface.rs").read_text()),
+            exported_item_filter_for_source("crates/nested/src/backend/interface.rs", root),
+        )
+        assert any("GatewayBackend" in s for s in nested_iface)
+        assert not any("InternalBackend" in s for s in nested_iface)
+
+        selective = root / "crates/selective/src"
+        selective.mkdir(parents=True)
+        (selective / "lib.rs").write_text(
+            "mod crypto;\npub use crypto::{decrypt_as_auditor, encrypt_for_auditor};\n"
+        )
+        (selective / "crypto.rs").write_text(
+            "\n".join(
+                [
+                    "pub const NONCE_SIZE: usize = 24;",
+                    "pub fn encrypt_for_auditor() {}",
+                    "pub fn decrypt_as_auditor() {}",
+                    "pub fn derive_shared_secret() {}",
+                ]
+            )
+            + "\n"
+        )
+        assert is_exported_crate_source("crates/selective/src/crypto.rs", root)
+        assert exported_item_filter_for_source("crates/selective/src/crypto.rs", root) == {
+            "decrypt_as_auditor",
+            "encrypt_for_auditor",
+        }
+        selective_surface = filter_public_surface(
+            extract_public_surface((selective / "crypto.rs").read_text()),
+            exported_item_filter_for_source("crates/selective/src/crypto.rs", root),
+        )
+        assert any("encrypt_for_auditor" in s for s in selective_surface)
+        assert any("decrypt_as_auditor" in s for s in selective_surface)
+        assert not any("NONCE_SIZE" in s for s in selective_surface)
+        assert not any("derive_shared_secret" in s for s in selective_surface)
 
         client_utils = "crates/client/src/wallet/utils.rs"
         client_wallet_mod = "crates/client/src/wallet/mod.rs"
@@ -1607,6 +1826,13 @@ pub enum KmsError {
         assert not is_exported_crate_source(
             "crates/gateway/src/backend/rpc.rs", repo_root()
         )
+        assert exported_item_filter_for_source(
+            "crates/gateway/src/backend/interface.rs", repo_root()
+        ) == {"DeployExecution", "GatewayBackend"}
+        # sdk::crypto is `pub mod`, so helpers remain part of the public module surface.
+        assert exported_item_filter_for_source(
+            "crates/sdk/src/crypto.rs", repo_root()
+        ) is None
 
 
 def _assert_file_size_ratchet_checks() -> None:
