@@ -27,7 +27,7 @@ krusty-kms = { version = "0.9.1", path = "../kms" }
 krusty-kms-sdk = { version = "0.9.1", path = "../sdk" }
 krusty-kms-crypto = { version = "0.9.1", path = "../crypto" }
 starknet-types-core.workspace = true
-starknet-rust = "0.18.0"
+starknet-rust = "0.19.1"
 tokio = { workspace = true, features = ["time", "sync", "macros", "net", "rt"] }
 serde.workspace = true
 serde_json.workspace = true
