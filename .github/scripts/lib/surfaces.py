@@ -398,9 +398,18 @@ def _collect_impl_pub_fns(
 
 
 def _format_field(attrs: str, signature: str) -> str:
+    cfg_attrs = [
+        line.strip()
+        for line in attrs.splitlines()
+        if _CFG_ATTR_RE.match(line.strip())
+    ]
     bindgen = _format_bindgen_attrs(attrs)
+    if cfg_attrs and bindgen:
+        return f"{' '.join(cfg_attrs)} | {bindgen} | {signature}"
     if bindgen:
         return f"{bindgen} | {signature}"
+    if cfg_attrs:
+        return f"{' '.join(cfg_attrs)} {signature}"
     return signature
 
 
@@ -1314,6 +1323,100 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
     return exports
 
 
+_EXTERN_C_FN_START_RE = re.compile(
+    r'^\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+([A-Za-z_]\w*)\s*\('
+)
+_C_HEADER_FN_RE = re.compile(
+    r"^(?:[\w\s\*]+?)\b(kms_[A-Za-z0-9_]+)\s*\((.*)\)\s*;\s*$"
+)
+
+
+def _fn_param_arity(sig_or_params: str, *, from_full_sig: bool) -> int:
+    if from_full_sig:
+        open_idx = sig_or_params.find("(")
+        if open_idx < 0:
+            return 0
+        text = sig_or_params[open_idx:]
+    else:
+        text = f"({sig_or_params})"
+    depth = 0
+    current: list[str] = []
+    params: list[str] = []
+    for ch in text:
+        if ch == "(":
+            depth += 1
+            if depth == 1:
+                continue
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                token = "".join(current).strip()
+                if token and token != "void":
+                    params.append(token)
+                break
+        elif ch == "," and depth == 1:
+            token = "".join(current).strip()
+            if token:
+                params.append(token)
+            current = []
+            continue
+        if depth >= 1:
+            current.append(ch)
+    return len(params)
+
+
+def extract_rust_ffi_functions(root: Path | None = None) -> dict[str, int]:
+    """Map ``extern "C"`` export names in ``crates/ffi`` to parameter arity."""
+    root = root or repo_root()
+    exports: dict[str, int] = {}
+    for path in sorted((root / "crates/ffi/src").rglob("*.rs")):
+        lines = path.read_text().splitlines()
+        for i, line in enumerate(lines):
+            match = _EXTERN_C_FN_START_RE.match(line)
+            if not match:
+                continue
+            name = match.group(1)
+            sig = _collect_rust_signature(lines, i)
+            exports[name] = _fn_param_arity(sig, from_full_sig=True)
+    return exports
+
+
+def extract_c_header_functions(header_text: str) -> dict[str, int]:
+    """Map ``kms_*`` function declarations in a C header to parameter arity."""
+    exports: dict[str, int] = {}
+    for raw in header_text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("/*") or line.startswith("*") or line.startswith("//"):
+            continue
+        match = _C_HEADER_FN_RE.match(line)
+        if not match:
+            continue
+        name, params = match.group(1), match.group(2)
+        exports[name] = _fn_param_arity(params, from_full_sig=False)
+    return exports
+
+
+def compare_ffi_rust_to_header(root: Path | None = None) -> list[str]:
+    """Return errors when Rust ``extern "C"`` exports disagree with ``kms.h``."""
+    root = root or repo_root()
+    header_path = root / "packages/kms-c/include/kms.h"
+    if not header_path.is_file():
+        return [f"missing {header_path}"]
+    rust = extract_rust_ffi_functions(root)
+    header = extract_c_header_functions(header_path.read_text())
+    errors: list[str] = []
+    for name in sorted(set(rust) - set(header)):
+        errors.append(f"Rust extern \"C\" fn {name} missing from packages/kms-c/include/kms.h")
+    for name in sorted(set(header) - set(rust)):
+        errors.append(f"packages/kms-c/include/kms.h declares {name} with no Rust extern \"C\" export")
+    for name in sorted(set(rust) & set(header)):
+        if rust[name] != header[name]:
+            errors.append(
+                f"FFI arity mismatch for {name}: rust={rust[name]} header={header[name]}"
+            )
+    return errors
+
+
 _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
 _KRUSTY_NAME_RE = re.compile(rf"^{_KRUSTY_NAME}$")
 _KRUSTY_PACKAGE = re.compile(rf"""package\s*=\s*["']({_KRUSTY_NAME})["']""")
@@ -1619,6 +1722,34 @@ def _assert_surfaces_self_checks() -> None:
         )
         == "wasm_bindgen(js_name=encryptedKey) | pub encrypted_key: String"
     )
+    assert (
+        _format_field('#[cfg(feature = "x")]', "pub a: u8")
+        == '#[cfg(feature = "x")] pub a: u8'
+    )
+    assert (
+        _format_field(
+            '#[cfg(feature = "x")]\n#[wasm_bindgen(skip)]',
+            "pub a: u8",
+        )
+        == '#[cfg(feature = "x")] | wasm_bindgen(skip) | pub a: u8'
+    )
+    cfg_field = """
+pub struct Foo {
+    #[cfg(feature = "x")]
+    pub a: u8,
+}
+""".strip()
+    no_cfg_field = """
+pub struct Foo {
+    pub a: u8,
+}
+""".strip()
+    assert extract_public_surface(cfg_field) != extract_public_surface(no_cfg_field)
+    assert any('#[cfg(feature = "x")]' in s for s in extract_public_surface(cfg_field))
+    assert compare_ffi_rust_to_header(repo_root()) == []
+    rust_ffi = extract_rust_ffi_functions(repo_root())
+    assert "kms_stark_sign" in rust_ffi
+    assert rust_ffi["kms_get_coin_type_tongo"] == 0
     assert krusty_deps_from_cargo_toml(
         "[dependencies]\nkrusty-kms-common.workspace = true\n"
     ) == {"krusty-kms-common"}

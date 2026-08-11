@@ -77,8 +77,27 @@ PY
   fi
 fi
 
+if ! python3 - <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(".github/scripts").resolve()))
+from lib.surfaces import compare_ffi_rust_to_header, extract_rust_ffi_functions
+
+errors = compare_ffi_rust_to_header()
+if errors:
+    for err in errors:
+        print(f"::error::{err}")
+    sys.exit(1)
+count = len(extract_rust_ffi_functions())
+print(f"Rust extern \"C\" exports match packages/kms-c/include/kms.h ({count} functions)")
+PY
+then
+  failed=1
+fi
+
 if (( failed == 1 )); then
-  echo "If the ABI change is intentional, update the snapshot and include a design note."
+  echo "If the ABI change is intentional, update the snapshot/headers and include a design note."
   exit 1
 fi
 
