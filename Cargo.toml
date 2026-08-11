@@ -42,7 +42,7 @@ categories = ["cryptography"]
 [workspace.dependencies]
 starknet-types-core = { version = "0.2.4", features = ["hash"] }
 bip39 = "2.2.0"
-hmac = "0.12.1"
+hmac = "0.13.0"
 sha2 = "0.10.8"
 sha3 = "0.10.8"
 num-bigint = "0.5.1"

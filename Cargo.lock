@@ -1676,7 +1676,7 @@ dependencies = [
  "chacha20poly1305",
  "ctr 0.10.1",
  "hex",
- "hmac 0.12.1",
+ "hmac 0.13.0",
  "k256",
  "krusty-kms-common",
  "krusty-kms-crypto",
