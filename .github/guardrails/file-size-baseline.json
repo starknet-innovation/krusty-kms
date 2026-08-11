@@ -162,7 +162,7 @@
     },
     {
       "path": "crates/sdk/src/operations.rs",
-      "lines": 1555
+      "lines": 1549
     },
     {
       "path": "crates/sdk/tests/cross_compat.rs",
@@ -171,6 +171,10 @@
     {
       "path": "crates/sdk/tests/prover_vectors.rs",
       "lines": 388
+    },
+    {
+      "path": "crates/wasm/src/discovery.rs",
+      "lines": 420
     },
     {
       "path": "crates/wasm/src/lib.rs",

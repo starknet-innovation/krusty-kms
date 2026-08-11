@@ -88,4 +88,6 @@ After rebasing onto main's 0.9.0 security-hardening release:
 - Split `crates/gateway/src/snapshot.rs` (547 lines from main) into
   `snapshot.rs` + `snapshot_cache.rs` so the new-file hard cap (500) holds;
   baselining cannot waive that cap for paths absent from the base baseline.
+- Regenerator sync: grandfather `crates/wasm/src/discovery.rs` (420) from main
+  and shrink the `sdk/src/operations.rs` ratchet to its post-merge size (1549).
 
