@@ -4,37 +4,26 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
-## [0.9.7] - 2026-08-11
+## [0.6.0] - 2026-08-11
 
-### Changed
+This release consolidates every change merged after `0.5.4`. The previously prepared
+`0.6.0` through `0.9.7` version candidates were never tagged or published.
+
+### SDK proof operations
 
 - Split the Tongo SDK proof operations and their tests into focused per-operation
   modules while preserving the existing public API.
 
-## [0.9.6] - 2026-08-11
-
-### Changed
+### Dependency compatibility
 
 - Adapt scrypt KDF call sites to `scrypt` 0.12 `Params::new` (log_n, r, p).
-
-## [0.9.5] - 2026-08-11
-
-### Changed
 
 - Bump `starknet-rust` to 0.19.1 across wallet-api/client/gateway (and controller)
   and adapt call sites for Result-returning curve helpers.
 - Raise workspace `starknet-types-core` minimum to 0.2.4.
 
-## [0.9.4] - 2026-08-11
-
-### Changed
-
 - Coordinate `aes` 0.9 + `ctr` 0.10 (shared `cipher` 0.5) for Web3 secret
   storage keystore decryption.
-
-## [0.9.3] - 2026-08-11
-
-### Changed
 
 - Migrate to `rand`/`rand_core` 0.10 (`TryRng`/`SysRng` renames) and
   `getrandom` 0.4 for SysRng/wasm_js compatibility. Krusty public helpers
@@ -42,42 +31,38 @@ All notable changes to the published Rust crates are documented here.
   keep the same signatures; fallible helpers still surface `getrandom::Error`
   (now from getrandom 0.4).
 
-## [0.9.2] - 2026-08-11
-
-### Changed
-
 - Migrate scalar modular arithmetic to `crypto-bigint` 0.7 `ConstMontyForm`
   (replacing the removed `Residue` API).
 
-## [0.9.1] - 2026-08-11
+### Maintainability and public API hygiene
 
-### Added
+#### Added
 
 - Maintainability guardrails: CI fitness checks for file-size ratchet, dependency
   DAG, `unsafe` policy, secret hygiene, FFI/WASM surface freezes, design-note
   gates, `cargo-deny`, rustdoc link checks, and locked `cargo-semver-checks`
   (see `docs/maintainability-guardrails.md`).
 
-### Fixed
+#### Fixed
 
 - Align `TongoKeyPair` `Debug` with `NostrKeyPair` by redacting as `"***"`.
 - Broken rustdoc intra-doc links in `SecretFelt`, range helpers, and OZ deploy
   docs.
 - Set `license` metadata on `krusty-kms-cabi`.
 
-### Changed
+#### Changed
 
 - Keep `starknet-types-core` on a caret requirement (`"0.2.0"`) and rely on
   `Cargo.lock` + locked rustdoc JSON for semver checks (exact pins would break
   downstream resolution).
 
-## [0.9.0] - 2026-08-10
+### Security hardening
 
 Third security-hardening pass, covering the Medium and Low/Info findings
 backlog from the full-repository audit (#46). Critical/High passes landed in
 #41 and #45.
 
-### Changed
+#### Changed
 
 - **Breaking:** `SecretFelt::expose_secret_hex` now returns
   `Zeroizing<String>` instead of `String`, so exported key hex is scrubbed on
@@ -153,7 +138,7 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   loopback-only exception (`localhost`, `127.0.0.1`, `::1`) for local
   devnets (M-14).
 
-### Fixed
+#### Fixed
 
 - Gateway `sign` verifies the request's `chain_id` against the configured
   backend before recording it in the signed provenance, so the attested
@@ -198,7 +183,7 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
 - `Amount::to_human` no longer panics for `decimals >= 39`, where
   `10^decimals` overflows `u128`.
 
-### Security / supply chain
+#### Security / supply chain
 
 - The workspace-root `cargo-audit` ignore list is now empty; the ignores
   motivated by the workspace-excluded `krusty-kms-controller` crate moved to
@@ -216,18 +201,18 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   configured Dependabot across all package ecosystems, and added
   keystore/key-material patterns to `.gitignore`.
 
-## [0.8.1] - 2026-08-10
+### Internal refactoring
 
-### Changed
+#### Changed
 
 - Internal refactor only: split the gateway `backend.rs` module into focused
   submodules (backend interface, Starknet JSON-RPC implementation, acceptance
   polling, deploy error mapping, RPC helpers). Follow-up to #51/#55; no public
   API or behavior changes.
 
-## [0.8.0] - 2026-08-10
+### Multisig coordination
 
-### Changed
+#### Changed
 
 - **Breaking:** multisig coordination notices are now cryptographically
   authenticated (#52). `MultisigCoordinator::publish`/`messages`/`subscribe`
@@ -251,9 +236,9 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   uniqueness — so consumers that tally them must deduplicate by
   `(actor, topic, message kind)`.
 
-## [0.7.0] - 2026-08-10
+### Dependency surface
 
-### Changed
+#### Changed
 
 - **Breaking:** NATS multisig coordination is now opt-in through the
   `krusty-kms-client/nats` feature, removing its dependency subtree from the
@@ -263,9 +248,9 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   dependencies across the workspace.
 - Removed the archived `console_error_panic_hook` from the WASM packages.
 
-## [0.6.1] - 2026-08-10
+### Internal refactoring (continued)
 
-### Changed
+#### Changed
 
 - Internal refactor only: split oversized source files into focused modules
   (`gateway` runtime, `client` multisig, `domain`, `oracle`, `wasm`
@@ -273,9 +258,9 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   review follow-up (#51). No public API or behavior changes; all crate-root
   paths are preserved via re-exports.
 
-## [0.6.0] - 2026-08-10
+### Core security and account APIs
 
-### Changed
+#### Changed
 
 - **Breaking:** `stark_public_key` now returns `Result` and rejects zero or
   out-of-range Stark private keys via `validate_stark_private_key` (H-08),
@@ -293,7 +278,7 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
   and OS-entropy failures now return a retryable `Internal` error instead of
   panicking.
 
-### Fixed
+#### Fixed
 
 - Gateway wait loops: deadline arithmetic no longer overflows, per-poll sleeps
   are capped at the remaining deadline, and `timeout_ms`/`poll_interval_ms`
