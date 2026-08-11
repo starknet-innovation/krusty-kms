@@ -248,6 +248,7 @@ _UNRESTRICTED_PUB_ITEM_RE = re.compile(
 _TRAIT_METHOD_RE = re.compile(
     r"^\s*(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?fn\b"
 )
+_TRAIT_ASSOC_ITEM_RE = re.compile(r"^\s*(?:type|const)\b")
 _UNRESTRICTED_PUB_DIFF_RE = re.compile(
     r"^[+-]\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
     r"(?:async\s+)?(?:unsafe\s+)?(?:extern\s+(?:\"[^\"]*\"|'[^']*')\s+)?"
@@ -467,9 +468,9 @@ def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[st
     return fields
 
 
-def _collect_trait_methods(lines: list[str], open_line: int) -> list[str]:
-    """Collect normalized method signatures from a trait body."""
-    methods: list[str] = []
+def _collect_trait_items(lines: list[str], open_line: int) -> list[str]:
+    """Collect normalized method and associated item signatures from a trait body."""
+    items: list[str] = []
     depth = 0
 
     for j in range(open_line, len(lines)):
@@ -492,14 +493,14 @@ def _collect_trait_methods(lines: list[str], open_line: int) -> list[str]:
                 if depth <= 0:
                     break
                 continue
-            if _TRAIT_METHOD_RE.match(line):
-                methods.append(_collect_rust_signature(lines, j))
+            if _TRAIT_METHOD_RE.match(line) or _TRAIT_ASSOC_ITEM_RE.match(line):
+                items.append(_collect_rust_signature(lines, j))
 
         depth += _brace_delta(line)
         if depth <= 0:
             break
 
-    return methods
+    return items
 
 
 def _collect_rust_signature(lines: list[str], start: int) -> str:
@@ -518,9 +519,9 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
             if "{" in lines[j]:
                 before = " ".join(parts).split("{", 1)[0].strip()
                 header = _normalize_ws(f"{before} {{")
-                body_methods = _collect_trait_methods(lines, j)
-                if body_methods:
-                    return _normalize_ws(f"{header} {'; '.join(body_methods)} }}")
+                body_items = _collect_trait_items(lines, j)
+                if body_items:
+                    return _normalize_ws(f"{header} {'; '.join(body_items)} }}")
                 return header
         return _normalize_ws(" ".join(parts))
 
@@ -1291,6 +1292,22 @@ pub trait WalletExecutor: Send + Sync {
 """.strip()
     changed_trait = trait_src.replace("estimate_fee", "estimate_fee_v2")
     assert extract_public_surface(trait_src) != extract_public_surface(changed_trait)
+
+    trait_assoc = """
+pub trait Provider {
+    type Error;
+    const ID: u8;
+    fn get(&self) -> Result<(), Self::Error>;
+}
+""".strip()
+    assert extract_public_surface(trait_assoc) != extract_public_surface(
+        trait_assoc.replace("type Error;", "type Error: Debug;")
+    )
+    assert extract_public_surface(trait_assoc) != extract_public_surface(
+        trait_assoc.replace("const ID: u8;", "const ID: u16;")
+    )
+    assert any("type Error;" in s for s in extract_public_surface(trait_assoc))
+    assert any("const ID: u8;" in s for s in extract_public_surface(trait_assoc))
 
     use_a = """
 pub use operations::{
