@@ -51,47 +51,10 @@ is_src_rs() {
 # Root Cargo.toml centralizes production deps under [workspace.dependencies].
 workspace_dep_entries() {
   python3 - "$1" <<'PY'
-import re
 import sys
-from pathlib import Path
+from lib.surfaces import workspace_dep_entries as entries
 
-text = Path(sys.argv[1]).read_text()
-_DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
-# One logical table entry per output line (bash sort/diff must not split headers/bodies).
-_ENTRY_SEP = "\x1e"
-
-
-def _normalize_body(body: str) -> str:
-    lines = []
-    for line in body.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        lines.append(stripped)
-    return _ENTRY_SEP.join(lines)
-
-
-def workspace_dep_entries(cargo_text: str) -> list[str]:
-    entries: list[str] = []
-    for section in re.split(r"\n(?=\[)", cargo_text):
-        if not section.strip():
-            continue
-        header = section.split("\n", 1)[0].strip()
-        if header == "[workspace.dependencies]":
-            for line in section.splitlines()[1:]:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    continue
-                if _DEP_KEY.match(stripped):
-                    entries.append(stripped)
-        elif header.startswith("[workspace.dependencies."):
-            body = section.split("\n", 1)[1] if "\n" in section else ""
-            norm = _normalize_body(body)
-            entries.append(f"{header}{_ENTRY_SEP}{norm}" if norm else header)
-    return entries
-
-
-for entry in workspace_dep_entries(text):
+for entry in entries(open(sys.argv[1]).read()):
     print(entry)
 PY
 }
@@ -115,62 +78,10 @@ root_cargo_workspace_deps_changed() {
 
 crate_production_dep_entries() {
   python3 - "$1" <<'PY'
-import re
 import sys
-from pathlib import Path
+from lib.surfaces import production_dep_entries
 
-text = Path(sys.argv[1]).read_text()
-_DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
-_DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
-# One logical table entry per output line (bash sort/diff must not split headers/bodies).
-_ENTRY_SEP = "\x1e"
-
-
-def _is_production_dep_section(header: str) -> bool:
-    return (
-        header == "[dependencies]"
-        or header.startswith("[dependencies.")
-        or ".dependencies]" in header
-        or re.match(r"^\[target\..+\.dependencies\]$", header) is not None
-    )
-
-
-def _normalize_body(body: str) -> str:
-    lines = []
-    for line in body.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        lines.append(stripped)
-    return _ENTRY_SEP.join(lines)
-
-
-def production_dep_entries(text: str) -> list[str]:
-    entries: list[str] = []
-    for section in re.split(r"\n(?=\[)", text):
-        if not section.strip():
-            continue
-        header = section.split("\n", 1)[0].strip()
-        if "dev-dependencies" in header or "build-dependencies" in header:
-            continue
-        table = _DEP_TABLE.match(header)
-        if table:
-            body = section.split("\n", 1)[1] if "\n" in section else ""
-            norm = _normalize_body(body)
-            entries.append(f"{header}{_ENTRY_SEP}{norm}" if norm else header)
-            continue
-        if not _is_production_dep_section(header):
-            continue
-        for line in section.splitlines()[1:]:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if _DEP_KEY.match(stripped):
-                entries.append(stripped)
-    return sorted(entries)
-
-
-for entry in production_dep_entries(text):
+for entry in production_dep_entries(open(sys.argv[1]).read()):
     print(entry)
 PY
 }

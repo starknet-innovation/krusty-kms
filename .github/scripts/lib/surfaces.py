@@ -242,7 +242,7 @@ _FIELD_DECL_RE = re.compile(
 _ENUM_VARIANT_START_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(.*)$")
 _UNRESTRICTED_PUB_ITEM_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
-    r"(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?"
+    r"(?:async\s+)?(?:unsafe\s+)?(?:extern\s+(?:\"[^\"]*\"|'[^']*')\s+)?(?:const\s+)?"
     r"(fn|struct|enum|trait|type|const|static|use|mod|impl)\b"
 )
 _TRAIT_METHOD_RE = re.compile(
@@ -250,6 +250,7 @@ _TRAIT_METHOD_RE = re.compile(
 )
 _UNRESTRICTED_PUB_DIFF_RE = re.compile(
     r"^[+-]\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
+    r"(?:async\s+)?(?:unsafe\s+)?(?:extern\s+(?:\"[^\"]*\"|'[^']*')\s+)?"
 )
 
 
@@ -952,10 +953,29 @@ _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
 _KRUSTY_NAME_RE = re.compile(rf"^{_KRUSTY_NAME}$")
 _KRUSTY_PACKAGE = re.compile(rf'package\s*=\s*"({_KRUSTY_NAME})"')
 _DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
+_DEP_DOTTED_FIELD_RE = re.compile(r"^([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\s*=")
+_DEP_KNOWN_FIELDS = frozenset(
+    {
+        "branch",
+        "default-features",
+        "features",
+        "git",
+        "optional",
+        "package",
+        "path",
+        "registry",
+        "rename",
+        "rev",
+        "tag",
+        "version",
+        "workspace",
+    }
+)
 _DEP_WS_INLINE = re.compile(r"^([a-zA-Z0-9_-]+)\.workspace\s*=\s*true\b")
 _DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
 _WS_DEP_TABLE = re.compile(r"^\[workspace\.dependencies\.([a-zA-Z0-9_.-]+)\]")
 _WS_TRUE = re.compile(r"\bworkspace\s*=\s*true\b")
+_ENTRY_SEP = "\x1e"
 
 
 def _is_krusty_dependency_section(header: str) -> bool:
@@ -1006,6 +1026,102 @@ def _uses_workspace(body: str) -> bool:
     return bool(_WS_TRUE.search(body))
 
 
+def _group_inline_dep_lines(lines: list[str]) -> list[tuple[str, str]]:
+    """Group ``name.field = value`` dependency lines into atomic entries."""
+    pending: dict[str, list[str]] = {}
+    entries: list[tuple[str, str]] = []
+
+    def flush() -> None:
+        for name in sorted(pending):
+            entries.append((name, "\n".join(pending[name])))
+        pending.clear()
+
+    for stripped in lines:
+        dotted = _DEP_DOTTED_FIELD_RE.match(stripped)
+        if dotted:
+            name, field = dotted.group(1), dotted.group(2)
+            if field in _DEP_KNOWN_FIELDS:
+                _, _, value = stripped.partition("=")
+                pending.setdefault(name, []).append(f"{field} = {value.strip()}")
+                continue
+        key_match = _DEP_KEY.match(stripped)
+        if not key_match:
+            continue
+        key = key_match.group(1)
+        if "." in key:
+            continue
+        flush()
+        entries.append((key, stripped))
+    flush()
+    return entries
+
+
+def _normalize_dep_body(body: str) -> str:
+    lines: list[str] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        lines.append(stripped)
+    return _ENTRY_SEP.join(lines)
+
+
+def _format_dep_entry(name: str, body: str) -> str:
+    norm = _normalize_dep_body(body)
+    return f"{name}{_ENTRY_SEP}{norm}" if norm else name
+
+
+def production_dep_entries(cargo_text: str) -> list[str]:
+    """Sorted atomic production dependency records for manifest diffing."""
+    entries: list[str] = []
+    for section in re.split(r"\n(?=\[)", cargo_text):
+        if not section.strip():
+            continue
+        header = section.split("\n", 1)[0].strip()
+        if "dev-dependencies" in header or "build-dependencies" in header:
+            continue
+        table = _DEP_TABLE.match(header)
+        if table:
+            body = section.split("\n", 1)[1] if "\n" in section else ""
+            norm = _normalize_dep_body(body)
+            entries.append(f"{header}{_ENTRY_SEP}{norm}" if norm else header)
+            continue
+        if not _is_krusty_dependency_section(header):
+            continue
+        inline_lines = [
+            line.strip()
+            for line in section.splitlines()[1:]
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        for name, body in _group_inline_dep_lines(inline_lines):
+            entries.append(_format_dep_entry(name, body))
+    return sorted(entries)
+
+
+def workspace_dep_entries(cargo_text: str) -> list[str]:
+    """Sorted atomic workspace dependency records for manifest diffing."""
+    entries: list[str] = []
+    for section in re.split(r"\n(?=\[)", cargo_text):
+        if not section.strip():
+            continue
+        header = section.split("\n", 1)[0].strip()
+        if header == "[workspace.dependencies]":
+            inline_lines = [
+                line.strip()
+                for line in section.splitlines()[1:]
+                if line.strip() and not line.strip().startswith("#")
+            ]
+            for name, body in _group_inline_dep_lines(inline_lines):
+                entries.append(_format_dep_entry(name, body))
+            continue
+        table = _WS_DEP_TABLE.match(header)
+        if table:
+            body = section.split("\n", 1)[1] if "\n" in section else ""
+            norm = _normalize_dep_body(body)
+            entries.append(f"{header}{_ENTRY_SEP}{norm}" if norm else header)
+    return entries
+
+
 def _add_krusty_dep_from_entry(
     deps: set[str],
     name: str,
@@ -1051,20 +1167,13 @@ def krusty_deps_from_cargo_toml(
             continue
         if not _is_krusty_dependency_section(header):
             continue
-        for line in section.splitlines()[1:]:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            ws_match = _DEP_WS_INLINE.match(stripped)
-            if ws_match:
-                _add_krusty_dep_from_entry(
-                    deps, ws_match.group(1), stripped, workspace_deps
-                )
-                continue
-            key_match = _DEP_KEY.match(stripped)
-            if not key_match:
-                continue
-            _add_krusty_dep_from_entry(deps, key_match.group(1), stripped, workspace_deps)
+        inline_lines = [
+            line.strip()
+            for line in section.splitlines()[1:]
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        for name, body in _group_inline_dep_lines(inline_lines):
+            _add_krusty_dep_from_entry(deps, name, body, workspace_deps)
     return deps
 
 
@@ -1112,6 +1221,36 @@ def _assert_surfaces_self_checks() -> None:
     assert parse_workspace_dependencies(
         '[workspace.dependencies]\nkms = { package = "krusty-kms", path = "crates/kms" }\n'
     ) == {"kms": "krusty-kms"}
+    assert krusty_deps_from_cargo_toml(
+        '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms"\n'
+    ) == {"krusty-kms"}
+    forbidden = krusty_deps_from_cargo_toml(
+        '[dependencies]\nclient.package = "krusty-kms-client"\nclient.path = "../client"\n'
+    )
+    assert "krusty-kms-client" in forbidden
+    assert production_dep_entries(
+        '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms"\n'
+    ) == [
+        f"kms{_ENTRY_SEP}package = \"krusty-kms\"{_ENTRY_SEP}path = \"../kms\""
+    ]
+    assert production_dep_entries(
+        '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms"\n'
+    ) != production_dep_entries(
+        '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms-v2"\n'
+    )
+
+    extern_fn = (
+        'pub unsafe extern "C" fn kms_stark_sign(\n'
+        "  sk: *const u8,\n"
+        ") -> i32"
+    )
+    extern_surface = extract_public_surface(extern_fn)
+    assert extern_surface
+    assert "kms_stark_sign" in next(iter(extern_surface))
+    assert extract_public_surface(extern_fn) != extract_public_surface(
+        extern_fn.replace("*const u8", "*const i32")
+    )
+    assert is_exported_crate_source("crates/ffi/src/signing.rs", repo_root())
 
     trait_src = """
 pub trait WalletExecutor: Send + Sync {
