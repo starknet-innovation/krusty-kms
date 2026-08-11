@@ -4,6 +4,12 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-08-11
+
+### Changed
+
+- Adapt scrypt KDF call sites to `scrypt` 0.12 `Params::new` (log_n, r, p).
+
 ## [0.9.5] - 2026-08-11
 
 ### Changed
