@@ -1690,7 +1690,7 @@ dependencies = [
  "sha2 0.10.9",
  "sha3",
  "starknet-rust-crypto 0.9.0",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "subtle",
  "zeroize",
 ]
@@ -1708,7 +1708,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "zeroize",
 ]
 
@@ -1731,7 +1731,7 @@ dependencies = [
  "serde",
  "serde_json",
  "starknet-rust",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "tokio",
  "url",
 ]
@@ -1743,7 +1743,7 @@ dependencies = [
  "hex",
  "serde",
  "serde_json",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "subtle",
  "thiserror 2.0.20",
  "zeroize",
@@ -1764,7 +1764,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "subtle",
  "zeroize",
 ]
@@ -1777,7 +1777,7 @@ dependencies = [
  "krusty-kms-common",
  "serde",
  "serde_json",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "thiserror 2.0.20",
 ]
 
@@ -1793,7 +1793,7 @@ dependencies = [
  "krusty-kms-domain",
  "num-bigint 0.5.1",
  "starknet-rust",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "tokio",
  "zeroize",
 ]
@@ -1823,7 +1823,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
 ]
 
 [[package]]
@@ -1854,7 +1854,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "sha3",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]
@@ -1952,7 +1952,7 @@ dependencies = [
  "rayon",
  "serde",
  "sha2 0.10.9",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "thiserror 2.0.20",
 ]
 
@@ -1970,7 +1970,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
- "starknet-types-core",
+ "starknet-types-core 1.0.0",
  "thiserror 2.0.20",
  "wasm-bindgen",
  "wasm-bindgen-test",
@@ -3322,7 +3322,7 @@ dependencies = [
  "sha3",
  "starknet-rust-core-derive",
  "starknet-rust-crypto 0.19.1",
- "starknet-types-core",
+ "starknet-types-core 0.2.4",
 ]
 
 [[package]]
@@ -3353,7 +3353,7 @@ dependencies = [
  "rfc6979",
  "sha2 0.10.9",
  "starknet-rust-curve 0.6.0",
- "starknet-types-core",
+ "starknet-types-core 0.2.4",
  "zeroize",
 ]
 
@@ -3374,7 +3374,7 @@ dependencies = [
  "rfc6979",
  "sha2 0.10.9",
  "starknet-rust-curve 0.19.1",
- "starknet-types-core",
+ "starknet-types-core 0.2.4",
  "zeroize",
 ]
 
@@ -3384,7 +3384,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1977caca63a4e6439968abe0c9d8c0d2074df7641f1153e8a551f8200470d8da"
 dependencies = [
- "starknet-types-core",
+ "starknet-types-core 0.2.4",
 ]
 
 [[package]]
@@ -3393,7 +3393,7 @@ version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf807adc0b881c58efa7cbdec303da1308250691a3969fb46b5eb47dfb125eca"
 dependencies = [
- "starknet-types-core",
+ "starknet-types-core 0.2.4",
 ]
 
 [[package]]
@@ -3454,6 +3454,25 @@ checksum = "90d23b1bc014ee4cce40056ab3114bcbcdc2dbc1e845bbfb1f8bd0bab63507d4"
 dependencies = [
  "blake2",
  "digest 0.10.7",
+ "lambdaworks-crypto",
+ "lambdaworks-math",
+ "num-bigint 0.4.8",
+ "num-integer",
+ "num-traits",
+ "rand 0.9.5",
+ "serde",
+ "zeroize",
+]
+
+[[package]]
+name = "starknet-types-core"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a12690813e587969cb4a9e7d8ebdb069d4bb7ec8d03275c5f719310c8e1f07c"
+dependencies = [
+ "blake2",
+ "digest 0.10.7",
+ "generic-array",
  "lambdaworks-crypto",
  "lambdaworks-math",
  "num-bigint 0.4.8",
