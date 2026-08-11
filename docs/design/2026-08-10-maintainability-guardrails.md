@@ -61,4 +61,7 @@ Addressed on the same PR after review:
 - Design-note coverage widened; baseline bumps require `docs/design/*.md`.
 - PR-size / design-note fail closed on PRs; shared `surfaces.py` for extractors.
 - Softened `SECURITY.md`; dropped redundant FFI digest; trimmed deny licenses.
+- Public/WASM fingerprints keep API-bearing attrs (`cfg`/`derive`/`serde`/`repr`/
+  `non_exhaustive`), including field-level `#[serde(...)]`; WASM snapshot refreshed
+  accordingly. FFI freeze also compares Dart `lookupFunction` bindings to `kms.h`.
 
