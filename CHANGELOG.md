@@ -4,6 +4,16 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-08-11
+
+### Changed
+
+- Migrate to `rand`/`rand_core` 0.10 (`TryRng`/`SysRng` renames) and
+  `getrandom` 0.4 for SysRng/wasm_js compatibility. Krusty public helpers
+  (`random_felt`, `fill_random_bytes`, WASM `randomFelt`/`randomBytesHex`)
+  keep the same signatures; fallible helpers still surface `getrandom::Error`
+  (now from getrandom 0.4).
+
 ## [0.9.2] - 2026-08-11
 
 ### Changed

@@ -224,11 +224,11 @@ pub fn point_add(
 /// Generate a random field element.
 #[wasm_bindgen(js_name = "randomFelt")]
 pub fn random_felt() -> String {
-    use rand_core::TryRngCore;
+    use rand_core::TryRng;
     use starknet_types_core::felt::Felt;
 
     let mut bytes = [0u8; 32];
-    rand::rngs::OsRng
+    rand::rngs::SysRng
         .try_fill_bytes(&mut bytes)
         .expect("OS entropy source unavailable");
     let felt = Felt::from_bytes_be(&bytes);
