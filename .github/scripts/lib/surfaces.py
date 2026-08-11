@@ -1588,6 +1588,160 @@ def compare_ffi_rust_to_header(root: Path | None = None) -> list[str]:
     return errors
 
 
+_RUST_REPR_C_STRUCT_RE = re.compile(
+    r"^\s*pub\s+struct\s+(Kms[A-Za-z0-9_]+)\s*\{"
+)
+_RUST_PUB_TYPE_ALIAS_RE = re.compile(
+    r"^\s*pub\s+type\s+(Kms[A-Za-z0-9_]+)\s*=\s*(.+?)\s*;\s*$"
+)
+_RUST_STRUCT_FIELD_RE = re.compile(
+    r"^\s*pub\s+([A-Za-z_]\w*)\s*:\s*(.+?)\s*,?\s*$"
+)
+_C_TYPEDEF_STRUCT_RE = re.compile(
+    r"typedef\s+struct\s*\{(?P<body>.*?)\}\s*(?P<name>Kms[A-Za-z0-9_]+)\s*;",
+    re.DOTALL,
+)
+_C_STRUCT_FIELD_RE = re.compile(
+    r"^(?P<type>.+?)\s+(?P<name>[A-Za-z_]\w*)(?P<array>(?:\s*\[\d+\])+)?\s*;\s*$"
+)
+
+
+def _canonical_layout_type(typ: str) -> str:
+    """Normalize Rust/C field types for ABI layout comparison."""
+    typ = _normalize_ws(typ)
+    rust_arr = re.match(r"^\[(.+?);\s*(\d+)\]$", typ)
+    if rust_arr:
+        return f"{_canonical_layout_type(rust_arr.group(1))}[{rust_arr.group(2)}]"
+    c_arr = re.match(r"^(.+?)((?:\[\d+\])+)$", typ)
+    if c_arr and not typ.startswith("["):
+        return f"{_canonical_layout_type(c_arr.group(1))}{c_arr.group(2)}"
+    if typ in _C_FFI_TYPE_ALIASES:
+        return _C_FFI_TYPE_ALIASES[typ]
+    if typ in _RUST_FFI_TYPE_ALIASES:
+        return _RUST_FFI_TYPE_ALIASES[typ]
+    return typ.split("::")[-1]
+
+
+def _layout_fingerprint(kind: str, name: str, fields: list[tuple[str, str]]) -> str:
+    if kind == "alias":
+        return f"type {name} = {fields[0][1]}"
+    body = "; ".join(f"{fname}: {ftype}" for fname, ftype in fields)
+    return f"struct {name} {{ {body} }}"
+
+
+def _has_preceding_repr_c(lines: list[str], start: int) -> bool:
+    i = start - 1
+    while i >= 0:
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("//"):
+            i -= 1
+            continue
+        if stripped.startswith("#["):
+            attr_parts = [stripped]
+            k = i + 1
+            while not _attr_is_complete(" ".join(attr_parts)) and k < start:
+                nxt = lines[k].strip()
+                if nxt:
+                    attr_parts.append(nxt)
+                k += 1
+            attr = _normalize_ws(" ".join(attr_parts))
+            if re.match(r"^#\[repr\s*\(\s*C\s*\)\]", attr):
+                return True
+            i -= 1
+            continue
+        break
+    return False
+
+
+def extract_rust_ffi_layouts(root: Path | None = None) -> dict[str, str]:
+    """Map exported ``#[repr(C)]`` / ABI type aliases in ``crates/ffi`` to layouts."""
+    root = root or repo_root()
+    layouts: dict[str, str] = {}
+    for path in sorted((root / "crates/ffi/src").rglob("*.rs")):
+        lines = path.read_text().splitlines()
+        for i, line in enumerate(lines):
+            alias = _RUST_PUB_TYPE_ALIAS_RE.match(line)
+            if alias:
+                name = alias.group(1)
+                layouts[name] = _layout_fingerprint(
+                    "alias", name, [("", _canonical_layout_type(alias.group(2)))]
+                )
+                continue
+            struct = _RUST_REPR_C_STRUCT_RE.match(line)
+            if not struct or not _has_preceding_repr_c(lines, i):
+                continue
+            name = struct.group(1)
+            fields: list[tuple[str, str]] = []
+            depth = _brace_delta(line)
+            for j in range(i + 1, len(lines)):
+                depth += _brace_delta(lines[j])
+                if depth <= 0:
+                    break
+                stripped = lines[j].strip()
+                if not stripped or stripped.startswith("//") or stripped.startswith("#"):
+                    continue
+                field = _RUST_STRUCT_FIELD_RE.match(lines[j])
+                if not field:
+                    continue
+                fields.append(
+                    (field.group(1), _canonical_layout_type(field.group(2).rstrip(",")))
+                )
+            layouts[name] = _layout_fingerprint("struct", name, fields)
+    return layouts
+
+
+def extract_c_header_layouts(header_text: str) -> dict[str, str]:
+    """Map ``typedef struct`` / scalar typedefs named ``Kms*`` to layout fingerprints."""
+    layouts: dict[str, str] = {}
+    for match in _C_TYPEDEF_STRUCT_RE.finditer(header_text):
+        name = match.group("name")
+        fields: list[tuple[str, str]] = []
+        for raw in match.group("body").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("/*") or line.startswith("*") or line.startswith("//"):
+                continue
+            field = _C_STRUCT_FIELD_RE.match(line)
+            if not field:
+                continue
+            typ = field.group("type").strip()
+            array = field.group("array") or ""
+            fields.append((field.group("name"), _canonical_layout_type(f"{typ}{array}")))
+        layouts[name] = _layout_fingerprint("struct", name, fields)
+    for match in _C_SCALAR_TYPEDEF_RE.finditer(header_text):
+        base, name = match.group(1), match.group(2)
+        if not name.startswith("Kms"):
+            continue
+        layouts[name] = _layout_fingerprint(
+            "alias", name, [("", _canonical_layout_type(base))]
+        )
+    return layouts
+
+
+def compare_ffi_layouts(root: Path | None = None) -> list[str]:
+    """Return errors when Rust ``repr(C)`` layouts disagree with ``kms.h`` typedefs."""
+    root = root or repo_root()
+    header_path = root / "packages/kms-c/include/kms.h"
+    if not header_path.is_file():
+        return [f"missing {header_path}"]
+    rust = extract_rust_ffi_layouts(root)
+    header = extract_c_header_layouts(header_path.read_text())
+    errors: list[str] = []
+    for name in sorted(set(rust) - set(header)):
+        errors.append(
+            f"Rust FFI type {name} missing from packages/kms-c/include/kms.h"
+        )
+    for name in sorted(set(header) - set(rust)):
+        errors.append(
+            f"packages/kms-c/include/kms.h typedef {name} has no Rust FFI layout"
+        )
+    for name in sorted(set(rust) & set(header)):
+        if rust[name] != header[name]:
+            errors.append(
+                f"FFI layout mismatch for {name}: rust={rust[name]} header={header[name]}"
+            )
+    return errors
+
+
 _DART_TYPEDEF_RE = re.compile(
     r"typedef\s+(\w+)\s*=\s*(.+?)\s*Function\s*\((.*?)\);",
     re.DOTALL,
@@ -1744,7 +1898,11 @@ def compare_ffi_dart_to_header(root: Path | None = None) -> list[str]:
 
 def compare_ffi_surfaces(root: Path | None = None) -> list[str]:
     """Return combined Rust/Dart vs ``kms.h`` FFI freeze errors."""
-    return compare_ffi_rust_to_header(root) + compare_ffi_dart_to_header(root)
+    return (
+        compare_ffi_rust_to_header(root)
+        + compare_ffi_layouts(root)
+        + compare_ffi_dart_to_header(root)
+    )
 
 
 _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
@@ -2093,6 +2251,20 @@ pub struct Foo {
     assert header_ffi["kms_derive_nostr_private_key"] == rust_ffi[
         "kms_derive_nostr_private_key"
     ]
+    rust_layouts = extract_rust_ffi_layouts(repo_root())
+    header_layouts = extract_c_header_layouts(
+        (repo_root() / "packages/kms-c/include/kms.h").read_text()
+    )
+    assert rust_layouts["KmsAccountState"] == header_layouts["KmsAccountState"]
+    assert "balance_low: u64" in rust_layouts["KmsAccountState"]
+    swapped = rust_layouts["KmsAccountState"].replace(
+        "balance_low: u64; balance_high: u64",
+        "balance_high: u64; balance_low: u64",
+    )
+    assert swapped != header_layouts["KmsAccountState"]
+    assert rust_layouts["KmsFelt"] == "struct KmsFelt { bytes: u8[32] }"
+    assert rust_layouts["KmsAccountHandle"] == "type KmsAccountHandle = u64"
+    assert compare_ffi_layouts(repo_root()) == []
     dart_ffi = extract_dart_ffi_functions(
         (repo_root() / "packages/kms-dart/lib/src/ffi/bindings.dart").read_text()
     )
