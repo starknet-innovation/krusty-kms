@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "soft_limit": 350,
+  "hard_limit_new_files": 500,
+  "notes": "Baseline of existing oversized files. CI fails if any listed file grows, or if a new file exceeds hard_limit_new_files. Soft_limit applies to new files as a warning threshold documented in CONTRIBUTING.md.",
+  "files": [
+    {
+      "path": "crates/client/src/contract.rs",
+      "lines": 496
+    },
+    {
+      "path": "crates/client/src/events.rs",
+      "lines": 743
+    },
+    {
+      "path": "crates/client/src/multisig/types.rs",
+      "lines": 634
+    },
+    {
+      "path": "crates/client/src/operations.rs",
+      "lines": 629
+    },
+    {
+      "path": "crates/client/tests/oz_multisig_devnet.rs",
+      "lines": 504
+    },
+    {
+      "path": "crates/client/tests/tongo_sepolia_integration.rs",
+      "lines": 1225
+    },
+    {
+      "path": "crates/common/src/utils.rs",
+      "lines": 378
+    },
+    {
+      "path": "crates/crypto/src/audit.rs",
+      "lines": 828
+    },
+    {
+      "path": "crates/crypto/src/bit.rs",
+      "lines": 360
+    },
+    {
+      "path": "crates/crypto/src/poe2.rs",
+      "lines": 383
+    },
+    {
+      "path": "crates/crypto/src/range.rs",
+      "lines": 468
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/blackjack.rs",
+      "lines": 888
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/crossy.rs",
+      "lines": 609
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/deck.rs",
+      "lines": 391
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/protocol.rs",
+      "lines": 576
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/shuffle.rs",
+      "lines": 686
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/types.rs",
+      "lines": 805
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/src/zkp.rs",
+      "lines": 1034
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/tests/equivalence.rs",
+      "lines": 662
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker/tests/fuzz.rs",
+      "lines": 414
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker-wasm/src/blackjack.rs",
+      "lines": 839
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker-wasm/src/crossy.rs",
+      "lines": 452
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker-wasm/src/deck.rs",
+      "lines": 841
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker-wasm/src/player.rs",
+      "lines": 359
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/mental-poker-wasm/src/types.rs",
+      "lines": 457
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/qb-game/src/types.rs",
+      "lines": 520
+    },
+    {
+      "path": "crates/experimental/gaming-experimental/qb-game/src/verification.rs",
+      "lines": 401
+    },
+    {
+      "path": "crates/ffi/src/calldata.rs",
+      "lines": 1205
+    },
+    {
+      "path": "crates/ffi/src/elgamal_ffi.rs",
+      "lines": 379
+    },
+    {
+      "path": "crates/ffi/src/proof.rs",
+      "lines": 962
+    },
+    {
+      "path": "crates/kms/src/account_class.rs",
+      "lines": 585
+    },
+    {
+      "path": "crates/kms/src/derivation.rs",
+      "lines": 703
+    },
+    {
+      "path": "crates/kms/src/encryption.rs",
+      "lines": 359
+    },
+    {
+      "path": "crates/kms/src/keystore.rs",
+      "lines": 645
+    },
+    {
+      "path": "crates/kms/src/tx_hash.rs",
+      "lines": 1147
+    },
+    {
+      "path": "crates/kms/src/typed_data.rs",
+      "lines": 814
+    },
+    {
+      "path": "crates/kms/tests/tx_hash_parity.rs",
+      "lines": 459
+    },
+    {
+      "path": "crates/sdk/benches/operations.rs",
+      "lines": 438
+    },
+    {
+      "path": "crates/sdk/benches/transfer_throughput.rs",
+      "lines": 439
+    },
+    {
+      "path": "crates/sdk/src/operations.rs",
+      "lines": 1549
+    },
+    {
+      "path": "crates/sdk/tests/cross_compat.rs",
+      "lines": 504
+    },
+    {
+      "path": "crates/sdk/tests/prover_vectors.rs",
+      "lines": 388
+    },
+    {
+      "path": "crates/wasm/src/discovery.rs",
+      "lines": 420
+    },
+    {
+      "path": "crates/wasm/src/lib.rs",
+      "lines": 403
+    },
+    {
+      "path": "crates/wasm/src/proof.rs",
+      "lines": 955
+    },
+    {
+      "path": "crates/wasm/src/tx_hash.rs",
+      "lines": 552
+    },
+    {
+      "path": "crates/wasm/src/types.rs",
+      "lines": 562
+    }
+  ]
+}

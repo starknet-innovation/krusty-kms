@@ -1,0 +1,54 @@
+# cargo-deny configuration for krusty-kms.
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+targets = [
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "wasm32-unknown-unknown" },
+]
+# Audit optional features on publishable crates (e.g. krusty-kms-client `nats`).
+# crates/controller is workspace-excluded and is not part of this graph.
+all-features = true
+
+[advisories]
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    # Present via transitive crates (e.g. some crypto/util deps). Prefer not to
+    # expand further without discussion — CC0 has no patent grant.
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+    "0BSD",
+    "BSL-1.0",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+deny = []
+# Path/workspace crates may duplicate versions during a publish window; warn only.
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

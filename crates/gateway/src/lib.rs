@@ -15,6 +15,8 @@
 //! - derive/check/deploy share one canonical descriptor path
 //! - runtime state is localized to operation tracking and bounded snapshot cache
 
+#![forbid(unsafe_code)]
+
 mod account_class;
 mod accounts;
 mod backend;
@@ -24,6 +26,7 @@ mod gateway;
 mod operations;
 mod signing;
 mod snapshot;
+mod snapshot_cache;
 mod types;
 
 #[cfg(test)]

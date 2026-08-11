@@ -18,7 +18,7 @@ use starknet_types_core::felt::Felt;
 
 /// Computes the total randomness from per-bit random values.
 ///
-/// Computes r = sum(random_values[i] * 2^i) for i in 0..random_values.len()
+/// Computes r = sum(random_values\[i\] * 2^i) for i in 0..random_values.len()
 ///
 /// This is useful when you need to know `r` before calling `prove_with_randomness`,
 /// e.g. to compute cipher balance coordinates for prefix hashing.

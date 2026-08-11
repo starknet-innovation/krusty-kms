@@ -4,6 +4,28 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-08-11
+
+### Added
+
+- Maintainability guardrails: CI fitness checks for file-size ratchet, dependency
+  DAG, `unsafe` policy, secret hygiene, FFI/WASM surface freezes, design-note
+  gates, `cargo-deny`, rustdoc link checks, and locked `cargo-semver-checks`
+  (see `docs/maintainability-guardrails.md`).
+
+### Fixed
+
+- Align `TongoKeyPair` `Debug` with `NostrKeyPair` by redacting as `"***"`.
+- Broken rustdoc intra-doc links in `SecretFelt`, range helpers, and OZ deploy
+  docs.
+- Set `license` metadata on `krusty-kms-cabi`.
+
+### Changed
+
+- Keep `starknet-types-core` on a caret requirement (`"0.2.0"`) and rely on
+  `Cargo.lock` + locked rustdoc JSON for semver checks (exact pins would break
+  downstream resolution).
+
 ## [0.9.0] - 2026-08-10
 
 Third security-hardening pass, covering the Medium and Low/Info findings

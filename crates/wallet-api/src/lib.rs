@@ -4,6 +4,8 @@
 //! higher-level wallet implementations can share one stable boundary without
 //! depending on each other.
 
+#![forbid(unsafe_code)]
+
 use async_trait::async_trait;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;

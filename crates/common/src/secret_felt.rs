@@ -16,10 +16,10 @@ use zeroize::Zeroize;
 ///
 /// # Security
 ///
-/// - All access to the inner `Felt` must go through [`expose_secret()`], making
+/// - All access to the inner `Felt` must go through [`Self::expose_secret`], making
 ///   every secret-access point explicit and greppable.
 /// - `Debug` output is redacted to prevent accidental logging of secrets.
-/// - Hex serialization requires the explicit [`expose_secret_hex()`] escape hatch.
+/// - Hex serialization requires the explicit [`Self::expose_secret_hex`] escape hatch.
 /// - `Drop` uses a volatile write to prevent the compiler from optimizing
 ///   away the zeroing.
 // Clone is needed by TongoKeyPair; note that cloning duplicates the secret.

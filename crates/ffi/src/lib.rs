@@ -16,6 +16,7 @@
 //! Every FFI entry point is wrapped in `catch_unwind` so that Rust panics
 //! never propagate across the C ABI boundary.
 
+#![allow(unsafe_code)] // this crate is the raw-pointer C ABI boundary
 #![allow(clippy::missing_safety_doc)] // safety is documented crate-wide above
 
 // ---------------------------------------------------------------------------

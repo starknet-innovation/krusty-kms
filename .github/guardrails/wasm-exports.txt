@@ -1,0 +1,152 @@
+crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveOzAccountAddress) | pub fn derive_oz_account_address(public_key_x: &str, class_hash: &str, salt: Option<String>) -> Result<String, JsValue>
+crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveArgentAccountAddress) | pub fn derive_argent_account_address(public_key: &str, class_hash: Option<String>) -> Result<String, JsValue>
+crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveBraavosAccountAddress) | pub fn derive_braavos_account_address(public_key: &str, class_hash: Option<String>) -> Result<String, JsValue>
+crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=calculateContractAddress) | pub fn calculate_contract_address(address_salt: &str, class_hash: &str, constructor_calldata: Vec<String>, deployer_address: &str) -> Result<String, JsValue>
+crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=getAccountClassHashes) | pub fn get_account_class_hashes() -> String
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=generateMnemonic) | pub fn generate_mnemonic(word_count: Option<u8>) -> Result<String, JsValue>
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=validateMnemonic) | pub fn validate_mnemonic(mnemonic: &str) -> bool
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveKeypair) | pub fn derive_keypair(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmKeypair, JsValue>
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=derivePublicKey) | pub fn derive_public_key(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmPublicKey, JsValue>
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveStarknetKeypair) | pub fn derive_starknet_keypair(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmKeypair, JsValue>
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveStarknetPublicKey) | pub fn derive_starknet_public_key(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmPublicKey, JsValue>
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=getStarknetCoinType) | pub fn get_starknet_coin_type() -> u32
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=getTongoCoinType) | pub fn get_tongo_coin_type() -> u32
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=getNostrCoinType) | pub fn get_nostr_coin_type() -> u32
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveArgentLegacyKeypair) | pub fn derive_argent_legacy_keypair(mnemonic: &str, address_index: u32, account_index: u32) -> Result<WasmStarkXOnlyKeypair, JsValue>
+crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveArgentLegacyPublicKey) | pub fn derive_argent_legacy_public_key(mnemonic: &str, address_index: u32, account_index: u32) -> Result<WasmStarkXOnlyPublicKey, JsValue>
+crates/wasm/src/account/nostr.rs: wasm_bindgen(js_name=deriveNostrKeypair) | pub fn derive_nostr_keypair(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmNostrKeypair, JsValue>
+crates/wasm/src/account/nostr.rs: wasm_bindgen(js_name=deriveNostrPublicKey) | pub fn derive_nostr_public_key(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmNostrPublicKey, JsValue>
+crates/wasm/src/account/wasm_account.rs: pub struct WasmAccount {
+crates/wasm/src/account/wasm_account.rs: impl WasmAccount {
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=fromMnemonic) | pub fn from_mnemonic(mnemonic: &str, address_index: u32, account_index: u32, contract_address: &str, passphrase: Option<String>) -> Result<WasmAccount, JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=fromPrivateKey) | pub fn from_private_key(private_key: &str, contract_address: &str) -> Result<WasmAccount, JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=ownerPublicKeyHex) | pub fn owner_public_key_hex(&self) -> Result<String, JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=contractAddress) | pub fn contract_address(&self) -> String
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=getState) | pub fn get_state(&self) -> WasmAccountState
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=updateState) | pub fn update_state(&mut self, state: WasmAccountState) -> Result<(), JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=hasSufficientBalance) | pub fn has_sufficient_balance(&self, amount: &str) -> Result<bool, JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=totalBalance) | pub fn total_balance(&self) -> Result<String, JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=decryptToPoint) | pub fn decrypt_to_point(&self, ciphertext: &WasmCiphertext) -> Result<WasmDecryptedPoint, JsValue>
+crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=decryptBalance) | pub fn decrypt_balance(&self, ciphertext: &WasmCiphertext, max_search: Option<u64>) -> Result<String, JsValue>
+crates/wasm/src/calldata.rs: wasm_bindgen(js_name=compileCalls) | pub fn compile_calls(calls_json: &str) -> Result<Vec<String>, JsValue>
+crates/wasm/src/calldata.rs: wasm_bindgen(js_name=encodeFelt) | pub fn encode_felt(value: &str) -> Result<String, JsValue>
+crates/wasm/src/calldata.rs: wasm_bindgen(js_name=encodeShortString) | pub fn encode_short_string(s: &str) -> Result<String, JsValue>
+crates/wasm/src/calldata.rs: wasm_bindgen(js_name=decodeShortString) | pub fn decode_short_string(felt_hex: &str) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=generateAccountCandidates) | pub fn generate_account_candidates(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=generateAccountCandidatesWithSecrets) | pub fn generate_account_candidates_with_secrets(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=generateAccountAddresses) | pub fn generate_account_addresses(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=deriveDiscoveryKeypairs) | pub fn derive_discovery_keypairs(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=deriveDiscoveryKeypairsWithSecrets) | pub fn derive_discovery_keypairs_with_secrets(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=discoverAccountsFromMnemonic) | pub fn discover_accounts_from_mnemonic(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/discovery.rs: wasm_bindgen(js_name=discoverAccountsFromMnemonicWithSecrets) | pub fn discover_accounts_from_mnemonic_with_secrets(mnemonic: &str, max_index: Option<u32>) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedKey { pub nonce: String; pub salt: String; wasm_bindgen(js_name=encryptedKey) | pub encrypted_key: String }
+crates/wasm/src/encryption.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedPayload { pub nonce: String; pub ciphertext: String }
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptPrivateKey) | pub fn encrypt_private_key(private_key_hex: &str, password: &str, scrypt_n: u32) -> Result<WasmEncryptedKey, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptPrivateKey) | pub fn decrypt_private_key(nonce: &str, salt: &str, encrypted_key: &str, password: &str, scrypt_n: u32) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptWithKey) | pub fn encrypt_with_key(plaintext: &str, key_hex: &str) -> Result<WasmEncryptedPayload, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptWithKey) | pub fn decrypt_with_key(nonce: &str, ciphertext: &str, key_hex: &str) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptKeystore) | pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptKeystore) | pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptEthersKeystore) | pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<String, JsValue>
+crates/wasm/src/hashing.rs: wasm_bindgen(js_name=pedersenHash) | pub fn pedersen_hash(a: &str, b: &str) -> Result<String, JsValue>
+crates/wasm/src/hashing.rs: wasm_bindgen(js_name=pedersenHashMany) | pub fn pedersen_hash_many(felts: Vec<String>) -> Result<String, JsValue>
+crates/wasm/src/hashing.rs: wasm_bindgen(js_name=starknetKeccak) | pub fn starknet_keccak(data: &str, encoding: Option<String>) -> Result<String, JsValue>
+crates/wasm/src/hashing.rs: wasm_bindgen(js_name=getSelectorFromName) | pub fn get_selector_from_name(name: &str) -> Result<String, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(start) | pub fn init()
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=getVersion) | pub fn get_version() -> String
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=getBuildInfo) | pub fn get_build_info() -> JsValue
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=poseidonHashMany) | pub fn poseidon_hash(inputs: Vec<String>) -> Result<String, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=poseidonHash) | pub fn poseidon_hash_two(a: &str, b: &str) -> Result<String, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=scalarMul) | pub fn scalar_mul(scalar: &str, point_x: &str, point_y: &str) -> Result<types::WasmPoint, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=scalarMulGenerator) | pub fn scalar_mul_generator(scalar: &str) -> Result<types::WasmPoint, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=getGenerator) | pub fn get_generator() -> types::WasmPoint
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=pointAdd) | pub fn point_add(p1_x: &str, p1_y: &str, p2_x: &str, p2_y: &str) -> Result<types::WasmPoint, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=randomFelt) | pub fn random_felt() -> String
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=serializePublicKey) | pub fn serialize_public_key(x: &str, y: &str) -> Result<String, JsValue>
+crates/wasm/src/lib.rs: wasm_bindgen(js_name=deserializePublicKey) | pub fn deserialize_public_key(hex: &str) -> Result<types::WasmPoint, JsValue>
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmFundParams { pub amount: String; pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String; pub current_cipher_l_x: String; pub current_cipher_l_y: String; pub current_cipher_r_x: String; pub current_cipher_r_y: String; pub auditor_public_key: Option<String> }
+crates/wasm/src/proof.rs: impl WasmFundParams {
+crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(amount: String, nonce: String, chain_id: String, tongo_address: String, sender_address: String, current_cipher_l_x: String, current_cipher_l_y: String, current_cipher_r_x: String, current_cipher_r_y: String) -> Self
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=withAuditor) | pub fn with_auditor(mut self, auditor_public_key: String) -> Self
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmFundProofResult { pub y_x: String; pub y_y: String; pub proof_json: String; pub amount: String; pub audit_json: Option<String> }
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=generateFundProof) | pub fn generate_fund_proof(account: &WasmAccount, params: &WasmFundParams) -> Result<WasmFundProofResult, JsValue>
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmTransferParams { pub recipient_public_key: String; pub amount: String; pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String; pub current_cipher_l_x: String; pub current_cipher_l_y: String; pub current_cipher_r_x: String; pub current_cipher_r_y: String; pub bit_size: Option<u8>; pub auditor_public_key: Option<String> }
+crates/wasm/src/proof.rs: impl WasmTransferParams {
+crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(recipient_public_key: String, amount: String, nonce: String, chain_id: String, tongo_address: String, sender_address: String, current_cipher_l_x: String, current_cipher_l_y: String, current_cipher_r_x: String, current_cipher_r_y: String) -> Self
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=withBitSize) | pub fn with_bit_size(mut self, bit_size: u8) -> Self
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=withAuditor) | pub fn with_auditor(mut self, auditor_public_key: String) -> Self
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmTransferProofResult { pub transfer_l_x: String; pub transfer_l_y: String; pub transfer_r_x: String; pub transfer_r_y: String; pub self_l_x: String; pub self_l_y: String; pub self_r_x: String; pub self_r_y: String; pub aux_v_x: String; pub aux_v_y: String; pub aux_r_x: String; pub aux_r_y: String; pub aux2_v_x: String; pub aux2_v_y: String; pub aux2_r_x: String; pub aux2_r_y: String; pub new_balance_l_x: String; pub new_balance_l_y: String; pub new_balance_r_x: String; pub new_balance_r_y: String; pub proof_json: String; pub audit_balance_json: Option<String>; pub audit_transfer_json: Option<String> }
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=generateTransferProof) | pub fn generate_transfer_proof(account: &WasmAccount, params: &WasmTransferParams) -> Result<WasmTransferProofResult, JsValue>
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmRolloverParams { pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String }
+crates/wasm/src/proof.rs: impl WasmRolloverParams {
+crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(nonce: String, chain_id: String, tongo_address: String, sender_address: String) -> Self
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmRolloverProofResult { pub y_x: String; pub y_y: String; pub proof_json: String; pub pending_amount: String }
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=generateRolloverProof) | pub fn generate_rollover_proof(account: &WasmAccount, params: &WasmRolloverParams) -> Result<WasmRolloverProofResult, JsValue>
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmWithdrawParams { pub recipient_address: String; pub amount: String; pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String; pub current_cipher_l_x: String; pub current_cipher_l_y: String; pub current_cipher_r_x: String; pub current_cipher_r_y: String; pub bit_size: Option<u8>; pub auditor_public_key: Option<String> }
+crates/wasm/src/proof.rs: impl WasmWithdrawParams {
+crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(recipient_address: String, amount: String, nonce: String, chain_id: String, tongo_address: String, sender_address: String, current_cipher_l_x: String, current_cipher_l_y: String, current_cipher_r_x: String, current_cipher_r_y: String) -> Self
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=withBitSize) | pub fn with_bit_size(mut self, bit_size: u8) -> Self
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=withAuditor) | pub fn with_auditor(mut self, auditor_public_key: String) -> Self
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmWithdrawProofResult { pub y_x: String; pub y_y: String; pub a_x_x: String; pub a_x_y: String; pub a_r_x: String; pub a_r_y: String; pub a_x2: String; pub a_y2: String; pub a_v_x: String; pub a_v_y: String; pub sx: String; pub sb: String; pub sr: String; pub aux_v_x: String; pub aux_v_y: String; pub aux_r_x: String; pub aux_r_y: String; pub range_json: String; pub amount: String; pub recipient: String; pub audit_json: Option<String> }
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=generateWithdrawProof) | pub fn generate_withdraw_proof(account: &WasmAccount, params: &WasmWithdrawParams) -> Result<WasmWithdrawProofResult, JsValue>
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmRagequitParams { pub recipient_address: String; pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String; pub current_cipher_l_x: String; pub current_cipher_l_y: String; pub current_cipher_r_x: String; pub current_cipher_r_y: String; pub auditor_public_key: Option<String> }
+crates/wasm/src/proof.rs: impl WasmRagequitParams {
+crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(recipient_address: String, nonce: String, chain_id: String, tongo_address: String, sender_address: String, current_cipher_l_x: String, current_cipher_l_y: String, current_cipher_r_x: String, current_cipher_r_y: String) -> Self
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=withAuditor) | pub fn with_auditor(mut self, auditor_public_key: String) -> Self
+crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmRagequitProofResult { pub y_x: String; pub y_y: String; pub a_x_x: String; pub a_x_y: String; pub a_r_x: String; pub a_r_y: String; pub sx: String; pub amount: String; pub recipient: String; pub audit_json: Option<String> }
+crates/wasm/src/proof.rs: wasm_bindgen(js_name=generateRagequitProof) | pub fn generate_ragequit_proof(account: &WasmAccount, params: &WasmRagequitParams) -> Result<WasmRagequitProofResult, JsValue>
+crates/wasm/src/signing.rs: wasm_bindgen(js_name=starkPublicKey) | pub fn stark_public_key(private_key: &str) -> Result<String, JsValue>
+crates/wasm/src/signing.rs: wasm_bindgen(js_name=signStarkHash) | pub fn sign_stark_hash(private_key: &str, msg_hash: &str) -> Result<WasmStarkSignature, JsValue>
+crates/wasm/src/signing.rs: wasm_bindgen(js_name=nostrPublicKey) | pub fn nostr_public_key(private_key: &str) -> Result<String, JsValue>
+crates/wasm/src/signing.rs: wasm_bindgen(js_name=signNostrEventId) | pub fn sign_nostr_event_id(private_key: &str, event_id: &str) -> Result<WasmNostrSignature, JsValue>
+crates/wasm/src/signing.rs: wasm_bindgen(js_name=signNostrMessage) | pub fn sign_nostr_message(private_key: &str, message: &str) -> Result<WasmNostrSignature, JsValue>
+crates/wasm/src/strk20.rs: wasm_bindgen(js_name=deriveStrk20ViewingKey) | pub fn derive_strk20_viewing_key(private_key: &str) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeInvokeTransactionHashV1) | pub fn compute_invoke_transaction_hash_v1(sender_address: &str, calldata: Vec<String>, max_fee: &str, chain_id: &str, nonce: &str) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeInvokeTransactionHashV3) | pub fn compute_invoke_transaction_hash_v3(sender_address: &str, calldata: Vec<String>, chain_id: &str, nonce: &str, tip: &str, resource_bounds: JsValue, paymaster_data: Vec<String>, nonce_data_availability_mode: u8, fee_data_availability_mode: u8, account_deployment_data: Vec<String>, proof_facts: Option<Vec<String>>) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeDeployAccountTransactionHashV1) | pub fn compute_deploy_account_transaction_hash_v1(contract_address: &str, class_hash: &str, constructor_calldata: Vec<String>, salt: &str, max_fee: &str, chain_id: &str, nonce: &str) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeDeployAccountTransactionHashV3) | pub fn compute_deploy_account_transaction_hash_v3(contract_address: &str, class_hash: &str, constructor_calldata: Vec<String>, salt: &str, chain_id: &str, nonce: &str, tip: &str, resource_bounds: JsValue, paymaster_data: Vec<String>, nonce_data_availability_mode: u8, fee_data_availability_mode: u8) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeDeclareTransactionHashV2) | pub fn compute_declare_transaction_hash_v2(sender_address: &str, class_hash: &str, max_fee: &str, chain_id: &str, nonce: &str, compiled_class_hash: &str) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeDeclareTransactionHashV3) | pub fn compute_declare_transaction_hash_v3(sender_address: &str, class_hash: &str, chain_id: &str, nonce: &str, compiled_class_hash: &str, tip: &str, resource_bounds: JsValue, paymaster_data: Vec<String>, nonce_data_availability_mode: u8, fee_data_availability_mode: u8, account_deployment_data: Vec<String>) -> Result<String, JsValue>
+crates/wasm/src/tx_hash.rs: wasm_bindgen(js_name=computeTypedDataMessageHash) | pub fn compute_typed_data_message_hash(typed_data_json: &str, account_address: &str) -> Result<String, JsValue>
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmAccountState { pub balance: String; pub pending_balance: String; pub nonce: u64 }
+crates/wasm/src/types.rs: impl WasmAccountState {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(balance: String, pending_balance: String, transaction_nonce: u64) -> Result<WasmAccountState, JsValue>
+crates/wasm/src/types.rs: wasm_bindgen(js_name=totalBalance) | pub fn total_balance(&self) -> Result<String, JsValue>
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmPoint { pub x: String; pub y: String }
+crates/wasm/src/types.rs: impl WasmPoint {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(x: String, y: String) -> Result<WasmPoint, JsValue>
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmDecryptedPoint { pub is_identity: bool; pub x: Option<String>; pub y: Option<String> }
+crates/wasm/src/types.rs: impl WasmDecryptedPoint {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(is_identity: bool, x: Option<String>, y: Option<String>) -> Self
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmCiphertext { pub l_x: String; pub l_y: String; pub r_x: String; pub r_y: String }
+crates/wasm/src/types.rs: impl WasmCiphertext {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(l_x: String, l_y: String, r_x: String, r_y: String) -> Self
+crates/wasm/src/types.rs: #[derive(Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmKeypair { #[serde(skip_serializing)] pub private_key: String; pub public_key_x: String; pub public_key_y: String }
+crates/wasm/src/types.rs: impl WasmKeypair {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: String, public_key_x: String, public_key_y: String) -> Result<WasmKeypair, JsValue>
+crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmPublicKey { pub public_key_x: String; pub public_key_y: String }
+crates/wasm/src/types.rs: #[derive(Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmStarkXOnlyKeypair { #[serde(skip_serializing)] pub private_key: String; pub public_key_x: String }
+crates/wasm/src/types.rs: impl WasmStarkXOnlyKeypair {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: String, public_key_x: String) -> Result<WasmStarkXOnlyKeypair, JsValue>
+crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmStarkXOnlyPublicKey { pub public_key_x: String }
+crates/wasm/src/types.rs: impl WasmStarkXOnlyPublicKey {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(public_key_x: String) -> Result<WasmStarkXOnlyPublicKey, JsValue>
+crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
+crates/wasm/src/types.rs: impl WasmPublicKey {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(public_key_x: String, public_key_y: String) -> Result<WasmPublicKey, JsValue>
+crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Copy, PartialEq, Eq)] | pub enum WasmTxType { Fund = 0; Transfer = 1; Rollover = 2; Withdraw = 3; Ragequit = 4 }
+crates/wasm/src/types.rs: #[derive(Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmNostrKeypair { #[serde(skip_serializing)] pub private_key: String; pub public_key: String }
+crates/wasm/src/types.rs: impl WasmNostrKeypair {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: String, public_key: String) -> Self
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmNostrPublicKey { pub public_key: String }
+crates/wasm/src/types.rs: impl WasmNostrPublicKey {
+crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(public_key: String) -> Self
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmStarkSignature { pub r: String; pub s: String; wasm_bindgen(js_name=publicKey) | pub public_key: String }
+crates/wasm/src/types.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmNostrSignature { wasm_bindgen(js_name=publicKey) | pub public_key: String; pub signature: String }
+crates/wasm/src/utils.rs: wasm_bindgen(js_name=grindKey) | pub fn grind_key(seed_hex: &str) -> Result<String, JsValue>
+crates/wasm/src/utils.rs: wasm_bindgen(js_name=randomBytesHex) | pub fn random_bytes_hex(length: usize) -> Result<String, JsValue>
+crates/wasm/src/utils.rs: wasm_bindgen(js_name=isValidFelt) | pub fn is_valid_felt(hex_str: &str) -> bool
+crates/wasm/src/utils.rs: wasm_bindgen(js_name=isValidStarkPrivateKey) | pub fn is_valid_stark_private_key(hex_str: &str) -> bool

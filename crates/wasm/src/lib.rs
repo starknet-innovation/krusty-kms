@@ -3,6 +3,7 @@
 //! Provides JavaScript/TypeScript-accessible APIs for account management,
 //! proof generation, and cryptographic operations.
 
+#![forbid(unsafe_code)]
 #![allow(clippy::new_without_default)]
 
 pub mod account;

@@ -1,0 +1,190 @@
+name: Guardrails
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "packages/kms-c/**"
+      - "packages/kms-swift/**"
+      - "packages/kms-jvm/**"
+      - "packages/kms-dart/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - "docs/design/**"
+      - ".github/guardrails/**"
+      - ".github/scripts/**"
+      - ".github/workflows/guardrails.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "packages/kms-c/**"
+      - "packages/kms-swift/**"
+      - "packages/kms-jvm/**"
+      - "packages/kms-dart/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "deny.toml"
+      - "docs/design/**"
+      - ".github/guardrails/**"
+      - ".github/scripts/**"
+      - ".github/workflows/guardrails.yml"
+
+concurrency:
+  group: guardrails-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  fitness:
+    name: Maintainability fitness checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: File-size ratchet
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF:-}" ]]; then
+            export GUARDRAILS_BASE_REF="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags origin "${BEFORE_SHA}" || true
+            export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
+          fi
+          bash .github/scripts/check-file-size-ratchet.sh
+
+      - name: Dependency layering
+        run: bash .github/scripts/check-dependency-layers.sh
+
+      - name: Unsafe policy
+        run: bash .github/scripts/check-unsafe-allowlist.sh
+
+      - name: Surface parser self-checks
+        run: python3 .github/scripts/lib/surfaces.py
+
+      - name: Secret hygiene
+        run: bash .github/scripts/check-secret-hygiene.sh
+
+      - name: FFI surface freeze
+        run: bash .github/scripts/check-ffi-surface.sh
+
+      - name: WASM export freeze
+        run: bash .github/scripts/check-wasm-exports.sh
+
+      - name: Baselines are in sync
+        run: |
+          bash .github/scripts/regenerate-guardrail-baselines.sh
+          git diff --exit-code .github/guardrails/
+
+      - name: PR size limits
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GUARDRAILS_FAIL_CLOSED: "1"
+        run: bash .github/scripts/check-pr-size.sh
+
+      - name: Design note for public-surface changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          GUARDRAILS_FAIL_CLOSED: "1"
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF:-}" ]]; then
+            export GUARDRAILS_BASE_REF="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags origin "${BEFORE_SHA}" || true
+            export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
+          fi
+          if [[ -z "${PR_BODY:-}" && "${{ github.event_name }}" == "push" ]]; then
+            export PR_BODY="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].body // empty')"
+          fi
+          bash .github/scripts/check-design-note.sh
+
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-deny
+      - name: cargo deny check
+        run: cargo deny check
+
+  docs:
+    name: rustdoc link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - name: Document publishable crates
+        env:
+          RUSTDOCFLAGS: "-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links"
+        run: >
+          cargo doc --locked --no-deps --all-features
+          -p krusty-kms-common
+          -p krusty-kms-wallet-api
+          -p krusty-kms-domain
+          -p krusty-kms-crypto
+          -p krusty-kms
+          -p krusty-kms-sdk
+          -p krusty-kms-client
+          -p krusty-kms-gateway
+
+  semver:
+    name: cargo-semver-checks
+    runs-on: ubuntu-latest
+    # Compare publishable crate APIs against the PR base (or origin/main) using
+    # locked rustdoc JSON. See .github/scripts/check-semver.sh.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2
+        with:
+          tool: cargo-semver-checks
+      - name: Prepare git baseline worktree
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF}" ]]; then
+            # Pull requests: compare against the target branch tip.
+            git fetch --no-tags origin "${BASE_REF}"
+            baseline_rev="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            # Push to main: compare against the pre-push commit (not HEAD^).
+            git fetch --no-tags origin "${BEFORE_SHA}"
+            baseline_rev="${BEFORE_SHA}"
+          else
+            # workflow_dispatch, new-branch push, or missing before: fall back to main.
+            git fetch --no-tags origin main
+            baseline_rev="origin/main"
+          fi
+          if [[ "$(git rev-parse HEAD)" == "$(git rev-parse "${baseline_rev}")" ]]; then
+            baseline_rev="$(git rev-parse HEAD^)"
+          fi
+          echo "Using baseline ${baseline_rev}"
+          git worktree add /tmp/krusty-semver-baseline "${baseline_rev}"
+          echo "BASELINE_ROOT=/tmp/krusty-semver-baseline" >> "$GITHUB_ENV"
+      - name: Check publishable crate semver
+        # Nightly pin lives in check-semver.sh (NIGHTLY_TOOLCHAIN); script installs it.
+        run: bash .github/scripts/check-semver.sh

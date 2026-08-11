@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
+
+if (( BASH_VERSINFO[0] < 4 )); then
+  echo "pre-commit needs bash >= 4 (e.g. brew install bash)"
+  exit 1
+fi
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
 
 # Auto-format Rust workspace before committing
 if command -v cargo >/dev/null 2>&1; then
@@ -10,3 +18,19 @@ if command -v cargo >/dev/null 2>&1; then
         exit 1
     fi
 fi
+
+# Fast maintainability fitness checks (also enforced in CI).
+scripts=(
+  .github/scripts/check-file-size-ratchet.sh
+  .github/scripts/check-dependency-layers.sh
+  .github/scripts/check-unsafe-allowlist.sh
+  .github/scripts/check-secret-hygiene.sh
+  .github/scripts/check-ffi-surface.sh
+  .github/scripts/check-wasm-exports.sh
+)
+
+for script in "${scripts[@]}"; do
+  if [[ -f "$script" ]]; then
+    bash "$script"
+  fi
+done
