@@ -7,6 +7,8 @@
 //! This crate is separated from `krusty-kms-client` because `account_sdk`
 //! is only available as a git dependency and cannot be published to crates.io.
 
+#![forbid(unsafe_code)]
+
 #[cfg(feature = "sdk")]
 mod convert;
 #[cfg(feature = "sdk")]

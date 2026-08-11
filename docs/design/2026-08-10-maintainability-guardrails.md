@@ -66,6 +66,8 @@ Addressed on the same PR after review:
   accordingly. FFI freeze also compares Dart `lookupFunction` bindings to `kms.h`.
 - Fingerprints collect multiline field types and prefix items with inline `mod`
   paths; guardrails path filters include `packages/kms-dart/**`.
-- FFI freeze also compares Rust `#[repr(C)]` / `Kms*` type-alias layouts to the
-  matching `typedef`s in `kms.h` (field order and types).
+- FFI freeze also compares Rust `#[repr(C)]` / `Kms*` type-alias layouts and Dart
+  `Struct` layouts to the matching `typedef`s in `kms.h` (field order and types).
+- Unsafe policy discovers `crates/*/src/lib.rs` roots (excluding experimental)
+  instead of a fixed list, so new crates must declare `unsafe_code` up front.
 

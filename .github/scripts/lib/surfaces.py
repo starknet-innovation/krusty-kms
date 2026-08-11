@@ -1742,6 +1742,115 @@ def compare_ffi_layouts(root: Path | None = None) -> list[str]:
     return errors
 
 
+_DART_STRUCT_RE = re.compile(
+    r"final\s+class\s+(Kms[A-Za-z0-9_]+)\s+extends\s+Struct\s*\{(.*?)\n\}",
+    re.DOTALL,
+)
+_DART_ARRAY_ATTR_RE = re.compile(r"^@Array\((\d+)\)\s*$")
+_DART_NATIVE_ATTR_RE = re.compile(r"^@([A-Za-z_]\w*)\s*\(\s*\)\s*$")
+_DART_EXTERNAL_FIELD_RE = re.compile(
+    r"^external\s+(.+?)\s+([A-Za-z_]\w*)\s*;\s*$"
+)
+_DART_NATIVE_LAYOUT_ALIASES = {
+    "Int32": "i32",
+    "Uint32": "u32",
+    "Uint64": "u64",
+    "Int64": "i64",
+    "Uint8": "u8",
+}
+
+
+def _camel_to_snake(name: str) -> str:
+    step = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", step).lower()
+
+
+def _canonical_dart_layout_type(typ: str, array_len: int | None = None) -> str:
+    typ = _normalize_ws(typ)
+    arr = re.match(r"^Array\s*<\s*(.+)\s*>$", typ)
+    if arr:
+        inner = _DART_NATIVE_LAYOUT_ALIASES.get(arr.group(1).strip(), arr.group(1).strip())
+        if array_len is None:
+            return f"{inner}[]"
+        return f"{inner}[{array_len}]"
+    if array_len is not None:
+        return f"{_canonical_dart_layout_type(typ)}[{array_len}]"
+    return _DART_NATIVE_LAYOUT_ALIASES.get(typ, typ)
+
+
+def extract_dart_ffi_layouts(types_text: str) -> dict[str, str]:
+    """Map Dart ``final class Kms* extends Struct`` layouts to fingerprints."""
+    layouts: dict[str, str] = {}
+    for match in _DART_STRUCT_RE.finditer(types_text):
+        name = match.group(1)
+        fields: list[tuple[str, str]] = []
+        pending_array: int | None = None
+        pending_native: str | None = None
+        for raw in match.group(2).splitlines():
+            stripped = raw.strip()
+            if not stripped or stripped.startswith("//"):
+                continue
+            array_attr = _DART_ARRAY_ATTR_RE.match(stripped)
+            if array_attr:
+                pending_array = int(array_attr.group(1))
+                continue
+            native_attr = _DART_NATIVE_ATTR_RE.match(stripped)
+            if native_attr:
+                pending_native = _DART_NATIVE_LAYOUT_ALIASES.get(
+                    native_attr.group(1), native_attr.group(1)
+                )
+                continue
+            field = _DART_EXTERNAL_FIELD_RE.match(stripped)
+            if not field:
+                pending_array = None
+                pending_native = None
+                continue
+            field_name = _camel_to_snake(field.group(2))
+            if pending_native is not None:
+                field_type = pending_native
+                if pending_array is not None:
+                    field_type = f"{field_type}[{pending_array}]"
+            else:
+                field_type = _canonical_dart_layout_type(field.group(1), pending_array)
+            fields.append((field_name, field_type))
+            pending_array = None
+            pending_native = None
+        layouts[name] = _layout_fingerprint("struct", name, fields)
+    return layouts
+
+
+def compare_ffi_dart_layouts(root: Path | None = None) -> list[str]:
+    """Return errors when Dart ``Struct`` layouts disagree with ``kms.h`` typedefs."""
+    root = root or repo_root()
+    header_path = root / "packages/kms-c/include/kms.h"
+    dart_path = root / "packages/kms-dart/lib/src/ffi/types.dart"
+    if not header_path.is_file():
+        return [f"missing {header_path}"]
+    if not dart_path.is_file():
+        return [f"missing {dart_path}"]
+    header = {
+        name: fp
+        for name, fp in extract_c_header_layouts(header_path.read_text()).items()
+        if fp.startswith("struct ")
+    }
+    dart = extract_dart_ffi_layouts(dart_path.read_text())
+    errors: list[str] = []
+    for name in sorted(set(header) - set(dart)):
+        errors.append(
+            f"packages/kms-dart Struct missing kms.h typedef {name}"
+        )
+    for name in sorted(set(dart) - set(header)):
+        errors.append(
+            f"packages/kms-dart Struct {name} has no packages/kms-c/include/kms.h typedef"
+        )
+    for name in sorted(set(header) & set(dart)):
+        if header[name] != dart[name]:
+            errors.append(
+                f"Dart FFI layout mismatch for {name}: dart={dart[name]} header={header[name]}"
+            )
+    return errors
+
+
 _DART_TYPEDEF_RE = re.compile(
     r"typedef\s+(\w+)\s*=\s*(.+?)\s*Function\s*\((.*?)\);",
     re.DOTALL,
@@ -1901,6 +2010,7 @@ def compare_ffi_surfaces(root: Path | None = None) -> list[str]:
     return (
         compare_ffi_rust_to_header(root)
         + compare_ffi_layouts(root)
+        + compare_ffi_dart_layouts(root)
         + compare_ffi_dart_to_header(root)
     )
 
@@ -2265,6 +2375,13 @@ pub struct Foo {
     assert rust_layouts["KmsFelt"] == "struct KmsFelt { bytes: u8[32] }"
     assert rust_layouts["KmsAccountHandle"] == "type KmsAccountHandle = u64"
     assert compare_ffi_layouts(repo_root()) == []
+    dart_layouts = extract_dart_ffi_layouts(
+        (repo_root() / "packages/kms-dart/lib/src/ffi/types.dart").read_text()
+    )
+    assert dart_layouts["KmsAccountState"] == header_layouts["KmsAccountState"]
+    assert dart_layouts["KmsFelt"] == header_layouts["KmsFelt"]
+    assert dart_layouts["KmsNostrKeyPair"] == header_layouts["KmsNostrKeyPair"]
+    assert compare_ffi_dart_layouts(repo_root()) == []
     dart_ffi = extract_dart_ffi_functions(
         (repo_root() / "packages/kms-dart/lib/src/ffi/bindings.dart").read_text()
     )

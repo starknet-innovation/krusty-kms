@@ -11,19 +11,18 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 failed=0
 
-production_libs=(
-  crates/common/src/lib.rs
-  crates/wallet-api/src/lib.rs
-  crates/domain/src/lib.rs
-  crates/crypto/src/lib.rs
-  crates/kms/src/lib.rs
-  crates/sdk/src/lib.rs
-  crates/client/src/lib.rs
-  crates/gateway/src/lib.rs
-  crates/oracle/src/lib.rs
-  crates/wasm/src/lib.rs
-  crates/ffi/src/lib.rs
+# Discover production crate roots (exclude experimental trees).
+mapfile -t production_libs < <(
+  find "$root/crates" -mindepth 3 -maxdepth 3 -type f -path '*/src/lib.rs' \
+    ! -path '*/experimental/*' | sort | while read -r path; do
+      printf '%s\n' "${path#"$root"/}"
+    done
 )
+
+if ((${#production_libs[@]} == 0)); then
+  echo "::error::no production crate roots discovered under crates/*/src/lib.rs"
+  exit 1
+fi
 
 for lib in "${production_libs[@]}"; do
   path="$root/$lib"
