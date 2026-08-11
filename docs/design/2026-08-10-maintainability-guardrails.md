@@ -70,4 +70,8 @@ Addressed on the same PR after review:
   `Struct` layouts to the matching `typedef`s in `kms.h` (field order and types).
 - Unsafe policy discovers `crates/*/src/lib.rs` roots (excluding experimental)
   instead of a fixed list, so new crates must declare `unsafe_code` up front.
+- FFI/WASM extractors keep preceding `cfg` (and other API-bearing attrs) in
+  fingerprints; fitness runs `python3 .github/scripts/lib/surfaces.py` self-checks.
+- Swift `kms.h` compare is order-preserving; `self::`/`super::` pub-use paths
+  resolve without double-prepending the module path.
 

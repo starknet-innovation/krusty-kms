@@ -924,12 +924,13 @@ def _resolve_qualified_path(segments: list[str], module_path: str) -> list[str]:
         return _resolve_qualified_path(segments[1:], "")
     if segments[0] == "self":
         base = module_path.split("/") if module_path else []
-        return base + _resolve_qualified_path(segments[1:], module_path)
+        # Remainder is relative to this module; do not re-apply ``module_path``.
+        return base + _resolve_qualified_path(segments[1:], "")
     if segments[0] == "super":
         base = module_path.split("/") if module_path else []
         if base:
             base = base[:-1]
-        return base + _resolve_qualified_path(segments[1:], module_path)
+        return base + _resolve_qualified_path(segments[1:], "")
     base = module_path.split("/") if module_path else []
     return base + segments
 
@@ -1361,10 +1362,37 @@ def _format_bindgen_attrs(attrs: str) -> str:
     return f"wasm_bindgen({', '.join(options)})"
 
 
+def _extract_api_bearing_attrs(attrs: str) -> list[str]:
+    """Return normalized API-bearing attrs from a multi-line attribute blob."""
+    api_attrs: list[str] = []
+    pending: list[str] = []
+    for line in attrs.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _append_pending_attr(pending, stripped):
+            if pending and _attr_is_complete(pending[-1]):
+                attr = _normalize_ws(pending.pop())
+                if _API_BEARING_ATTR_RE.match(attr):
+                    api_attrs.append(attr)
+            continue
+    while pending:
+        attr = _normalize_ws(pending.pop(0))
+        if _API_BEARING_ATTR_RE.match(attr):
+            api_attrs.append(attr)
+    return api_attrs
+
+
 def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
+    api_attrs = _extract_api_bearing_attrs(attrs)
     bindgen = _format_bindgen_attrs(attrs)
+    parts: list[str] = []
+    if api_attrs:
+        parts.append(" ".join(api_attrs))
     if bindgen:
-        return f"{rel_path}: {bindgen} | {signature}"
+        parts.append(bindgen)
+    if parts:
+        return f"{rel_path}: {' | '.join(parts)} | {signature}"
     return f"{rel_path}: {signature}"
 
 
@@ -1384,7 +1412,11 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
                         break
                     j += 1
                 if j < len(lines):
-                    attrs = "\n".join(lines[i:j])
+                    preceding = _collect_preceding_api_attrs(lines, i)
+                    bindgen_attrs = "\n".join(lines[i:j])
+                    attrs = (
+                        f"{preceding}\n{bindgen_attrs}" if preceding else bindgen_attrs
+                    )
                     if _IMPL_RE.match(lines[j]):
                         signature = _collect_rust_signature(lines, j)
                         exports.append(_format_wasm_export(rel, attrs, signature))
@@ -1548,7 +1580,11 @@ def extract_rust_ffi_functions(root: Path | None = None) -> dict[str, str]:
                 continue
             name = match.group(1)
             sig = _collect_rust_signature(lines, i)
-            exports[name] = _rust_ffi_type_fingerprint(sig)
+            fingerprint = _rust_ffi_type_fingerprint(sig)
+            cfg_attrs = _collect_preceding_api_attrs(lines, i)
+            if cfg_attrs:
+                fingerprint = f"{cfg_attrs} {fingerprint}"
+            exports[name] = fingerprint
     return exports
 
 
@@ -1581,6 +1617,12 @@ def compare_ffi_rust_to_header(root: Path | None = None) -> list[str]:
     for name in sorted(set(header) - set(rust)):
         errors.append(f"packages/kms-c/include/kms.h declares {name} with no Rust extern \"C\" export")
     for name in sorted(set(rust) & set(header)):
+        if "#[cfg" in rust[name]:
+            errors.append(
+                f"Rust extern \"C\" fn {name} is cfg-gated; C ABI exports must match "
+                f"kms.h unconditionally ({rust[name]})"
+            )
+            continue
         if rust[name] != header[name]:
             errors.append(
                 f"FFI type mismatch for {name}: rust={rust[name]} header={header[name]}"
@@ -2382,6 +2424,31 @@ pub struct Foo {
     assert dart_layouts["KmsFelt"] == header_layouts["KmsFelt"]
     assert dart_layouts["KmsNostrKeyPair"] == header_layouts["KmsNostrKeyPair"]
     assert compare_ffi_dart_layouts(repo_root()) == []
+    cfg_gated_ffi = (
+        '#[cfg(feature = "zz_never_enabled")]\n'
+        "#[no_mangle]\n"
+        'pub extern "C" fn kms_get_coin_type_tongo() -> u32 {}\n'
+    )
+    cfg_lines = cfg_gated_ffi.splitlines()
+    cfg_i = next(i for i, line in enumerate(cfg_lines) if _EXTERN_C_FN_START_RE.match(line))
+    cfg_fp = _rust_ffi_type_fingerprint(_collect_rust_signature(cfg_lines, cfg_i))
+    cfg_attrs = _collect_preceding_api_attrs(cfg_lines, cfg_i)
+    assert '#[cfg(feature = "zz_never_enabled")]' in cfg_attrs
+    assert f"{cfg_attrs} {cfg_fp}" != header_ffi["kms_get_coin_type_tongo"]
+    wasm_cfg_line = _format_wasm_export(
+        "crates/wasm/src/x.rs",
+        '#[cfg(feature = "zz_never_enabled")]\n#[wasm_bindgen]',
+        "pub fn gated_export()",
+    )
+    assert '#[cfg(feature = "zz_never_enabled")]' in wasm_cfg_line
+    assert "wasm_bindgen" in wasm_cfg_line
+    assert _resolve_qualified_path(
+        ["self", "interface", "GatewayBackend"], "backend"
+    ) == ["backend", "interface", "GatewayBackend"]
+    assert _resolve_qualified_path(["super", "peer"], "backend/nested") == [
+        "backend",
+        "peer",
+    ]
     dart_ffi = extract_dart_ffi_functions(
         (repo_root() / "packages/kms-dart/lib/src/ffi/bindings.dart").read_text()
     )
@@ -2866,8 +2933,8 @@ const SECRET: u8 = 1;
         )
         (nested / "backend.rs").write_text(
             "mod interface;\nmod starknet;\nmod rpc;\n"
-            "pub use interface::GatewayBackend;\n"
-            "pub use starknet::StarknetGatewayBackend;\n"
+            "pub use self::interface::GatewayBackend;\n"
+            "pub use self::starknet::StarknetGatewayBackend;\n"
         )
         (nested / "backend").mkdir()
         (nested / "backend/interface.rs").write_text(

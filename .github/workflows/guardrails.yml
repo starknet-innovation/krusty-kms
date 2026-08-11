@@ -68,6 +68,9 @@ jobs:
       - name: Unsafe policy
         run: bash .github/scripts/check-unsafe-allowlist.sh
 
+      - name: Surface parser self-checks
+        run: python3 .github/scripts/lib/surfaces.py
+
       - name: Secret hygiene
         run: bash .github/scripts/check-secret-hygiene.sh
 

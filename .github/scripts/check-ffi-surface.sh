@@ -39,8 +39,8 @@ SWIFT_ONLY = {
 }
 
 
-def significant_lines(text: str) -> set[str]:
-    lines: set[str] = set()
+def significant_lines(text: str) -> list[str]:
+    lines: list[str] = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
@@ -49,25 +49,21 @@ def significant_lines(text: str) -> set[str]:
             continue
         if line.endswith("*/") and not line.startswith("#"):
             continue
-        lines.add(line)
+        lines.append(line)
     return lines
 
 
 canonical = significant_lines(Path(sys.argv[1]).read_text())
-swift = significant_lines(Path(sys.argv[2]).read_text())
-swift_abi = swift - SWIFT_ONLY
+swift = [line for line in significant_lines(Path(sys.argv[2]).read_text()) if line not in SWIFT_ONLY]
 
-missing = sorted(canonical - swift_abi)
-extra = sorted(swift_abi - canonical)
+if canonical != swift:
+    # Prefer an ordered diff so field reorder is visible.
+    import difflib
 
-if missing:
-    for line in missing:
-        print(f"::error::Swift kms.h is missing canonical ABI line: {line}")
-if extra:
-    for line in extra:
-        print(f"::error::Swift kms.h has stale/extra ABI line: {line}")
-
-if missing or extra:
+    for line in difflib.unified_diff(
+        canonical, swift, fromfile="kms-c/include/kms.h", tofile="kms-swift/.../kms.h", lineterm=""
+    ):
+        print(f"::error::{line}")
     sys.exit(1)
 
 print("Swift header ABI matches canonical surface (plus Swift-only helpers)")
