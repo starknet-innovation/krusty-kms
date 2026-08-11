@@ -282,6 +282,21 @@ def _is_pub_fn_declaration(line: str) -> bool:
     return bool(_PUB_FN_RE.match(line))
 
 
+def _attr_is_complete(attr: str) -> bool:
+    return attr.count("[") <= attr.count("]")
+
+
+def _append_pending_attr(pending_attrs: list[str], stripped: str) -> bool:
+    """Consume an attribute line, including multiline ``#[...]`` continuations."""
+    if pending_attrs and not _attr_is_complete(pending_attrs[-1]):
+        pending_attrs[-1] = f"{pending_attrs[-1]} {stripped}"
+        return True
+    if stripped.startswith("#["):
+        pending_attrs.append(stripped)
+        return True
+    return False
+
+
 def _collect_enum_variant_signature(
     lines: list[str], line_idx: int
 ) -> tuple[str, int]:
@@ -365,10 +380,9 @@ def _collect_impl_pub_fns(
             continue
 
         if depth == 1:
-            if stripped.startswith("#["):
-                pending_attrs.append(stripped)
-                continue
             if not stripped or stripped.startswith("//"):
+                continue
+            if _append_pending_attr(pending_attrs, stripped):
                 continue
             if _is_pub_fn_declaration(line):
                 attrs = "\n".join(pending_attrs)
@@ -411,12 +425,11 @@ def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[st
             j += 1
             continue
 
-        if stripped.startswith("#["):
-            pending_attrs.append(stripped)
+        if not stripped or stripped.startswith("//"):
             j += 1
             continue
 
-        if not stripped or stripped.startswith("//"):
+        if _append_pending_attr(pending_attrs, stripped):
             j += 1
             continue
 
@@ -1093,14 +1106,45 @@ def _format_dep_entry(name: str, body: str) -> str:
     return f"{name}{_ENTRY_SEP}{norm}" if norm else name
 
 
+def _group_feature_lines(lines: list[str]) -> list[tuple[str, str]]:
+    """Group ``[features]`` assignments, including multiline arrays."""
+    entries: list[tuple[str, str]] = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i]
+        key_match = _DEP_KEY.match(stripped)
+        if not key_match or "." in key_match.group(1):
+            i += 1
+            continue
+        name = key_match.group(1)
+        parts = [stripped]
+        depth = stripped.count("[") - stripped.count("]")
+        i += 1
+        while depth > 0 and i < len(lines):
+            parts.append(lines[i])
+            depth += lines[i].count("[") - lines[i].count("]")
+            i += 1
+        entries.append((name, "\n".join(parts)))
+    return entries
+
+
 def production_dep_entries(cargo_text: str) -> list[str]:
-    """Sorted atomic production dependency records for manifest diffing."""
+    """Sorted atomic production dependency/feature records for manifest diffing."""
     entries: list[str] = []
     for section in re.split(r"\n(?=\[)", cargo_text):
         if not section.strip():
             continue
         header = section.split("\n", 1)[0].strip()
         if "dev-dependencies" in header or "build-dependencies" in header:
+            continue
+        if header == "[features]":
+            inline_lines = [
+                line.strip()
+                for line in section.splitlines()[1:]
+                if line.strip() and not line.strip().startswith("#")
+            ]
+            for name, body in _group_feature_lines(inline_lines):
+                entries.append(_format_dep_entry(f"[features].{name}", body))
             continue
         table = _DEP_TABLE.match(header)
         if table:
@@ -1269,6 +1313,47 @@ def _assert_surfaces_self_checks() -> None:
         '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms"\n'
     ) != production_dep_entries(
         '[dependencies]\nkms.package = "krusty-kms"\nkms.path = "../kms-v2"\n'
+    )
+    feats_a = """
+[features]
+default = []
+nats = ["dep:async-nats"]
+[dependencies]
+async-nats = { version = "1", optional = true }
+""".strip()
+    feats_b = feats_a.replace("default = []", 'default = ["nats"]')
+    assert any(e.startswith("[features].default") for e in production_dep_entries(feats_a))
+    assert production_dep_entries(feats_a) != production_dep_entries(feats_b)
+    feats_multiline = """
+[features]
+default = [
+  "nats",
+]
+""".strip()
+    assert production_dep_entries(feats_a) != production_dep_entries(feats_multiline)
+
+    multiline_impl = """
+impl Foo {
+    #[wasm_bindgen(
+        js_name = "doThing"
+    )]
+    pub fn do_thing(&self) {}
+}
+""".strip().splitlines()
+    methods = _collect_impl_pub_fns(multiline_impl, 0, len(multiline_impl) - 1)
+    assert len(methods) == 1
+    assert "js_name=doThing" in _format_bindgen_attrs(methods[0][1])
+    changed_impl = """
+impl Foo {
+    #[wasm_bindgen(
+        js_name = "doThingV2"
+    )]
+    pub fn do_thing(&self) {}
+}
+""".strip().splitlines()
+    changed_methods = _collect_impl_pub_fns(changed_impl, 0, len(changed_impl) - 1)
+    assert _format_bindgen_attrs(methods[0][1]) != _format_bindgen_attrs(
+        changed_methods[0][1]
     )
 
     extern_fn = (
