@@ -468,7 +468,7 @@ def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[st
 
         variant_sig, end_j = _collect_enum_variant_signature(lines, j)
         if variant_sig:
-            fields.append(variant_sig)
+            fields.append(_format_field("\n".join(pending_attrs), variant_sig))
             pending_attrs = []
             for k in range(j, end_j + 1):
                 depth += _brace_delta(lines[k])
@@ -494,6 +494,7 @@ def _collect_trait_items(lines: list[str], open_line: int) -> list[str]:
     """Collect normalized method and associated item signatures from a trait body."""
     items: list[str] = []
     depth = 0
+    pending_attrs: list[str] = []
 
     for j in range(open_line, len(lines)):
         line = lines[j]
@@ -508,15 +509,24 @@ def _collect_trait_items(lines: list[str], open_line: int) -> list[str]:
             continue
 
         if depth == 1:
-            if stripped.startswith("#["):
-                continue
             if not stripped or stripped.startswith("//"):
                 depth += _brace_delta(line)
                 if depth <= 0:
                     break
                 continue
+            if _append_pending_attr(pending_attrs, stripped):
+                continue
             if _TRAIT_METHOD_RE.match(line) or _TRAIT_ASSOC_ITEM_RE.match(line):
-                items.append(_collect_rust_signature(lines, j))
+                sig = _collect_rust_signature(lines, j)
+                cfg_attrs = [
+                    attr for attr in pending_attrs if _CFG_ATTR_RE.match(attr)
+                ]
+                if cfg_attrs:
+                    sig = f"{' '.join(cfg_attrs)} {sig}"
+                items.append(sig)
+                pending_attrs = []
+            else:
+                pending_attrs = []
 
         depth += _brace_delta(line)
         if depth <= 0:
@@ -1327,48 +1337,135 @@ _EXTERN_C_FN_START_RE = re.compile(
     r'^\s*pub\s+(?:unsafe\s+)?extern\s+"C"\s+fn\s+([A-Za-z_]\w*)\s*\('
 )
 _C_HEADER_FN_RE = re.compile(
-    r"^(?:[\w\s\*]+?)\b(kms_[A-Za-z0-9_]+)\s*\((.*)\)\s*;\s*$"
+    r"^(?P<ret>[\w\s\*]+?)\b(?P<name>kms_[A-Za-z0-9_]+)\s*\((?P<params>.*)\)\s*;\s*$"
 )
+_RUST_FFI_TYPE_ALIASES = {
+    "i32": "i32",
+    "u32": "u32",
+    "u64": "u64",
+    "usize": "usize",
+    "u8": "u8",
+    "c_char": "char",
+    "bool": "bool",
+}
+_C_FFI_TYPE_ALIASES = {
+    "int32_t": "i32",
+    "uint32_t": "u32",
+    "uint64_t": "u64",
+    "size_t": "usize",
+    "uint8_t": "u8",
+    "char": "char",
+    "void": "void",
+    "bool": "bool",
+}
 
 
-def _fn_param_arity(sig_or_params: str, *, from_full_sig: bool) -> int:
-    if from_full_sig:
-        open_idx = sig_or_params.find("(")
-        if open_idx < 0:
-            return 0
-        text = sig_or_params[open_idx:]
-    else:
-        text = f"({sig_or_params})"
-    depth = 0
+def _split_top_level_params(params: str) -> list[str]:
+    items: list[str] = []
     current: list[str] = []
-    params: list[str] = []
-    for ch in text:
-        if ch == "(":
+    depth = 0
+    for ch in params:
+        if ch in "([{":
             depth += 1
-            if depth == 1:
-                continue
-        elif ch == ")":
+            current.append(ch)
+            continue
+        if ch in ")]}":
             depth -= 1
-            if depth == 0:
-                token = "".join(current).strip()
-                if token and token != "void":
-                    params.append(token)
-                break
-        elif ch == "," and depth == 1:
+            current.append(ch)
+            continue
+        if ch == "," and depth == 0:
             token = "".join(current).strip()
             if token:
-                params.append(token)
+                items.append(token)
             current = []
             continue
-        if depth >= 1:
-            current.append(ch)
-    return len(params)
+        current.append(ch)
+    token = "".join(current).strip()
+    if token:
+        items.append(token)
+    return items
 
 
-def extract_rust_ffi_functions(root: Path | None = None) -> dict[str, int]:
-    """Map ``extern "C"`` export names in ``crates/ffi`` to parameter arity."""
+def _canonical_rust_ffi_type(typ: str) -> str:
+    typ = _normalize_ws(typ)
+    match = re.match(r"^\*(const|mut)\s+(.+)$", typ)
+    if match:
+        return f"*{match.group(1)} {_canonical_rust_ffi_type(match.group(2))}"
+    base = typ.split("::")[-1]
+    return _RUST_FFI_TYPE_ALIASES.get(typ, _RUST_FFI_TYPE_ALIASES.get(base, base))
+
+
+def _canonical_c_ffi_type(typ: str) -> str:
+    typ = _normalize_ws(typ)
+    match = re.match(r"^(.+?)\[(\d*)\]$", typ)
+    if match:
+        inner = match.group(1).strip()
+        # C array parameters decay to pointers; preserve const element types.
+        if inner.startswith("const "):
+            return f"*const {_canonical_c_ffi_type(inner[len('const ') :])}"
+        return f"*mut {_canonical_c_ffi_type(inner)}"
+    match = re.match(r"^const\s+(.+?)\s*\*$", typ)
+    if match:
+        return f"*const {_canonical_c_ffi_type(match.group(1))}"
+    match = re.match(r"^(.+?)\s*\*$", typ)
+    if match:
+        inner = match.group(1).strip()
+        if inner.startswith("const "):
+            return f"*const {_canonical_c_ffi_type(inner[len('const ') :])}"
+        return f"*mut {_canonical_c_ffi_type(inner)}"
+    if typ.startswith("const "):
+        # Bare const value parameters are uncommon; treat as the underlying type.
+        return _canonical_c_ffi_type(typ[len("const ") :])
+    return _C_FFI_TYPE_ALIASES.get(typ, typ)
+
+
+def _c_param_canonical_type(param: str) -> str:
+    param = _normalize_ws(param)
+    if param == "void":
+        return "void"
+    match = re.match(r"^(.*\S)\s+([A-Za-z_]\w*)(\[\d*\])$", param)
+    if match:
+        return _canonical_c_ffi_type(f"{match.group(1)}{match.group(3)}")
+    match = re.match(r"^(.*\*)\s*([A-Za-z_]\w*)$", param)
+    if match:
+        return _canonical_c_ffi_type(match.group(1).strip())
+    match = re.match(r"^(.*\S)\s+([A-Za-z_]\w*)$", param)
+    if match:
+        return _canonical_c_ffi_type(match.group(1))
+    return _canonical_c_ffi_type(param)
+
+
+def _rust_ffi_type_fingerprint(sig: str) -> str:
+    ret = "void"
+    ret_match = re.search(r"\)\s*->\s*(.+)$", sig)
+    if ret_match:
+        ret = _canonical_rust_ffi_type(ret_match.group(1).strip())
+    open_idx = sig.find("(")
+    close_idx = sig.rfind(")")
+    params_blob = sig[open_idx + 1 : close_idx] if open_idx >= 0 and close_idx > open_idx else ""
+    param_types: list[str] = []
+    for param in _split_top_level_params(params_blob):
+        if ":" not in param:
+            continue
+        _name, typ = param.split(":", 1)
+        param_types.append(_canonical_rust_ffi_type(typ.strip()))
+    return f"{ret} ({', '.join(param_types)})"
+
+
+def _c_ffi_type_fingerprint(ret: str, params: str) -> str:
+    ret_norm = _canonical_c_ffi_type(ret.strip())
+    param_types: list[str] = []
+    for param in _split_top_level_params(params):
+        if param.strip() == "void":
+            continue
+        param_types.append(_c_param_canonical_type(param))
+    return f"{ret_norm} ({', '.join(param_types)})"
+
+
+def extract_rust_ffi_functions(root: Path | None = None) -> dict[str, str]:
+    """Map ``extern "C"`` export names in ``crates/ffi`` to type fingerprints."""
     root = root or repo_root()
-    exports: dict[str, int] = {}
+    exports: dict[str, str] = {}
     for path in sorted((root / "crates/ffi/src").rglob("*.rs")):
         lines = path.read_text().splitlines()
         for i, line in enumerate(lines):
@@ -1377,13 +1474,13 @@ def extract_rust_ffi_functions(root: Path | None = None) -> dict[str, int]:
                 continue
             name = match.group(1)
             sig = _collect_rust_signature(lines, i)
-            exports[name] = _fn_param_arity(sig, from_full_sig=True)
+            exports[name] = _rust_ffi_type_fingerprint(sig)
     return exports
 
 
-def extract_c_header_functions(header_text: str) -> dict[str, int]:
-    """Map ``kms_*`` function declarations in a C header to parameter arity."""
-    exports: dict[str, int] = {}
+def extract_c_header_functions(header_text: str) -> dict[str, str]:
+    """Map ``kms_*`` function declarations in a C header to type fingerprints."""
+    exports: dict[str, str] = {}
     for raw in header_text.splitlines():
         line = raw.strip()
         if not line or line.startswith("/*") or line.startswith("*") or line.startswith("//"):
@@ -1391,8 +1488,8 @@ def extract_c_header_functions(header_text: str) -> dict[str, int]:
         match = _C_HEADER_FN_RE.match(line)
         if not match:
             continue
-        name, params = match.group(1), match.group(2)
-        exports[name] = _fn_param_arity(params, from_full_sig=False)
+        name = match.group("name")
+        exports[name] = _c_ffi_type_fingerprint(match.group("ret"), match.group("params"))
     return exports
 
 
@@ -1412,7 +1509,7 @@ def compare_ffi_rust_to_header(root: Path | None = None) -> list[str]:
     for name in sorted(set(rust) & set(header)):
         if rust[name] != header[name]:
             errors.append(
-                f"FFI arity mismatch for {name}: rust={rust[name]} header={header[name]}"
+                f"FFI type mismatch for {name}: rust={rust[name]} header={header[name]}"
             )
     return errors
 
@@ -1749,7 +1846,20 @@ pub struct Foo {
     assert compare_ffi_rust_to_header(repo_root()) == []
     rust_ffi = extract_rust_ffi_functions(repo_root())
     assert "kms_stark_sign" in rust_ffi
-    assert rust_ffi["kms_get_coin_type_tongo"] == 0
+    assert rust_ffi["kms_get_coin_type_tongo"] == "u32 ()"
+    assert rust_ffi["kms_stark_sign"] == (
+        "i32 (*const KmsFelt, *const KmsFelt, *mut KmsFelt, *mut KmsFelt)"
+    )
+    assert rust_ffi["kms_stark_sign"] != rust_ffi["kms_stark_sign"].replace(
+        "*const KmsFelt", "*const i32"
+    )
+    header_ffi = extract_c_header_functions(
+        (repo_root() / "packages/kms-c/include/kms.h").read_text()
+    )
+    assert header_ffi["kms_stark_sign"] == rust_ffi["kms_stark_sign"]
+    assert header_ffi["kms_derive_nostr_private_key"] == rust_ffi[
+        "kms_derive_nostr_private_key"
+    ]
     assert krusty_deps_from_cargo_toml(
         "[dependencies]\nkrusty-kms-common.workspace = true\n"
     ) == {"krusty-kms-common"}
@@ -1934,6 +2044,30 @@ pub trait Provider {
     )
     assert any("type Error;" in s for s in extract_public_surface(trait_assoc))
     assert any("const ID: u8;" in s for s in extract_public_surface(trait_assoc))
+
+    trait_cfg = """
+pub trait Provider {
+    #[cfg(feature = "x")]
+    type Error;
+    #[cfg(feature = "y")]
+    fn get(&self);
+}
+""".strip()
+    trait_cfg_changed = trait_cfg.replace('feature = "x"', 'feature = "z"')
+    assert extract_public_surface(trait_cfg) != extract_public_surface(trait_cfg_changed)
+    assert any('#[cfg(feature = "x")]' in s for s in extract_public_surface(trait_cfg))
+    assert any('#[cfg(feature = "y")]' in s for s in extract_public_surface(trait_cfg))
+
+    enum_cfg = """
+pub enum Mode {
+    #[cfg(feature = "x")]
+    Fast,
+    Safe,
+}
+""".strip()
+    enum_cfg_changed = enum_cfg.replace('feature = "x"', 'feature = "z"')
+    assert extract_public_surface(enum_cfg) != extract_public_surface(enum_cfg_changed)
+    assert any('#[cfg(feature = "x")]' in s for s in extract_public_surface(enum_cfg))
 
     use_a = """
 pub use operations::{
