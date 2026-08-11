@@ -294,7 +294,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 
     // Derive key via scrypt (N/r/p already resource-capped above)
     let log_n = scrypt_log_n(n)?;
-    let params = ScryptParams::new(log_n, r, p, dklen)
+    let params = ScryptParams::new(log_n, r, p)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut derived_key = Zeroizing::new(vec![0u8; dklen]);
     scrypt(password.as_bytes(), &salt, &params, &mut derived_key)
@@ -492,7 +492,7 @@ mod tests {
 
         // Derive key
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
-        let params = ScryptParams::new(log_n, 8, 1, 32).unwrap();
+        let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
         scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
@@ -547,7 +547,7 @@ mod tests {
         let password = test_password(0);
 
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
-        let params = ScryptParams::new(log_n, 8, 1, 32).unwrap();
+        let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
         scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 

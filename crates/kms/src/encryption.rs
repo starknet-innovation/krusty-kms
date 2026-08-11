@@ -85,7 +85,7 @@ pub(crate) fn derive_scrypt_key(
     n: u32,
 ) -> Result<Zeroizing<[u8; 32]>> {
     let log_n = scrypt_log_n(n)?;
-    let params = ScryptParams::new(log_n, 8, 1, 32)
+    let params = ScryptParams::new(log_n, 8, 1)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut key = Zeroizing::new([u8::default(); 32]);
     scrypt(password, kdf_salt, &params, &mut *key)
