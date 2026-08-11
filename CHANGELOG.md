@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-08-11
+
+### Changed
+
+- Coordinate `aes` 0.9 + `ctr` 0.10 (shared `cipher` 0.5) for Web3 secret
+  storage keystore decryption.
+
 ## [0.9.3] - 2026-08-11
 
 ### Changed

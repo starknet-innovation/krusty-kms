@@ -4,8 +4,8 @@
 //! - A krusty-kms native keystore format (version 1, XChaCha20-Poly1305 + scrypt)
 //! - Decryption of ethers.js / Web3 Secret Storage keystores (version 3, AES-128-CTR + scrypt)
 
-use aes::Aes128;
 use aes::cipher::{KeyIvInit, StreamCipher};
+use aes::Aes128;
 use krusty_kms_common::{KmsError, Result};
 use scrypt::{scrypt, Params as ScryptParams};
 use sha3::{Digest, Keccak256};
@@ -320,8 +320,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     // Decrypt with AES-128-CTR using the first 16 bytes of the derived key. `Zeroizing`
     // because this buffer becomes the private key in place -- the higher-value secret.
     let mut plaintext = Zeroizing::new(std::mem::take(&mut ciphertext));
-    let mut stream = Aes128Ctr::new_from_slices(aes_key, &iv)
-        .expect("AES-128-CTR key/IV lengths validated");
+    let mut stream =
+        Aes128Ctr::new_from_slices(aes_key, &iv).expect("AES-128-CTR key/IV lengths validated");
     stream.apply_keystream(&mut plaintext);
 
     Ok(hex::encode(&*plaintext))
