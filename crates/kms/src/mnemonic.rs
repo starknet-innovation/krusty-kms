@@ -2,7 +2,7 @@
 
 use bip39::Mnemonic;
 use krusty_kms_common::{KmsError, Result};
-use rand_core::TryRngCore;
+use rand_core::TryRng;
 
 /// Generate a new BIP-39 mnemonic phrase.
 ///
@@ -38,7 +38,7 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
     };
 
     let mut entropy = vec![0u8; entropy_size];
-    rand::rngs::OsRng
+    rand::rngs::SysRng
         .try_fill_bytes(&mut entropy)
         .expect("OS entropy source unavailable");
 

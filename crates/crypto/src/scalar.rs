@@ -79,7 +79,7 @@ pub fn reduce_scalar(a: &Felt) -> Result<Felt> {
 
 /// Generate a cryptographically secure random scalar.
 ///
-/// Uses OS-level entropy via `OsRng` for cryptographic security.
+/// Uses OS-level entropy via system RNG for cryptographic security.
 /// This function generates a random 32-byte value suitable for use
 /// as a scalar in cryptographic operations.
 ///

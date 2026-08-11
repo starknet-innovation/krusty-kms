@@ -29,7 +29,7 @@ krusty-kms-common = { version = "0.9.1", path = "../common" }
 starknet-types-core.workspace = true
 crypto-bigint.workspace = true
 sha2 = { workspace = true, optional = true }
-getrandom = "0.3"
+getrandom = "0.4"
 rayon = { workspace = true, optional = true }
 zeroize.workspace = true
 subtle.workspace = true
@@ -37,7 +37,7 @@ subtle.workspace = true
 # WASM support - ensure proper random number generation in browsers
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
-getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 
 [dev-dependencies]
 criterion.workspace = true
