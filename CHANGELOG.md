@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-08-11
+
+### Changed
+
+- Bump `starknet-rust` to 0.19.1 across wallet-api/client/gateway (and controller)
+  and adapt call sites for Result-returning curve helpers.
+- Raise workspace `starknet-types-core` minimum to 0.2.4.
+
 ## [0.9.4] - 2026-08-11
 
 ### Changed
