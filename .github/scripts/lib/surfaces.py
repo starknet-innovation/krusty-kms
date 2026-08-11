@@ -670,6 +670,61 @@ def _collect_preceding_cfg_attrs(lines: list[str], start: int) -> str:
     return "\n".join(cfg_attrs)
 
 
+def _inherent_impl_type_name(header: str) -> str | None:
+    """Return the type name for an inherent ``impl Type`` header, if any."""
+    text = header.split("{", 1)[0].strip()
+    if not re.match(r"^impl\b", text):
+        return None
+    if re.search(r"\bfor\b", text):
+        return None
+    rest = text[len("impl") :].strip()
+    if rest.startswith("<"):
+        depth = 0
+        end = None
+        for i, ch in enumerate(rest):
+            if ch == "<":
+                depth += 1
+            elif ch == ">":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if end is None:
+            return None
+        rest = rest[end + 1 :].strip()
+    match = re.match(r"^([A-Za-z_][\w:]*)", rest)
+    if not match:
+        return None
+    return match.group(1).split("::")[-1]
+
+
+def _enclosing_inherent_impl_type(lines: list[str], idx: int) -> str | None:
+    """If ``idx`` is inside an inherent ``impl Type`` body, return ``Type``."""
+    depth = 0
+    for j in range(idx - 1, -1, -1):
+        line = lines[j]
+        depth += line.count("}") - line.count("{")
+        if depth >= 0:
+            continue
+        header_parts: list[str] = []
+        k = j
+        while k >= 0:
+            stripped = lines[k].strip()
+            if not stripped or stripped.startswith("//"):
+                k -= 1
+                continue
+            if stripped.startswith("#["):
+                k -= 1
+                continue
+            header_parts.insert(0, stripped)
+            combined = " ".join(header_parts)
+            if re.search(r"\bimpl\b", combined):
+                return _inherent_impl_type_name(combined)
+            break
+        return None
+    return None
+
+
 def extract_public_surface(text: str) -> frozenset[str]:
     """Canonical fingerprint of unrestricted ``pub`` API items in Rust source."""
     lines = text.splitlines()
@@ -683,6 +738,9 @@ def extract_public_surface(text: str) -> frozenset[str]:
         cfg_attrs = _collect_preceding_cfg_attrs(lines, i)
         if cfg_attrs:
             sig = f"{cfg_attrs} {sig}"
+        impl_type = _enclosing_inherent_impl_type(lines, i)
+        if impl_type and re.search(r"\bfn\b", sig):
+            sig = f"impl {impl_type} {{ {sig} }}"
         surface.add(sig)
     return frozenset(surface)
 
@@ -919,6 +977,9 @@ def _public_surface_item_name(sig: str) -> str | None:
 
 
 def _signature_matches_exported_items(sig: str, allowed: set[str]) -> bool:
+    impl_match = re.match(r"^impl\s+([A-Za-z_][\w]*)\s*\{", sig)
+    if impl_match and impl_match.group(1) in allowed:
+        return True
     name = _public_surface_item_name(sig)
     if name and name in allowed:
         return True
@@ -1742,6 +1803,32 @@ pub struct Foo;
     assert extract_public_surface(cfg_through_derive) != extract_public_surface(no_cfg_struct)
     assert extract_public_surface(cfg_through_derive) != extract_public_surface(
         cfg_through_derive.replace('feature = "x"', 'feature = "y"')
+    )
+
+    inherent_src = """
+pub struct StarknetGatewayBackend;
+impl StarknetGatewayBackend {
+    pub fn new() -> Self { Self }
+    pub fn network(&self) -> u8 { 0 }
+}
+impl Other {
+    pub fn new() -> Self { Self }
+}
+""".strip()
+    inherent_allowed = {"StarknetGatewayBackend"}
+    inherent_filtered = filter_public_surface(
+        extract_public_surface(inherent_src), inherent_allowed
+    )
+    assert any(
+        "impl StarknetGatewayBackend" in s and "fn new" in s for s in inherent_filtered
+    )
+    assert any("network" in s for s in inherent_filtered)
+    assert not any("impl Other" in s for s in inherent_filtered)
+    inherent_changed = inherent_src.replace(
+        "pub fn network(&self) -> u8", "pub fn network(&self) -> u16"
+    )
+    assert inherent_filtered != filter_public_surface(
+        extract_public_surface(inherent_changed), inherent_allowed
     )
 
     mod_a = """
