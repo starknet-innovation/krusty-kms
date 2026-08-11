@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Soft size gate for Rust production sources in a PR.
 # Counts added+deleted lines and touched files under crates/** (excluding
-# experimental/, tests/, examples/, benches/, and src/tests/). Large PRs must
-# include a justification marker in the PR body.
+# experimental/, tests/, examples/, benches/, src/tests/, and src/**/tests.rs).
+# Large PRs must include a justification marker in the PR body.
 #
 # Scope trade-off: this intentionally measures production Rust sources only,
 # not guardrail shell/Python. Documented in docs/maintainability-guardrails.md.
@@ -50,6 +50,7 @@ mapfile -t files < <(git diff --name-only "$base_ref"...HEAD -- 'crates/**/*.rs'
       /\/examples\// { next }
       /\/benches\// { next }
       /\/src\/tests\// { next }
+      /\/tests\.rs$/ { next }
       /_test\.rs$/ { next }
       { print }
     ' || true)

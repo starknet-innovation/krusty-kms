@@ -1189,9 +1189,13 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
 
 _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
 _KRUSTY_NAME_RE = re.compile(rf"^{_KRUSTY_NAME}$")
-_KRUSTY_PACKAGE = re.compile(rf'package\s*=\s*"({_KRUSTY_NAME})"')
-_DEP_KEY = re.compile(r"^([a-zA-Z0-9_.-]+)\s*=")
-_DEP_DOTTED_FIELD_RE = re.compile(r"^([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+)\s*=")
+_KRUSTY_PACKAGE = re.compile(rf"""package\s*=\s*["']({_KRUSTY_NAME})["']""")
+_TOML_KEY = r'(?:[A-Za-z0-9_.-]+|"[^"]+"|\'[^\']+\')'
+_TOML_KEY_NO_DOT = r'(?:[A-Za-z0-9_-]+|"[^"]+"|\'[^\']+\')'
+_DEP_KEY = re.compile(rf"^({_TOML_KEY})\s*=")
+_DEP_DOTTED_FIELD_RE = re.compile(
+    rf"^({_TOML_KEY_NO_DOT})\.([A-Za-z0-9_-]+)\s*="
+)
 _DEP_KNOWN_FIELDS = frozenset(
     {
         "branch",
@@ -1209,11 +1213,17 @@ _DEP_KNOWN_FIELDS = frozenset(
         "workspace",
     }
 )
-_DEP_WS_INLINE = re.compile(r"^([a-zA-Z0-9_-]+)\.workspace\s*=\s*true\b")
-_DEP_TABLE = re.compile(r"^\[(?:.*\.)?dependencies\.([a-zA-Z0-9_-]+)\]")
-_WS_DEP_TABLE = re.compile(r"^\[workspace\.dependencies\.([a-zA-Z0-9_.-]+)\]")
+_DEP_WS_INLINE = re.compile(rf"^({_TOML_KEY_NO_DOT})\.workspace\s*=\s*true\b")
+_DEP_TABLE = re.compile(rf"^\[(?:.*\.)?dependencies\.({_TOML_KEY_NO_DOT})\]")
+_WS_DEP_TABLE = re.compile(rf"^\[workspace\.dependencies\.({_TOML_KEY})\]")
 _WS_TRUE = re.compile(r"\bworkspace\s*=\s*true\b")
 _ENTRY_SEP = "\x1e"
+
+
+def _unquote_toml_key(key: str) -> str:
+    if len(key) >= 2 and key[0] == key[-1] and key[0] in "\"'":
+        return key[1:-1]
+    return key
 
 
 def _is_krusty_dependency_section(header: str) -> bool:
@@ -1252,7 +1262,7 @@ def parse_workspace_dependencies(cargo_text: str) -> dict[str, str]:
             continue
         table = _WS_DEP_TABLE.match(header)
         if table:
-            key = table.group(1)
+            key = _unquote_toml_key(table.group(1))
             mapping[key] = _workspace_dep_package_name(key, body)
     return mapping
 
@@ -1276,7 +1286,7 @@ def _group_inline_dep_lines(lines: list[str]) -> list[tuple[str, str]]:
         stripped = lines[i]
         dotted = _DEP_DOTTED_FIELD_RE.match(stripped)
         if dotted:
-            name, field = dotted.group(1), dotted.group(2)
+            name, field = _unquote_toml_key(dotted.group(1)), dotted.group(2)
             if field in _DEP_KNOWN_FIELDS:
                 _, _, value = stripped.partition("=")
                 pending.setdefault(name, []).append(f"{field} = {value.strip()}")
@@ -1286,7 +1296,7 @@ def _group_inline_dep_lines(lines: list[str]) -> list[tuple[str, str]]:
         if not key_match:
             i += 1
             continue
-        key = key_match.group(1)
+        key = _unquote_toml_key(key_match.group(1))
         if "." in key:
             i += 1
             continue
@@ -1325,10 +1335,13 @@ def _group_feature_lines(lines: list[str]) -> list[tuple[str, str]]:
     while i < len(lines):
         stripped = lines[i]
         key_match = _DEP_KEY.match(stripped)
-        if not key_match or "." in key_match.group(1):
+        if not key_match:
             i += 1
             continue
-        name = key_match.group(1)
+        name = _unquote_toml_key(key_match.group(1))
+        if "." in name:
+            i += 1
+            continue
         parts = [stripped]
         depth = stripped.count("[") - stripped.count("]")
         i += 1
@@ -1441,7 +1454,9 @@ def krusty_deps_from_cargo_toml(
         table = _DEP_TABLE.match(header)
         if table:
             body = section.split("\n", 1)[1] if "\n" in section else ""
-            _add_krusty_dep_from_entry(deps, table.group(1), body, workspace_deps)
+            _add_krusty_dep_from_entry(
+                deps, _unquote_toml_key(table.group(1)), body, workspace_deps
+            )
             continue
         if not _is_krusty_dependency_section(header):
             continue
@@ -1469,6 +1484,12 @@ def _assert_surfaces_self_checks() -> None:
     )
     assert krusty_deps_from_cargo_toml(
         "[dependencies]\nkrusty-kms-common.workspace = true\n"
+    ) == {"krusty-kms-common"}
+    assert krusty_deps_from_cargo_toml(
+        '[dependencies]\n"krusty-kms" = { path = "../kms" }\n'
+    ) == {"krusty-kms"}
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies.'krusty-kms-common']\nworkspace = true\n"
     ) == {"krusty-kms-common"}
     assert krusty_deps_from_cargo_toml(
         '[dependencies]\nfoo = { package = "krusty-kms-sdk", path = "../sdk" }\n'
