@@ -581,19 +581,25 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
     parts: list[str] = []
     for j in range(start, len(lines)):
         line = lines[j].strip()
+        if not line:
+            continue
         if "{" in line:
             before = line.split("{", 1)[0].strip()
-            if parts:
-                return _normalize_ws(" ".join(parts) + (" " + before if before else ""))
-            return _normalize_ws(before)
+            if before:
+                parts.append(before)
+            return _normalize_ws(" ".join(parts))
         parts.append(line)
         combined = " ".join(parts)
+        if ";" in line and _paren_depth(combined) == 0:
+            return _normalize_ws(combined)
         if "(" in combined and _paren_depth(combined) == 0:
-            if "->" in combined:
-                return _normalize_ws(combined)
-            if j + 1 < len(lines) and lines[j + 1].strip().startswith("->"):
-                parts.append(lines[j + 1].strip())
-                return _normalize_ws(" ".join(parts))
+            nxt = lines[j + 1].strip() if j + 1 < len(lines) else ""
+            if nxt.startswith("->") or nxt.startswith("where"):
+                continue
+            if re.search(r"\bwhere\b", combined) and (
+                line == "where" or line.endswith(",") or line.endswith(":")
+            ):
+                continue
             return _normalize_ws(combined)
     return _normalize_ws(" ".join(parts))
 
@@ -1062,31 +1068,43 @@ def _uses_workspace(body: str) -> bool:
 
 
 def _group_inline_dep_lines(lines: list[str]) -> list[tuple[str, str]]:
-    """Group ``name.field = value`` dependency lines into atomic entries."""
+    """Group dotted fields and multiline inline dependency tables into entries."""
     pending: dict[str, list[str]] = {}
     entries: list[tuple[str, str]] = []
+    i = 0
 
     def flush() -> None:
         for name in sorted(pending):
             entries.append((name, "\n".join(pending[name])))
         pending.clear()
 
-    for stripped in lines:
+    while i < len(lines):
+        stripped = lines[i]
         dotted = _DEP_DOTTED_FIELD_RE.match(stripped)
         if dotted:
             name, field = dotted.group(1), dotted.group(2)
             if field in _DEP_KNOWN_FIELDS:
                 _, _, value = stripped.partition("=")
                 pending.setdefault(name, []).append(f"{field} = {value.strip()}")
+                i += 1
                 continue
         key_match = _DEP_KEY.match(stripped)
         if not key_match:
+            i += 1
             continue
         key = key_match.group(1)
         if "." in key:
+            i += 1
             continue
         flush()
-        entries.append((key, stripped))
+        parts = [stripped]
+        brace_depth = stripped.count("{") - stripped.count("}")
+        i += 1
+        while brace_depth > 0 and i < len(lines):
+            parts.append(lines[i])
+            brace_depth += lines[i].count("{") - lines[i].count("}")
+            i += 1
+        entries.append((key, "\n".join(parts)))
     flush()
     return entries
 
@@ -1290,6 +1308,18 @@ def _assert_surfaces_self_checks() -> None:
     assert parse_workspace_dependencies(
         '[workspace.dependencies]\nkms.package = "krusty-kms"\nkms.path = "crates/kms"\n'
     ) == {"kms": "krusty-kms"}
+    ws_map_multiline = parse_workspace_dependencies(
+        "[workspace.dependencies]\n"
+        "kms = {\n"
+        '  package = "krusty-kms",\n'
+        '  path = "crates/kms",\n'
+        "}\n"
+    )
+    assert ws_map_multiline == {"kms": "krusty-kms"}
+    assert krusty_deps_from_cargo_toml(
+        "[dependencies]\nkms.workspace = true\n",
+        workspace_deps=ws_map_multiline,
+    ) == {"krusty-kms"}
     ws_map_dotted = parse_workspace_dependencies(
         '[workspace.dependencies]\nkms.package = "krusty-kms"\nkms.path = "crates/kms"\n'
     )
@@ -1368,6 +1398,19 @@ impl Foo {
         extern_fn.replace("*const u8", "*const i32")
     )
     assert is_exported_crate_source("crates/ffi/src/signing.rs", repo_root())
+
+    fn_where = """
+pub fn serialize_cairo_some<F>(f: F) -> Vec<Felt>
+where
+    F: FnOnce() -> Vec<Felt>,
+{
+    f()
+}
+""".strip()
+    assert any("where" in s and "FnOnce" in s for s in extract_public_surface(fn_where))
+    assert extract_public_surface(fn_where) != extract_public_surface(
+        fn_where.replace("FnOnce", "FnMut")
+    )
 
     trait_src = """
 pub trait WalletExecutor: Send + Sync {
