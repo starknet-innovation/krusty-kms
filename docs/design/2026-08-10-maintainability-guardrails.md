@@ -74,4 +74,6 @@ Addressed on the same PR after review:
   fingerprints; fitness runs `python3 .github/scripts/lib/surfaces.py` self-checks.
 - Swift `kms.h` compare is order-preserving; `self::`/`super::` pub-use paths
   resolve without double-prepending the module path.
+- Design-note gate also fingerprints inherent methods on re-exported types that
+  live in private modules; FFI freeze compares ABI/error constants to `#define`s.
 
