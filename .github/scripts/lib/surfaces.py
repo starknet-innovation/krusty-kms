@@ -254,6 +254,9 @@ _UNRESTRICTED_PUB_DIFF_RE = re.compile(
     r"(?:async\s+)?(?:unsafe\s+)?(?:extern\s+(?:\"[^\"]*\"|'[^']*')\s+)?"
 )
 _CFG_ATTR_RE = re.compile(r"^#\[cfg\b")
+_API_BEARING_ATTR_RE = re.compile(
+    r"^#\[(?:cfg|derive|serde|repr|non_exhaustive)\b"
+)
 
 
 def _normalize_ws(text: str) -> str:
@@ -398,18 +401,18 @@ def _collect_impl_pub_fns(
 
 
 def _format_field(attrs: str, signature: str) -> str:
-    cfg_attrs = [
+    api_attrs = [
         line.strip()
         for line in attrs.splitlines()
-        if _CFG_ATTR_RE.match(line.strip())
+        if _API_BEARING_ATTR_RE.match(line.strip())
     ]
     bindgen = _format_bindgen_attrs(attrs)
-    if cfg_attrs and bindgen:
-        return f"{' '.join(cfg_attrs)} | {bindgen} | {signature}"
+    if api_attrs and bindgen:
+        return f"{' '.join(api_attrs)} | {bindgen} | {signature}"
     if bindgen:
         return f"{bindgen} | {signature}"
-    if cfg_attrs:
-        return f"{' '.join(cfg_attrs)} {signature}"
+    if api_attrs:
+        return f"{' '.join(api_attrs)} {signature}"
     return signature
 
 
@@ -518,11 +521,11 @@ def _collect_trait_items(lines: list[str], open_line: int) -> list[str]:
                 continue
             if _TRAIT_METHOD_RE.match(line) or _TRAIT_ASSOC_ITEM_RE.match(line):
                 sig = _collect_rust_signature(lines, j)
-                cfg_attrs = [
-                    attr for attr in pending_attrs if _CFG_ATTR_RE.match(attr)
+                api_attrs = [
+                    attr for attr in pending_attrs if _API_BEARING_ATTR_RE.match(attr)
                 ]
-                if cfg_attrs:
-                    sig = f"{' '.join(cfg_attrs)} {sig}"
+                if api_attrs:
+                    sig = f"{' '.join(api_attrs)} {sig}"
                 items.append(sig)
                 pending_attrs = []
             else:
@@ -628,9 +631,9 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
     return _normalize_ws(" ".join(parts))
 
 
-def _collect_preceding_cfg_attrs(lines: list[str], start: int) -> str:
-    """Return ``#[cfg(...)]`` attrs above ``start``, walking through other attrs."""
-    cfg_attrs: list[str] = []
+def _collect_preceding_api_attrs(lines: list[str], start: int) -> str:
+    """Return API-bearing attrs above ``start`` (cfg/derive/serde/repr/...)."""
+    api_attrs: list[str] = []
     i = start - 1
 
     while i >= 0:
@@ -648,8 +651,8 @@ def _collect_preceding_cfg_attrs(lines: list[str], start: int) -> str:
                     attr_parts.append(nxt)
                 k += 1
             attr = _normalize_ws(" ".join(attr_parts))
-            if _CFG_ATTR_RE.match(attr):
-                cfg_attrs.insert(0, attr)
+            if _API_BEARING_ATTR_RE.match(attr):
+                api_attrs.insert(0, attr)
             i -= 1
             continue
 
@@ -687,11 +690,11 @@ def _collect_preceding_cfg_attrs(lines: list[str], start: int) -> str:
                 if lines[k].strip() and not lines[k].strip().startswith("//")
             )
         )
-        if _CFG_ATTR_RE.match(attr):
-            cfg_attrs.insert(0, attr)
+        if _API_BEARING_ATTR_RE.match(attr):
+            api_attrs.insert(0, attr)
         i = j - 1
 
-    return "\n".join(cfg_attrs)
+    return "\n".join(api_attrs)
 
 
 def _inherent_impl_type_name(header: str) -> str | None:
@@ -773,7 +776,7 @@ def extract_public_surface(text: str) -> frozenset[str]:
         sig = _collect_rust_signature(lines, i)
         if not sig:
             continue
-        cfg_attrs = _collect_preceding_cfg_attrs(lines, i)
+        cfg_attrs = _collect_preceding_api_attrs(lines, i)
         if cfg_attrs:
             sig = f"{cfg_attrs} {sig}"
         impl_type = _enclosing_inherent_impl_type(lines, i)
@@ -1514,6 +1517,165 @@ def compare_ffi_rust_to_header(root: Path | None = None) -> list[str]:
     return errors
 
 
+_DART_TYPEDEF_RE = re.compile(
+    r"typedef\s+(\w+)\s*=\s*(.+?)\s*Function\s*\((.*?)\);",
+    re.DOTALL,
+)
+_DART_LOOKUP_RE = re.compile(
+    r"lookupFunction<\s*(\w+)\s*,\s*(\w+)\s*>\s*\(\s*'(kms_[^']+)'\s*\)",
+    re.DOTALL,
+)
+_C_SCALAR_TYPEDEF_RE = re.compile(r"typedef\s+(\w+)\s+(\w+)\s*;")
+_DART_FFI_TYPE_ALIASES = {
+    "Int32": "i32",
+    "Uint32": "u32",
+    "Uint64": "u64",
+    "Int64": "i64",
+    "Size": "usize",
+    "Uint8": "u8",
+    "Void": "void",
+}
+
+
+def _canonical_dart_ffi_type(typ: str) -> str:
+    typ = _normalize_ws(typ)
+    match = re.match(r"^Pointer\s*<\s*(.+)\s*>$", typ)
+    if match:
+        inner = match.group(1).strip()
+        if inner == "Utf8":
+            return "*char"
+        return f"*{_canonical_dart_ffi_type(inner)}"
+    return _DART_FFI_TYPE_ALIASES.get(typ, typ)
+
+
+def _dart_param_canonical_type(param: str) -> str:
+    """Strip a Dart param name and canonicalize its FFI type."""
+    param = _normalize_ws(param)
+    match = re.match(r"^(.*\S)\s+([A-Za-z_]\w*)$", param)
+    if match:
+        return _canonical_dart_ffi_type(match.group(1))
+    return _canonical_dart_ffi_type(param)
+
+
+def _soften_ffi_fingerprint(fingerprint: str) -> str:
+    """Collapse ``*const``/``*mut`` to ``*`` for Dart comparisons."""
+    return re.sub(r"\*(?:const|mut) ", "*", fingerprint)
+
+
+def _c_scalar_typedef_aliases(header_text: str) -> dict[str, str]:
+    """Map ``typedef uint64_t KmsAccountHandle;``-style aliases to canonical types."""
+    aliases: dict[str, str] = {}
+    for match in _C_SCALAR_TYPEDEF_RE.finditer(header_text):
+        base, name = match.group(1), match.group(2)
+        canon = _C_FFI_TYPE_ALIASES.get(base)
+        if canon:
+            aliases[name] = canon
+    return aliases
+
+
+def _apply_ffi_type_aliases(fingerprint: str, aliases: dict[str, str]) -> str:
+    """Rewrite type tokens in ``ret (t1, t2, ...)`` using scalar typedef aliases."""
+    if not aliases:
+        return fingerprint
+    open_idx = fingerprint.find("(")
+    close_idx = fingerprint.rfind(")")
+    if open_idx < 0 or close_idx < open_idx:
+        return fingerprint
+
+    def rewrite(token: str) -> str:
+        token = token.strip()
+        if token.startswith("*"):
+            inner = token[1:]
+            return f"*{aliases.get(inner, inner)}"
+        return aliases.get(token, token)
+
+    ret = rewrite(fingerprint[:open_idx].strip())
+    params = [
+        rewrite(param)
+        for param in _split_top_level_params(fingerprint[open_idx + 1 : close_idx])
+        if param.strip()
+    ]
+    return f"{ret} ({', '.join(params)})"
+
+
+def _dart_abi_fingerprint(fingerprint: str) -> str:
+    """Normalize Dart/C buffer pointer spellings for ABI equality checks."""
+    # Dart uses ``Pointer<Uint8>`` for many C ``char*`` writable buffers.
+    return re.sub(r"\*(?:char|u8)\b", "*byte", fingerprint)
+
+
+def _dart_ffi_type_fingerprint(ret: str, params: str) -> str:
+    ret_norm = _canonical_dart_ffi_type(ret.strip())
+    param_types = [
+        _dart_param_canonical_type(param)
+        for param in _split_top_level_params(params)
+        if param.strip()
+    ]
+    return f"{ret_norm} ({', '.join(param_types)})"
+
+
+def extract_dart_ffi_functions(bindings_text: str) -> dict[str, str]:
+    """Map Dart ``lookupFunction('kms_...')`` bindings to type fingerprints."""
+    typedefs: dict[str, str] = {}
+    for match in _DART_TYPEDEF_RE.finditer(bindings_text):
+        name, ret, params = match.group(1), match.group(2), match.group(3)
+        if not name.endswith("C"):
+            continue
+        typedefs[name] = _dart_ffi_type_fingerprint(ret, params)
+
+    exports: dict[str, str] = {}
+    for match in _DART_LOOKUP_RE.finditer(bindings_text):
+        c_typedef, _dart_typedef, symbol = match.group(1), match.group(2), match.group(3)
+        fingerprint = typedefs.get(c_typedef)
+        if fingerprint is None:
+            continue
+        exports[symbol] = fingerprint
+    return exports
+
+
+def compare_ffi_dart_to_header(root: Path | None = None) -> list[str]:
+    """Return errors when Dart FFI bindings disagree with ``kms.h``."""
+    root = root or repo_root()
+    header_path = root / "packages/kms-c/include/kms.h"
+    dart_path = root / "packages/kms-dart/lib/src/ffi/bindings.dart"
+    if not header_path.is_file():
+        return [f"missing {header_path}"]
+    if not dart_path.is_file():
+        return [f"missing {dart_path}"]
+    header_text = header_path.read_text()
+    aliases = _c_scalar_typedef_aliases(header_text)
+    header = {
+        name: _dart_abi_fingerprint(
+            _apply_ffi_type_aliases(_soften_ffi_fingerprint(fp), aliases)
+        )
+        for name, fp in extract_c_header_functions(header_text).items()
+    }
+    dart = {
+        name: _dart_abi_fingerprint(_apply_ffi_type_aliases(fp, aliases))
+        for name, fp in extract_dart_ffi_functions(dart_path.read_text()).items()
+    }
+    errors: list[str] = []
+    for name in sorted(set(header) - set(dart)):
+        errors.append(
+            f"packages/kms-dart bindings missing kms.h export {name}"
+        )
+    for name in sorted(set(dart) - set(header)):
+        errors.append(
+            f"packages/kms-dart binds {name} with no packages/kms-c/include/kms.h declaration"
+        )
+    for name in sorted(set(header) & set(dart)):
+        if header[name] != dart[name]:
+            errors.append(
+                f"Dart FFI type mismatch for {name}: dart={dart[name]} header={header[name]}"
+            )
+    return errors
+
+
+def compare_ffi_surfaces(root: Path | None = None) -> list[str]:
+    """Return combined Rust/Dart vs ``kms.h`` FFI freeze errors."""
+    return compare_ffi_rust_to_header(root) + compare_ffi_dart_to_header(root)
+
+
 _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
 _KRUSTY_NAME_RE = re.compile(rf"^{_KRUSTY_NAME}$")
 _KRUSTY_PACKAGE = re.compile(rf"""package\s*=\s*["']({_KRUSTY_NAME})["']""")
@@ -1843,7 +2005,7 @@ pub struct Foo {
 """.strip()
     assert extract_public_surface(cfg_field) != extract_public_surface(no_cfg_field)
     assert any('#[cfg(feature = "x")]' in s for s in extract_public_surface(cfg_field))
-    assert compare_ffi_rust_to_header(repo_root()) == []
+    assert compare_ffi_surfaces(repo_root()) == []
     rust_ffi = extract_rust_ffi_functions(repo_root())
     assert "kms_stark_sign" in rust_ffi
     assert rust_ffi["kms_get_coin_type_tongo"] == "u32 ()"
@@ -1860,6 +2022,13 @@ pub struct Foo {
     assert header_ffi["kms_derive_nostr_private_key"] == rust_ffi[
         "kms_derive_nostr_private_key"
     ]
+    dart_ffi = extract_dart_ffi_functions(
+        (repo_root() / "packages/kms-dart/lib/src/ffi/bindings.dart").read_text()
+    )
+    assert "kms_stark_sign" in dart_ffi
+    assert dart_ffi["kms_stark_sign"] == _soften_ffi_fingerprint(
+        header_ffi["kms_stark_sign"]
+    )
     assert krusty_deps_from_cargo_toml(
         "[dependencies]\nkrusty-kms-common.workspace = true\n"
     ) == {"krusty-kms-common"}
@@ -2113,6 +2282,24 @@ pub struct Foo;
     assert extract_public_surface(cfg_through_derive) != extract_public_surface(
         cfg_through_derive.replace('feature = "x"', 'feature = "y"')
     )
+
+    serde_enum = """
+#[derive(Debug, Serialize)]
+#[serde(tag = "command", content = "params", rename_all = "snake_case")]
+pub enum OracleCommand {
+    Sign,
+}
+""".strip()
+    serde_enum_changed = serde_enum.replace('tag = "command"', 'tag = "cmd"')
+    assert extract_public_surface(serde_enum) != extract_public_surface(serde_enum_changed)
+    assert any("serde(tag" in s for s in extract_public_surface(serde_enum))
+    assert any("derive(Debug, Serialize)" in s for s in extract_public_surface(serde_enum))
+    derive_only = """
+#[derive(Debug)]
+pub struct Foo;
+""".strip()
+    derive_changed = derive_only.replace("Debug", "Debug, Clone")
+    assert extract_public_surface(derive_only) != extract_public_surface(derive_changed)
 
     inherent_src = """
 pub struct StarknetGatewayBackend;
