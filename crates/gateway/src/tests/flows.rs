@@ -4,7 +4,7 @@ use super::{
     derivation_request, gateway, nostr_sign_request, raw_nostr_sign_request, snapshot_request,
     stark_sign_request, TestClock,
 };
-use crate::snapshot::MAX_SNAPSHOT_TTL_MS;
+use crate::snapshot_cache::MAX_SNAPSHOT_TTL_MS;
 use crate::DeployExecution;
 use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
@@ -204,7 +204,7 @@ async fn snapshot_rejects_unbounded_token_list() {
     let mut request = snapshot_request(QueryMode::ActiveView);
     let token = request.tokens[0].clone();
     request.tokens = std::iter::repeat_with(|| token.clone())
-        .take(crate::snapshot::MAX_SNAPSHOT_TOKENS + 1)
+        .take(crate::snapshot_cache::MAX_SNAPSHOT_TOKENS + 1)
         .collect();
 
     let error = gateway.query_account_snapshot(request).await.unwrap_err();

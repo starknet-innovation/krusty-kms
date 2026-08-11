@@ -5,7 +5,7 @@ use crate::clock::Clock;
 use crate::gateway::Gateway;
 use crate::snapshot_cache::{
     cached_snapshot_response, quantize_down, stale_snapshot_fallback, SnapshotCacheEntry,
-    SnapshotCacheKey,
+    SnapshotCacheKey, MAX_SNAPSHOT_TOKENS,
 };
 use crate::types::{GatewayResponse, GatewayResult, SecretResolver};
 use krusty_kms_domain::{
@@ -13,9 +13,7 @@ use krusty_kms_domain::{
     OperationState, OperationStatus, SnapshotBlockMetadata, TokenBalanceSnapshot,
 };
 
-pub(crate) use crate::snapshot_cache::{
-    SnapshotCache, MAX_SNAPSHOT_TOKENS, MAX_SNAPSHOT_TTL_MS, SNAPSHOT_TIME_QUANTUM_MS,
-};
+pub(crate) use crate::snapshot_cache::SnapshotCache;
 
 impl<B, S, C> Gateway<B, S, C>
 where

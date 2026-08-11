@@ -3,7 +3,7 @@
 use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
     AccountSnapshot, AccountSnapshotRequest, BlockSelector, CacheMetadata, CachePolicy,
-    CacheStatus, FeltHex, QueryMode, SnapshotBlockMetadata,
+    CacheStatus, FeltHex, QueryMode,
 };
 use std::collections::{HashMap, VecDeque};
 
@@ -211,6 +211,7 @@ impl From<&krusty_kms_domain::TrackedToken> for CachedTrackedToken {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use krusty_kms_domain::SnapshotBlockMetadata;
 
     fn snapshot() -> AccountSnapshot {
         AccountSnapshot {
