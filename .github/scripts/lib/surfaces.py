@@ -706,6 +706,8 @@ def _enclosing_inherent_impl_type(lines: list[str], idx: int) -> str | None:
         depth += line.count("}") - line.count("{")
         if depth >= 0:
             continue
+        # Opening brace of the enclosing block — keep walking for multiline
+        # ``impl<...> Type where ... {`` headers.
         header_parts: list[str] = []
         k = j
         while k >= 0:
@@ -714,13 +716,25 @@ def _enclosing_inherent_impl_type(lines: list[str], idx: int) -> str | None:
                 k -= 1
                 continue
             if stripped.startswith("#["):
+                if any(re.search(r"\bimpl\b", part) for part in header_parts):
+                    break
                 k -= 1
                 continue
             header_parts.insert(0, stripped)
             combined = " ".join(header_parts)
             if re.search(r"\bimpl\b", combined):
                 return _inherent_impl_type_name(combined)
-            break
+            if (
+                stripped.startswith("pub ")
+                or stripped.startswith("fn ")
+                or stripped.startswith("struct ")
+                or stripped.startswith("enum ")
+                or stripped.startswith("trait ")
+                or stripped.startswith("mod ")
+                or stripped.startswith("}")
+            ):
+                return None
+            k -= 1
         return None
     return None
 
@@ -1829,6 +1843,29 @@ impl Other {
     )
     assert inherent_filtered != filter_public_surface(
         extract_public_surface(inherent_changed), inherent_allowed
+    )
+
+    multiline_where_impl = """
+pub struct Gateway<B, S>;
+impl<B, S> Gateway<B, S>
+where
+    B: Backend,
+    S: Resolver,
+{
+    pub fn new(backend: B, secret_resolver: S) -> Self { Self }
+    pub fn with_clock(backend: B, secret_resolver: S) -> Self { Self }
+}
+""".strip()
+    where_filtered = filter_public_surface(
+        extract_public_surface(multiline_where_impl), {"Gateway"}
+    )
+    assert any("impl Gateway" in s and "fn new" in s for s in where_filtered)
+    assert any("with_clock" in s for s in where_filtered)
+    assert where_filtered != filter_public_surface(
+        extract_public_surface(
+            multiline_where_impl.replace("pub fn new(backend: B, secret_resolver: S)", "pub fn new(backend: B)")
+        ),
+        {"Gateway"},
     )
 
     mod_a = """
