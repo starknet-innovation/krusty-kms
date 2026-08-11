@@ -1542,7 +1542,7 @@ dependencies = [
  "serde_json",
  "starknet-types-core",
  "subtle",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "zeroize",
 ]
 
@@ -1575,7 +1575,7 @@ dependencies = [
  "serde",
  "serde_json",
  "starknet-types-core",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1750,7 +1750,7 @@ dependencies = [
  "serde",
  "sha2",
  "starknet-types-core",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1768,7 +1768,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "starknet-types-core",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]
