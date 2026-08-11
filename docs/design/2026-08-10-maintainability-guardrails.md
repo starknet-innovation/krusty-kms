@@ -93,4 +93,7 @@ After rebasing onto main's 0.9.0 security-hardening release:
 - Design-note fingerprints: inherent `pub const` on re-exported types; skip
   private/`#[cfg(test)]` inline modules (incl. fallback pub diff); multiline
   return-type generics; `cfg_attr` as API-bearing; nested `pub use` groups.
+- Inline `pub mod` fingerprints stop at the `{` header so private body imports
+  do not trip the design-note gate; FFI freeze also compares JVM
+  `KmsNative.java` natives to `kms_jni.c` `JNIEXPORT` symbols/signatures.
 

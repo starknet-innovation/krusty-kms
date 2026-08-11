@@ -87,7 +87,7 @@ if errors:
     sys.exit(1)
 count = len(extract_rust_ffi_functions())
 print(
-    f"Rust/Dart FFI bindings match packages/kms-c/include/kms.h ({count} functions)"
+    f"Rust/Dart/JVM FFI bindings match packages/kms-c/include/kms.h ({count} functions)"
 )
 PY
 then

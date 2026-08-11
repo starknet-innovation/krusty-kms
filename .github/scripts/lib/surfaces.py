@@ -652,7 +652,22 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
                 return _normalize_ws(" ".join(parts))
         return _normalize_ws(" ".join(parts))
 
-    if re.match(r"^\s*(pub\s+)?(?:mod|type|static)\b", first) or re.match(
+    if re.match(r"^\s*(pub\s+)?mod\b", first):
+        # Inline ``pub mod name { ... }``: fingerprint the header only so private
+        # body statements (``use super::*``, helpers, etc.) cannot trip the gate.
+        parts: list[str] = []
+        for j in range(start, len(lines)):
+            line = lines[j].strip()
+            parts.append(line)
+            combined = " ".join(parts)
+            if "{" in combined:
+                before = combined.split("{", 1)[0].strip()
+                return _normalize_ws(f"{before} {{")
+            if ";" in line:
+                return _normalize_ws(combined)
+        return _normalize_ws(" ".join(parts))
+
+    if re.match(r"^\s*(pub\s+)?(?:type|static)\b", first) or re.match(
         r"^\s*(pub\s+)?const\s+(?!fn\b)", first
     ):
         parts: list[str] = []
@@ -2277,14 +2292,142 @@ def compare_ffi_dart_to_header(root: Path | None = None) -> list[str]:
 
 
 def compare_ffi_surfaces(root: Path | None = None) -> list[str]:
-    """Return combined Rust/Dart vs ``kms.h`` FFI freeze errors."""
+    """Return combined Rust/Dart/JVM vs ``kms.h`` FFI freeze errors."""
     return (
         compare_ffi_rust_to_header(root)
         + compare_ffi_layouts(root)
         + compare_ffi_constants(root)
         + compare_ffi_dart_layouts(root)
         + compare_ffi_dart_to_header(root)
+        + compare_ffi_jvm_natives(root)
     )
+
+
+_JAVA_NATIVE_RE = re.compile(
+    r"^\s*public\s+static\s+native\s+(.+?)\s+(\w+)\s*\((.*?)\)\s*;",
+    re.MULTILINE,
+)
+_JNI_EXPORT_START_RE = re.compile(
+    r"JNIEXPORT\s+(\w+)\s+JNICALL\s+(Java_io_krustykms_KmsNative_(\w+))\s*\("
+)
+_JAVA_TO_JNI_TYPES = {
+    "void": "void",
+    "int": "jint",
+    "long": "jlong",
+    "boolean": "jboolean",
+    "float": "jfloat",
+    "double": "jdouble",
+    "String": "jstring",
+    "byte[]": "jbyteArray",
+    "int[]": "jintArray",
+    "long[]": "jlongArray",
+    "boolean[]": "jbooleanArray",
+    "byte[][]": "jobjectArray",
+    "Object": "jobject",
+}
+
+
+def _java_type_to_jni(java_type: str) -> str:
+    cleaned = re.sub(r"\s+", "", java_type.strip())
+    return _JAVA_TO_JNI_TYPES.get(cleaned, cleaned)
+
+
+def extract_java_native_methods(text: str) -> dict[str, str]:
+    """Map Java native method name -> ``ret name(arg, ...)`` JNI-normalized fingerprint."""
+    out: dict[str, str] = {}
+    for match in _JAVA_NATIVE_RE.finditer(text):
+        ret, name, args = match.group(1), match.group(2), match.group(3).strip()
+        params: list[str] = []
+        if args:
+            for part in args.split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                # ``Type name`` or just ``Type`` — drop the parameter identifier.
+                tokens = part.rsplit(None, 1)
+                type_text = tokens[0] if len(tokens) == 2 else part
+                params.append(_java_type_to_jni(type_text))
+        out[name] = _normalize_ws(
+            f"{_java_type_to_jni(ret)} {name}({', '.join(params)})"
+        )
+    return out
+
+
+def extract_jni_native_methods(text: str) -> dict[str, str]:
+    """Map JNI ``Java_io_krustykms_KmsNative_*`` method name -> fingerprint."""
+    lines = text.splitlines()
+    out: dict[str, str] = {}
+    for i, line in enumerate(lines):
+        match = _JNI_EXPORT_START_RE.search(line)
+        if not match:
+            continue
+        ret, _full, name = match.group(1), match.group(2), match.group(3)
+        # Collect parameter list starting at this line's ``(``.
+        buf = line[match.end() - 1 :]  # starts with '('
+        j = i
+        while _paren_depth(buf) > 0 and j + 1 < len(lines):
+            j += 1
+            buf += " " + lines[j].strip()
+        inner = buf[buf.find("(") + 1 : buf.rfind(")")]
+        params: list[str] = []
+        depth = 0
+        current: list[str] = []
+        for ch in inner:
+            if ch == "<":
+                depth += 1
+            elif ch == ">":
+                depth -= 1
+            if ch == "," and depth == 0:
+                token = "".join(current).strip()
+                if token:
+                    params.append(token)
+                current = []
+                continue
+            current.append(ch)
+        token = "".join(current).strip()
+        if token:
+            params.append(token)
+        # Drop JNIEnv*/jclass receiver args for static natives.
+        filtered: list[str] = []
+        for param in params:
+            cleaned = re.sub(r"\s+", " ", param).strip()
+            if cleaned.startswith("JNIEnv"):
+                continue
+            if cleaned.startswith("jclass"):
+                continue
+            # Keep only the JNI type token (first word / array type).
+            type_token = cleaned.split()[0].rstrip(",")
+            filtered.append(type_token)
+        out[name] = _normalize_ws(f"{ret} {name}({', '.join(filtered)})")
+    return out
+
+
+def compare_ffi_jvm_natives(root: Path | None = None) -> list[str]:
+    """Return errors when ``KmsNative.java`` disagrees with ``kms_jni.c`` exports."""
+    root = root or repo_root()
+    java_path = root / "packages/kms-jvm/src/main/java/io/krustykms/KmsNative.java"
+    jni_path = root / "packages/kms-jvm/src/main/c/kms_jni.c"
+    if not java_path.is_file():
+        return [f"missing {java_path}"]
+    if not jni_path.is_file():
+        return [f"missing {jni_path}"]
+    java = extract_java_native_methods(java_path.read_text())
+    jni = extract_jni_native_methods(jni_path.read_text())
+    errors: list[str] = []
+    for name in sorted(set(java) - set(jni)):
+        errors.append(
+            f"kms_jni.c missing JNI export for KmsNative.{name}"
+        )
+    for name in sorted(set(jni) - set(java)):
+        errors.append(
+            f"kms_jni.c exports Java_io_krustykms_KmsNative_{name} with no KmsNative.java native"
+        )
+    for name in sorted(set(java) & set(jni)):
+        if java[name] != jni[name]:
+            errors.append(
+                f"JVM/JNI signature mismatch for {name}: java={java[name]} jni={jni[name]}"
+            )
+    return errors
 
 
 _KRUSTY_NAME = r"krusty-kms(?:-[a-z0-9-]+)?"
@@ -2659,6 +2802,18 @@ pub struct Foo {
     assert extract_c_header_constants(
         (repo_root() / "packages/kms-c/include/kms.h").read_text()
     )["KMS_ERR_JSON"] == "7"
+    java_natives = extract_java_native_methods(
+        (
+            repo_root()
+            / "packages/kms-jvm/src/main/java/io/krustykms/KmsNative.java"
+        ).read_text()
+    )
+    jni_natives = extract_jni_native_methods(
+        (repo_root() / "packages/kms-jvm/src/main/c/kms_jni.c").read_text()
+    )
+    assert "getAbiVersion" in java_natives
+    assert java_natives["getAbiVersion"] == jni_natives["getAbiVersion"]
+    assert compare_ffi_jvm_natives(repo_root()) == []
     cfg_gated_ffi = (
         '#[cfg(feature = "zz_never_enabled")]\n'
         "#[no_mangle]\n"
@@ -3000,7 +3155,22 @@ pub mod tongo {
     inline_surface = extract_public_surface(inline_mods)
     assert "erc20::pub static TRANSFER: u8 = 1;" in inline_surface
     assert "tongo::pub static TRANSFER: u8 = 1;" in inline_surface
+    assert "pub mod erc20 {" in inline_surface
+    assert "pub mod tongo {" in inline_surface
+    assert not any("use super" in s for s in inline_surface)
     assert extract_public_surface(inline_mods) != extract_public_surface(inline_mods_removed)
+    inline_with_private_use = """
+pub mod erc20 {
+    use super::*;
+    pub static TRANSFER: u8 = 1;
+}
+""".strip()
+    inline_private_use_changed = inline_with_private_use.replace(
+        "use super::*;", "use crate::other::*;"
+    )
+    assert extract_public_surface(inline_with_private_use) == extract_public_surface(
+        inline_private_use_changed
+    )
 
     inherent_src = """
 pub struct StarknetGatewayBackend;
