@@ -1089,6 +1089,19 @@ def _public_surface_item_name(sig: str) -> str | None:
     return None
 
 
+def _pub_type_names_in_text(text: str) -> set[str]:
+    """Return ``pub struct|enum|trait|type`` names from Rust source text."""
+    names: set[str] = set()
+    for line in text.splitlines():
+        match = re.match(
+            r"^\s*pub\s+(?:struct|enum|trait|type)\s+([A-Za-z_]\w*)\b",
+            line,
+        )
+        if match:
+            names.add(match.group(1))
+    return names
+
+
 def _signature_matches_exported_items(sig: str, allowed: set[str]) -> bool:
     impl_match = re.match(r"^impl\s+([A-Za-z_][\w]*)\s*\{", sig)
     if impl_match and impl_match.group(1) in allowed:
@@ -1146,6 +1159,35 @@ class _CrateExportIndex:
         if module_path == "" or module_path in self._public_reachable:
             return None
         return self._export_items.get(module_path, set())
+
+    def exported_type_names(self) -> set[str]:
+        """Return type names reachable via public modules or selective ``pub use``."""
+        names: set[str] = set()
+        for mod in self._public_reachable:
+            file_path = self._module_file(mod)
+            if file_path is None:
+                continue
+            names |= _pub_type_names_in_text(file_path.read_text())
+        for mod, items in self._export_items.items():
+            if items is None:
+                file_path = self._module_file(mod)
+                if file_path is not None:
+                    names |= _pub_type_names_in_text(file_path.read_text())
+                continue
+            for item in items:
+                if item[:1].isupper():
+                    names.add(item)
+        return names
+
+    def _module_file(self, module_path: str) -> Path | None:
+        if module_path == "":
+            for candidate in (self.src_dir / "lib.rs", self.src_dir / "main.rs"):
+                if candidate.is_file():
+                    return candidate
+            return None
+        parts = module_path.split("/")
+        parent = "/".join(parts[:-1])
+        return _resolve_mod_file(self.src_dir, parent, parts[-1])
 
     def _walk_module(self, module_path: str, file_path: Path, *, is_public: bool) -> None:
         if is_public:
@@ -1237,6 +1279,17 @@ def exported_item_filter_for_source(
     return index.exported_item_filter(rel_path)
 
 
+def exported_type_names_for_crate(
+    rel_path: str, root: Path | None = None
+) -> set[str]:
+    """Return crate-level exported type names for inherent ``impl`` filtering."""
+    repo = root or repo_root()
+    index = _export_index_for_file(rel_path, repo)
+    if index is None:
+        return set()
+    return index.exported_type_names()
+
+
 def public_api_change_reasons(
     base_ref: str,
     files: list[str],
@@ -1248,9 +1301,15 @@ def public_api_change_reasons(
     _export_index_cache.clear()
     reasons: list[str] = []
     for rel in files:
-        if not is_exported_crate_source(rel, repo):
-            continue
+        exported = is_exported_crate_source(rel, repo)
         allowed = exported_item_filter_for_source(rel, repo)
+        if not exported:
+            # Private modules can still host public API via inherent methods on
+            # re-exported types (e.g. ``impl Gateway`` in ``accounts.rs``).
+            type_names = exported_type_names_for_crate(rel, repo)
+            if not type_names:
+                continue
+            allowed = type_names
         try:
             base_text = subprocess.check_output(
                 ["git", "show", f"{base_ref}:{rel}"],
@@ -1264,11 +1323,16 @@ def public_api_change_reasons(
         head_text = head_path.read_text() if head_path.is_file() else ""
         base_surface = filter_public_surface(extract_public_surface(base_text), allowed)
         head_surface = filter_public_surface(extract_public_surface(head_text), allowed)
+        if not exported:
+            base_surface = frozenset(sig for sig in base_surface if sig.startswith("impl "))
+            head_surface = frozenset(sig for sig in head_surface if sig.startswith("impl "))
+            if not base_surface and not head_surface:
+                continue
         if base_surface != head_surface:
             reasons.append(f"public API surface changed in {rel}")
             continue
         if allowed is not None:
-            # Selective re-exports: ignore unrelated pub churn in the private module.
+            # Selective re-exports / type-filtered private modules: ignore unrelated pub churn.
             continue
         try:
             diff = subprocess.check_output(
@@ -1784,6 +1848,65 @@ def compare_ffi_layouts(root: Path | None = None) -> list[str]:
     return errors
 
 
+_RUST_FFI_CONST_RE = re.compile(
+    r"(?:pub\s+)?const\s+(?P<name>ABI_MAJOR|ABI_MINOR|KMS_OK|KMS_ERR_[A-Z0-9_]+)\s*:\s*"
+    r"[^=]*=\s*(?P<value>-?\d+)\s*;"
+)
+_C_FFI_DEFINE_RE = re.compile(
+    r"#define\s+(?P<name>KMS_ABI_VERSION_MAJOR|KMS_ABI_VERSION_MINOR|KMS_OK|KMS_ERR_[A-Z0-9_]+)\s+"
+    r"(?P<value>-?\d+)\b"
+)
+_RUST_FFI_CONST_TO_C = {
+    "ABI_MAJOR": "KMS_ABI_VERSION_MAJOR",
+    "ABI_MINOR": "KMS_ABI_VERSION_MINOR",
+}
+
+
+def extract_rust_ffi_constants(root: Path | None = None) -> dict[str, str]:
+    """Map canonical C macro names to decimal values declared in ``crates/ffi``."""
+    root = root or repo_root()
+    constants: dict[str, str] = {}
+    for path in sorted((root / "crates/ffi/src").rglob("*.rs")):
+        for match in _RUST_FFI_CONST_RE.finditer(path.read_text()):
+            rust_name = match.group("name")
+            c_name = _RUST_FFI_CONST_TO_C.get(rust_name, rust_name)
+            constants[c_name] = match.group("value")
+    return constants
+
+
+def extract_c_header_constants(header_text: str) -> dict[str, str]:
+    """Map ``#define KMS_*`` numeric macros from ``kms.h``."""
+    return {
+        match.group("name"): match.group("value")
+        for match in _C_FFI_DEFINE_RE.finditer(header_text)
+    }
+
+
+def compare_ffi_constants(root: Path | None = None) -> list[str]:
+    """Return errors when Rust FFI constants disagree with ``kms.h`` macros."""
+    root = root or repo_root()
+    header_path = root / "packages/kms-c/include/kms.h"
+    if not header_path.is_file():
+        return [f"missing {header_path}"]
+    rust = extract_rust_ffi_constants(root)
+    header = extract_c_header_constants(header_path.read_text())
+    errors: list[str] = []
+    for name in sorted(set(rust) - set(header)):
+        errors.append(
+            f"Rust FFI constant {name}={rust[name]} missing from packages/kms-c/include/kms.h"
+        )
+    for name in sorted(set(header) - set(rust)):
+        errors.append(
+            f"packages/kms-c/include/kms.h macro {name}={header[name]} has no Rust FFI constant"
+        )
+    for name in sorted(set(rust) & set(header)):
+        if rust[name] != header[name]:
+            errors.append(
+                f"FFI constant mismatch for {name}: rust={rust[name]} header={header[name]}"
+            )
+    return errors
+
+
 _DART_STRUCT_RE = re.compile(
     r"final\s+class\s+(Kms[A-Za-z0-9_]+)\s+extends\s+Struct\s*\{(.*?)\n\}",
     re.DOTALL,
@@ -2052,6 +2175,7 @@ def compare_ffi_surfaces(root: Path | None = None) -> list[str]:
     return (
         compare_ffi_rust_to_header(root)
         + compare_ffi_layouts(root)
+        + compare_ffi_constants(root)
         + compare_ffi_dart_layouts(root)
         + compare_ffi_dart_to_header(root)
     )
@@ -2424,6 +2548,11 @@ pub struct Foo {
     assert dart_layouts["KmsFelt"] == header_layouts["KmsFelt"]
     assert dart_layouts["KmsNostrKeyPair"] == header_layouts["KmsNostrKeyPair"]
     assert compare_ffi_dart_layouts(repo_root()) == []
+    assert compare_ffi_constants(repo_root()) == []
+    assert extract_rust_ffi_constants(repo_root())["KMS_ABI_VERSION_MAJOR"] == "2"
+    assert extract_c_header_constants(
+        (repo_root() / "packages/kms-c/include/kms.h").read_text()
+    )["KMS_ERR_JSON"] == "7"
     cfg_gated_ffi = (
         '#[cfg(feature = "zz_never_enabled")]\n'
         "#[no_mangle]\n"
@@ -3014,6 +3143,74 @@ const SECRET: u8 = 1;
         assert exported_item_filter_for_source(
             "crates/sdk/src/crypto.rs", repo_root()
         ) is None
+        assert "Gateway" in exported_type_names_for_crate(
+            "crates/gateway/src/accounts.rs", repo_root()
+        )
+        gateway_accounts = (repo_root() / "crates/gateway/src/accounts.rs").read_text()
+        gateway_types = exported_type_names_for_crate(
+            "crates/gateway/src/accounts.rs", repo_root()
+        )
+        gateway_surface = frozenset(
+            sig
+            for sig in filter_public_surface(
+                extract_public_surface(gateway_accounts), gateway_types
+            )
+            if sig.startswith("impl ")
+        )
+        assert any("deploy_account" in sig for sig in gateway_surface)
+        changed_accounts = gateway_accounts.replace(
+            "deploy_account(", "deploy_account_v2(", 1
+        )
+        changed_surface = frozenset(
+            sig
+            for sig in filter_public_surface(
+                extract_public_surface(changed_accounts), gateway_types
+            )
+            if sig.startswith("impl ")
+        )
+        assert gateway_surface != changed_surface
+
+        inherent_priv = root / "crates/inherent_priv/src"
+        inherent_priv.mkdir(parents=True)
+        (inherent_priv / "lib.rs").write_text(
+            "mod helpers;\npub use helpers::PublicApi;\n"
+        )
+        (inherent_priv / "helpers.rs").write_text("pub struct PublicApi;\n")
+        (inherent_priv / "methods.rs").write_text(
+            "use crate::PublicApi;\n"
+            "impl PublicApi {\n"
+            "    pub fn run(&self) {}\n"
+            "}\n"
+        )
+        (inherent_priv / "lib.rs").write_text(
+            "mod helpers;\nmod methods;\npub use helpers::PublicApi;\n"
+        )
+        assert not is_exported_crate_source(
+            "crates/inherent_priv/src/methods.rs", root
+        )
+        assert "PublicApi" in exported_type_names_for_crate(
+            "crates/inherent_priv/src/methods.rs", root
+        )
+        methods_text = (inherent_priv / "methods.rs").read_text()
+        methods_types = exported_type_names_for_crate(
+            "crates/inherent_priv/src/methods.rs", root
+        )
+        methods_surface = frozenset(
+            sig
+            for sig in filter_public_surface(
+                extract_public_surface(methods_text), methods_types
+            )
+            if sig.startswith("impl ")
+        )
+        assert any("run" in sig for sig in methods_surface)
+        assert methods_surface != frozenset(
+            sig
+            for sig in filter_public_surface(
+                extract_public_surface(methods_text.replace("run(", "run_v2(", 1)),
+                methods_types,
+            )
+            if sig.startswith("impl ")
+        )
 
 
 def _assert_file_size_ratchet_checks() -> None:
