@@ -121,12 +121,12 @@ crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(is_identity: bo
 crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmCiphertext { pub l_x: String; pub l_y: String; pub r_x: String; pub r_y: String }
 crates/wasm/src/types.rs: impl WasmCiphertext {
 crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(l_x: String, l_y: String, r_x: String, r_y: String) -> Self
-crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmKeypair { pub private_key: String; pub public_key_x: String; pub public_key_y: String }
+crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmKeypair { #[serde(skip_serializing)] pub private_key: String; pub public_key_x: String; pub public_key_y: String }
 crates/wasm/src/types.rs: impl WasmKeypair {
 crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: String, public_key_x: String, public_key_y: String) -> Result<WasmKeypair, JsValue>
 crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
 crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmPublicKey { pub public_key_x: String; pub public_key_y: String }
-crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmStarkXOnlyKeypair { pub private_key: String; pub public_key_x: String }
+crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmStarkXOnlyKeypair { #[serde(skip_serializing)] pub private_key: String; pub public_key_x: String }
 crates/wasm/src/types.rs: impl WasmStarkXOnlyKeypair {
 crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: String, public_key_x: String) -> Result<WasmStarkXOnlyKeypair, JsValue>
 crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
@@ -138,7 +138,7 @@ crates/wasm/src/types.rs: impl WasmPublicKey {
 crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(public_key_x: String, public_key_y: String) -> Result<WasmPublicKey, JsValue>
 crates/wasm/src/types.rs: wasm_bindgen(js_name=publicKeyHex) | pub fn public_key_hex(&self) -> Result<String, JsValue>
 crates/wasm/src/types.rs: pub enum WasmTxType { Fund = 0; Transfer = 1; Rollover = 2; Withdraw = 3; Ragequit = 4 }
-crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmNostrKeypair { pub private_key: String; pub public_key: String }
+crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmNostrKeypair { #[serde(skip_serializing)] pub private_key: String; pub public_key: String }
 crates/wasm/src/types.rs: impl WasmNostrKeypair {
 crates/wasm/src/types.rs: wasm_bindgen(constructor) | pub fn new(private_key: String, public_key: String) -> Self
 crates/wasm/src/types.rs: wasm_bindgen(getter_with_clone) | pub struct WasmNostrPublicKey { pub public_key: String }
