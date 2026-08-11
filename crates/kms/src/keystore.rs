@@ -4,8 +4,8 @@
 //! - A krusty-kms native keystore format (version 1, XChaCha20-Poly1305 + scrypt)
 //! - Decryption of ethers.js / Web3 Secret Storage keystores (version 3, AES-128-CTR + scrypt)
 
+use aes::cipher::{KeyIvInit, StreamCipher};
 use aes::Aes128;
-use ctr::cipher::{KeyIvInit, StreamCipher};
 use krusty_kms_common::{KmsError, Result};
 use scrypt::{scrypt, Params as ScryptParams};
 use sha3::{Digest, Keccak256};
@@ -283,8 +283,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid mac hex: {e}")))?;
 
-    // `Aes128Ctr::new` converts the IV with `GenericArray::from_slice`, which asserts
-    // on a length mismatch. Checked here so a short IV errors instead of aborting.
+    // Validate IV length before KDF so a short IV yields a clear error instead of
+    // failing later inside AES-128-CTR initialization.
     if iv.len() != V3_IV_LEN {
         return Err(KmsError::DeserializationError(format!(
             "Invalid cipherparams.iv length: expected {V3_IV_LEN} bytes, got {}",
@@ -320,7 +320,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     // Decrypt with AES-128-CTR using the first 16 bytes of the derived key. `Zeroizing`
     // because this buffer becomes the private key in place -- the higher-value secret.
     let mut plaintext = Zeroizing::new(std::mem::take(&mut ciphertext));
-    let mut stream = Aes128Ctr::new(aes_key.into(), iv.as_slice().into());
+    let mut stream =
+        Aes128Ctr::new_from_slices(aes_key, &iv).expect("AES-128-CTR key/IV lengths validated");
     stream.apply_keystream(&mut plaintext);
 
     Ok(hex::encode(&*plaintext))
@@ -439,9 +440,8 @@ mod tests {
 
     #[test]
     fn decrypt_ethers_keystore_rejects_bad_iv_length_without_panicking() {
-        // `Aes128Ctr::new` converts the IV with `GenericArray::from_slice`, which
-        // asserts on a length mismatch. Asserting on the message, not just `is_err`,
-        // so the case cannot pass for an unrelated reason.
+        // IV length is validated before KDF/cipher init. Assert on the message, not
+        // just `is_err`, so the case cannot pass for an unrelated reason.
         for iv_len in [0usize, 8, 15, 17, 32] {
             let err = decrypt_ethers_keystore(&ethers_keystore_with(32, iv_len), &test_password(0))
                 .expect_err("must be rejected");
@@ -499,7 +499,7 @@ mod tests {
         // Encrypt with AES-128-CTR
         let aes_key = &derived_key[..16];
         let mut ciphertext = private_key_bytes.clone();
-        let mut cipher = Aes128Ctr::new(aes_key.into(), iv.as_slice().into());
+        let mut cipher = Aes128Ctr::new_from_slices(aes_key, &iv).unwrap();
         cipher.apply_keystream(&mut ciphertext);
 
         // Compute MAC
