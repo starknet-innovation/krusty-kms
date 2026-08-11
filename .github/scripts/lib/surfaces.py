@@ -595,6 +595,194 @@ def extract_public_surface(text: str) -> frozenset[str]:
     return frozenset(surface)
 
 
+_CRATE_SRC_PATH_RE = re.compile(r"^crates/([^/]+)/src/(.+)\.rs$")
+_PUB_MOD_DECL_RE = re.compile(
+    r"^\s*(?:#\[[^\]]*\]\s*)*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))mod\s+(\w+)"
+)
+_MOD_DECL_RE = re.compile(r"^\s*(?:#\[[^\]]*\]\s*)*mod\s+(\w+)")
+_PUB_USE_START_RE = re.compile(
+    r"^\s*(?:#\[[^\]]*\]\s*)*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))use\s+"
+)
+
+
+def _module_path_from_rel(rel_path: str) -> str | None:
+    match = _CRATE_SRC_PATH_RE.match(rel_path)
+    if not match:
+        return None
+    rest = match.group(2)
+    if rest in ("lib", "main"):
+        return ""
+    if rest.endswith("/mod"):
+        return rest[: -len("/mod")]
+    return rest
+
+
+def _crate_src_dir_from_rel(rel_path: str, root: Path) -> Path | None:
+    match = _CRATE_SRC_PATH_RE.match(rel_path)
+    if not match:
+        return None
+    return root / "crates" / match.group(1) / "src"
+
+
+def _resolve_mod_file(src_dir: Path, parent_path: str, mod_name: str) -> Path | None:
+    if parent_path:
+        parent_dir = src_dir / parent_path
+        candidates = (parent_dir / f"{mod_name}.rs", parent_dir / mod_name / "mod.rs")
+    else:
+        candidates = (src_dir / f"{mod_name}.rs", src_dir / mod_name / "mod.rs")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _parse_mod_declarations(text: str) -> list[tuple[str, bool, bool]]:
+    """Return ``(name, is_public, has_external_file)`` for each ``mod`` declaration."""
+    decls: list[tuple[str, bool, bool]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        pub_match = _PUB_MOD_DECL_RE.match(line)
+        if pub_match:
+            external = ";" in stripped.split("{", 1)[0]
+            decls.append((pub_match.group(1), True, external))
+            continue
+        mod_match = _MOD_DECL_RE.match(line)
+        if mod_match and not pub_match:
+            external = ";" in stripped.split("{", 1)[0]
+            decls.append((mod_match.group(1), False, external))
+    return decls
+
+
+def _resolve_qualified_path(segments: list[str], module_path: str) -> list[str]:
+    if not segments:
+        return []
+    if segments[0] == "crate":
+        return _resolve_qualified_path(segments[1:], "")
+    if segments[0] == "self":
+        base = module_path.split("/") if module_path else []
+        return base + _resolve_qualified_path(segments[1:], module_path)
+    if segments[0] == "super":
+        base = module_path.split("/") if module_path else []
+        if base:
+            base = base[:-1]
+        return base + _resolve_qualified_path(segments[1:], module_path)
+    base = module_path.split("/") if module_path else []
+    return base + segments
+
+
+def _use_statement_module_paths(use_stmt: str, module_path: str) -> set[str]:
+    body = re.sub(r"^\s*(?:#\[[^\]]*\]\s*)*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))use\s+", "", use_stmt)
+    body = body.strip().rstrip(";").strip()
+    if not body:
+        return set()
+
+    brace_idx = body.find("{")
+    if brace_idx >= 0:
+        path_part = body[:brace_idx].rstrip()
+    else:
+        path_part = re.sub(r"\s+as\s+\w+\s*$", "", body).strip()
+
+    segments = [part.strip() for part in path_part.split("::") if part.strip()]
+    if not segments:
+        return set()
+
+    resolved = _resolve_qualified_path(segments, module_path)
+    if brace_idx < 0 and len(resolved) >= 2 and resolved[-1][0].isupper():
+        resolved = resolved[:-1]
+    if not resolved:
+        return set()
+
+    paths: set[str] = set()
+    for i in range(1, len(resolved) + 1):
+        paths.add("/".join(resolved[:i]))
+    return paths
+
+
+def _collect_pub_use_module_paths(text: str, module_path: str) -> set[str]:
+    lines = text.splitlines()
+    paths: set[str] = set()
+    idx = 0
+    while idx < len(lines):
+        if not _PUB_USE_START_RE.match(lines[idx]):
+            idx += 1
+            continue
+        parts = [lines[idx].strip()]
+        while idx + 1 < len(lines) and ";" not in parts[-1]:
+            idx += 1
+            parts.append(lines[idx].strip())
+        stmt = " ".join(parts)
+        paths.update(_use_statement_module_paths(stmt, module_path))
+        idx += 1
+    return paths
+
+
+class _CrateExportIndex:
+    """Module reachability and ``pub use`` export map for one crate ``src/`` tree."""
+
+    def __init__(self, src_dir: Path) -> None:
+        self.src_dir = src_dir
+        self._public_reachable: set[str] = set()
+        self._export_touched: set[str] = set()
+        root_rs = src_dir / "lib.rs"
+        if not root_rs.is_file():
+            root_rs = src_dir / "main.rs"
+        if root_rs.is_file():
+            self._walk_module("", root_rs, is_public=True)
+
+    def is_exported_file(self, rel_path: str) -> bool:
+        module_path = _module_path_from_rel(rel_path)
+        if module_path is None:
+            return False
+        if module_path == "":
+            return True
+        if module_path in self._public_reachable:
+            return True
+        return module_path in self._export_touched
+
+    def _walk_module(self, module_path: str, file_path: Path, *, is_public: bool) -> None:
+        if is_public:
+            self._public_reachable.add(module_path)
+        text = file_path.read_text()
+        if is_public:
+            self._export_touched.update(_collect_pub_use_module_paths(text, module_path))
+        for name, child_public, external in _parse_mod_declarations(text):
+            child_path = f"{module_path}/{name}" if module_path else name
+            if not external:
+                continue
+            child_file = _resolve_mod_file(self.src_dir, module_path, name)
+            if child_file is None:
+                continue
+            self._walk_module(
+                child_path,
+                child_file,
+                is_public=is_public and child_public,
+            )
+
+
+_export_index_cache: dict[str, _CrateExportIndex] = {}
+
+
+def _export_index_for_file(rel_path: str, root: Path) -> _CrateExportIndex | None:
+    src_dir = _crate_src_dir_from_rel(rel_path, root)
+    if src_dir is None:
+        return None
+    key = str(src_dir.resolve())
+    if key not in _export_index_cache:
+        _export_index_cache[key] = _CrateExportIndex(src_dir)
+    return _export_index_cache[key]
+
+
+def is_exported_crate_source(rel_path: str, root: Path | None = None) -> bool:
+    """Return True when ``rel_path`` is part of the crate's exported module surface."""
+    repo = root or repo_root()
+    index = _export_index_for_file(rel_path, repo)
+    if index is None:
+        return False
+    return index.is_exported_file(rel_path)
+
+
 def public_api_change_reasons(
     base_ref: str,
     files: list[str],
@@ -603,8 +791,11 @@ def public_api_change_reasons(
 ) -> list[str]:
     """Return design-note trigger reasons for changed production ``src/**/*.rs`` files."""
     repo = root or repo_root()
+    _export_index_cache.clear()
     reasons: list[str] = []
     for rel in files:
+        if not is_exported_crate_source(rel, repo):
+            continue
         try:
             base_text = subprocess.check_output(
                 ["git", "show", f"{base_ref}:{rel}"],
@@ -994,6 +1185,61 @@ pub enum KmsError {
 """.strip()
     enum_struct_changed = enum_struct.replace("message: String", "message: Felt")
     assert extract_public_surface(enum_struct) != extract_public_surface(enum_struct_changed)
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        src = root / "crates/synthetic/src"
+        src.mkdir(parents=True)
+        (src / "lib.rs").write_text(
+            "\n".join(
+                [
+                    "mod wallet;",
+                    "pub use wallet::Wallet;",
+                    "pub mod discovery;",
+                ]
+            )
+            + "\n"
+        )
+        wallet_dir = src / "wallet"
+        wallet_dir.mkdir()
+        (wallet_dir / "mod.rs").write_text(
+            "\n".join(
+                [
+                    "pub mod utils;",
+                    "pub struct Wallet;",
+                ]
+            )
+            + "\n"
+        )
+        (wallet_dir / "utils.rs").write_text("pub fn foo() {}\n")
+        (src / "discovery.rs").write_text("pub fn discover() {}\n")
+
+        rel_utils = "crates/synthetic/src/wallet/utils.rs"
+        rel_wallet_mod = "crates/synthetic/src/wallet/mod.rs"
+        rel_discovery = "crates/synthetic/src/discovery.rs"
+        rel_lib = "crates/synthetic/src/lib.rs"
+
+        assert not is_exported_crate_source(rel_utils, root)
+        assert is_exported_crate_source(rel_wallet_mod, root)
+        assert is_exported_crate_source(rel_discovery, root)
+        assert is_exported_crate_source(rel_lib, root)
+
+        utils_text = (wallet_dir / "utils.rs").read_text()
+        wallet_text = (wallet_dir / "mod.rs").read_text()
+        wallet_changed = wallet_text.replace("pub struct Wallet;", "pub struct WalletV2;")
+        assert extract_public_surface("") != extract_public_surface(utils_text)
+        assert not is_exported_crate_source(rel_utils, root)
+        assert is_exported_crate_source(rel_wallet_mod, root)
+        assert extract_public_surface(wallet_text) != extract_public_surface(wallet_changed)
+
+        client_utils = "crates/client/src/wallet/utils.rs"
+        client_wallet_mod = "crates/client/src/wallet/mod.rs"
+        client_discovery = "crates/client/src/discovery.rs"
+        assert not is_exported_crate_source(client_utils, repo_root())
+        assert is_exported_crate_source(client_wallet_mod, repo_root())
+        assert is_exported_crate_source(client_discovery, repo_root())
 
 
 def _assert_file_size_ratchet_checks() -> None:

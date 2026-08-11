@@ -46,7 +46,18 @@ jobs:
           fetch-depth: 0
 
       - name: File-size ratchet
-        run: bash .github/scripts/check-file-size-ratchet.sh
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF:-}" ]]; then
+            export GUARDRAILS_BASE_REF="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags origin "${BEFORE_SHA}" || true
+            export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
+          fi
+          bash .github/scripts/check-file-size-ratchet.sh
 
       - name: Dependency layering
         run: bash .github/scripts/check-dependency-layers.sh
@@ -77,12 +88,21 @@ jobs:
         run: bash .github/scripts/check-pr-size.sh
 
       - name: Design note for public-surface changes
-        if: github.event_name == 'pull_request'
         env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
           GUARDRAILS_FAIL_CLOSED: "1"
-        run: bash .github/scripts/check-design-note.sh
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF:-}" ]]; then
+            export GUARDRAILS_BASE_REF="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags origin "${BEFORE_SHA}" || true
+            export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
+          fi
+          bash .github/scripts/check-design-note.sh
 
   deny:
     name: cargo-deny
