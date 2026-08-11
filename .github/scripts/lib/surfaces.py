@@ -605,22 +605,69 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
 
 
 def _collect_preceding_cfg_attrs(lines: list[str], start: int) -> str:
-    """Return contiguous ``#[cfg(...)]`` attribute lines immediately above ``start``."""
-    attrs: list[str] = []
+    """Return ``#[cfg(...)]`` attrs above ``start``, walking through other attrs."""
+    cfg_attrs: list[str] = []
     i = start - 1
+
     while i >= 0:
         stripped = lines[i].strip()
-        if not stripped:
+        if not stripped or stripped.startswith("//"):
             i -= 1
             continue
-        if _CFG_ATTR_RE.match(stripped):
-            attrs.insert(0, stripped)
-            i -= 1
-            continue
+
         if stripped.startswith("#["):
+            attr_parts = [stripped]
+            k = i + 1
+            while not _attr_is_complete(" ".join(attr_parts)) and k < start:
+                nxt = lines[k].strip()
+                if nxt:
+                    attr_parts.append(nxt)
+                k += 1
+            attr = _normalize_ws(" ".join(attr_parts))
+            if _CFG_ATTR_RE.match(attr):
+                cfg_attrs.insert(0, attr)
+            i -= 1
+            continue
+
+        # Multiline attribute tail (e.g. ``)]`` from ``#[derive(...)]``): find its ``#[``.
+        end = i
+        j = i
+        found_start = False
+        while j >= 0:
+            candidate = lines[j].strip()
+            if not candidate or candidate.startswith("//"):
+                j -= 1
+                continue
+            if candidate.startswith("#["):
+                found_start = True
+                break
+            if (
+                candidate.startswith("pub ")
+                or candidate.startswith("fn ")
+                or candidate.startswith("struct ")
+                or candidate.startswith("enum ")
+                or candidate.startswith("trait ")
+                or candidate.startswith("impl ")
+                or candidate.startswith("}")
+                or candidate.startswith("mod ")
+                or candidate.endswith(";")
+            ):
+                break
+            j -= 1
+        if not found_start:
             break
-        break
-    return "\n".join(attrs)
+        attr = _normalize_ws(
+            " ".join(
+                lines[k].strip()
+                for k in range(j, end + 1)
+                if lines[k].strip() and not lines[k].strip().startswith("//")
+            )
+        )
+        if _CFG_ATTR_RE.match(attr):
+            cfg_attrs.insert(0, attr)
+        i = j - 1
+
+    return "\n".join(cfg_attrs)
 
 
 def extract_public_surface(text: str) -> frozenset[str]:
@@ -1671,6 +1718,31 @@ pub use multisig::NatsMultisigCoordinator;
     no_cfg_use = "pub use multisig::NatsMultisigCoordinator;"
     assert extract_public_surface(cfg_use) != extract_public_surface(no_cfg_use)
     assert any('#[cfg(feature = "nats")]' in s for s in extract_public_surface(cfg_use))
+
+    cfg_through_derive = """
+#[cfg(feature = "x")]
+#[derive(Debug)]
+pub struct Foo;
+""".strip()
+    cfg_through_multiline_derive = """
+#[cfg(feature = "x")]
+#[derive(
+    Debug,
+)]
+pub struct Foo;
+""".strip()
+    no_cfg_struct = """
+#[derive(Debug)]
+pub struct Foo;
+""".strip()
+    assert any('#[cfg(feature = "x")]' in s for s in extract_public_surface(cfg_through_derive))
+    assert any(
+        '#[cfg(feature = "x")]' in s for s in extract_public_surface(cfg_through_multiline_derive)
+    )
+    assert extract_public_surface(cfg_through_derive) != extract_public_surface(no_cfg_struct)
+    assert extract_public_surface(cfg_through_derive) != extract_public_surface(
+        cfg_through_derive.replace('feature = "x"', 'feature = "y"')
+    )
 
     mod_a = """
 pub mod secret_felt;
