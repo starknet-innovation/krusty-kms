@@ -3,7 +3,7 @@
 use crate::abi::tongo_events;
 use crate::types::{AEBalance, CipherBalance};
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::types::{BlockId, BlockTag, EmittedEvent, EventFilter};
+use starknet_rust::core::types::{AddressFilter, BlockId, BlockTag, EmittedEvent, EventFilter};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::Provider;
 use starknet_types_core::curve::ProjectivePoint;
@@ -240,7 +240,7 @@ impl TongoEventReader {
             to_block: to_block
                 .map(BlockId::Number)
                 .or(Some(BlockId::Tag(BlockTag::Latest))),
-            address: Some(self.contract_address),
+            address: Some(AddressFilter::Single(self.contract_address)),
             keys: Some(keys),
         };
 

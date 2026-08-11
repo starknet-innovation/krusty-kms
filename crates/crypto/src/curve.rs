@@ -163,11 +163,13 @@ fn ct_select_felt(choice: Choice, a: &Felt, b: &Felt) -> Felt {
 /// Both `a` and `b` must be valid curve points (including identity). The
 /// selected result is exactly one of the inputs.
 fn ct_select_point(choice: Choice, a: &ProjectivePoint, b: &ProjectivePoint) -> ProjectivePoint {
+    // Both inputs are valid curve points; the selected (x, y, z) is exactly one of them.
     ProjectivePoint::new(
         ct_select_felt(choice, &a.x(), &b.x()),
         ct_select_felt(choice, &a.y(), &b.y()),
         ct_select_felt(choice, &a.z(), &b.z()),
     )
+    .expect("ct_select_point selects between two valid ProjectivePoint values")
 }
 
 #[cfg(test)]

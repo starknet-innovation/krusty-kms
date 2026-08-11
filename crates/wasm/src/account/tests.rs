@@ -248,7 +248,7 @@ fn test_nostr_keypair_deterministic() {
 
 #[wasm_bindgen_test]
 fn test_derive_argent_account_address() {
-    let pk = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    let pk = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
     let addr = derive_argent_account_address(pk, None).unwrap();
     assert!(addr.starts_with("0x"));
     assert_ne!(addr, "0x0");
@@ -256,7 +256,7 @@ fn test_derive_argent_account_address() {
 
 #[wasm_bindgen_test]
 fn test_derive_braavos_account_address() {
-    let pk = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    let pk = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
     let addr = derive_braavos_account_address(pk, None).unwrap();
     assert!(addr.starts_with("0x"));
     assert_ne!(addr, "0x0");
@@ -264,7 +264,7 @@ fn test_derive_braavos_account_address() {
 
 #[wasm_bindgen_test]
 fn test_different_account_types_different_addresses() {
-    let pk = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
+    let pk = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
     let argent_addr = derive_argent_account_address(pk, None).unwrap();
     let braavos_addr = derive_braavos_account_address(pk, None).unwrap();
     assert_ne!(argent_addr, braavos_addr);
