@@ -21,6 +21,11 @@ if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
   git fetch --no-tags origin "${GITHUB_BASE_REF:-main}" || true
 fi
 
+if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
+  echo "base ref unavailable; running file-size ratchet without new-file base comparison"
+  base_ref=""
+fi
+
 if [[ ! -f "$baseline_path" ]]; then
   echo "::error::missing file-size baseline at $baseline_path"
   exit 1

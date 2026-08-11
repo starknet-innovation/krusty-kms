@@ -239,7 +239,7 @@ _PUB_FN_RE = re.compile(
 _FIELD_DECL_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))([\w]+)\s*:\s*(.+?)\s*,?\s*$"
 )
-_ENUM_VARIANT_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(=\s*[^,{]+)?\s*,?\s*$")
+_ENUM_VARIANT_START_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(.*)$")
 _UNRESTRICTED_PUB_ITEM_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
     r"(?:async\s+)?(?:unsafe\s+)?(?:const\s+)?"
@@ -277,6 +277,51 @@ def _is_field_declaration(line: str) -> bool:
 
 def _is_pub_fn_declaration(line: str) -> bool:
     return bool(_PUB_FN_RE.match(line))
+
+
+def _collect_enum_variant_signature(
+    lines: list[str], line_idx: int
+) -> tuple[str, int]:
+    """Parse one enum variant; return ``(normalized fingerprint, last line index)``."""
+    stripped = lines[line_idx].strip()
+    m = _ENUM_VARIANT_START_RE.match(stripped)
+    if not m:
+        return "", line_idx
+
+    name = m.group(1)
+    rest = m.group(2).strip().rstrip(",")
+
+    if not rest:
+        return name, line_idx
+
+    if rest.startswith("="):
+        return _normalize_ws(f"{name} {rest}"), line_idx
+
+    if rest.startswith("("):
+        parts = [rest]
+        depth = _paren_depth(rest)
+        j = line_idx
+        while depth > 0 and j + 1 < len(lines):
+            j += 1
+            nxt = lines[j].strip()
+            parts.append(nxt)
+            depth += _paren_depth(nxt)
+        payload = _normalize_ws(" ".join(parts)).rstrip(",")
+        return _normalize_ws(f"{name}{payload}"), j
+
+    if rest.startswith("{"):
+        parts = [rest]
+        depth = _brace_delta(rest)
+        j = line_idx
+        while depth > 0 and j + 1 < len(lines):
+            j += 1
+            nxt = lines[j].strip()
+            parts.append(nxt)
+            depth += _brace_delta(nxt)
+        payload = _normalize_ws(" ".join(parts)).rstrip(",")
+        return _normalize_ws(f"{name} {payload}"), j
+
+    return name, line_idx
 
 
 def _find_impl_block_end(lines: list[str], impl_line: int) -> int:
@@ -347,47 +392,75 @@ def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[st
     fields: list[str] = []
     depth = 0
     pending_attrs: list[str] = []
+    j = open_line
 
-    for j in range(open_line, len(lines)):
+    while j < len(lines):
         line = lines[j]
         stripped = line.strip()
 
         if depth == 0:
             if "{" not in line:
+                j += 1
                 continue
             depth += _brace_delta(line)
             if depth <= 0:
                 break
+            j += 1
             continue
 
         if stripped.startswith("#["):
             pending_attrs.append(stripped)
+            j += 1
             continue
 
         if not stripped or stripped.startswith("//"):
+            j += 1
             continue
 
-        depth += _brace_delta(line)
-        if depth <= 0:
-            break
-
         if kind == "struct":
+            depth += _brace_delta(line)
+            if depth <= 0:
+                break
             m = _FIELD_DECL_RE.match(line)
             if not m:
                 pending_attrs = []
+                j += 1
                 continue
             name, typ = m.group(1), m.group(2).rstrip(",").strip()
             field_sig = f"pub {name}: {typ}"
             fields.append(_format_field("\n".join(pending_attrs), field_sig))
             pending_attrs = []
+            j += 1
             continue
 
-        m = _ENUM_VARIANT_RE.match(line)
-        if m and not stripped.startswith("pub"):
-            variant = m.group(1)
-            value = (m.group(2) or "").strip()
-            fields.append(_normalize_ws(f"{variant}{(' ' + value) if value else ''}"))
+        if stripped.startswith("pub"):
             pending_attrs = []
+            depth += _brace_delta(line)
+            if depth <= 0:
+                break
+            j += 1
+            continue
+
+        variant_sig, end_j = _collect_enum_variant_signature(lines, j)
+        if variant_sig:
+            fields.append(variant_sig)
+            pending_attrs = []
+            for k in range(j, end_j + 1):
+                depth += _brace_delta(lines[k])
+                if depth <= 0:
+                    j = end_j + 1
+                    break
+            else:
+                j = end_j + 1
+            if depth <= 0:
+                break
+            continue
+
+        pending_attrs = []
+        depth += _brace_delta(line)
+        if depth <= 0:
+            break
+        j += 1
 
     return fields
 
@@ -891,6 +964,36 @@ pub mod other;
     assert "pub mod secret_felt;" in surface_a
     assert "pub mod other;" in surface_a
     assert surface_a == surface_c
+
+    enum_unit_and_tuple = """
+pub enum KmsError {
+    Other,
+    InvalidPublicKey(String),
+}
+""".strip()
+    enum_tuple_felt = enum_unit_and_tuple.replace("InvalidPublicKey(String)", "InvalidPublicKey(Felt)")
+    enum_surface_string = extract_public_surface(enum_unit_and_tuple)
+    enum_surface_felt = extract_public_surface(enum_tuple_felt)
+    assert enum_surface_string != enum_surface_felt
+    assert "InvalidPublicKey(String)" in next(
+        s for s in enum_surface_string if s.startswith("pub enum KmsError")
+    )
+    assert "InvalidPublicKey(Felt)" in next(
+        s for s in enum_surface_felt if s.startswith("pub enum KmsError")
+    )
+    assert "Other" in next(s for s in enum_surface_string if s.startswith("pub enum KmsError"))
+
+    enum_struct = """
+pub enum KmsError {
+    Other,
+    Detailed {
+        code: u32,
+        message: String,
+    },
+}
+""".strip()
+    enum_struct_changed = enum_struct.replace("message: String", "message: Felt")
+    assert extract_public_surface(enum_struct) != extract_public_surface(enum_struct_changed)
 
 
 def _assert_file_size_ratchet_checks() -> None:
