@@ -57,7 +57,7 @@ rand = "0.10"
 rand_core = "0.10.1"
 rayon = "1.10.0"
 proptest = "1.6.0"
-criterion = "0.5.1"
+criterion = "0.8.2"
 tokio = "1.43.0"
 zeroize = { version = "1.8", features = ["derive"] }
 subtle = "2.6"
