@@ -35,7 +35,7 @@ serde_json.workspace = true
 hex.workspace = true
 rand.workspace = true
 rand_core.workspace = true
-k256 = { version = "0.13", features = ["ecdsa"] }
+k256 = { version = "0.14", features = ["ecdsa"] }
 starknet-crypto = { package = "starknet-rust-crypto", version = "0.9" }
 zeroize.workspace = true
 subtle.workspace = true
