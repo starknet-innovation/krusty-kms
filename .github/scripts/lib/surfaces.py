@@ -239,6 +239,12 @@ _PUB_FN_RE = re.compile(
 _FIELD_DECL_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))([\w]+)\s*:\s*(.+?)\s*,?\s*$"
 )
+_FIELD_START_RE = re.compile(
+    r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))([\w]+)\s*:\s*(.*)$"
+)
+_INLINE_MOD_RE = re.compile(
+    r"^\s*(?:pub\s+(?:\([^)]*\)\s+)?)?mod\s+(\w+)\b(.*)$"
+)
 _ENUM_VARIANT_START_RE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(.*)$")
 _UNRESTRICTED_PUB_ITEM_RE = re.compile(
     r"^\s*pub\s+(?!(?:\(crate\)|\(super\)|\(in\b))"
@@ -278,11 +284,20 @@ def _brace_delta(text: str) -> int:
 
 
 def _is_field_declaration(line: str) -> bool:
-    return bool(_FIELD_DECL_RE.match(line))
+    return bool(_FIELD_DECL_RE.match(line)) or bool(_FIELD_START_RE.match(line))
 
 
 def _is_pub_fn_declaration(line: str) -> bool:
     return bool(_PUB_FN_RE.match(line))
+
+
+def _type_delim_balanced(text: str) -> bool:
+    """Return True when ``<>``, ``()``, and ``[]`` delimiters are balanced."""
+    return (
+        text.count("<") == text.count(">")
+        and text.count("(") == text.count(")")
+        and text.count("[") == text.count("]")
+    )
 
 
 def _attr_is_complete(attr: str) -> bool:
@@ -416,6 +431,36 @@ def _format_field(attrs: str, signature: str) -> str:
     return signature
 
 
+def _collect_struct_field_signature(
+    lines: list[str], start: int
+) -> tuple[str | None, int]:
+    """Collect a pub struct field type, including multiline generic continuations."""
+    match = _FIELD_START_RE.match(lines[start])
+    if not match:
+        return None, start
+    name = match.group(1)
+    parts = [match.group(2)]
+    end = start
+    while end < len(lines):
+        typ = _normalize_ws(" ".join(part.strip() for part in parts))
+        typ_body = typ.rstrip(",").strip()
+        if typ_body and _type_delim_balanced(typ_body):
+            return f"pub {name}: {typ_body}", end
+        end += 1
+        if end >= len(lines):
+            break
+        nxt = lines[end].strip()
+        if not nxt or nxt.startswith("//"):
+            continue
+        if nxt.startswith("#") or nxt.startswith("}"):
+            break
+        parts.append(nxt)
+    typ = _normalize_ws(" ".join(part.strip() for part in parts)).rstrip(",").strip()
+    if not typ:
+        return None, start
+    return f"pub {name}: {typ}", max(start, end)
+
+
 def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[str]:
     """Collect normalized pub struct fields or enum variants from a type body."""
     fields: list[str] = []
@@ -446,17 +491,23 @@ def _collect_type_fields(lines: list[str], open_line: int, kind: str) -> list[st
             continue
 
         if kind == "struct":
+            field_sig, end_j = _collect_struct_field_signature(lines, j)
+            if field_sig:
+                fields.append(_format_field("\n".join(pending_attrs), field_sig))
+                pending_attrs = []
+                for k in range(j, end_j + 1):
+                    depth += _brace_delta(lines[k])
+                    if depth <= 0:
+                        j = end_j + 1
+                        break
+                else:
+                    j = end_j + 1
+                if depth <= 0:
+                    break
+                continue
             depth += _brace_delta(line)
             if depth <= 0:
                 break
-            m = _FIELD_DECL_RE.match(line)
-            if not m:
-                pending_attrs = []
-                j += 1
-                continue
-            name, typ = m.group(1), m.group(2).rstrip(",").strip()
-            field_sig = f"pub {name}: {typ}"
-            fields.append(_format_field("\n".join(pending_attrs), field_sig))
             pending_attrs = []
             j += 1
             continue
@@ -770,19 +821,39 @@ def extract_public_surface(text: str) -> frozenset[str]:
     """Canonical fingerprint of unrestricted ``pub`` API items in Rust source."""
     lines = text.splitlines()
     surface: set[str] = set()
+    depth = 0
+    # ``(body_depth, mod_name)`` for enclosing inline ``mod`` blocks.
+    mod_stack: list[tuple[int, str]] = []
+
     for i, line in enumerate(lines):
-        if not _UNRESTRICTED_PUB_ITEM_RE.match(line):
-            continue
-        sig = _collect_rust_signature(lines, i)
-        if not sig:
-            continue
-        cfg_attrs = _collect_preceding_api_attrs(lines, i)
-        if cfg_attrs:
-            sig = f"{cfg_attrs} {sig}"
-        impl_type = _enclosing_inherent_impl_type(lines, i)
-        if impl_type and re.search(r"\bfn\b", sig):
-            sig = f"impl {impl_type} {{ {sig} }}"
-        surface.add(sig)
+        inline_mod_name: str | None = None
+        mod_match = _INLINE_MOD_RE.match(line)
+        if mod_match:
+            rest = mod_match.group(2).split("//", 1)[0]
+            if "{" in rest and ";" not in rest.split("{", 1)[0]:
+                inline_mod_name = mod_match.group(1)
+
+        if _UNRESTRICTED_PUB_ITEM_RE.match(line):
+            sig = _collect_rust_signature(lines, i)
+            if sig:
+                cfg_attrs = _collect_preceding_api_attrs(lines, i)
+                if cfg_attrs:
+                    sig = f"{cfg_attrs} {sig}"
+                impl_type = _enclosing_inherent_impl_type(lines, i)
+                if impl_type and re.search(r"\bfn\b", sig):
+                    sig = f"impl {impl_type} {{ {sig} }}"
+                if mod_stack:
+                    prefix = "::".join(name for _, name in mod_stack)
+                    sig = f"{prefix}::{sig}"
+                surface.add(sig)
+
+        depth_before = depth
+        depth += _brace_delta(line)
+        if inline_mod_name is not None:
+            mod_stack.append((depth_before + 1, inline_mod_name))
+        while mod_stack and depth < mod_stack[-1][0]:
+            mod_stack.pop()
+
     return frozenset(surface)
 
 
@@ -2300,6 +2371,39 @@ pub struct Foo;
 """.strip()
     derive_changed = derive_only.replace("Debug", "Debug, Clone")
     assert extract_public_surface(derive_only) != extract_public_surface(derive_changed)
+
+    multiline_field = """
+pub struct Container {
+    pub items: Vec<
+        Felt
+    >,
+}
+""".strip()
+    multiline_field_changed = multiline_field.replace("Felt", "String")
+    assert any("Vec< Felt >" in s or "Vec<Felt>" in s for s in extract_public_surface(multiline_field))
+    assert extract_public_surface(multiline_field) != extract_public_surface(
+        multiline_field_changed
+    )
+
+    inline_mods = """
+pub mod erc20 {
+    pub static TRANSFER: u8 = 1;
+}
+pub mod tongo {
+    pub static TRANSFER: u8 = 1;
+}
+""".strip()
+    inline_mods_removed = """
+pub mod erc20 {
+    pub static TRANSFER: u8 = 1;
+}
+pub mod tongo {
+}
+""".strip()
+    inline_surface = extract_public_surface(inline_mods)
+    assert "erc20::pub static TRANSFER: u8 = 1;" in inline_surface
+    assert "tongo::pub static TRANSFER: u8 = 1;" in inline_surface
+    assert extract_public_surface(inline_mods) != extract_public_surface(inline_mods_removed)
 
     inherent_src = """
 pub struct StarknetGatewayBackend;
