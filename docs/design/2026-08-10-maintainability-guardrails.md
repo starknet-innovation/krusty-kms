@@ -90,4 +90,7 @@ After rebasing onto main's 0.9.0 security-hardening release:
   baselining cannot waive that cap for paths absent from the base baseline.
 - Regenerator sync: grandfather `crates/wasm/src/discovery.rs` (420) from main
   and shrink the `sdk/src/operations.rs` ratchet to its post-merge size (1549).
+- Design-note fingerprints: inherent `pub const` on re-exported types; skip
+  private/`#[cfg(test)]` inline modules (incl. fallback pub diff); multiline
+  return-type generics; `cfg_attr` as API-bearing; nested `pub use` groups.
 

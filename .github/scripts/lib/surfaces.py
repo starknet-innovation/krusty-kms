@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 import subprocess
@@ -261,7 +262,7 @@ _UNRESTRICTED_PUB_DIFF_RE = re.compile(
 )
 _CFG_ATTR_RE = re.compile(r"^#\[cfg\b")
 _API_BEARING_ATTR_RE = re.compile(
-    r"^#\[(?:cfg|derive|serde|repr|non_exhaustive)\b"
+    r"^#\[(?:cfg_attr|cfg|derive|serde|repr|non_exhaustive)\b"
 )
 
 
@@ -277,6 +278,12 @@ def _normalize_ws(text: str) -> str:
 
 def _paren_depth(text: str) -> int:
     return text.count("(") - text.count(")")
+
+
+def _generic_depth(text: str) -> int:
+    # ``->`` must not count as a generic closer.
+    cleaned = text.replace("->", " ")
+    return cleaned.count("<") - cleaned.count(">")
 
 
 def _brace_delta(text: str) -> int:
@@ -668,7 +675,7 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
             return _normalize_ws(" ".join(parts))
         parts.append(line)
         combined = " ".join(parts)
-        if ";" in line and _paren_depth(combined) == 0:
+        if ";" in line and _paren_depth(combined) == 0 and _generic_depth(combined) <= 0:
             return _normalize_ws(combined)
         if "(" in combined and _paren_depth(combined) == 0:
             nxt = lines[j + 1].strip() if j + 1 < len(lines) else ""
@@ -678,6 +685,12 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
                 line == "where" or line.endswith(",") or line.endswith(":")
             ):
                 continue
+            # Keep collecting while a multiline return type's generics/parens
+            # remain open (e.g. ``-> Result<\n Felt,\n>``).
+            if "->" in combined:
+                after_arrow = combined.split("->", 1)[1]
+                if _generic_depth(combined) > 0 or _paren_depth(after_arrow) > 0:
+                    continue
             return _normalize_ws(combined)
     return _normalize_ws(" ".join(parts))
 
@@ -817,40 +830,117 @@ def _enclosing_inherent_impl_type(lines: list[str], idx: int) -> str | None:
     return None
 
 
+def _preceding_has_cfg_test(lines: list[str], idx: int) -> bool:
+    """True if ``idx`` is preceded by a ``#[cfg(test)]`` (or equiv) attribute."""
+    i = idx - 1
+    while i >= 0:
+        stripped = lines[i].strip()
+        if not stripped or stripped.startswith("//"):
+            i -= 1
+            continue
+        if stripped.startswith("#["):
+            attr_parts = [stripped]
+            k = i + 1
+            while not _attr_is_complete(" ".join(attr_parts)) and k < idx:
+                nxt = lines[k].strip()
+                if nxt:
+                    attr_parts.append(nxt)
+                k += 1
+            attr = _normalize_ws(" ".join(attr_parts))
+            if re.search(r"\bcfg\s*\(\s*test\s*\)", attr):
+                return True
+            i -= 1
+            continue
+        break
+    return False
+
+
+def _inline_mod_is_skipped(lines: list[str], idx: int) -> bool:
+    """Skip private and ``#[cfg(test)]`` inline modules when fingerprinting pub API."""
+    line = lines[idx]
+    if _preceding_has_cfg_test(lines, idx):
+        return True
+    # Only unrestricted ``pub mod`` bodies contribute to the public surface.
+    if not re.match(r"^\s*pub\s+(?!\([^)]*\))mod\b", line):
+        return True
+    return False
+
+
+def _blank_skipped_inline_mod_bodies(text: str) -> str:
+    """Blank bodies of private / ``cfg(test)`` inline mods for fallback pub diffs."""
+    lines = text.splitlines(keepends=True)
+    plain = [ln.rstrip("\n") for ln in lines]
+    out: list[str] = []
+    depth = 0
+    # ``(body_depth, skipped)``
+    mod_stack: list[tuple[int, bool]] = []
+
+    for i, raw in enumerate(lines):
+        line = plain[i]
+        inline_mod = False
+        skip_mod = False
+        mod_match = _INLINE_MOD_RE.match(line)
+        if mod_match:
+            rest = mod_match.group(2).split("//", 1)[0]
+            if "{" in rest and ";" not in rest.split("{", 1)[0]:
+                inline_mod = True
+                skip_mod = _inline_mod_is_skipped(plain, i)
+
+        inside_skipped = any(skipped for _, skipped in mod_stack)
+        if inside_skipped:
+            nl = "\n" if raw.endswith("\n") else ""
+            out.append("".join(ch for ch in line if ch in "{}") + nl)
+        else:
+            out.append(raw)
+
+        depth_before = depth
+        depth += _brace_delta(line)
+        if inline_mod:
+            mod_stack.append((depth_before + 1, skip_mod))
+        while mod_stack and depth < mod_stack[-1][0]:
+            mod_stack.pop()
+
+    return "".join(out)
+
+
 def extract_public_surface(text: str) -> frozenset[str]:
     """Canonical fingerprint of unrestricted ``pub`` API items in Rust source."""
     lines = text.splitlines()
     surface: set[str] = set()
     depth = 0
-    # ``(body_depth, mod_name)`` for enclosing inline ``mod`` blocks.
-    mod_stack: list[tuple[int, str]] = []
+    # ``(body_depth, mod_name, skipped)`` for enclosing inline ``mod`` blocks.
+    mod_stack: list[tuple[int, str, bool]] = []
 
     for i, line in enumerate(lines):
         inline_mod_name: str | None = None
+        skip_mod = False
         mod_match = _INLINE_MOD_RE.match(line)
         if mod_match:
             rest = mod_match.group(2).split("//", 1)[0]
             if "{" in rest and ";" not in rest.split("{", 1)[0]:
                 inline_mod_name = mod_match.group(1)
+                skip_mod = _inline_mod_is_skipped(lines, i)
 
-        if _UNRESTRICTED_PUB_ITEM_RE.match(line):
+        inside_skipped = any(skipped for _, _, skipped in mod_stack)
+        if not inside_skipped and _UNRESTRICTED_PUB_ITEM_RE.match(line):
             sig = _collect_rust_signature(lines, i)
             if sig:
                 cfg_attrs = _collect_preceding_api_attrs(lines, i)
                 if cfg_attrs:
                     sig = f"{cfg_attrs} {sig}"
                 impl_type = _enclosing_inherent_impl_type(lines, i)
-                if impl_type and re.search(r"\bfn\b", sig):
+                if impl_type and re.search(r"\b(?:fn|const)\b", sig):
                     sig = f"impl {impl_type} {{ {sig} }}"
-                if mod_stack:
-                    prefix = "::".join(name for _, name in mod_stack)
+                active_mods = [name for _, name, skipped in mod_stack if not skipped]
+                if active_mods:
+                    prefix = "::".join(active_mods)
                     sig = f"{prefix}::{sig}"
                 surface.add(sig)
 
         depth_before = depth
         depth += _brace_delta(line)
         if inline_mod_name is not None:
-            mod_stack.append((depth_before + 1, inline_mod_name))
+            mod_stack.append((depth_before + 1, inline_mod_name, skip_mod))
         while mod_stack and depth < mod_stack[-1][0]:
             mod_stack.pop()
 
@@ -999,7 +1089,22 @@ def _use_statement_targets(
         targets: list[tuple[str, set[str] | None]] = []
         for tok in tokens:
             tok = tok.strip()
-            if not tok or "{" in tok:
+            if not tok:
+                continue
+            if "{" in tok:
+                # Nested group: ``interface::{A, B}`` inside ``backend::{...}``.
+                nested_brace = tok.find("{")
+                nested_path = tok[:nested_brace].strip().rstrip(":")
+                nested_inner = tok[nested_brace + 1 :]
+                nested_close = nested_inner.rfind("}")
+                if nested_close >= 0:
+                    nested_inner = nested_inner[:nested_close]
+                if path_part and nested_path:
+                    full_path = f"{path_part}::{nested_path}"
+                else:
+                    full_path = path_part or nested_path
+                nested_stmt = f"pub use {full_path}::{{{nested_inner}}};"
+                targets.extend(_use_statement_targets(nested_stmt, module_path))
                 continue
             name = _use_source_item_name(tok)
             if not name or name == "*":
@@ -1334,16 +1439,17 @@ def public_api_change_reasons(
         if allowed is not None:
             # Selective re-exports / type-filtered private modules: ignore unrelated pub churn.
             continue
-        try:
-            diff = subprocess.check_output(
-                ["git", "diff", f"{base_ref}...HEAD", "--", rel],
-                cwd=repo,
-                text=True,
-                stderr=subprocess.DEVNULL,
+        # Fallback over texts with private/cfg(test) inline modules blanked so
+        # renaming ``pub`` test helpers cannot force a design note.
+        stripped_diff = "".join(
+            difflib.unified_diff(
+                _blank_skipped_inline_mod_bodies(base_text).splitlines(True),
+                _blank_skipped_inline_mod_bodies(head_text).splitlines(True),
+                fromfile="base",
+                tofile="head",
             )
-        except subprocess.CalledProcessError:
-            diff = ""
-        if _UNRESTRICTED_PUB_DIFF_RE.search(diff):
+        )
+        if _UNRESTRICTED_PUB_DIFF_RE.search(stripped_diff):
             reasons.append(f"new/changed/removed pub items in {rel}")
     return reasons
 
@@ -2922,6 +3028,75 @@ impl Other {
         extract_public_surface(inherent_changed), inherent_allowed
     )
 
+    inherent_const_src = """
+pub struct ProtocolVersion;
+impl ProtocolVersion {
+    pub const V1_0: u8 = 1;
+    pub fn label() -> &'static str { "v1" }
+}
+""".strip()
+    const_filtered = filter_public_surface(
+        extract_public_surface(inherent_const_src), {"ProtocolVersion"}
+    )
+    assert any(
+        "impl ProtocolVersion" in s and "const V1_0" in s for s in const_filtered
+    )
+    assert const_filtered != filter_public_surface(
+        extract_public_surface(
+            inherent_const_src.replace("pub const V1_0: u8 = 1", "pub const V1_0: u8 = 2")
+        ),
+        {"ProtocolVersion"},
+    )
+
+    private_test_mod = """
+pub fn visible() {}
+mod tests {
+    pub fn generator_h() {}
+}
+#[cfg(test)]
+mod cfg_tests {
+    pub fn only_in_tests() {}
+}
+""".strip()
+    private_test_surface = extract_public_surface(private_test_mod)
+    assert any("visible" in s for s in private_test_surface)
+    assert not any("generator_h" in s for s in private_test_surface)
+    assert not any("only_in_tests" in s for s in private_test_surface)
+    renamed_helper = private_test_mod.replace("generator_h", "generator_h2")
+    assert extract_public_surface(private_test_mod) == extract_public_surface(
+        renamed_helper
+    )
+    stripped_diff = "".join(
+        difflib.unified_diff(
+            _blank_skipped_inline_mod_bodies(private_test_mod).splitlines(True),
+            _blank_skipped_inline_mod_bodies(renamed_helper).splitlines(True),
+            fromfile="base",
+            tofile="head",
+        )
+    )
+    assert not _UNRESTRICTED_PUB_DIFF_RE.search(stripped_diff)
+
+    multiline_return = """
+pub fn parse() -> Result<
+    Felt,
+    Error,
+> { unimplemented!() }
+""".strip()
+    multiline_return_changed = multiline_return.replace("Felt,", "String,")
+    assert any("Felt" in s for s in extract_public_surface(multiline_return))
+    assert extract_public_surface(multiline_return) != extract_public_surface(
+        multiline_return_changed
+    )
+
+    cfg_attr_item = """
+#[cfg_attr(feature = "serde", derive(Serialize))]
+pub struct WireFormat;
+""".strip()
+    cfg_attr_changed = cfg_attr_item.replace("Serialize", "Deserialize")
+    cfg_attr_surface = extract_public_surface(cfg_attr_item)
+    assert any("cfg_attr" in s for s in cfg_attr_surface)
+    assert cfg_attr_surface != extract_public_surface(cfg_attr_changed)
+
     multiline_where_impl = """
 pub struct Gateway<B, S>;
 impl<B, S> Gateway<B, S>
@@ -3090,6 +3265,37 @@ const SECRET: u8 = 1;
         )
         assert any("GatewayBackend" in s for s in nested_iface)
         assert not any("InternalBackend" in s for s in nested_iface)
+
+        nested_group = root / "crates/nested_group/src"
+        nested_group.mkdir(parents=True)
+        (nested_group / "lib.rs").write_text(
+            "mod backend;\n"
+            "pub use backend::{interface::{GatewayBackend, DeployExecution}};\n"
+        )
+        (nested_group / "backend.rs").write_text("mod interface;\n")
+        (nested_group / "backend").mkdir()
+        (nested_group / "backend/interface.rs").write_text(
+            "pub trait GatewayBackend {}\n"
+            "pub struct DeployExecution;\n"
+            "pub trait Hidden {}\n"
+        )
+        assert is_exported_crate_source(
+            "crates/nested_group/src/backend/interface.rs", root
+        )
+        assert exported_item_filter_for_source(
+            "crates/nested_group/src/backend/interface.rs", root
+        ) == {"GatewayBackend", "DeployExecution"}
+        nested_group_surface = filter_public_surface(
+            extract_public_surface(
+                (nested_group / "backend/interface.rs").read_text()
+            ),
+            exported_item_filter_for_source(
+                "crates/nested_group/src/backend/interface.rs", root
+            ),
+        )
+        assert any("GatewayBackend" in s for s in nested_group_surface)
+        assert any("DeployExecution" in s for s in nested_group_surface)
+        assert not any("Hidden" in s for s in nested_group_surface)
 
         selective = root / "crates/selective/src"
         selective.mkdir(parents=True)
