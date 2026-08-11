@@ -1,8 +1,45 @@
 //! Public types for account discovery: candidates, keypairs, and their
 //! secret-including serializable views.
 
+use krusty_kms_common::{KmsError, Result};
 use serde::{Deserialize, Serialize};
+use starknet_types_core::felt::Felt;
 use std::fmt;
+use zeroize::Zeroize;
+
+/// Shared checks for the `private_key` hex field of discovery types.
+///
+/// Default `Serialize` omits private keys, so a serde round-trip yields an
+/// empty `private_key`. These helpers make that state loud instead of letting
+/// an empty string flow into signing or export paths.
+fn require_private_key(private_key: &str) -> Result<&str> {
+    if private_key.is_empty() {
+        return Err(KmsError::InvalidPrivateKey(
+            "candidate has no private key material (deserialized from public-only JSON?)"
+                .to_string(),
+        ));
+    }
+    Ok(private_key)
+}
+
+/// Verify that a candidate's private key actually derives its public key.
+///
+/// Deserialized discovery results are untrusted input: nothing guarantees the
+/// `private_key` and `public_key` fields still belong together. Call this
+/// before trusting a deserialized candidate in a recovery flow.
+fn verify_key_binding(private_key: &str, public_key: &str) -> Result<()> {
+    let private = Felt::from_hex(require_private_key(private_key)?)
+        .map_err(|e| KmsError::InvalidPrivateKey(format!("invalid private key hex: {e}")))?;
+    let expected_public = Felt::from_hex(public_key)
+        .map_err(|e| KmsError::InvalidPublicKey(format!("invalid public key hex: {e}")))?;
+    let derived_public = crate::stark_signing::stark_public_key(&private)?;
+    if derived_public != expected_public {
+        return Err(KmsError::InvalidPrivateKey(
+            "private key does not derive the candidate's public key".to_string(),
+        ));
+    }
+    Ok(())
+}
 
 /// The type of wallet that created the account.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -72,24 +109,45 @@ impl fmt::Debug for CandidateAccount {
 
 impl CandidateAccount {
     /// Intentional access to the private key hex string.
-    pub fn expose_private_key(&self) -> &str {
-        &self.private_key
+    ///
+    /// Errors when the candidate holds no key material — the state produced by
+    /// deserializing the public-only JSON form — instead of handing back an
+    /// empty string that would silently flow into signing or export paths.
+    pub fn expose_private_key(&self) -> Result<&str> {
+        require_private_key(&self.private_key)
+    }
+
+    /// Verify that `private_key` derives `public_key`.
+    ///
+    /// Candidates built by [`super::generate_candidates`] are consistent by
+    /// construction; call this on candidates that crossed a serialization
+    /// boundary before trusting them in a recovery flow. (The address itself
+    /// is not recomputed here — a recovery flow confirms it on-chain.)
+    pub fn verify_key_binding(&self) -> Result<()> {
+        verify_key_binding(&self.private_key, &self.public_key)
     }
 
     /// Serializable view that includes the private key.
     ///
     /// Use only at explicit recovery / WASM boundaries that must return secrets.
-    pub fn with_secrets(&self) -> CandidateAccountWithSecrets<'_> {
-        CandidateAccountWithSecrets {
+    /// Errors when the candidate holds no key material.
+    pub fn with_secrets(&self) -> Result<CandidateAccountWithSecrets<'_>> {
+        Ok(CandidateAccountWithSecrets {
             wallet_type: self.wallet_type,
             class_hash: &self.class_hash,
             address: &self.address,
             public_key: &self.public_key,
-            private_key: &self.private_key,
+            private_key: require_private_key(&self.private_key)?,
             derivation_index: self.derivation_index,
             derivation_path: &self.derivation_path,
             class_version: &self.class_version,
-        }
+        })
+    }
+}
+
+impl Drop for CandidateAccount {
+    fn drop(&mut self) {
+        self.private_key.zeroize();
     }
 }
 
@@ -165,19 +223,37 @@ impl fmt::Debug for DerivedKeypair {
 
 impl DerivedKeypair {
     /// Intentional access to the private key hex string.
-    pub fn expose_private_key(&self) -> &str {
-        &self.private_key
+    ///
+    /// Errors when the keypair holds no key material (public-only round-trip).
+    pub fn expose_private_key(&self) -> Result<&str> {
+        require_private_key(&self.private_key)
+    }
+
+    /// Verify that `private_key` derives `public_key`.
+    ///
+    /// Call on keypairs that crossed a serialization boundary before trusting
+    /// them in a recovery flow.
+    pub fn verify_key_binding(&self) -> Result<()> {
+        verify_key_binding(&self.private_key, &self.public_key)
     }
 
     /// Serializable view that includes the private key.
-    pub fn with_secrets(&self) -> DerivedKeypairWithSecrets<'_> {
-        DerivedKeypairWithSecrets {
+    ///
+    /// Errors when the keypair holds no key material.
+    pub fn with_secrets(&self) -> Result<DerivedKeypairWithSecrets<'_>> {
+        Ok(DerivedKeypairWithSecrets {
             derivation_type: self.derivation_type,
             public_key: &self.public_key,
-            private_key: &self.private_key,
+            private_key: require_private_key(&self.private_key)?,
             derivation_index: self.derivation_index,
             derivation_path: &self.derivation_path,
-        }
+        })
+    }
+}
+
+impl Drop for DerivedKeypair {
+    fn drop(&mut self) {
+        self.private_key.zeroize();
     }
 }
 

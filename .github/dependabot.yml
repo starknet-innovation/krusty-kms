@@ -1,28 +1,43 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
+# Dependabot configuration. Keeps the dependency stack patched so security
+# fixes in transitive deps (RNG stacks, TLS, serde, ...) land promptly.
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
 updates:
-  - package-ecosystem: cargo
+  - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: weekly
+      interval: "weekly"
     open-pull-requests-limit: 10
     groups:
-      starknet:
-        patterns:
-          - "starknet*"
-          - "lambdaworks*"
+      # Batch semver-compatible bumps to keep review load manageable;
+      # security updates always arrive as individual PRs.
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
-  - package-ecosystem: github-actions
+  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: "weekly"
 
-  - package-ecosystem: npm
+  - package-ecosystem: "npm"
     directory: "/cross-tests"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: "weekly"
+
+  - package-ecosystem: "gradle"
+    directory: "/packages/kms-jvm"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pub"
+    directory: "/packages/kms-dart"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "swift"
+    directory: "/packages/kms-swift"
+    schedule:
+      interval: "weekly"

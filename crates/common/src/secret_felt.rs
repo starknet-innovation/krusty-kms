@@ -41,9 +41,10 @@ impl SecretFelt {
     ///
     /// This is an intentional escape hatch for boundaries that must serialize
     /// private material. Prefer keeping secrets as `SecretFelt` or `&Felt`
-    /// whenever possible.
-    pub fn expose_secret_hex(&self) -> String {
-        format!("{:#x}", self.0)
+    /// whenever possible. The returned buffer zeroizes itself on drop; callers
+    /// that copy it into a plain `String` own that copy's hygiene.
+    pub fn expose_secret_hex(&self) -> zeroize::Zeroizing<String> {
+        zeroize::Zeroizing::new(format!("{:#x}", self.0))
     }
 }
 
@@ -123,7 +124,7 @@ mod tests {
     fn test_secret_felt_hex_format_requires_explicit_escape_hatch() {
         let secret = SecretFelt::new(Felt::from(42u64));
         let hex = secret.expose_secret_hex();
-        assert_eq!(hex, "0x2a");
+        assert_eq!(hex.as_str(), "0x2a");
     }
 
     #[test]

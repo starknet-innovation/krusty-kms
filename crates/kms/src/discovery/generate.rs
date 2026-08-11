@@ -108,7 +108,8 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
 /// - **Argent**: direct derivation, Cairo 1 v0.4.0
 /// - **Argent legacy**: double derivation (via ETH key), Cairo 1 v0.4.0/v0.3.1/v0.3.0
 /// - **Argent Cairo 0**: double derivation, proxy + implementation pattern
-/// - **OpenZeppelin**: direct derivation, OZ v3.0.0
+/// - **OpenZeppelin**: direct derivation, OZ v3.0.0 with both salt policies
+///   (salt = public key matching this project's deploy flow, and salt = 0)
 ///
 /// Does NOT hit the network. Returns all mathematically possible addresses.
 /// Use with an RPC provider to filter to actually deployed accounts.
@@ -182,13 +183,29 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
             class_version: "v0.4.0".to_string(),
         });
 
-        // OpenZeppelin — v3.0.0 (salt=0, constructor=[pubk])
-        let oz_addr =
+        // OpenZeppelin — v3.0.0, both salt policies. The deploy/gateway flows
+        // default to salt = public key (SaltPolicy::PublicKey), so recovery
+        // must cover that variant or it misses accounts this project deployed
+        // itself; salt = 0 is kept for externally-deployed OZ accounts.
+        let oz_addr_salt_pubk =
+            calculate_contract_address(&direct_pubk, &oz_hash, &[direct_pubk], &Felt::ZERO)?;
+        candidates.push(CandidateAccount {
+            wallet_type: WalletType::OpenZeppelin,
+            class_hash: felt_hex(&oz_hash),
+            address: felt_hex(&oz_addr_salt_pubk),
+            public_key: felt_hex(&direct_pubk),
+            private_key: felt_hex(&direct_pk),
+            derivation_index: index,
+            derivation_path: direct_path.clone(),
+            class_version: "v3.0.0 salt-pubkey".to_string(),
+        });
+
+        let oz_addr_salt_zero =
             calculate_contract_address(&Felt::ZERO, &oz_hash, &[direct_pubk], &Felt::ZERO)?;
         candidates.push(CandidateAccount {
             wallet_type: WalletType::OpenZeppelin,
             class_hash: felt_hex(&oz_hash),
-            address: felt_hex(&oz_addr),
+            address: felt_hex(&oz_addr_salt_zero),
             public_key: felt_hex(&direct_pubk),
             private_key: felt_hex(&direct_pk),
             derivation_index: index,

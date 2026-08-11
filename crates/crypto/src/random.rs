@@ -4,18 +4,18 @@
 //! including single and batch generation.
 
 use starknet_types_core::felt::Felt;
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 use std::sync::{LazyLock, Mutex};
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 use sha2::{Digest, Sha256};
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 use zeroize::Zeroize;
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 const PARITY_DOMAIN: &[u8] = b"kms-parity-v1";
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 #[derive(Debug, Clone)]
 struct DeterministicRngState {
     seed: [u8; 32],
@@ -25,7 +25,7 @@ struct DeterministicRngState {
     block_offset: usize,
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 impl Zeroize for DeterministicRngState {
     fn zeroize(&mut self) {
         self.seed.zeroize();
@@ -36,14 +36,14 @@ impl Zeroize for DeterministicRngState {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 impl Drop for DeterministicRngState {
     fn drop(&mut self) {
         self.zeroize();
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 impl DeterministicRngState {
     fn new(seed: [u8; 32], stream: &[u8]) -> Self {
         Self {
@@ -85,22 +85,50 @@ impl DeterministicRngState {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 static DETERMINISTIC_RNG: LazyLock<Mutex<Option<DeterministicRngState>>> =
     LazyLock::new(|| Mutex::new(None));
+
+/// Environment variable that must be set to `1` before the deterministic
+/// parity RNG can be activated at runtime.
+#[cfg(feature = "insecure-deterministic-rng")]
+pub const DETERMINISTIC_RNG_OPT_IN_ENV: &str = "KRUSTY_KMS_ALLOW_DETERMINISTIC_RNG";
 
 /// Enables deterministic parity RNG.
 ///
 /// The RNG sequence is:
 /// `SHA256("kms-parity-v1" || stream || seed || counter_be_u64)`.
-#[cfg(feature = "test-utils")]
+///
+/// # Security
+///
+/// This replaces **all** key/nonce/salt randomness in the process with a
+/// predictable stream. It exists only for cross-language parity vector
+/// generation. To reduce the blast radius of the published cargo feature
+/// (which any dependent crate could enable through feature unification),
+/// activation additionally requires the runtime environment opt-in
+/// `KRUSTY_KMS_ALLOW_DETERMINISTIC_RNG=1`.
+///
+/// # Panics
+///
+/// Panics unless `KRUSTY_KMS_ALLOW_DETERMINISTIC_RNG=1` is set in the
+/// process environment.
+#[cfg(feature = "insecure-deterministic-rng")]
 pub fn set_deterministic_rng(seed: [u8; 32], stream: &[u8]) {
+    let opted_in = std::env::var(DETERMINISTIC_RNG_OPT_IN_ENV)
+        .map(|value| value == "1")
+        .unwrap_or(false);
+    assert!(
+        opted_in,
+        "refusing to replace cryptographic randomness with a deterministic stream: \
+         set {DETERMINISTIC_RNG_OPT_IN_ENV}=1 to confirm this process is a parity \
+         test harness and never a production signer"
+    );
     let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
     *guard = Some(DeterministicRngState::new(seed, stream));
 }
 
 /// Clears deterministic parity RNG and restores system randomness.
-#[cfg(feature = "test-utils")]
+#[cfg(feature = "insecure-deterministic-rng")]
 pub fn clear_deterministic_rng() {
     let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
     *guard = None;
@@ -115,7 +143,7 @@ pub fn fill_random_bytes(out: &mut [u8]) {
 /// Fallible variant of [`fill_random_bytes`] for request paths that must
 /// return an error rather than abort the task when OS entropy is unavailable.
 pub fn try_fill_random_bytes(out: &mut [u8]) -> Result<(), getrandom::Error> {
-    #[cfg(feature = "test-utils")]
+    #[cfg(feature = "insecure-deterministic-rng")]
     {
         let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
         if let Some(state) = guard.as_mut() {

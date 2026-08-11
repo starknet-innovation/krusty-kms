@@ -120,19 +120,20 @@ pub fn encrypt_private_key(
     // Generate 24-byte nonce
     let nonce_bytes = krusty_kms_crypto::random_bytes::<XNONCE_LEN>();
 
-    // Decode hex private key
+    // Decode hex private key; scrubbed on drop — this buffer is the raw key.
     let hex_str = private_key_hex
         .strip_prefix("0x")
         .unwrap_or(private_key_hex);
-    let plaintext =
-        hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?;
+    let plaintext = Zeroizing::new(
+        hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?,
+    );
 
     // Encrypt
     let cipher = XChaCha20Poly1305::new_from_slice(key.as_slice())
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {e}")))?;
     let nonce = XNonce::from_slice(&nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_ref())
+        .encrypt(nonce, plaintext.as_slice())
         .map_err(|e| KmsError::CryptoError(format!("Encryption failed: {e}")))?;
 
     Ok(EncryptedKey {

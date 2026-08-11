@@ -81,7 +81,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
     println!(
         "   ✓ Account Private Key: {}",
-        account_keypair.private_key.expose_secret_hex()
+        account_keypair.private_key.expose_secret_hex().as_str()
     );
     println!("   ✓ Account Public Key:  {:#x}", account_public_key);
 
@@ -110,7 +110,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
 
     println!(
         "   ✓ Tongo Account 0 Private Key: {}",
-        tongo_keypair_0.private_key.expose_secret_hex()
+        tongo_keypair_0.private_key.expose_secret_hex().as_str()
     );
     println!(
         "   ✓ Tongo Account 0 Public Key:  {:#x}",
@@ -122,7 +122,7 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
     );
     println!(
         "   ✓ Tongo Account 1 Private Key: {}",
-        tongo_keypair_1.private_key.expose_secret_hex()
+        tongo_keypair_1.private_key.expose_secret_hex().as_str()
     );
     println!(
         "   ✓ Tongo Account 1 Public Key:  {:#x}",
@@ -1161,7 +1161,7 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
     println!("Starknet Account Key (coin type 9004, index 0):");
     println!(
         "  Private: {}",
-        starknet_key.private_key.expose_secret_hex()
+        starknet_key.private_key.expose_secret_hex().as_str()
     );
     println!(
         "  Public:  {:#x}",
@@ -1173,7 +1173,10 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
     );
 
     println!("\nTongo Key 0 (coin type 5454, index 0):");
-    println!("  Private: {}", tongo_key_0.private_key.expose_secret_hex());
+    println!(
+        "  Private: {}",
+        tongo_key_0.private_key.expose_secret_hex().as_str()
+    );
     println!(
         "  Public:  {:#x}",
         tongo_key_0
@@ -1184,7 +1187,10 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
     );
 
     println!("\nTongo Key 1 (coin type 5454, index 1):");
-    println!("  Private: {}", tongo_key_1.private_key.expose_secret_hex());
+    println!(
+        "  Private: {}",
+        tongo_key_1.private_key.expose_secret_hex().as_str()
+    );
     println!(
         "  Public:  {:#x}",
         tongo_key_1

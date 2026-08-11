@@ -78,6 +78,10 @@ pub fn derive_private_key_with_coin_type(
     coin_type: u32,
     passphrase: Option<&str>,
 ) -> Result<Felt> {
+    require_unhardened_component(index, "index")?;
+    require_unhardened_component(account_index, "account_index")?;
+    require_unhardened_component(coin_type, "coin_type")?;
+
     let seed = Zeroizing::new(mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?);
 
     // Derive master key from seed
@@ -218,6 +222,9 @@ pub fn derive_nostr_private_key(
     account_index: u32,
     passphrase: Option<&str>,
 ) -> Result<[u8; 32]> {
+    require_unhardened_component(index, "index")?;
+    require_unhardened_component(account_index, "account_index")?;
+
     let seed = Zeroizing::new(mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?);
 
     // Derive master key from seed
@@ -297,6 +304,9 @@ pub fn derive_stark_from_eth_key(
     index: u32,
     account_index: u32,
 ) -> Result<Felt> {
+    require_unhardened_component(index, "index")?;
+    require_unhardened_component(account_index, "account_index")?;
+
     // Use the ETH private key as the seed for a new BIP-32 master key
     let master = derive_master_key(eth_private_key)?;
 
@@ -374,6 +384,22 @@ fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
 /// - child_key = (IL + parent_key) mod secp256k1_n
 ///
 /// # Cyclomatic Complexity: 3
+/// Reject caller-supplied path components with the hardened bit set.
+///
+/// Path builders OR `0x8000_0000` into hardened components, so a value that
+/// already carries the bit would silently alias to a *different* caller's
+/// value (e.g. `account_index` x and x|0x8000_0000 derive the same key). For
+/// the non-hardened address index the bit would silently switch to hardened
+/// derivation. Either way, reject rather than alias.
+fn require_unhardened_component(value: u32, field: &str) -> Result<()> {
+    if value & 0x8000_0000 != 0 {
+        return Err(KmsError::InvalidDerivationPath(format!(
+            "{field} {value} has the BIP-32 hardened bit set (must be < 2^31)"
+        )));
+    }
+    Ok(())
+}
+
 fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<DerivedKeyPair> {
     let mut mac =
         HmacSha512::new_from_slice(chain_code).map_err(|e| KmsError::CryptoError(e.to_string()))?;

@@ -22,7 +22,15 @@ fn with_registry<F, R>(f: F) -> Result<R, i32>
 where
     F: FnOnce(&mut HashMap<u64, Box<TongoAccount>>) -> Result<R, i32>,
 {
-    let mut guard = REGISTRY.lock().map_err(|_| KMS_ERR_INTERNAL)?;
+    // Recover from mutex poisoning instead of failing forever: the FFI layer
+    // wraps every entry point in `catch_unwind`, so a single panic while the
+    // lock was held would otherwise permanently poison the global registry
+    // and turn every subsequent account call into `KMS_ERR_INTERNAL`. The
+    // map's entries are independent accounts and `HashMap` stays structurally
+    // valid across an unwound panic, so continuing is sound.
+    let mut guard = REGISTRY
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let map = guard.get_or_insert_with(HashMap::new);
     f(map)
 }
