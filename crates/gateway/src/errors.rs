@@ -11,13 +11,11 @@ pub(crate) fn map_kms_error(error: KmsError) -> GatewayError {
         KmsError::ContractNotFound(message) => {
             GatewayError::new(GatewayErrorCode::NotFound, false, Some(message))
         }
-        KmsError::InsufficientBalance {
-            available,
-            required,
-        } => GatewayError::new(
+        // Amounts intentionally omitted: the available balance is confidential.
+        KmsError::InsufficientBalance => GatewayError::new(
             GatewayErrorCode::InsufficientBalance,
             false,
-            Some(format!("available={}, required={}", available, required)),
+            Some("insufficient balance for requested amount".to_string()),
         ),
         KmsError::InsufficientFeeBalance(message) => {
             GatewayError::new(GatewayErrorCode::InsufficientFee, false, Some(message))

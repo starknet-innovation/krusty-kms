@@ -28,6 +28,16 @@ where
             return Err(error);
         }
 
+        // The signed provenance record attests the request's chain id, so it
+        // must be a verified fact, not a caller claim: reject requests whose
+        // chain id does not match the configured backend.
+        if let Some(chain_id) = request.chain_id() {
+            if let Err(error) = self.ensure_chain_matches(chain_id) {
+                self.reject_operation(&queued, error.clone(), None).await;
+                return Err(error);
+            }
+        }
+
         let provenance = sign_provenance(&request);
 
         match &request {

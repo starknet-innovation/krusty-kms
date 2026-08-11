@@ -84,10 +84,15 @@ pub struct WaitPolicy {
 }
 
 impl WaitPolicy {
+    /// Minimum accepted poll interval: anything shorter turns the wait loop
+    /// into an RPC flood. The gateway enforces the same floor on requests
+    /// that bypass this constructor.
+    pub const MIN_POLL_INTERVAL_MS: u64 = 250;
+
     pub fn new(poll_interval_ms: u64, timeout_ms: u64) -> Result<Self, DomainError> {
-        if poll_interval_ms == 0 {
+        if poll_interval_ms < Self::MIN_POLL_INTERVAL_MS {
             return Err(DomainError::InvalidWaitPolicy(
-                "poll_interval_ms must be greater than zero",
+                "poll_interval_ms must be at least 250",
             ));
         }
         if timeout_ms == 0 {

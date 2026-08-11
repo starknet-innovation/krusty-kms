@@ -55,7 +55,9 @@ pub fn derive_keypair(
         .map_err(|_| JsValue::from_str("Invalid public key point"))?;
 
     Ok(WasmKeypair {
-        private_key: kp.private_key.expose_secret_hex(),
+        // Deliberate copy into a plain String: the wasm-bindgen boundary
+        // requires one (M-15); the Zeroizing original is scrubbed on drop.
+        private_key: kp.private_key.expose_secret_hex().as_str().to_owned(),
         public_key_x: format!("{:#x}", affine.x()),
         public_key_y: format!("{:#x}", affine.y()),
     })
@@ -130,7 +132,9 @@ pub fn derive_starknet_keypair(
         .map_err(|_| JsValue::from_str("Invalid public key point"))?;
 
     Ok(WasmKeypair {
-        private_key: kp.private_key.expose_secret_hex(),
+        // Deliberate copy into a plain String: the wasm-bindgen boundary
+        // requires one (M-15); the Zeroizing original is scrubbed on drop.
+        private_key: kp.private_key.expose_secret_hex().as_str().to_owned(),
         public_key_x: format!("{:#x}", affine.x()),
         public_key_y: format!("{:#x}", affine.y()),
     })

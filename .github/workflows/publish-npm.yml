@@ -20,7 +20,34 @@ permissions:
   id-token: write
 
 jobs:
+  # Gate npm publishing on tests and the dependency audit: a merge to main
+  # must never ship a wasm package whose Rust sources fail CI checks.
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - run: rustup target add wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
+      # krusty-kms-wasm is excluded from the native run because its tests only
+      # execute under wasm-pack (see rust.yml).
+      - run: cargo test --workspace --locked --exclude krusty-kms-wasm
+      # ...so the wasm package — the artifact this workflow publishes — must be
+      # tested here explicitly. `publish` only gates on this job, and
+      # workflow_dispatch bypasses rust.yml's parallel wasm job entirely, so
+      # without this a wasm-only regression could reach npm untested. Building
+      # and `npm pack --dry-run` in the publish job are not a substitute.
+      - run: wasm-pack test --node crates/wasm
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+
   publish:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

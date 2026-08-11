@@ -8,7 +8,7 @@
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::felt::Felt;
-use zeroize::ZeroizeOnDrop;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 /// A secp256k1 signer for Ethereum-key Starknet accounts.
 ///
@@ -30,14 +30,15 @@ impl EthSigner {
     /// Create from a hex-encoded private key (with or without `0x` prefix).
     pub fn from_hex(hex_str: &str) -> Result<Self> {
         let hex_str = hex_str.strip_prefix("0x").unwrap_or(hex_str);
-        let bytes = hex::decode(hex_str)?;
+        // Both intermediate copies of the raw key are scrubbed before returning.
+        let bytes = Zeroizing::new(hex::decode(hex_str)?);
         if bytes.len() != 32 {
             return Err(KmsError::InvalidPrivateKey(format!(
                 "expected 32 bytes, got {}",
                 bytes.len()
             )));
         }
-        let mut arr = [0u8; 32];
+        let mut arr = Zeroizing::new([0u8; 32]);
         arr.copy_from_slice(&bytes);
         Self::from_private_key(&arr)
     }

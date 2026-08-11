@@ -17,10 +17,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
-krusty-kms-domain = { version = "0.8.0", path = "../domain" }
-krusty-kms-common = { version = "0.8.0", path = "../common" }
-krusty-kms = { version = "0.8.0", path = "../kms" }
-krusty-kms-crypto = { version = "0.8.0", path = "../crypto", default-features = false }
+krusty-kms-domain = { version = "0.9.0", path = "../domain" }
+krusty-kms-common = { version = "0.9.0", path = "../common" }
+krusty-kms = { version = "0.9.0", path = "../kms" }
+krusty-kms-crypto = { version = "0.9.0", path = "../crypto", default-features = false }
 async-trait.workspace = true
 hex.workspace = true
 num-bigint.workspace = true

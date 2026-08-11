@@ -51,6 +51,8 @@ fn cache_policy_requires_positive_ttl_and_capacity() {
 fn wait_policy_requires_positive_interval_and_timeout() {
     assert!(WaitPolicy::new(0, 1_000).is_err());
     assert!(WaitPolicy::new(100, 0).is_err());
+    // Intervals below the RPC-flood floor are rejected (M-10).
+    assert!(WaitPolicy::new(WaitPolicy::MIN_POLL_INTERVAL_MS - 1, 5_000).is_err());
     assert!(WaitPolicy::new(250, 5_000).is_ok());
 }
 

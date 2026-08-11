@@ -22,8 +22,11 @@ tokio = { version = "1.43.0", features = ["sync"] }
 async-trait = "0.1"
 url = "2.5"
 
-# Cartridge Controller SDK (git-only, not on crates.io)
-account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", tag = "v0.10.1", optional = true }
+# Cartridge Controller SDK (git-only, not on crates.io).
+# Pinned by commit rev, not tag: tags are mutable, so a compromised or
+# force-pushed upstream tag could silently swap the dependency's contents.
+# rev corresponds to tag v0.10.1.
+account_sdk = { git = "https://github.com/cartridge-gg/controller-rs.git", rev = "4ec2e4fc6824807ec053c36bf8ed726db374e153", optional = true }
 starknet = { version = "0.17.0", optional = true }
 
 [features]

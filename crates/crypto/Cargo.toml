@@ -19,13 +19,15 @@ targets = ["x86_64-unknown-linux-gnu"]
 [features]
 default = ["parallel"]
 parallel = ["rayon"]
-test-utils = ["dep:sha2"]
+# DANGER: replaces all key/nonce/salt randomness with a deterministic stream.
+# Only for cross-language parity vector generation; requires a runtime
+# environment opt-in (see `random::set_deterministic_rng`) before it activates.
+insecure-deterministic-rng = ["dep:sha2"]
 
 [dependencies]
-krusty-kms-common = { version = "0.8.0", path = "../common" }
+krusty-kms-common = { version = "0.9.0", path = "../common" }
 starknet-types-core.workspace = true
-num-bigint.workspace = true
-num-traits.workspace = true
+crypto-bigint.workspace = true
 sha2 = { workspace = true, optional = true }
 getrandom = "0.3"
 rayon = { workspace = true, optional = true }
@@ -41,6 +43,8 @@ getrandom = { version = "0.3", features = ["wasm_js"] }
 criterion.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+num-bigint.workspace = true
+num-traits.workspace = true
 
 [[bench]]
 name = "provers"

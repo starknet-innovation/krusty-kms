@@ -84,7 +84,18 @@ impl Amount {
         if self.decimals == 0 {
             return self.raw.to_string();
         }
-        let factor = 10u128.pow(self.decimals as u32);
+        // `from_raw`/`Deserialize` accept any `decimals`, and 10^39 overflows
+        // u128 — `pow` would panic (or wrap). The integer part is then always
+        // zero, so render the fraction directly.
+        let Some(factor) = 10u128.checked_pow(u32::from(self.decimals)) else {
+            let frac_str = format!("{:0>width$}", self.raw, width = self.decimals as usize);
+            let trimmed = frac_str.trim_end_matches('0');
+            return if trimmed.is_empty() {
+                "0.0".to_string()
+            } else {
+                format!("0.{trimmed}")
+            };
+        };
         let integer = self.raw / factor;
         let fraction = self.raw % factor;
         if fraction == 0 {
@@ -157,6 +168,24 @@ mod tests {
     fn test_from_raw() {
         let amt = Amount::from_raw(1_500_000_000_000_000_000, 18);
         assert_eq!(amt.to_human(), "1.5");
+    }
+
+    /// `decimals >= 39` overflows `10^decimals` in u128; `to_human` must
+    /// render instead of panicking (audit Low/Info backlog, #46).
+    #[test]
+    fn test_to_human_huge_decimals_does_not_panic() {
+        assert_eq!(Amount::from_raw(0, 39).to_human(), "0.0");
+        assert_eq!(
+            Amount::from_raw(5, 39).to_human(),
+            format!("0.{}5", "0".repeat(38))
+        );
+        // u128::MAX ends in 5, so nothing trims: "0." + 255 padded digits.
+        assert_eq!(Amount::from_raw(u128::MAX, 255).to_human().len(), 2 + 255);
+        // The largest non-overflowing width still uses the exact path.
+        assert_eq!(
+            Amount::from_raw(1, 38).to_human(),
+            format!("0.{}1", "0".repeat(37))
+        );
     }
 
     #[test]

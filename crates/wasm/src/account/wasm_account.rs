@@ -141,7 +141,9 @@ impl WasmAccount {
     ///
     /// # Arguments
     /// * `ciphertext` - The ciphertext to decrypt
-    /// * `max_search` - Maximum value to search for (default: 1,000,000)
+    /// * `max_search` - Maximum value to search for (default: 1,000,000;
+    ///   capped at 2^20 — see [`Self::MAX_SEARCH_CEILING`] for why the cap has
+    ///   to be this small)
     ///
     /// # Returns
     /// The decrypted balance as a string (for large number support in JS)
@@ -151,11 +153,31 @@ impl WasmAccount {
         ciphertext: &WasmCiphertext,
         max_search: Option<u64>,
     ) -> Result<String, JsValue> {
+        /// Upper bound on the brute-force discrete-log search.
+        ///
+        /// The search is a linear scan performing a curve addition plus an
+        /// affine conversion per step — measured at ~420k steps/sec natively in
+        /// release, and slower under wasm. So the ceiling has to bound
+        /// wall-clock time, not merely be finite: 2^32 works out to roughly
+        /// three hours natively and worse in a browser, which is no protection
+        /// at all for a synchronous call on the calling thread.
+        ///
+        /// 2^20 holds the worst case to a few seconds and matches the existing
+        /// default. Recovering larger balances needs a better algorithm
+        /// (baby-step giant-step, Pollard's kangaroo), not a bigger linear cap.
+        const MAX_SEARCH_CEILING: u64 = 1 << 20;
+
         let cipher = parse_ciphertext(ciphertext)?;
+
+        let max = max_search.unwrap_or(1_000_000);
+        if max > MAX_SEARCH_CEILING {
+            return Err(JsValue::from_str(&format!(
+                "max_search {max} exceeds ceiling {MAX_SEARCH_CEILING}"
+            )));
+        }
 
         let decrypted_point =
             from_sdk_result(self.inner.decrypt(&cipher)).map_err(JsValue::from)?;
-        let max = max_search.unwrap_or(1_000_000);
         let balance =
             krusty_kms_crypto::recover_small_discrete_log(&decrypted_point, u128::from(max))
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;

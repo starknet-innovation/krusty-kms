@@ -11,6 +11,7 @@
 #endif
 
 #include "kms.h"
+#include "utf16_to_utf8.h"
 
 /* ====================================================================== */
 /* Helpers                                                                  */
@@ -54,30 +55,69 @@ static void throw_kms_error(JNIEnv *env, int32_t code) {
     }
 }
 
-/* GetStringUTFChars with NULL checks. Returns NULL and throws on failure. */
-static const char *require_utf_chars(JNIEnv *env, jstring s) {
+/* ---------------------------------------------------------------------- */
+/* Standard UTF-8 string extraction                                        */
+/*                                                                          */
+/* The conversion itself lives in utf16_to_utf8.h (JNI-free, so a           */
+/* standalone test can execute it); see that header for why modified UTF-8  */
+/* is unusable here.                                                        */
+/* ---------------------------------------------------------------------- */
+
+/* Convert a Java String to a malloc'd, NUL-terminated, standard UTF-8
+ * buffer. Sets *out_capacity to the allocated size so callers can
+ * secure_free the whole buffer (strings may carry secrets). Returns NULL
+ * with an exception pending on failure. */
+static char *require_utf8_chars(JNIEnv *env, jstring s, size_t *out_capacity) {
+    *out_capacity = 0;
     if (s == NULL) {
         throw_kms_error(env, KMS_ERR_NULL_POINTER);
         return NULL;
     }
-    const char *p = (*env)->GetStringUTFChars(env, s, NULL);
-    if (p == NULL) {
+    jsize len16 = (*env)->GetStringLength(env, s);
+    const jchar *chars = (*env)->GetStringChars(env, s, NULL);
+    if (chars == NULL) {
         if (!(*env)->ExceptionCheck(env)) {
             throw_kms_error(env, KMS_ERR_INTERNAL);
         }
         return NULL;
     }
-    return p;
+    size_t len8 = 0;
+    /* Rejects unpaired surrogates and embedded U+0000; the latter would be
+     * truncated by the `CStr::from_ptr` on the Rust side of this ABI, silently
+     * deriving the key for the string's prefix. */
+    if (kms_utf16_to_utf8_size((const uint16_t *)chars, (size_t)len16, &len8) != KMS_UTF16_OK) {
+        (*env)->ReleaseStringChars(env, s, chars);
+        throw_kms_error(env, KMS_ERR_INVALID_INPUT);
+        return NULL;
+    }
+    char *buf = (char *)malloc(len8 + 1);
+    if (buf == NULL) {
+        (*env)->ReleaseStringChars(env, s, chars);
+        throw_kms_error(env, KMS_ERR_INTERNAL);
+        return NULL;
+    }
+    kms_utf16_to_utf8_write((const uint16_t *)chars, (size_t)len16, buf);
+    buf[len8] = '\0';
+    (*env)->ReleaseStringChars(env, s, chars);
+    *out_capacity = len8 + 1;
+    return buf;
 }
 
-/* Optional UTF chars: NULL jstring → empty C string (static). */
-static const char *optional_utf_chars(JNIEnv *env, jstring s, int *is_empty_literal) {
-    *is_empty_literal = 0;
+/* Optional variant: NULL jstring → malloc'd empty string, so every caller
+ * frees uniformly with secure_free. */
+static char *optional_utf8_chars(JNIEnv *env, jstring s, size_t *out_capacity) {
     if (s == NULL) {
-        *is_empty_literal = 1;
-        return "";
+        char *buf = (char *)malloc(1);
+        if (buf == NULL) {
+            *out_capacity = 0;
+            throw_kms_error(env, KMS_ERR_INTERNAL);
+            return NULL;
+        }
+        buf[0] = '\0';
+        *out_capacity = 1;
+        return buf;
     }
-    return require_utf_chars(env, s);
+    return require_utf8_chars(env, s, out_capacity);
 }
 
 static jbyteArray felt_to_jbytearray(JNIEnv *env, const KmsFelt *felt) {
@@ -230,11 +270,12 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_getVersionString(
 JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_feltFromHex(
     JNIEnv *env, jclass cls, jstring hex) {
     (void)cls;
-    const char *h = require_utf_chars(env, hex);
+    size_t h_cap = 0;
+    char *h = require_utf8_chars(env, hex, &h_cap);
     if (h == NULL) return NULL;
     KmsFelt out;
     int32_t rc = kms_felt_from_hex(h, &out);
-    (*env)->ReleaseStringUTFChars(env, hex, h);
+    secure_free(h, h_cap);
     if (rc != KMS_OK) { throw_kms_error(env, rc); return NULL; }
     return felt_to_jbytearray(env, &out);
 }
@@ -466,22 +507,24 @@ JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateMnemonicFromEntrop
 JNIEXPORT jint JNICALL Java_io_krustykms_KmsNative_validateMnemonic(
     JNIEnv *env, jclass cls, jstring phrase) {
     (void)cls;
-    const char *p = require_utf_chars(env, phrase);
+    size_t p_cap = 0;
+    char *p = require_utf8_chars(env, phrase, &p_cap);
     if (p == NULL) return KMS_ERR_NULL_POINTER;
     int32_t rc = kms_validate_mnemonic(p);
-    (*env)->ReleaseStringUTFChars(env, phrase, p);
+    secure_free(p, p_cap);
     return rc;
 }
 
 JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_mnemonicToSeed(
     JNIEnv *env, jclass cls, jstring phrase, jstring passphrase) {
     (void)cls;
-    const char *p = require_utf_chars(env, phrase);
+    size_t p_cap = 0;
+    char *p = require_utf8_chars(env, phrase, &p_cap);
     if (p == NULL) return NULL;
-    int pp_literal = 0;
-    const char *pp = optional_utf_chars(env, passphrase, &pp_literal);
+    size_t pp_cap = 0;
+    char *pp = optional_utf8_chars(env, passphrase, &pp_cap);
     if (pp == NULL) {
-        (*env)->ReleaseStringUTFChars(env, phrase, p);
+        secure_free(p, p_cap);
         return NULL;
     }
 
@@ -489,10 +532,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_mnemonicToSeed(
     size_t written = 0;
     int32_t rc = kms_mnemonic_to_seed(p, pp, out, sizeof(out), &written);
 
-    (*env)->ReleaseStringUTFChars(env, phrase, p);
-    if (!pp_literal) {
-        (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-    }
+    secure_free(p, p_cap);
+    secure_free(pp, pp_cap);
 
     if (rc != KMS_OK) {
         secure_wipe(out, sizeof(out));
@@ -518,12 +559,13 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_derivePrivateKey(
     JNIEnv *env, jclass cls, jstring mnemonic, jint index,
     jint accountIndex, jint coinType, jstring passphrase) {
     (void)cls;
-    const char *m = require_utf_chars(env, mnemonic);
+    size_t m_cap = 0;
+    char *m = require_utf8_chars(env, mnemonic, &m_cap);
     if (m == NULL) return NULL;
-    int pp_literal = 0;
-    const char *pp = optional_utf_chars(env, passphrase, &pp_literal);
+    size_t pp_cap = 0;
+    char *pp = optional_utf8_chars(env, passphrase, &pp_cap);
     if (pp == NULL) {
-        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
+        secure_free(m, m_cap);
         return NULL;
     }
 
@@ -531,10 +573,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_derivePrivateKey(
     int32_t rc = kms_derive_private_key_with_coin_type(
         m, (uint32_t)index, (uint32_t)accountIndex, (uint32_t)coinType, pp, &felt);
 
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    if (!pp_literal) {
-        (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-    }
+    secure_free(m, m_cap);
+    secure_free(pp, pp_cap);
 
     if (rc != KMS_OK) {
         secure_wipe(&felt, sizeof(felt));
@@ -550,12 +590,13 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveKeypair(
     JNIEnv *env, jclass cls, jstring mnemonic, jint index,
     jint accountIndex, jint coinType, jstring passphrase) {
     (void)cls;
-    const char *m = require_utf_chars(env, mnemonic);
+    size_t m_cap = 0;
+    char *m = require_utf8_chars(env, mnemonic, &m_cap);
     if (m == NULL) return NULL;
-    int pp_literal = 0;
-    const char *pp = optional_utf_chars(env, passphrase, &pp_literal);
+    size_t pp_cap = 0;
+    char *pp = optional_utf8_chars(env, passphrase, &pp_cap);
     if (pp == NULL) {
-        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
+        secure_free(m, m_cap);
         return NULL;
     }
 
@@ -564,10 +605,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveKeypair(
     int32_t rc = kms_derive_keypair_with_coin_type(
         m, (uint32_t)index, (uint32_t)accountIndex, (uint32_t)coinType, pp, &kp);
 
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    if (!pp_literal) {
-        (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-    }
+    secure_free(m, m_cap);
+    secure_free(pp, pp_cap);
 
     if (rc != KMS_OK) {
         secure_wipe(&kp, sizeof(kp));
@@ -593,12 +632,13 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveNostrPrivateKey(
     JNIEnv *env, jclass cls, jstring mnemonic, jint index,
     jint accountIndex, jstring passphrase) {
     (void)cls;
-    const char *m = require_utf_chars(env, mnemonic);
+    size_t m_cap = 0;
+    char *m = require_utf8_chars(env, mnemonic, &m_cap);
     if (m == NULL) return NULL;
-    int pp_literal = 0;
-    const char *pp = optional_utf_chars(env, passphrase, &pp_literal);
+    size_t pp_cap = 0;
+    char *pp = optional_utf8_chars(env, passphrase, &pp_cap);
     if (pp == NULL) {
-        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
+        secure_free(m, m_cap);
         return NULL;
     }
 
@@ -607,10 +647,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveNostrPrivateKey(
     int32_t rc = kms_derive_nostr_private_key(
         m, (uint32_t)index, (uint32_t)accountIndex, pp, out);
 
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    if (!pp_literal) {
-        (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-    }
+    secure_free(m, m_cap);
+    secure_free(pp, pp_cap);
 
     if (rc != KMS_OK) {
         secure_wipe(out, sizeof(out));
@@ -632,12 +670,13 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveNostrKeypair(
     JNIEnv *env, jclass cls, jstring mnemonic, jint index,
     jint accountIndex, jstring passphrase) {
     (void)cls;
-    const char *m = require_utf_chars(env, mnemonic);
+    size_t m_cap = 0;
+    char *m = require_utf8_chars(env, mnemonic, &m_cap);
     if (m == NULL) return NULL;
-    int pp_literal = 0;
-    const char *pp = optional_utf_chars(env, passphrase, &pp_literal);
+    size_t pp_cap = 0;
+    char *pp = optional_utf8_chars(env, passphrase, &pp_cap);
     if (pp == NULL) {
-        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
+        secure_free(m, m_cap);
         return NULL;
     }
 
@@ -646,10 +685,8 @@ JNIEXPORT jbyteArray JNICALL Java_io_krustykms_KmsNative_deriveNostrKeypair(
     int32_t rc = kms_derive_nostr_keypair(
         m, (uint32_t)index, (uint32_t)accountIndex, pp, &kp);
 
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    if (!pp_literal) {
-        (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-    }
+    secure_free(m, m_cap);
+    secure_free(pp, pp_cap);
 
     if (rc != KMS_OK) {
         secure_wipe(&kp, sizeof(kp));
@@ -778,20 +815,19 @@ JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromMnemonic(
     JNIEnv *env, jclass cls, jstring mnemonic, jint index,
     jint accountIndex, jbyteArray contractAddress, jstring passphrase) {
     (void)cls;
-    const char *m = require_utf_chars(env, mnemonic);
+    size_t m_cap = 0;
+    char *m = require_utf8_chars(env, mnemonic, &m_cap);
     if (m == NULL) return 0;
-    int pp_literal = 0;
-    const char *pp = optional_utf_chars(env, passphrase, &pp_literal);
+    size_t pp_cap = 0;
+    char *pp = optional_utf8_chars(env, passphrase, &pp_cap);
     if (pp == NULL) {
-        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
+        secure_free(m, m_cap);
         return 0;
     }
     KmsFelt cAddr;
     if (jbytearray_to_felt(env, contractAddress, &cAddr)) {
-        (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-        if (!pp_literal) {
-            (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-        }
+        secure_free(m, m_cap);
+        secure_free(pp, pp_cap);
         return 0;
     }
     KmsAccountHandle handle = 0;
@@ -799,10 +835,8 @@ JNIEXPORT jlong JNICALL Java_io_krustykms_KmsNative_accountCreateFromMnemonic(
     int32_t rc = kms_account_create_from_mnemonic(
         m, (uint32_t)index, (uint32_t)accountIndex, &cAddr, pp, &handle);
 
-    (*env)->ReleaseStringUTFChars(env, mnemonic, m);
-    if (!pp_literal) {
-        (*env)->ReleaseStringUTFChars(env, passphrase, pp);
-    }
+    secure_free(m, m_cap);
+    secure_free(pp, pp_cap);
 
     if (rc != KMS_OK) { throw_kms_error(env, rc); return 0; }
     return (jlong)handle;
@@ -876,55 +910,60 @@ JNIEXPORT void JNICALL Java_io_krustykms_KmsNative_accountDestroy(
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateFundProof(
     JNIEnv *env, jclass cls, jlong handle, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic_handle(env, kms_generate_fund_proof,
         (KmsAccountHandle)handle, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateTransferProof(
     JNIEnv *env, jclass cls, jlong handle, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic_handle(env, kms_generate_transfer_proof,
         (KmsAccountHandle)handle, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateRolloverProof(
     JNIEnv *env, jclass cls, jlong handle, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic_handle(env, kms_generate_rollover_proof,
         (KmsAccountHandle)handle, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateWithdrawProof(
     JNIEnv *env, jclass cls, jlong handle, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic_handle(env, kms_generate_withdraw_proof,
         (KmsAccountHandle)handle, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_generateRagequitProof(
     JNIEnv *env, jclass cls, jlong handle, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic_handle(env, kms_generate_ragequit_proof,
         (KmsAccountHandle)handle, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
@@ -1110,59 +1149,65 @@ JNIEXPORT jobjectArray JNICALL Java_io_krustykms_KmsNative_ethSign(
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_encodeErc20Approve(
     JNIEnv *env, jclass cls, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic(env, kms_encode_erc20_approve, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_encodeFundCalls(
     JNIEnv *env, jclass cls, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic(env, kms_encode_fund_calls, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_encodeTransferCalls(
     JNIEnv *env, jclass cls, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic(env, kms_encode_transfer_calls, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_encodeRolloverCalls(
     JNIEnv *env, jclass cls, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic(env, kms_encode_rollover_calls, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_encodeWithdrawCalls(
     JNIEnv *env, jclass cls, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic(env, kms_encode_withdraw_calls, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
 
 JNIEXPORT jstring JNICALL Java_io_krustykms_KmsNative_encodeRagequitCalls(
     JNIEnv *env, jclass cls, jstring paramsJson) {
     (void)cls;
-    const char *json = require_utf_chars(env, paramsJson);
+    size_t json_cap = 0;
+    char *json = require_utf8_chars(env, paramsJson, &json_cap);
     if (json == NULL) return NULL;
     jstring result = string_dynamic(env, kms_encode_ragequit_calls, json);
-    (*env)->ReleaseStringUTFChars(env, paramsJson, json);
+    secure_free(json, json_cap);
     return result;
 }
