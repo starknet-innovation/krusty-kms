@@ -21,7 +21,7 @@ bip39 = { workspace = true }
 hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha3 = "0.10"
+sha3 = "0.12"
 zeroize = { workspace = true }
 
 [lints.clippy]
