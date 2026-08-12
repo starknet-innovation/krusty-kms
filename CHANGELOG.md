@@ -4,6 +4,12 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add chain- and pool-scoped STRK20 viewing-key derivation stages for hardware
+  signers. Signature folding verifies the expected public key and message, and
+  preserves the original unscoped Rust and WASM APIs for compatibility.
+
 ## [0.6.0] - 2026-08-11
 
 This release consolidates every change merged after `0.5.4`. The previously prepared
