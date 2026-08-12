@@ -4,7 +4,7 @@
 //! to produce a valid Stark curve scalar.
 
 use crate::mnemonic::mnemonic_to_seed;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use k256::ecdsa::SigningKey;
 use krusty_kms_common::{KmsError, Result, SecretFelt};
 use num_bigint::BigUint;
@@ -273,7 +273,7 @@ pub fn derive_nostr_keypair(
     let verifying_key = signing_key.verifying_key();
 
     // Get x-only public key (BIP-340 format used by Nostr)
-    let point = verifying_key.to_encoded_point(false); // uncompressed
+    let point = verifying_key.to_sec1_point(false); // uncompressed
     let x_bytes = point
         .x()
         .ok_or_else(|| KmsError::CryptoError("Failed to get x coordinate".to_string()))?;
@@ -415,7 +415,7 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<Der
         let signing_key = SigningKey::from_bytes(key.into())
             .map_err(|e| KmsError::CryptoError(format!("Invalid secp256k1 key: {}", e)))?;
         let verifying_key = signing_key.verifying_key();
-        let compressed_pubkey = verifying_key.to_encoded_point(true); // compressed = true
+        let compressed_pubkey = verifying_key.to_sec1_point(true); // compressed = true
         mac.update(compressed_pubkey.as_bytes()); // 33 bytes: 0x02/0x03 + x
     }
 

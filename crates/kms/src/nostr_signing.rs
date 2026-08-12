@@ -59,7 +59,7 @@ pub fn sign_nostr_message(
 }
 
 fn parse_signing_key(private_key: &[u8; 32]) -> Result<SigningKey, KmsError> {
-    SigningKey::from_bytes(private_key)
+    SigningKey::from_slice(private_key)
         .map_err(|error| KmsError::InvalidPrivateKey(format!("Invalid secp256k1 key: {error}")))
 }
 
@@ -70,7 +70,7 @@ fn sign_nostr_event_id_with_aux_rand(
 ) -> Result<NostrSignature, KmsError> {
     let signing_key = parse_signing_key(private_key)?;
     let signature = signing_key
-        .sign_prehash_with_aux_rand(event_id, aux_rand)
+        .sign_raw(event_id, aux_rand)
         .map_err(|error| KmsError::CryptoError(format!("nostr signing failed: {error}")))?;
 
     Ok(NostrSignature {
@@ -114,7 +114,7 @@ mod tests {
             decode_array::<32>("6c3fd336b5457a0f2b74959f177a5c5e7f9ab75cdb4ab7a3ec7aaf1e2a3d2b13");
 
         let signed = sign_nostr_event_id(&private_key, &event_id).unwrap();
-        let verifying_key = VerifyingKey::from_bytes(&signed.public_key).unwrap();
+        let verifying_key = VerifyingKey::from_slice(&signed.public_key).unwrap();
         let signature = Signature::try_from(signed.signature.as_slice()).unwrap();
 
         verifying_key.verify_prehash(&event_id, &signature).unwrap();
@@ -147,7 +147,7 @@ mod tests {
         let message = b"hello nostr raw message";
 
         let signed = sign_nostr_message(&private_key, message).unwrap();
-        let verifying_key = VerifyingKey::from_bytes(&signed.public_key).unwrap();
+        let verifying_key = VerifyingKey::from_slice(&signed.public_key).unwrap();
         let signature = Signature::try_from(signed.signature.as_slice()).unwrap();
 
         verifying_key.verify(message, &signature).unwrap();

@@ -8,7 +8,7 @@
 //!
 //! We test how operation time scales with input bit sizes (amount complexity).
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_crypto::StarkCurve;
 use krusty_kms_sdk::{
@@ -19,7 +19,7 @@ use krusty_kms_sdk::{
     TongoAccount,
 };
 use starknet_types_core::felt::Felt;
-
+use std::hint::black_box;
 const TEST_MNEMONIC: &str =
     "habit hope tip crystal because grunt nation idea electric witness alert like";
 

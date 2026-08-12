@@ -6,9 +6,10 @@
 //! - Scalar arithmetic modulo curve order
 //! - Hash operations (Pedersen, challenge generation)
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use krusty_kms_crypto::{scalar, StarkCurve};
 use starknet_types_core::felt::Felt;
+use std::hint::black_box;
 
 /// Generate a Felt with approximately n bits of entropy.
 fn felt_with_bits(bits: u32) -> Felt {
