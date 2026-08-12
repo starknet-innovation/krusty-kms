@@ -1,11 +1,12 @@
 //! Benchmarks for mental poker operations.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use mental_poker::{
     deck::{CardEncoding, MaskedDeck},
     protocol::MentalPokerProtocol,
     types::Card,
 };
+use std::hint::black_box;
 
 fn bench_key_generation(c: &mut Criterion) {
     c.bench_function("player_keygen", |b| {

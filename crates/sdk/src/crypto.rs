@@ -77,12 +77,12 @@ pub fn encrypt_audit_hint(
     let cipher = XChaCha20Poly1305::new_from_slice(shared_secret)
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {}", e)))?;
 
-    let nonce = XNonce::from_slice(&nonce_bytes);
+    let nonce = XNonce::from(nonce_bytes);
 
     // Encrypt the balance (as 16-byte big-endian)
     let plaintext = plaintext_balance.to_be_bytes();
     let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_ref())
+        .encrypt(&nonce, plaintext.as_ref())
         .map_err(|e| KmsError::CryptoError(format!("Encryption failed: {}", e)))?;
 
     // Pack into 64-byte output (ciphertext + tag = 32 bytes, padded)
@@ -110,12 +110,12 @@ pub fn decrypt_audit_hint(
     let cipher = XChaCha20Poly1305::new_from_slice(shared_secret)
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {}", e)))?;
 
-    let nonce = XNonce::from_slice(nonce);
+    let nonce = XNonce::from(*nonce);
 
     // The actual ciphertext is 16 bytes plaintext + 16 bytes tag = 32 bytes
     let ct_len = 16 + TAG_SIZE; // 32 bytes
     let plaintext = cipher
-        .decrypt(nonce, &ciphertext[..ct_len])
+        .decrypt(&nonce, &ciphertext[..ct_len])
         .map_err(|e| KmsError::CryptoError(format!("Decryption failed: {}", e)))?;
 
     // Convert back to u128

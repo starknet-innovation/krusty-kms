@@ -7,7 +7,7 @@
 //! The benchmark outputs raw timing data suitable for statistical analysis and
 //! visualization with tools like seaborn.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_crypto::StarkCurve;
 use krusty_kms_sdk::{
@@ -16,9 +16,9 @@ use krusty_kms_sdk::{
 };
 use rayon::prelude::*;
 use starknet_types_core::felt::Felt;
+use std::hint::black_box;
 use std::io::Write;
 use std::time::{Duration, Instant};
-
 const TEST_MNEMONIC: &str =
     "habit hope tip crystal because grunt nation idea electric witness alert like";
 

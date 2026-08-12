@@ -46,7 +46,7 @@ impl EthSigner {
     /// Get the uncompressed secp256k1 public key (65 bytes: `04 || x || y`).
     pub fn public_key_uncompressed(&self) -> [u8; 65] {
         let verifying_key = VerifyingKey::from(&self.signing_key);
-        let encoded = verifying_key.to_encoded_point(false);
+        let encoded = verifying_key.to_sec1_point(false);
         let bytes = encoded.as_bytes();
         let mut out = [0u8; 65];
         out.copy_from_slice(bytes);
@@ -72,10 +72,7 @@ impl EthSigner {
     pub fn sign_hash(&self, hash: &Felt) -> Result<[Felt; 5]> {
         let hash_bytes = hash.to_bytes_be();
 
-        let (signature, recovery_id) = self
-            .signing_key
-            .sign_prehash_recoverable(&hash_bytes)
-            .map_err(|e| KmsError::CryptoError(format!("secp256k1 signing failed: {e}")))?;
+        let (signature, recovery_id) = self.signing_key.sign_prehash_recoverable(&hash_bytes);
 
         let r_generic = signature.r().to_bytes();
         let s_generic = signature.s().to_bytes();

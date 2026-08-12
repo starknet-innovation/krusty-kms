@@ -8,9 +8,10 @@
 //!
 //! Input sizes tested: 8, 16, 32, 64, 128, 192, 252 bits
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use krusty_kms_crypto::{ElGamal, ProofOfExponentiation, ProofOfExponentiation2, StarkCurve};
 use starknet_types_core::felt::Felt;
+use std::hint::black_box;
 
 /// Generate a Felt with approximately n bits of entropy.
 fn felt_with_bits(bits: u32) -> Felt {

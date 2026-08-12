@@ -17,21 +17,21 @@ pub(crate) const XNONCE_LEN: usize = 24;
 
 /// Validate a nonce length before it reaches the AEAD.
 ///
-/// `XNonce::from_slice` asserts on a mismatch rather than erroring, so a nonce taken
-/// from untrusted JSON aborted the process instead of returning.
+/// A malformed nonce from untrusted JSON must return an error rather than panic.
+/// `TryFrom` performs the length check without asserting, preserving the existing
+/// deserialization error at this untrusted boundary.
 ///
 /// `DeserializationError` rather than `CryptoError`: the length is a property of the
 /// stored file, not of the password, and the two are the same variant to a caller who
 /// only sees the error code. `CryptoError` maps to `CRYPTO_ERROR` in the wasm layer,
 /// which reads as "wrong password" and invites a retry that cannot succeed.
 pub(crate) fn xnonce(nonce: &[u8]) -> Result<&XNonce> {
-    if nonce.len() != XNONCE_LEN {
-        return Err(KmsError::DeserializationError(format!(
+    <&XNonce>::try_from(nonce).map_err(|_| {
+        KmsError::DeserializationError(format!(
             "Invalid nonce length: expected {XNONCE_LEN} bytes, got {}",
             nonce.len()
-        )));
-    }
-    Ok(XNonce::from_slice(nonce))
+        ))
+    })
 }
 
 /// Encrypted private key with KDF salt.
@@ -131,9 +131,9 @@ pub fn encrypt_private_key(
     // Encrypt
     let cipher = XChaCha20Poly1305::new_from_slice(key.as_slice())
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {e}")))?;
-    let nonce = XNonce::from_slice(&nonce_bytes);
+    let nonce = XNonce::from(nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_slice())
+        .encrypt(&nonce, plaintext.as_slice())
         .map_err(|e| KmsError::CryptoError(format!("Encryption failed: {e}")))?;
 
     Ok(EncryptedKey {
@@ -192,9 +192,9 @@ pub fn encrypt_with_key(plaintext: &[u8], key: &[u8; 32]) -> Result<EncryptedPay
 
     let cipher = XChaCha20Poly1305::new_from_slice(key)
         .map_err(|e| KmsError::CryptoError(format!("Invalid key: {e}")))?;
-    let nonce = XNonce::from_slice(&nonce_bytes);
+    let nonce = XNonce::from(nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, plaintext)
+        .encrypt(&nonce, plaintext)
         .map_err(|e| KmsError::CryptoError(format!("Encryption failed: {e}")))?;
 
     Ok(EncryptedPayload {
