@@ -48,7 +48,10 @@ pub use nostr_signing::{
 pub use stark_signing::{
     sign_stark_hash, stark_public_key, validate_stark_private_key, StarkSignature,
 };
-pub use strk20::{derive_strk20_viewing_key, STRK20_VIEWING_KEY_DOMAIN};
+pub use strk20::{
+    derive_scoped_strk20_viewing_key, derive_strk20_viewing_key, fold_strk20_viewing_key,
+    strk20_viewing_key_message_hash, STRK20_VIEWING_KEY_DOMAIN,
+};
 pub use tx_hash::{
     compute_declare_v2_hash, compute_declare_v3_hash, compute_deploy_account_v1_hash,
     compute_deploy_account_v3_hash, compute_invoke_v1_hash, compute_invoke_v3_hash,
