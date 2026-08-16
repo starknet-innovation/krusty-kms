@@ -36,12 +36,15 @@ pub fn felt_to_kms(f: &Felt) -> KmsFelt {
 /// (JNI / Swift / Dart) would otherwise sign or prove with a key the caller
 /// did not intend. The hex/bytes parsers already reject this (M-25); every
 /// struct-passing entry point must use this checked decoder (H-3).
+///
+/// Canonical encodings are the unique 32-byte big-endian integers in
+/// `0..=p-1`. The bound is checked against `Felt::MAX` *before* decoding so
+/// secret-bearing inputs never get an extra `to_bytes_be()` plaintext copy.
 pub fn kms_to_felt(k: &KmsFelt) -> Result<Felt, i32> {
-    let felt = Felt::from_bytes_be_slice(&k.bytes);
-    if felt.to_bytes_be() != k.bytes {
+    if k.bytes > Felt::MAX.to_bytes_be() {
         return Err(KMS_ERR_INVALID_INPUT);
     }
-    Ok(felt)
+    Ok(Felt::from_bytes_be_slice(&k.bytes))
 }
 
 /// Decode a slice of `KmsFelt` values, failing closed on the first

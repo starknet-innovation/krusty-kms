@@ -13,10 +13,15 @@ buffer they supplied.
 ## Interface
 
 `kms_to_felt` now returns `Result<Felt, i32>` and fail-closes with
-`KMS_ERR_INVALID_INPUT` unless `felt.to_bytes_be() == k.bytes`.
-`kms_slice_to_felts` applies the same check to arrays. The C ABI function
-signatures are unchanged; only the error code for non-canonical struct
-values changes (previously those calls succeeded with a reduced scalar).
+`KMS_ERR_INVALID_INPUT` unless the 32-byte buffer is `<= Felt::MAX`
+(`p - 1`) as a big-endian integer. `kms_slice_to_felts` applies the same
+check to arrays. The C ABI function signatures are unchanged; only the
+error code for non-canonical struct values changes (previously those
+calls succeeded with a reduced scalar).
+
+The bound is compared against the public `Felt::MAX` encoding before
+`from_bytes_be_slice`, so secret-bearing inputs (private keys, ElGamal
+scalars) do not get an extra `to_bytes_be()` plaintext copy on the stack.
 
 ## Invariants
 
