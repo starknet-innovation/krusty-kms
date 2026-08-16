@@ -4,11 +4,16 @@ use std::ffi::c_char;
 use std::panic::catch_unwind;
 
 use krusty_kms_common::{ElGamalCiphertext, SecretFelt};
-use krusty_kms_crypto::ElGamal;
+use krusty_kms_crypto::{ElGamal, ElGamalEncryption};
+use starknet_types_core::curve::ProjectivePoint;
+use starknet_types_core::felt::Felt;
 
 use crate::error::*;
 use crate::helpers::*;
 use crate::types::*;
+
+type EncryptFn =
+    fn(&Felt, &ProjectivePoint, &Felt, &Felt) -> krusty_kms_common::Result<ElGamalEncryption>;
 
 /// Encrypt a message under an ElGamal public key and produce a proof.
 ///
@@ -33,65 +38,18 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
     out_proof_json_written: *mut usize,
 ) -> i32 {
     catch_unwind(|| {
-        if message.is_null()
-            || public_key.is_null()
-            || random.is_null()
-            || prefix.is_null()
-            || out_l.is_null()
-            || out_r.is_null()
-        {
-            return KMS_ERR_NULL_POINTER;
-        }
-
-        // SecretFelt zeroizes on drop (volatile write). Plain Felt copies of
-        // the plaintext amount and blinding scalar would linger in stack
-        // memory on every path; knowing either reveals the plaintext point
-        // (L - pk^r).
-        let msg = match kms_to_felt(&*message) {
-            Ok(felt) => SecretFelt::new(felt),
-            Err(code) => return code,
-        };
-        let pk = match kms_to_proj(&*public_key) {
-            Ok(p) => p,
-            Err(e) => return e,
-        };
-        let rnd = match kms_to_felt(&*random) {
-            Ok(felt) => SecretFelt::new(felt),
-            Err(code) => return code,
-        };
-        let pfx = match kms_to_felt(&*prefix) {
-            Ok(felt) => felt,
-            Err(code) => return code,
-        };
-
-        let enc = match ElGamal::encrypt(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx) {
-            Ok(e) => e,
-            Err(_) => return KMS_ERR_CRYPTO,
-        };
-
-        let proof_str = match to_deterministic_json(&enc.proof) {
-            Ok(s) => s,
-            Err(e) => return e,
-        };
-
-        let rc = write_string_output(
-            &proof_str,
+        elgamal_encrypt_inner(
+            message,
+            public_key,
+            random,
+            prefix,
+            out_l,
+            out_r,
             out_proof_json,
             out_proof_json_len,
             out_proof_json_written,
-        );
-        if rc != KMS_OK {
-            return rc;
-        }
-
-        // Size probe (NULL proof buffer): report length only; do not publish points.
-        if out_proof_json.is_null() {
-            return KMS_OK;
-        }
-
-        *out_l = proj_to_kms(&enc.l);
-        *out_r = proj_to_kms(&enc.r);
-        KMS_OK
+            ElGamal::encrypt,
+        )
     })
     .unwrap_or(KMS_ERR_INTERNAL)
 }
@@ -116,66 +74,88 @@ pub unsafe extern "C" fn kms_elgamal_encrypt_strong(
     out_proof_json_written: *mut usize,
 ) -> i32 {
     catch_unwind(|| {
-        if message.is_null()
-            || public_key.is_null()
-            || random.is_null()
-            || prefix.is_null()
-            || out_l.is_null()
-            || out_r.is_null()
-        {
-            return KMS_ERR_NULL_POINTER;
-        }
-
-        // See kms_elgamal_encrypt: wipe both the plaintext amount and the
-        // blinding scalar on every return path.
-        let msg = match kms_to_felt(&*message) {
-            Ok(felt) => SecretFelt::new(felt),
-            Err(code) => return code,
-        };
-        let pk = match kms_to_proj(&*public_key) {
-            Ok(p) => p,
-            Err(e) => return e,
-        };
-        let rnd = match kms_to_felt(&*random) {
-            Ok(felt) => SecretFelt::new(felt),
-            Err(code) => return code,
-        };
-        let pfx = match kms_to_felt(&*prefix) {
-            Ok(felt) => felt,
-            Err(code) => return code,
-        };
-
-        let enc = match ElGamal::encrypt_strong(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx)
-        {
-            Ok(e) => e,
-            Err(_) => return KMS_ERR_CRYPTO,
-        };
-
-        let proof_str = match to_deterministic_json(&enc.proof) {
-            Ok(s) => s,
-            Err(e) => return e,
-        };
-
-        let rc = write_string_output(
-            &proof_str,
+        elgamal_encrypt_inner(
+            message,
+            public_key,
+            random,
+            prefix,
+            out_l,
+            out_r,
             out_proof_json,
             out_proof_json_len,
             out_proof_json_written,
-        );
-        if rc != KMS_OK {
-            return rc;
-        }
-
-        // Size probe (NULL proof buffer): report length only; do not publish points.
-        if out_proof_json.is_null() {
-            return KMS_OK;
-        }
-
-        *out_l = proj_to_kms(&enc.l);
-        *out_r = proj_to_kms(&enc.r);
-        KMS_OK
+            ElGamal::encrypt_strong,
+        )
     })
     .unwrap_or(KMS_ERR_INTERNAL)
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn elgamal_encrypt_inner(
+    message: *const KmsFelt,
+    public_key: *const KmsProjectivePoint,
+    random: *const KmsFelt,
+    prefix: *const KmsFelt,
+    out_l: *mut KmsProjectivePoint,
+    out_r: *mut KmsProjectivePoint,
+    out_proof_json: *mut c_char,
+    out_proof_json_len: usize,
+    out_proof_json_written: *mut usize,
+    encrypt: EncryptFn,
+) -> i32 {
+    if message.is_null()
+        || public_key.is_null()
+        || random.is_null()
+        || prefix.is_null()
+        || out_l.is_null()
+        || out_r.is_null()
+    {
+        return KMS_ERR_NULL_POINTER;
+    }
+
+    let msg = match kms_to_felt(&*message) {
+        Ok(felt) => SecretFelt::new(felt),
+        Err(code) => return code,
+    };
+    let pk = match kms_to_proj(&*public_key) {
+        Ok(p) => p,
+        Err(e) => return e,
+    };
+    let rnd = match kms_to_felt(&*random) {
+        Ok(felt) => SecretFelt::new(felt),
+        Err(code) => return code,
+    };
+    let pfx = match kms_to_felt(&*prefix) {
+        Ok(felt) => felt,
+        Err(code) => return code,
+    };
+
+    let enc = match encrypt(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx) {
+        Ok(e) => e,
+        Err(_) => return KMS_ERR_CRYPTO,
+    };
+
+    let proof_str = match to_deterministic_json(&enc.proof) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+
+    let rc = write_string_output(
+        &proof_str,
+        out_proof_json,
+        out_proof_json_len,
+        out_proof_json_written,
+    );
+    if rc != KMS_OK {
+        return rc;
+    }
+    if out_proof_json.is_null() {
+        return KMS_OK;
+    }
+
+    *out_l = proj_to_kms(&enc.l);
+    *out_r = proj_to_kms(&enc.r);
+    KMS_OK
 }
 
 /// Decrypt an ElGamal ciphertext, returning the decrypted message point.
@@ -247,8 +227,7 @@ mod tests {
         };
         let mut out_r = out_l;
 
-        // Two-call pattern: first probe required bytes, then write.
-        // Probe must not publish ciphertext points.
+        // Two-call pattern: probe must not publish ciphertext points.
         let zero_point = out_l;
         let mut needed = 0usize;
         let rc = unsafe {

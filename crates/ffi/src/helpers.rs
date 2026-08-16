@@ -63,12 +63,14 @@ pub fn proj_to_kms(p: &ProjectivePoint) -> KmsProjectivePoint {
 }
 
 pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, i32> {
+    // Decode every coordinate first. A canonical `z == 0` identity must not
+    // smuggle a non-canonical `x`/`y` past `KMS_ERR_INVALID_INPUT`.
+    let x = kms_to_felt(&k.x)?;
+    let y = kms_to_felt(&k.y)?;
     let z = kms_to_felt(&k.z)?;
     if z == Felt::ZERO {
         return Ok(ProjectivePoint::identity());
     }
-    let x = kms_to_felt(&k.x)?;
-    let y = kms_to_felt(&k.y)?;
     // Convert projective (X, Y, Z) → affine, avoiding ProjectivePoint::new
     // which changed signature in starknet-types-core 0.2.4.
     // Homogeneous projective: affine = (X/Z, Y/Z).
@@ -283,5 +285,30 @@ mod tests {
         let bad = KmsFelt { bytes: [0xff; 32] };
         assert_eq!(kms_slice_to_felts(&[ok, bad]), Err(KMS_ERR_INVALID_INPUT));
         assert_eq!(kms_slice_to_felts(&[ok]).unwrap(), vec![Felt::from(1u64)]);
+    }
+
+    #[test]
+    fn kms_to_proj_rejects_noncanonical_xy_when_z_is_zero() {
+        let identity = proj_to_kms(&ProjectivePoint::identity());
+        assert!(kms_to_proj(&identity).is_ok());
+
+        let zero = felt_to_kms(&Felt::ZERO);
+        let noncanonical = KmsFelt { bytes: [0xff; 32] };
+        assert_eq!(
+            kms_to_proj(&KmsProjectivePoint {
+                x: noncanonical,
+                y: zero,
+                z: zero,
+            }),
+            Err(KMS_ERR_INVALID_INPUT)
+        );
+        assert_eq!(
+            kms_to_proj(&KmsProjectivePoint {
+                x: zero,
+                y: noncanonical,
+                z: zero,
+            }),
+            Err(KMS_ERR_INVALID_INPUT)
+        );
     }
 }

@@ -22,6 +22,8 @@ values changes (previously those calls succeeded with a reduced scalar).
 
 - Every FFI entry point that reads a `KmsFelt` goes through the checked
   decoder, including hashes, points, and address helpers.
+- Projective points decode `x`, `y`, and `z` before the `z == 0` identity
+  fast path, so a canonical zero Z cannot smuggle a non-canonical X or Y.
 - Canonical encodings, including `Felt::MAX` (`p - 1`) and leading-zero
   short values produced by `felt_to_kms`, still decode.
 
