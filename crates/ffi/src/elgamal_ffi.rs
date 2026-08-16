@@ -47,13 +47,22 @@ pub unsafe extern "C" fn kms_elgamal_encrypt(
         // the plaintext amount and blinding scalar would linger in stack
         // memory on every path; knowing either reveals the plaintext point
         // (L - pk^r).
-        let msg = SecretFelt::new(kms_to_felt(&*message));
+        let msg = match kms_to_felt(&*message) {
+            Ok(felt) => SecretFelt::new(felt),
+            Err(code) => return code,
+        };
         let pk = match kms_to_proj(&*public_key) {
             Ok(p) => p,
             Err(e) => return e,
         };
-        let rnd = SecretFelt::new(kms_to_felt(&*random));
-        let pfx = kms_to_felt(&*prefix);
+        let rnd = match kms_to_felt(&*random) {
+            Ok(felt) => SecretFelt::new(felt),
+            Err(code) => return code,
+        };
+        let pfx = match kms_to_felt(&*prefix) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
 
         let enc = match ElGamal::encrypt(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx) {
             Ok(e) => e,
@@ -119,13 +128,22 @@ pub unsafe extern "C" fn kms_elgamal_encrypt_strong(
 
         // See kms_elgamal_encrypt: wipe both the plaintext amount and the
         // blinding scalar on every return path.
-        let msg = SecretFelt::new(kms_to_felt(&*message));
+        let msg = match kms_to_felt(&*message) {
+            Ok(felt) => SecretFelt::new(felt),
+            Err(code) => return code,
+        };
         let pk = match kms_to_proj(&*public_key) {
             Ok(p) => p,
             Err(e) => return e,
         };
-        let rnd = SecretFelt::new(kms_to_felt(&*random));
-        let pfx = kms_to_felt(&*prefix);
+        let rnd = match kms_to_felt(&*random) {
+            Ok(felt) => SecretFelt::new(felt),
+            Err(code) => return code,
+        };
+        let pfx = match kms_to_felt(&*prefix) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
 
         let enc = match ElGamal::encrypt_strong(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx)
         {
@@ -186,7 +204,10 @@ pub unsafe extern "C" fn kms_elgamal_decrypt(
             Err(e) => return e,
         };
         // SecretFelt zeroizes on drop (volatile write); plain assignment can be DCE'd.
-        let sk = SecretFelt::new(kms_to_felt(&*private_key));
+        let sk = match kms_to_felt(&*private_key) {
+            Ok(felt) => SecretFelt::new(felt),
+            Err(code) => return code,
+        };
 
         let cipher = ElGamalCiphertext { l, r };
         match ElGamal::decrypt(&cipher, sk.expose_secret()) {

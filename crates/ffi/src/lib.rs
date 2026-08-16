@@ -102,7 +102,7 @@ mod tests {
     fn test_felt_conversion_roundtrip() {
         let felt = Felt::from(42u64);
         let kms = helpers::felt_to_kms(&felt);
-        let back = helpers::kms_to_felt(&kms);
+        let back = helpers::kms_to_felt(&kms).unwrap();
         assert_eq!(felt, back);
     }
 

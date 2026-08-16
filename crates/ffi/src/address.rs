@@ -6,7 +6,7 @@ use std::slice;
 use starknet_types_core::felt::Felt;
 
 use crate::error::*;
-use crate::helpers::{felt_to_kms, kms_to_felt, KMS_MAX_CONSTRUCTOR_CALLDATA};
+use crate::helpers::{felt_to_kms, kms_slice_to_felts, kms_to_felt, KMS_MAX_CONSTRUCTOR_CALLDATA};
 use crate::types::*;
 
 #[no_mangle]
@@ -29,15 +29,27 @@ pub unsafe extern "C" fn kms_calculate_contract_address(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let s = kms_to_felt(&*salt);
-        let ch = kms_to_felt(&*class_hash);
-        let da = kms_to_felt(&*deployer_address);
+        let s = match kms_to_felt(&*salt) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
+        let ch = match kms_to_felt(&*class_hash) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
+        let da = match kms_to_felt(&*deployer_address) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
 
         let calldata: Vec<Felt> = if constructor_calldata_len == 0 {
             vec![]
         } else {
             let kms_cd = slice::from_raw_parts(constructor_calldata, constructor_calldata_len);
-            kms_cd.iter().map(kms_to_felt).collect()
+            match kms_slice_to_felts(kms_cd) {
+                Ok(felts) => felts,
+                Err(code) => return code,
+            }
         };
 
         match krusty_kms::calculate_contract_address(&s, &ch, &calldata, &da) {
@@ -63,12 +75,21 @@ pub unsafe extern "C" fn kms_derive_oz_account_address(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let pk = kms_to_felt(&*public_key_x);
-        let ch = kms_to_felt(&*class_hash);
+        let pk = match kms_to_felt(&*public_key_x) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
+        let ch = match kms_to_felt(&*class_hash) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         let s = if salt.is_null() {
             None
         } else {
-            Some(kms_to_felt(&*salt))
+            match kms_to_felt(&*salt) {
+                Ok(felt) => Some(felt),
+                Err(code) => return code,
+            }
         };
 
         match krusty_kms::derive_oz_account_address(&pk, &ch, s.as_ref()) {

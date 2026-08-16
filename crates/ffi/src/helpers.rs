@@ -29,8 +29,25 @@ pub fn felt_to_kms(f: &Felt) -> KmsFelt {
     }
 }
 
-pub fn kms_to_felt(k: &KmsFelt) -> Felt {
-    Felt::from_bytes_be_slice(&k.bytes)
+/// Decode a `KmsFelt` and reject non-canonical 32-byte encodings.
+///
+/// `Felt::from_bytes_be_slice` reduces values `>= p` to a different field
+/// element. Language bindings that stuff raw 32-byte keys into `KmsFelt`
+/// (JNI / Swift / Dart) would otherwise sign or prove with a key the caller
+/// did not intend. The hex/bytes parsers already reject this (M-25); every
+/// struct-passing entry point must use this checked decoder (H-3).
+pub fn kms_to_felt(k: &KmsFelt) -> Result<Felt, i32> {
+    let felt = Felt::from_bytes_be_slice(&k.bytes);
+    if felt.to_bytes_be() != k.bytes {
+        return Err(KMS_ERR_INVALID_INPUT);
+    }
+    Ok(felt)
+}
+
+/// Decode a slice of `KmsFelt` values, failing closed on the first
+/// non-canonical encoding.
+pub fn kms_slice_to_felts(values: &[KmsFelt]) -> Result<Vec<Felt>, i32> {
+    values.iter().map(kms_to_felt).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -46,12 +63,12 @@ pub fn proj_to_kms(p: &ProjectivePoint) -> KmsProjectivePoint {
 }
 
 pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, i32> {
-    let z = kms_to_felt(&k.z);
+    let z = kms_to_felt(&k.z)?;
     if z == Felt::ZERO {
         return Ok(ProjectivePoint::identity());
     }
-    let x = kms_to_felt(&k.x);
-    let y = kms_to_felt(&k.y);
+    let x = kms_to_felt(&k.x)?;
+    let y = kms_to_felt(&k.y)?;
     // Convert projective (X, Y, Z) → affine, avoiding ProjectivePoint::new
     // which changed signature in starknet-types-core 0.2.4.
     // Homogeneous projective: affine = (X/Z, Y/Z).
@@ -235,5 +252,36 @@ mod tests {
             short.contains("0x0000000000000000000000000000000000000000000000000000000000000001")
         );
         assert!(long.contains("0x0000000000000000000000000000000000000000000000000000000000abcdef"));
+    }
+
+    fn prime_bytes() -> [u8; 32] {
+        let mut bytes = Felt::MAX.to_bytes_be();
+        bytes[31] += 1;
+        bytes
+    }
+
+    #[test]
+    fn kms_to_felt_rejects_values_at_or_above_the_field_prime() {
+        let canonical = felt_to_kms(&Felt::from(42u64));
+        assert_eq!(kms_to_felt(&canonical).unwrap(), Felt::from(42u64));
+
+        let max = felt_to_kms(&Felt::MAX);
+        assert_eq!(kms_to_felt(&max).unwrap(), Felt::MAX);
+
+        let prime = KmsFelt {
+            bytes: prime_bytes(),
+        };
+        assert_eq!(kms_to_felt(&prime), Err(KMS_ERR_INVALID_INPUT));
+
+        let all_ff = KmsFelt { bytes: [0xff; 32] };
+        assert_eq!(kms_to_felt(&all_ff), Err(KMS_ERR_INVALID_INPUT));
+    }
+
+    #[test]
+    fn kms_slice_to_felts_fails_closed_on_first_noncanonical() {
+        let ok = felt_to_kms(&Felt::from(1u64));
+        let bad = KmsFelt { bytes: [0xff; 32] };
+        assert_eq!(kms_slice_to_felts(&[ok, bad]), Err(KMS_ERR_INVALID_INPUT));
+        assert_eq!(kms_slice_to_felts(&[ok]).unwrap(), vec![Felt::from(1u64)]);
     }
 }

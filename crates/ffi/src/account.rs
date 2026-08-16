@@ -50,7 +50,10 @@ pub unsafe extern "C" fn kms_account_create_from_mnemonic(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let addr = kms_to_felt(&*contract_address);
+        let addr = match kms_to_felt(&*contract_address) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         let pass = if p.is_empty() { None } else { Some(p) };
 
         let account = match TongoAccount::from_mnemonic(m, index, account_index, addr, pass) {
@@ -81,8 +84,14 @@ pub unsafe extern "C" fn kms_account_create_from_private_key(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let sk = kms_to_felt(&*private_key);
-        let addr = kms_to_felt(&*contract_address);
+        let sk = match kms_to_felt(&*private_key) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
+        let addr = match kms_to_felt(&*contract_address) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
 
         let account = match TongoAccount::from_private_key(sk, addr) {
             Ok(a) => a,
@@ -254,5 +263,16 @@ mod tests {
 
         let rc = unsafe { kms_account_destroy(h) };
         assert_eq!(rc, KMS_OK);
+    }
+
+    #[test]
+    fn test_account_from_private_key_rejects_noncanonical() {
+        let private_key = KmsFelt { bytes: [0xff; 32] };
+        let addr = felt_to_kms(&Felt::from(456u64));
+        let mut h: KmsAccountHandle = 0;
+
+        let rc = unsafe { kms_account_create_from_private_key(&private_key, &addr, &mut h) };
+        assert_eq!(rc, KMS_ERR_INVALID_INPUT);
+        assert_eq!(h, 0);
     }
 }

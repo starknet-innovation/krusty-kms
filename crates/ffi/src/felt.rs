@@ -55,7 +55,10 @@ pub unsafe extern "C" fn kms_felt_to_hex(
         if value.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let felt = kms_to_felt(&*value);
+        let felt = match kms_to_felt(&*value) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         let hex = format!("0x{:064x}", felt);
         write_string_output(&hex, out, out_len, out_written)
     })
@@ -103,7 +106,10 @@ pub unsafe extern "C" fn kms_felt_to_bytes_be(
         if value.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let felt = kms_to_felt(&*value);
+        let felt = match kms_to_felt(&*value) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         let bytes = felt.to_bytes_be();
         write_bytes_output(&bytes, out, out_len, out_written)
     })
@@ -151,7 +157,7 @@ mod tests {
                 unsafe { kms_felt_from_hex(cstr.as_ptr(), &mut out) },
                 KMS_OK
             );
-            assert_eq!(kms_to_felt(&out), Felt::MAX);
+            assert_eq!(kms_to_felt(&out).unwrap(), Felt::MAX);
         }
 
         // Short canonical values (with leading zeros implied) still parse.
@@ -160,7 +166,7 @@ mod tests {
             unsafe { kms_felt_from_hex(short.as_ptr(), &mut out) },
             KMS_OK
         );
-        assert_eq!(kms_to_felt(&out), Felt::from(42u64));
+        assert_eq!(kms_to_felt(&out).unwrap(), Felt::from(42u64));
     }
 
     /// 32-byte inputs >= p must be rejected, not silently reduced (M-25).
@@ -179,7 +185,7 @@ mod tests {
             unsafe { kms_felt_from_bytes_be(max.as_ptr(), max.len(), &mut out) },
             KMS_OK
         );
-        assert_eq!(kms_to_felt(&out), Felt::MAX);
+        assert_eq!(kms_to_felt(&out).unwrap(), Felt::MAX);
 
         // Short inputs and 32-byte inputs with leading zeros stay accepted.
         let small = [0u8, 0, 0, 42];
@@ -187,6 +193,23 @@ mod tests {
             unsafe { kms_felt_from_bytes_be(small.as_ptr(), small.len(), &mut out) },
             KMS_OK
         );
-        assert_eq!(kms_to_felt(&out), Felt::from(42u64));
+        assert_eq!(kms_to_felt(&out).unwrap(), Felt::from(42u64));
+    }
+
+    #[test]
+    fn to_hex_and_bytes_reject_noncanonical_struct_values() {
+        let prime = KmsFelt {
+            bytes: prime_bytes(),
+        };
+        let mut written = 0usize;
+        assert_eq!(
+            unsafe { kms_felt_to_hex(&prime, std::ptr::null_mut(), 0, &mut written) },
+            KMS_ERR_INVALID_INPUT
+        );
+        let mut out = [0u8; 32];
+        assert_eq!(
+            unsafe { kms_felt_to_bytes_be(&prime, out.as_mut_ptr(), out.len(), &mut written) },
+            KMS_ERR_INVALID_INPUT
+        );
     }
 }
