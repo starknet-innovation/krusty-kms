@@ -4,6 +4,12 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Reject cleartext `http://localhost` RPC URLs unless every resolved address
+  is loopback, so a poisoned resolver cannot steer signing-critical RPC at
+  metadata or RFC1918 destinations.
+
 ### Added
 
 - Add chain- and pool-scoped STRK20 viewing-key derivation stages for hardware
