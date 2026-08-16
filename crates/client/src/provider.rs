@@ -21,7 +21,9 @@ use url::Url;
 /// `/etc/hosts` or resolver that maps `localhost` to metadata/RFC1918 is
 /// rejected. The HTTP client is then pinned to **every** address in that
 /// RRset so `HttpTransport` cannot re-resolve the name (DNS rebinding) and
-/// dual-stack loopback listeners still have a fallback.
+/// dual-stack loopback listeners still have a fallback. Cleartext clients
+/// also disable proxies and redirects so a 307 or `http_proxy` cannot send
+/// the JSON-RPC POST off-loopback.
 ///
 /// Everything this provider reports (nonces, balances, deployment state,
 /// contract parameters) feeds signing decisions, so a cleartext remote
@@ -31,7 +33,7 @@ use url::Url;
 /// A configured `JsonRpcClient` that can be used to interact with Starknet.
 pub fn create_provider(rpc_url: &str) -> Result<JsonRpcClient<HttpTransport>> {
     let url = Url::parse(rpc_url)
-        .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid RPC URL: {}", e)))?;
+        .map_err(|e| krusty_kms_common::KmsError::RpcError(format!("Invalid RPC URL: {}", e)))?;
 
     Ok(JsonRpcClient::new(rpc_http_transport(url)?))
 }
@@ -55,7 +57,9 @@ fn rpc_http_transport(url: Url) -> Result<HttpTransport> {
 /// every answer to be loopback, and pin **all** of those addresses so later
 /// requests neither rebind nor drop a dual-stack fallback.
 fn cleartext_loopback_http_client(url: &Url) -> Result<reqwest::Client> {
-    let mut builder = reqwest::Client::builder().no_proxy();
+    let mut builder = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none());
     if let Some((host, addrs)) = localhost_loopback_pin(url)? {
         builder = builder.resolve_to_addrs(&host, &addrs);
     }
@@ -69,12 +73,24 @@ fn cleartext_loopback_http_client(url: &Url) -> Result<reqwest::Client> {
 /// `Some((host, addrs))` when the URL uses `localhost` and every resolved
 /// address is loopback. `None` for loopback IP literals.
 fn localhost_loopback_pin(url: &Url) -> Result<Option<(String, Vec<SocketAddr>)>> {
+    pin_localhost(url, resolve_host)
+}
+
+fn pin_localhost(
+    url: &Url,
+    resolve: impl Fn(&str, u16) -> Result<Vec<SocketAddr>>,
+) -> Result<Option<(String, Vec<SocketAddr>)>> {
     match url.host() {
         Some(url::Host::Ipv4(v4)) if v4.is_loopback() => Ok(None),
         Some(url::Host::Ipv6(v6)) if ip_is_cleartext_loopback(IpAddr::V6(v6)) => Ok(None),
         Some(url::Host::Domain(domain)) if domain.eq_ignore_ascii_case("localhost") => {
-            let port = url.port_or_known_default().unwrap_or(80);
-            let addrs = resolve_host(domain, port)?;
+            // `http` always has a known default; fail closed rather than invent a port.
+            let port = url.port_or_known_default().ok_or_else(|| {
+                krusty_kms_common::KmsError::RpcError(format!(
+                    "plain http:// RPC URL is missing a port, got {url}"
+                ))
+            })?;
+            let addrs = resolve(domain, port)?;
             require_loopback_addrs(domain, &addrs)?;
             Ok(Some((domain.to_string(), addrs)))
         }
@@ -154,26 +170,60 @@ mod tests {
     }
 
     #[test]
+    fn malformed_rpc_url_is_rpc_error() {
+        match create_provider("not a url") {
+            Err(krusty_kms_common::KmsError::RpcError(message)) => {
+                assert!(message.contains("Invalid RPC URL"));
+            }
+            other => panic!("expected RpcError, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn localhost_http_pins_every_validated_loopback_addr() {
         let url = Url::parse("http://localhost:5050").unwrap();
-        let (host, addrs) = localhost_loopback_pin(&url)
+        let v4 = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5050);
+        let v6 = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 5050);
+        let (host, addrs) = pin_localhost(&url, |_, _| Ok(vec![v6, v4]))
             .unwrap()
             .expect("localhost must pin DNS");
         assert!(host.eq_ignore_ascii_case("localhost"));
-        assert!(!addrs.is_empty());
-        assert!(addrs.iter().all(|addr| ip_is_cleartext_loopback(addr.ip())));
+        assert_eq!(addrs, vec![v6, v4]);
 
         assert!(
-            localhost_loopback_pin(&Url::parse("http://127.0.0.1:5050").unwrap())
+            pin_localhost(&Url::parse("http://127.0.0.1:5050").unwrap(), |_, _| Ok(
+                vec![]
+            ))
+            .unwrap()
+            .is_none()
+        );
+        assert!(
+            pin_localhost(&Url::parse("http://[::1]:5050").unwrap(), |_, _| Ok(vec![]))
                 .unwrap()
                 .is_none()
         );
         assert!(
-            localhost_loopback_pin(&Url::parse("http://[::1]:5050").unwrap())
-                .unwrap()
-                .is_none()
+            pin_localhost(&Url::parse("http://example.com").unwrap(), |_, _| Ok(vec![
+                v4
+            ]))
+            .is_err()
         );
-        assert!(localhost_loopback_pin(&Url::parse("http://example.com").unwrap()).is_err());
+    }
+
+    #[test]
+    fn pin_localhost_rejects_synthetic_mixed_rrset() {
+        let url = Url::parse("http://localhost:5050/rpc/v0_7?x=1").unwrap();
+        let loopback = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5050);
+        let metadata = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254)), 80);
+        assert!(pin_localhost(&url, |_, _| Ok(vec![loopback, metadata])).is_err());
+        assert!(pin_localhost(&url, |_, _| Ok(vec![])).is_err());
+        let (host, addrs) = pin_localhost(&url, |_, _| Ok(vec![loopback]))
+            .unwrap()
+            .expect("loopback-only RRset must pin");
+        assert_eq!(host, "localhost");
+        assert_eq!(addrs, vec![loopback]);
+        assert_eq!(url.path(), "/rpc/v0_7");
+        assert_eq!(url.query(), Some("x=1"));
     }
 
     #[test]

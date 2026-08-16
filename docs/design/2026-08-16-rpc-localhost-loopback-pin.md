@@ -18,7 +18,8 @@ DNS alone is also TOCTOU: `HttpTransport` re-resolves the hostname later.
    map retains **every** validated address (IPv4 and IPv6), so later requests
    do not ask DNS again and dual-stack listeners still have a fallback.
 
-Loopback IP literals skip DNS pinning. HTTPS is unchanged.
+Cleartext clients also disable proxies and HTTP redirects so a 307 or
+`http_proxy` cannot send the JSON-RPC POST off-loopback.
 
 ## Dependency
 
