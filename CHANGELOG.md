@@ -7,8 +7,9 @@ All notable changes to the published Rust crates are documented here.
 ### Security
 
 - Reject cleartext `http://localhost` RPC URLs unless every resolved address
-  is loopback, then rewrite the URL to a validated loopback IP literal so
-  later HTTP requests cannot rebind to metadata or RFC1918.
+  is loopback, and pin the HTTP client to that full RRset so later DNS
+  lookups cannot rebind to metadata or RFC1918. `krusty-kms-client` now
+  uses reqwest 0.13 so the pin uses the same client type as `HttpTransport`.
 
 ### Added
 
