@@ -117,10 +117,6 @@
       "lines": 1205
     },
     {
-      "path": "crates/ffi/src/elgamal_ffi.rs",
-      "lines": 379
-    },
-    {
       "path": "crates/ffi/src/proof.rs",
       "lines": 962
     },
