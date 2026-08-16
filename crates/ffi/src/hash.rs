@@ -7,7 +7,7 @@ use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 
 use crate::error::*;
-use crate::helpers::{felt_to_kms, kms_to_felt, KMS_MAX_POSEIDON_VALUES};
+use crate::helpers::{felt_to_kms, kms_slice_to_felts, kms_to_felt, KMS_MAX_POSEIDON_VALUES};
 use crate::types::*;
 
 #[no_mangle]
@@ -20,8 +20,14 @@ pub unsafe extern "C" fn kms_pedersen_hash(
         if left.is_null() || right.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let l = kms_to_felt(&*left);
-        let r = kms_to_felt(&*right);
+        let l = match kms_to_felt(&*left) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
+        let r = match kms_to_felt(&*right) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         let h = Pedersen::hash(&l, &r);
         *out = felt_to_kms(&h);
         KMS_OK
@@ -50,7 +56,10 @@ pub unsafe extern "C" fn kms_poseidon_hash_many(
             vec![]
         } else {
             let kms_felts = slice::from_raw_parts(values, values_len);
-            kms_felts.iter().map(kms_to_felt).collect()
+            match kms_slice_to_felts(kms_felts) {
+                Ok(felts) => felts,
+                Err(code) => return code,
+            }
         };
 
         let h = krusty_kms_crypto::poseidon_hash_many(&felts);

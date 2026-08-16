@@ -30,9 +30,15 @@ pub unsafe extern "C" fn kms_stark_sign(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let msg = kms_to_felt(&*hash);
+        let msg = match kms_to_felt(&*hash) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         // SecretFelt zeroizes on drop (volatile write); plain assignment can be DCE'd.
-        let sk = SecretFelt::new(kms_to_felt(&*private_key));
+        let sk = match kms_to_felt(&*private_key) {
+            Ok(felt) => SecretFelt::new(felt),
+            Err(code) => return code,
+        };
 
         match krusty_kms::sign_stark_hash(sk.expose_secret(), &msg) {
             Ok(sig) => {
@@ -65,7 +71,10 @@ pub unsafe extern "C" fn kms_eth_sign(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let h = kms_to_felt(&*hash);
+        let h = match kms_to_felt(&*hash) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
         let pk_slice = slice::from_raw_parts(eth_private_key_bytes, 32);
         let mut pk_arr = [0u8; 32];
         pk_arr.copy_from_slice(pk_slice);
@@ -185,5 +194,18 @@ mod tests {
         // `s` are writable output storage for the duration of the call.
         let rc = unsafe { kms_stark_sign(&hash, &zero, &mut r, &mut s) };
         assert_eq!(rc, KMS_ERR_CRYPTO);
+    }
+
+    #[test]
+    fn test_stark_sign_rejects_noncanonical_private_key() {
+        let hash = felt_to_kms(&Felt::from(0x1234u64));
+        let sk = KmsFelt { bytes: [0xff; 32] };
+        let mut r = KmsFelt { bytes: [0; 32] };
+        let mut s = KmsFelt { bytes: [0; 32] };
+
+        // SAFETY: all pointers reference initialized `KmsFelt` values; `r` and
+        // `s` are writable output storage for the duration of the call.
+        let rc = unsafe { kms_stark_sign(&hash, &sk, &mut r, &mut s) };
+        assert_eq!(rc, KMS_ERR_INVALID_INPUT);
     }
 }

@@ -17,8 +17,14 @@ pub unsafe extern "C" fn kms_projective_from_affine(
         if affine.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let x = kms_to_felt(&(*affine).x);
-        let y = kms_to_felt(&(*affine).y);
+        let x = match kms_to_felt(&(*affine).x) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
+        let y = match kms_to_felt(&(*affine).y) {
+            Ok(felt) => felt,
+            Err(code) => return code,
+        };
 
         let ap = match AffinePoint::new(x, y) {
             Ok(ap) => ap,
