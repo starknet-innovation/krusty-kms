@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-16
+
 ### Security
 
 - Reject cleartext `http://localhost` RPC URLs unless every resolved address
