@@ -19,9 +19,12 @@ use url::Url;
 /// `::1`, including IPv4-mapped `::ffff:127.0.0.1`). For the `localhost`
 /// hostname, every DNS answer is required to be loopback — a poisoned
 /// `/etc/hosts` or resolver that maps `localhost` to metadata/RFC1918 is
-/// rejected. Everything this provider reports (nonces, balances, deployment
-/// state, contract parameters) feeds signing decisions, so a cleartext
-/// remote transport would hand a network attacker that influence.
+/// rejected. The HTTP client is then pinned to that RRset so a later lookup
+/// inside `HttpTransport` cannot rebind to a non-loopback address.
+///
+/// Everything this provider reports (nonces, balances, deployment state,
+/// contract parameters) feeds signing decisions, so a cleartext remote
+/// transport would hand a network attacker that influence.
 ///
 /// # Returns
 /// A configured `JsonRpcClient` that can be used to interact with Starknet.
@@ -29,29 +32,50 @@ pub fn create_provider(rpc_url: &str) -> Result<JsonRpcClient<HttpTransport>> {
     let url = Url::parse(rpc_url)
         .map_err(|e| krusty_kms_common::KmsError::CryptoError(format!("Invalid RPC URL: {}", e)))?;
 
-    validate_rpc_url(&url)?;
-
-    Ok(JsonRpcClient::new(HttpTransport::new(url)))
+    Ok(JsonRpcClient::new(rpc_http_transport(url)?))
 }
 
-fn validate_rpc_url(url: &Url) -> Result<()> {
+fn rpc_http_transport(url: Url) -> Result<HttpTransport> {
     match url.scheme() {
-        "https" => Ok(()),
-        "http" => validate_cleartext_loopback(url),
+        "https" => Ok(HttpTransport::new(url)),
+        "http" => {
+            let client = cleartext_loopback_http_client(&url)?;
+            Ok(HttpTransport::new_with_client(url, client))
+        }
         other => Err(krusty_kms_common::KmsError::RpcError(format!(
             "unsupported RPC URL scheme '{other}' (expected https)"
         ))),
     }
 }
 
-fn validate_cleartext_loopback(url: &Url) -> Result<()> {
+/// Build a cleartext HTTP client that can only reach loopback.
+///
+/// Loopback IP literals need no DNS pin. For `localhost`, resolve now, require
+/// every answer to be loopback, and `resolve_to_addrs` so subsequent requests
+/// reuse that RRset instead of asking the resolver again (DNS rebinding).
+fn cleartext_loopback_http_client(url: &Url) -> Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder().no_proxy();
+    if let Some((host, addrs)) = loopback_dns_override(url)? {
+        builder = builder.resolve_to_addrs(&host, &addrs);
+    }
+    builder.build().map_err(|error| {
+        krusty_kms_common::KmsError::RpcError(format!(
+            "failed to build cleartext RPC HTTP client: {error}"
+        ))
+    })
+}
+
+/// `Some((host, addrs))` when the URL uses the `localhost` name and every
+/// resolved address is loopback. `None` for loopback IP literals.
+fn loopback_dns_override(url: &Url) -> Result<Option<(String, Vec<SocketAddr>)>> {
     match url.host() {
-        Some(url::Host::Ipv4(v4)) if v4.is_loopback() => Ok(()),
-        Some(url::Host::Ipv6(v6)) if ip_is_cleartext_loopback(IpAddr::V6(v6)) => Ok(()),
+        Some(url::Host::Ipv4(v4)) if v4.is_loopback() => Ok(None),
+        Some(url::Host::Ipv6(v6)) if ip_is_cleartext_loopback(IpAddr::V6(v6)) => Ok(None),
         Some(url::Host::Domain(domain)) if domain.eq_ignore_ascii_case("localhost") => {
             let port = url.port_or_known_default().unwrap_or(80);
             let addrs = resolve_host(domain, port)?;
-            require_loopback_addrs(domain, &addrs)
+            require_loopback_addrs(domain, &addrs)?;
+            Ok(Some((domain.to_string(), addrs)))
         }
         Some(_) => Err(krusty_kms_common::KmsError::RpcError(format!(
             "plain http:// RPC endpoints are only allowed for loopback hosts, got {url}"
@@ -126,6 +150,29 @@ mod tests {
         assert!(create_provider("http://[::1]:5050").is_ok());
         assert!(create_provider("http://[::ffff:127.0.0.1]:5050").is_ok());
         assert!(create_provider("http://[::ffff:169.254.169.254]:5050").is_err());
+    }
+
+    #[test]
+    fn localhost_http_pins_resolved_loopback_addrs() {
+        let url = Url::parse("http://localhost:5050").unwrap();
+        let (host, addrs) = loopback_dns_override(&url)
+            .unwrap()
+            .expect("localhost must pin DNS");
+        assert!(host.eq_ignore_ascii_case("localhost"));
+        assert!(!addrs.is_empty());
+        assert!(addrs.iter().all(|addr| ip_is_cleartext_loopback(addr.ip())));
+
+        assert!(
+            loopback_dns_override(&Url::parse("http://127.0.0.1:5050").unwrap())
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            loopback_dns_override(&Url::parse("http://[::1]:5050").unwrap())
+                .unwrap()
+                .is_none()
+        );
+        assert!(loopback_dns_override(&Url::parse("http://example.com").unwrap()).is_err());
     }
 
     #[test]
