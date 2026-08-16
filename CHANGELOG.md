@@ -10,6 +10,11 @@ All notable changes to the published Rust crates are documented here.
   signers. Signature folding verifies the expected public key and message, and
   preserves the original unscoped Rust and WASM APIs for compatibility.
 
+### Fixed
+
+- Reject non-canonical field encodings in every C-ABI `KmsFelt` struct decoder
+  instead of silently reducing them, including projective identity coordinates.
+
 ## [0.6.0] - 2026-08-11
 
 This release consolidates every change merged after `0.5.4`. The previously prepared

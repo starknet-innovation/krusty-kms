@@ -74,6 +74,8 @@ pub unsafe extern "C" fn kms_elgamal_encrypt_strong(
     out_proof_json_written: *mut usize,
 ) -> i32 {
     catch_unwind(|| {
+        // See kms_elgamal_encrypt: wipe both the plaintext amount and the
+        // blinding scalar on every return path.
         elgamal_encrypt_inner(
             message,
             public_key,
@@ -113,6 +115,9 @@ unsafe fn elgamal_encrypt_inner(
         return KMS_ERR_NULL_POINTER;
     }
 
+    // SecretFelt zeroizes on drop (volatile write). Plain Felt copies of the
+    // plaintext amount and blinding scalar would linger in stack memory on
+    // every path; knowing either reveals the plaintext point (L - pk^r).
     let msg = match kms_to_felt(&*message) {
         Ok(felt) => SecretFelt::new(felt),
         Err(code) => return code,
@@ -149,6 +154,8 @@ unsafe fn elgamal_encrypt_inner(
     if rc != KMS_OK {
         return rc;
     }
+
+    // Size probe (NULL proof buffer): report length only; do not publish points.
     if out_proof_json.is_null() {
         return KMS_OK;
     }
