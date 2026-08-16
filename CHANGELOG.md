@@ -7,8 +7,8 @@ All notable changes to the published Rust crates are documented here.
 ### Security
 
 - Reject cleartext `http://localhost` RPC URLs unless every resolved address
-  is loopback, and pin the HTTP client to that RRset so a later DNS lookup
-  cannot rebind signing-critical RPC to metadata or RFC1918.
+  is loopback, then rewrite the URL to a validated loopback IP literal so
+  later HTTP requests cannot rebind to metadata or RFC1918.
 
 ### Added
 
