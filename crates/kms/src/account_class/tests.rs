@@ -70,6 +70,41 @@ fn test_argent_v03x_calldata() {
     }
 }
 
+/// An unrecognised class hash must error, not return a guessed address.
+///
+/// `getAccountClassHashes()` publishes Argent Cairo-0 proxy hashes to JS
+/// callers; those take a different constructor shape, so guessing the
+/// v0.4.0 layout would hand back an undeployable address.
+#[test]
+fn test_argent_unknown_class_hash_is_rejected() {
+    let pk = Felt::from(42u64);
+    let cairo0_proxy =
+        Felt::from_hex("0x025ec026985a3bf9d0cc1fe17326b245dfdc3ff89b8fde106542a3ea56c5a918")
+            .unwrap();
+
+    for hash in [Felt::from(0xABCDEFu64), cairo0_proxy] {
+        let argent = ArgentAccount::with_class_hash(hash);
+        assert!(
+            matches!(
+                argent.calculate_address(&pk, SaltPolicy::PublicKey),
+                Err(KmsError::InvalidClassHash(_))
+            ),
+            "unknown Argent class hash {hash:#x} must not derive an address"
+        );
+    }
+}
+
+/// Every known class hash must derive an address (no accidental rejections).
+#[test]
+fn test_argent_known_class_hashes_all_derive() {
+    let pk = Felt::from(42u64);
+    for hash in ArgentAccount::known_class_hashes() {
+        assert!(ArgentAccount::with_class_hash(hash)
+            .calculate_address(&pk, SaltPolicy::PublicKey)
+            .is_ok());
+    }
+}
+
 #[test]
 fn test_braavos_calldata() {
     let braavos = BraavosAccount::new();
