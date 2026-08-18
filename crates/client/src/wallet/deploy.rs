@@ -7,6 +7,7 @@
 use krusty_kms::{OpenZeppelinAccount, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
+use krusty_kms_common::fee::{FeeBounds, ResolvedFeeBounds};
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use starknet_rust::accounts::AccountFactory;
@@ -46,6 +47,33 @@ pub async fn deploy_oz_account(
     chain_id: ChainId,
     network: NetworkPreset,
 ) -> Result<DeployResult> {
+    deploy_oz_account_with_bounds(
+        provider,
+        signing_key,
+        account_class,
+        salt_policy,
+        chain_id,
+        network,
+        &FeeBounds::default(),
+    )
+    .await
+}
+
+/// Deploy an OpenZeppelin account within caller-supplied fee bounds.
+///
+/// Identical to [`deploy_oz_account`] but lets the caller cap what the
+/// deployment may cost. The tip is pinned from `fee_bounds` rather than taken
+/// from a block median, the nonce is pinned locally, and the transaction hash
+/// is verified against the one the endpoint reports.
+pub async fn deploy_oz_account_with_bounds(
+    provider: Arc<JsonRpcClient<HttpTransport>>,
+    signing_key: &SigningKey,
+    account_class: &OpenZeppelinAccount,
+    salt_policy: SaltPolicy,
+    chain_id: ChainId,
+    network: NetworkPreset,
+    fee_bounds: &FeeBounds,
+) -> Result<DeployResult> {
     let verifying_key = signing_key.verifying_key();
     let public_key_rs = verifying_key.scalar();
     let public_key_core = super::utils::rs_felt_to_core(public_key_rs);
@@ -75,13 +103,39 @@ pub async fn deploy_oz_account(
             .await
             .map_err(|e| KmsError::CryptoError(e.to_string()))?;
 
-    let result = factory
+    // Not pinned to zero: a reverted deploy still lands in a block and bumps
+    // the nonce of an account that is still undeployed. Untrusted input is
+    // fine here — a wrong nonce only makes the transaction unincludeable.
+    let nonce = factory
         .deploy_v3(salt_rs)
-        .send()
+        .fetch_nonce()
         .await
-        .map_err(map_deploy_factory_error)?;
+        .map_err(|e| KmsError::RpcError(e.to_string()))?;
 
-    let tx = Tx::new(result.transaction_hash, provider, network);
+    let bounds = match fee_bounds.explicit() {
+        Some(resolved) => resolved?,
+        None => {
+            let estimate = factory
+                .deploy_v3(salt_rs)
+                .nonce(nonce)
+                .estimate_fee()
+                .await
+                .map_err(map_deploy_factory_error)?;
+            fee_bounds.resolve(&super::estimate_input(&estimate))?
+        }
+    };
+
+    let prepared = apply_bounds(factory.deploy_v3(salt_rs).nonce(nonce), &bounds)
+        .prepared()
+        .map_err(|e| KmsError::TransactionError(e.to_string()))?;
+
+    let local_hash = prepared.transaction_hash(false);
+
+    prepared.send().await.map_err(map_deploy_factory_error)?;
+
+    // The reported hash is never used: a substituted one could resolve to
+    // another transaction's receipt and be read as this one succeeding.
+    let tx = Tx::new(local_hash, provider, network);
 
     Ok(DeployResult {
         address,
@@ -119,4 +173,19 @@ pub async fn estimate_deploy_fee(
         .estimate_fee()
         .await
         .map_err(map_deploy_factory_error)
+}
+
+/// Pin every fee field on a deploy builder so none is filled from RPC.
+fn apply_bounds<'a, F>(
+    deployment: starknet_rust::accounts::AccountDeploymentV3<'a, F>,
+    bounds: &ResolvedFeeBounds,
+) -> starknet_rust::accounts::AccountDeploymentV3<'a, F> {
+    deployment
+        .l1_gas(bounds.l1_gas)
+        .l1_gas_price(bounds.l1_gas_price)
+        .l2_gas(bounds.l2_gas)
+        .l2_gas_price(bounds.l2_gas_price)
+        .l1_data_gas(bounds.l1_data_gas)
+        .l1_data_gas_price(bounds.l1_data_gas_price)
+        .tip(bounds.tip)
 }

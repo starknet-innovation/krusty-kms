@@ -1804,6 +1804,7 @@ dependencies = [
  "krusty-kms-crypto",
  "krusty-kms-domain",
  "num-bigint 0.5.1",
+ "serde_json",
  "starknet-rust",
  "starknet-types-core",
  "tokio",

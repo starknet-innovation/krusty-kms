@@ -6,6 +6,7 @@ pub mod utils;
 use krusty_kms::{AccountClass, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
+use krusty_kms_common::fee::{FeeBounds, FeeEstimateInput, ResolvedFeeBounds};
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::Tx;
@@ -27,6 +28,7 @@ pub struct Wallet {
     address: Address,
     chain_id: ChainId,
     network: NetworkPreset,
+    fee_bounds: FeeBounds,
     deployed_cache: RwLock<Option<(bool, Instant)>>,
 }
 
@@ -71,6 +73,7 @@ impl Wallet {
             address,
             chain_id,
             network,
+            fee_bounds: FeeBounds::default(),
             deployed_cache: RwLock::new(None),
         })
     }
@@ -102,6 +105,7 @@ impl Wallet {
             address,
             chain_id,
             network,
+            fee_bounds: FeeBounds::default(),
             deployed_cache: RwLock::new(None),
         }
     }
@@ -164,18 +168,67 @@ impl Wallet {
         Ok(deployed)
     }
 
+    /// Replace the fee bounds this wallet signs within.
+    ///
+    /// Defaults to [`FeeBounds::default`], which pins the tip to zero and caps
+    /// the total at [`krusty_kms_common::fee::DEFAULT_MAX_FEE_FRI`].
+    #[must_use]
+    pub fn with_fee_bounds(mut self, fee_bounds: FeeBounds) -> Self {
+        self.fee_bounds = fee_bounds;
+        self
+    }
+
+    /// The fee bounds applied to every transaction this wallet sends.
+    pub fn fee_bounds(&self) -> &FeeBounds {
+        &self.fee_bounds
+    }
+
     /// Execute a list of calls via `execute_v3`.
+    ///
+    /// Every V3 fee field is pinned before signing rather than left for the RPC
+    /// endpoint to fill: the tip comes from [`Self::fee_bounds`] (never from a
+    /// block median), and the gas bounds are checked against the caller's
+    /// ceiling. The returned [`Tx`] tracks the locally computed hash, so a
+    /// lying endpoint cannot point the caller at a different transaction.
     pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
-        use starknet_rust::accounts::Account;
-        let result = self
+        use starknet_rust::accounts::{Account, ConnectedAccount};
+
+        let nonce = self
             .account
-            .execute_v3(calls)
+            .get_nonce()
+            .await
+            .map_err(|e| KmsError::RpcError(e.to_string()))?;
+
+        let bounds = match self.fee_bounds.explicit() {
+            // Caller supplied every bound: no estimate, no endpoint input.
+            Some(resolved) => resolved?,
+            None => {
+                let estimate = self
+                    .account
+                    .execute_v3(calls.clone())
+                    .nonce(nonce)
+                    .estimate_fee()
+                    .await
+                    .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
+                self.fee_bounds.resolve(&estimate_input(&estimate))?
+            }
+        };
+
+        let prepared = apply_bounds(self.account.execute_v3(calls).nonce(nonce), &bounds)
+            .prepared()
+            .map_err(|e| KmsError::TransactionError(e.to_string()))?;
+
+        let local_hash = prepared.transaction_hash(false);
+
+        prepared
             .send()
             .await
             .map_err(|e| KmsError::TransactionError(e.to_string()))?;
 
+        // The reported hash is never used: a substituted one could resolve to
+        // another transaction's receipt and be read as this one succeeding.
         Ok(Tx::new(
-            result.transaction_hash,
+            local_hash,
             self.provider.clone(),
             self.network.clone(),
         ))
@@ -216,6 +269,35 @@ impl Wallet {
     pub fn tx(&self) -> crate::tx::TxBuilder<'_> {
         crate::tx::TxBuilder::new(self)
     }
+}
+
+/// Convert a provider fee estimate into the Starknet-free shape `FeeBounds` takes.
+pub(crate) fn estimate_input(
+    estimate: &starknet_rust::core::types::FeeEstimate,
+) -> FeeEstimateInput {
+    FeeEstimateInput {
+        l1_gas_consumed: estimate.l1_gas_consumed,
+        l1_gas_price: estimate.l1_gas_price,
+        l2_gas_consumed: estimate.l2_gas_consumed,
+        l2_gas_price: estimate.l2_gas_price,
+        l1_data_gas_consumed: estimate.l1_data_gas_consumed,
+        l1_data_gas_price: estimate.l1_data_gas_price,
+    }
+}
+
+/// Pin every fee field on an execution builder so none is filled from RPC.
+fn apply_bounds<'a, A>(
+    execution: starknet_rust::accounts::ExecutionV3<'a, A>,
+    bounds: &ResolvedFeeBounds,
+) -> starknet_rust::accounts::ExecutionV3<'a, A> {
+    execution
+        .l1_gas(bounds.l1_gas)
+        .l1_gas_price(bounds.l1_gas_price)
+        .l2_gas(bounds.l2_gas)
+        .l2_gas_price(bounds.l2_gas_price)
+        .l1_data_gas(bounds.l1_data_gas)
+        .l1_data_gas_price(bounds.l1_data_gas_price)
+        .tip(bounds.tip)
 }
 
 #[async_trait::async_trait]
