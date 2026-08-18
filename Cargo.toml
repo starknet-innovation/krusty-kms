@@ -40,7 +40,7 @@ keywords = ["cryptography", "kms", "starknet", "encryption"]
 categories = ["cryptography"]
 
 [workspace.dependencies]
-starknet-types-core = { version = "0.2.4", features = ["hash"] }
+starknet-types-core = { version = "0.3.0", features = ["hash"] }
 bip39 = "2.2.0"
 hmac = "0.13.0"
 sha2 = "0.11.0"
