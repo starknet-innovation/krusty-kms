@@ -65,6 +65,11 @@ pub async fn deploy_oz_account(
 /// deployment may cost. The tip is pinned from `fee_bounds` rather than taken
 /// from a block median, and the returned [`Tx`] tracks the locally computed
 /// transaction hash; the one the endpoint reports is ignored.
+// NOTE: intentionally over the 40-line guideline. This is the canonical
+// derivation-to-deployment path, and splitting it further would scatter the
+// order of descriptor -> deployed-check -> nonce -> bounds -> submit across
+// helpers where the sequencing is the thing a reader needs to see. It was
+// already over before fee bounds were threaded through.
 pub async fn deploy_oz_account_with_bounds(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,
@@ -112,18 +117,7 @@ pub async fn deploy_oz_account_with_bounds(
         .await
         .map_err(|e| KmsError::RpcError(e.to_string()))?;
 
-    let bounds = match fee_bounds.explicit() {
-        Some(resolved) => resolved?,
-        None => {
-            let estimate = factory
-                .deploy_v3(salt_rs)
-                .nonce(nonce)
-                .estimate_fee()
-                .await
-                .map_err(map_deploy_factory_error)?;
-            fee_bounds.resolve(&super::estimate_input(&estimate))?
-        }
-    };
+    let bounds = resolve_bounds(&factory, salt_rs, nonce, fee_bounds).await?;
 
     let prepared = apply_bounds(factory.deploy_v3(salt_rs).nonce(nonce), &bounds)
         .prepared()
@@ -188,4 +182,26 @@ fn apply_bounds<'a, F>(
         .l1_data_gas(bounds.l1_data_gas)
         .l1_data_gas_price(bounds.l1_data_gas_price)
         .tip(bounds.tip)
+}
+
+/// Bounds for this deployment, estimating only when the caller left a gap.
+async fn resolve_bounds(
+    factory: &OpenZeppelinAccountFactory<LocalWallet, Arc<JsonRpcClient<HttpTransport>>>,
+    salt: starknet_rust::core::types::Felt,
+    nonce: starknet_rust::core::types::Felt,
+    fee_bounds: &FeeBounds,
+) -> Result<ResolvedFeeBounds> {
+    // Caller supplied every bound: no estimate, no endpoint input.
+    if let Some(resolved) = fee_bounds.explicit() {
+        return resolved;
+    }
+
+    let estimate = factory
+        .deploy_v3(salt)
+        .nonce(nonce)
+        .estimate_fee()
+        .await
+        .map_err(map_deploy_factory_error)?;
+
+    fee_bounds.resolve(&super::estimate_input(&estimate))
 }

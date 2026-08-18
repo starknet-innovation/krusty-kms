@@ -87,6 +87,10 @@ impl GatewayBackend for StarknetGatewayBackend {
         }
     }
 
+    // NOTE: intentionally over the 40-line guideline, for the same reason as
+    // the client's deploy path: chain guard -> descriptor validation ->
+    // deployed-check -> nonce -> bounds -> submit -> wait is a sequence whose
+    // order is the point. It was already over before fee bounds were added.
     async fn deploy_open_zeppelin(
         &self,
         private_key: &SecretFelt,
@@ -137,21 +141,7 @@ impl GatewayBackend for StarknetGatewayBackend {
             .await
             .map_err(|error| provider_transport_error(error.to_string()))?;
 
-        let bounds = match self.fee_bounds.explicit() {
-            // Caller supplied every bound: no estimate, no endpoint input.
-            Some(resolved) => resolved.map_err(fee_bounds_rejected)?,
-            None => {
-                let estimate = factory
-                    .deploy_v3(salt)
-                    .nonce(nonce)
-                    .estimate_fee()
-                    .await
-                    .map_err(map_deploy_submission_error)?;
-                self.fee_bounds
-                    .resolve(&estimate_input(&estimate))
-                    .map_err(fee_bounds_rejected)?
-            }
-        };
+        let bounds = resolve_bounds(&factory, salt, nonce, &self.fee_bounds).await?;
 
         let prepared = apply_bounds(factory.deploy_v3(salt).nonce(nonce), &bounds)
             .prepared()
@@ -308,4 +298,28 @@ fn apply_bounds<'a, F>(
         .l1_data_gas(bounds.l1_data_gas)
         .l1_data_gas_price(bounds.l1_data_gas_price)
         .tip(bounds.tip)
+}
+
+/// Bounds for this deployment, estimating only when the caller left a gap.
+async fn resolve_bounds(
+    factory: &OpenZeppelinAccountFactory<LocalWallet, Arc<JsonRpcClient<HttpTransport>>>,
+    salt: starknet_rust::core::types::Felt,
+    nonce: starknet_rust::core::types::Felt,
+    fee_bounds: &FeeBounds,
+) -> GatewayResult<ResolvedFeeBounds> {
+    // Caller supplied every bound: no estimate, no endpoint input.
+    if let Some(resolved) = fee_bounds.explicit() {
+        return resolved.map_err(fee_bounds_rejected);
+    }
+
+    let estimate = factory
+        .deploy_v3(salt)
+        .nonce(nonce)
+        .estimate_fee()
+        .await
+        .map_err(map_deploy_submission_error)?;
+
+    fee_bounds
+        .resolve(&estimate_input(&estimate))
+        .map_err(fee_bounds_rejected)
 }

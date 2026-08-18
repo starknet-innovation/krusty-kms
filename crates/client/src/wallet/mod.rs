@@ -13,6 +13,7 @@ use krusty_kms_wallet_api::Tx;
 pub use krusty_kms_wallet_api::WalletExecutor;
 use starknet_rust::accounts::{ExecutionEncoding, SingleOwnerAccount};
 use starknet_rust::core::types::Call;
+use starknet_rust::core::types::Felt as RsFelt;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
@@ -183,6 +184,26 @@ impl Wallet {
         &self.fee_bounds
     }
 
+    /// Bounds for this call, estimating only when the caller left a gap.
+    async fn resolve_bounds(&self, calls: &[Call], nonce: RsFelt) -> Result<ResolvedFeeBounds> {
+        use starknet_rust::accounts::Account;
+
+        // Caller supplied every bound: no estimate, no endpoint input.
+        if let Some(resolved) = self.fee_bounds.explicit() {
+            return resolved;
+        }
+
+        let estimate = self
+            .account
+            .execute_v3(calls.to_vec())
+            .nonce(nonce)
+            .estimate_fee()
+            .await
+            .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
+
+        self.fee_bounds.resolve(&estimate_input(&estimate))
+    }
+
     /// Execute a list of calls via `execute_v3`.
     ///
     /// Every V3 fee field is pinned before signing rather than left for the RPC
@@ -199,20 +220,7 @@ impl Wallet {
             .await
             .map_err(|e| KmsError::RpcError(e.to_string()))?;
 
-        let bounds = match self.fee_bounds.explicit() {
-            // Caller supplied every bound: no estimate, no endpoint input.
-            Some(resolved) => resolved?,
-            None => {
-                let estimate = self
-                    .account
-                    .execute_v3(calls.clone())
-                    .nonce(nonce)
-                    .estimate_fee()
-                    .await
-                    .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
-                self.fee_bounds.resolve(&estimate_input(&estimate))?
-            }
-        };
+        let bounds = self.resolve_bounds(&calls, nonce).await?;
 
         let prepared = apply_bounds(self.account.execute_v3(calls).nonce(nonce), &bounds)
             .prepared()
