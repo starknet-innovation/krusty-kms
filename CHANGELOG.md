@@ -4,6 +4,47 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **BREAKING: every Argent account address derived by 0.7.0 and earlier was
+  wrong.** `ArgentAccount::build_constructor_calldata` emitted
+  `[0, public_key, 0]` for every Argent class hash. Corrected per version,
+  verified against the deployed class ABIs: v0.4.0+ takes
+  `constructor(owner: Signer, guardian: Option<Signer>)`, where the guardian is
+  `Option::None` — variant **1**, not 0 — so `[0, public_key, 1]`; v0.3.0 and
+  v0.3.1 take a two-felt `constructor(owner: felt252, guardian: felt252)`, so
+  `[public_key, 0]`.
+
+  The old trailing `0` encodes a truncated `Option::Some`, which fails Cairo
+  deserialization, so those addresses were not merely different accounts but
+  permanently undeployable. Confirmed on Sepolia: the corrected derivation
+  reproduces a live v0.4.0 account for the repo's test mnemonic, while the
+  previous address returns `Contract not found`.
+
+  Affects `deriveArgentAccountAddress` (npm), gateway and oracle
+  `derive_account`, and account discovery. **Consumers must discard any cached
+  Argent address from an earlier release, and must never treat one as a receive
+  address — funds sent there cannot be recovered.** OpenZeppelin and Braavos
+  derivation are unaffected, as is the Argent Cairo-0 proxy path.
+
+### Changed
+
+- **BREAKING: Argent address derivation rejects unrecognised class hashes.**
+  `ArgentAccount::calculate_address` returns `InvalidClassHash` unless the class
+  hash is v0.4.0, v0.3.1 or v0.3.0. Argent's constructor shape is
+  version-dependent and `getAccountClassHashes()` publishes Cairo-0 proxy hashes
+  that take a different shape again, so guessing a layout produced exactly the
+  undeployable address described above. Callers passing a custom Argent class
+  hash — including via the gateway's `allow_unlisted_class_hash` — now get an
+  error instead of a wrong address.
+
+- Argent test vectors and cross-language reference values re-pinned to the
+  corrected addresses. The account-class fixture runner now honours each vector's
+  own class hash and asserts its constructor calldata, so a per-version vector
+  can no longer silently verify another version's encoding. Added v0.3.0 and
+  v0.3.1 fixture vectors and a discovery-level regression test asserting the
+  derived Argent address matches the account deployed on Sepolia.
+
 ## [0.7.0] - 2026-08-16
 
 ### Security
