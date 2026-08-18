@@ -4,6 +4,37 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Bound V3 transaction fees against a hostile RPC endpoint. `Wallet::execute`,
+  `deploy_oz_account`, and the gateway's `deploy_open_zeppelin` previously left
+  all six gas amount/price bounds and `tip` to be filled from RPC responses and
+  then committed them in the signature — and `tip` came from the median of a
+  block body the endpoint itself serves. Because the charged fee is
+  `(l2_gas_price + tip) * l2_gas_consumed + ...`, an endpoint could pick values
+  that drain the account with no collusion required. All three paths now resolve
+  fees through the new `krusty_kms_common::fee::FeeBounds`, which pins the tip
+  locally (default 0), caps the total (default 1 STRK), and can supply every
+  bound explicitly so no estimate is requested at all. Each path also tracks the
+  locally computed transaction hash and never reads the one the endpoint
+  reports, so a substituted hash cannot point the caller at someone else's
+  transaction. Configure via `Wallet::with_fee_bounds`,
+  `deploy_oz_account_with_bounds`, and `StarknetGatewayBackend::with_fee_bounds`;
+  defaults are safe and no existing signature changed.
+
+  Two caveats worth reading before upgrading. The ceiling applies to the
+  *bound* — the most a sequencer could charge — which the 1.5x gas and 1.5x
+  price multipliers inflate to 2.25x the estimate, so the 1 STRK default rejects
+  transactions whose estimated fee exceeds roughly 0.44 STRK. And pinning the
+  tip to 0 is an availability trade-off: under the v0.14 tip-ordered mempool a
+  zero-tip transaction sorts below tipped ones, so callers who need inclusion
+  during congestion should set `FeeBounds::tip` explicitly and raise
+  `max_fee_fri` to cover `tip * l2_gas`.
+
+  The `nonce` is unchanged and still comes from the endpoint on all three paths.
+  It is signature-committed, so a wrong value can only make a transaction
+  unincludeable, never more expensive.
+
 ## [0.7.0] - 2026-08-16
 
 ### Security
