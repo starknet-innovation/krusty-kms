@@ -53,24 +53,10 @@ fn argent_direct_derivation_does_not_match() {
 
 // -- Address derivation -----------------------------------------------------
 
-/// Verify that standard Argent v0.4.0 addresses are derivable from the mnemonic
-/// alone, and that the derivation reproduces the **real on-chain account**.
-///
-/// Standard accounts use `salt = publicKey`, making the address deterministic.
-/// The v0.4.0 constructor is:
-/// ```cairo
-/// fn constructor(ref self: ContractState, owner: Signer, guardian: Option<Signer>)
-/// ```
-/// so the calldata is `[0, publicKey, 1]`:
-/// - `0` = `Signer::Starknet` enum variant index
-/// - `publicKey` = the Stark public key (felt252)
-/// - `1` = `Option::None` for the guardian — `Some` is variant 0, `None` is
-///   variant 1. Using `0` here encodes a truncated `Some`, which fails to
-///   deserialize, so that address can never be deployed at all.
-///
-/// The address asserted here is confirmed deployed on Sepolia. The full
-/// mnemonic → address pipeline is gated by
-/// `candidates::discovery_argent_legacy_candidate_matches_known_address`.
+/// Standard accounts use `salt = publicKey`, so the address is deterministic and
+/// must reproduce the account deployed on Sepolia for this mnemonic. See
+/// `ArgentAccount::build_constructor_calldata` for why the guardian felt is `1`.
+/// The mnemonic → address pipeline is gated in `candidates.rs`.
 #[test]
 fn argent_standard_account_address_matches_onchain() {
     let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();

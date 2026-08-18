@@ -93,13 +93,9 @@ fn discovery_braavos_candidate_matches_known_address() {
     );
 }
 
-/// Verify that the ArgentLegacy v0.4.0 candidate at index 0 matches the account
-/// actually deployed on Sepolia for this mnemonic.
-///
-/// This is the discovery-level counterpart to
-/// `discovery_braavos_candidate_matches_known_address`. Without it, a wrong
-/// Argent constructor encoding produces a plausible-looking but undeployable
-/// address and nothing in the suite notices.
+/// The discovery-level counterpart to
+/// `discovery_braavos_candidate_matches_known_address`: without it, a wrong
+/// Argent constructor encoding yields an undeployable address unnoticed.
 #[test]
 fn discovery_argent_legacy_candidate_matches_known_address() {
     let candidates = generate_candidates(MNEMONIC, 1).unwrap();

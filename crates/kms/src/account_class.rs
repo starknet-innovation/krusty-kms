@@ -294,21 +294,12 @@ impl ArgentAccount {
     pub const CLASS_HASH_V030: &str =
         "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
 
-    /// Parsed [`Self::CLASS_HASH`] (v0.4.0).
     const V040_HASH: Felt = Felt::from_hex_unchecked(Self::CLASS_HASH);
-
-    /// Parsed [`Self::CLASS_HASH_V031`].
     const V031_HASH: Felt = Felt::from_hex_unchecked(Self::CLASS_HASH_V031);
-
-    /// Parsed [`Self::CLASS_HASH_V030`].
     const V030_HASH: Felt = Felt::from_hex_unchecked(Self::CLASS_HASH_V030);
 
-    /// Class hashes whose constructor layout this crate knows.
-    ///
-    /// This is the single source of truth: both the allowlist and the
-    /// constructor-layout dispatch read it, so the two cannot drift. Adding an
-    /// Argent version means adding it here *and* to
-    /// [`AccountClass::build_constructor_calldata`].
+    /// The allowlist and the constructor-layout dispatch both read this, so they
+    /// cannot drift. A new Argent version needs adding here and to the dispatch.
     const KNOWN_CLASS_HASHES: [Felt; 3] = [Self::V040_HASH, Self::V031_HASH, Self::V030_HASH];
 
     /// Class hashes accepted for Argent Cairo 1 deployments.
@@ -339,18 +330,12 @@ impl AccountClass for ArgentAccount {
         self.class_hash
     }
 
-    /// Build the version-appropriate Argent constructor calldata.
+    /// Layouts verified against the deployed class ABIs. In v0.4.0+,
+    /// `Signer::Starknet` is variant 0 and `Option::None` is variant **1**
+    /// (`Some` is 0) — a trailing `0` encodes a truncated `Some` that fails to
+    /// deserialize, giving an address that can never be deployed.
     ///
-    /// Verified against the deployed class ABIs:
-    /// - v0.3.0 / v0.3.1: `constructor(owner: felt252, guardian: felt252)`, so
-    ///   exactly two felts: `[public_key, 0]`.
-    /// - v0.4.0 and later: `constructor(owner: Signer, guardian: Option<Signer>)`.
-    ///   `Signer::Starknet` is variant `0`, so the owner serializes as
-    ///   `[0, public_key]`; `Option::None` is variant `1` (`Some` is `0`), so the
-    ///   guardian serializes as `[1]`. Together: `[0, public_key, 1]`.
-    ///
-    /// Only meaningful for a class hash in [`ArgentAccount::KNOWN_CLASS_HASHES`];
-    /// [`Self::calculate_address`] rejects anything else rather than guessing.
+    /// Assumes a known class hash; [`Self::calculate_address`] rejects the rest.
     fn build_constructor_calldata(&self, public_key: &Felt) -> Vec<Felt> {
         if self.class_hash == Self::V030_HASH || self.class_hash == Self::V031_HASH {
             vec![*public_key, Felt::ZERO]
@@ -359,13 +344,9 @@ impl AccountClass for ArgentAccount {
         }
     }
 
-    /// Reject class hashes whose constructor layout is unknown.
-    ///
-    /// Argent's constructor shape changed between versions, and the Cairo-0
-    /// proxy classes published by `getAccountClassHashes()` take a different
-    /// shape again (`[impl, selector("initialize"), 2, owner, guardian]`).
-    /// Guessing a layout yields an address that cannot be deployed, so an
-    /// unrecognised hash is an error rather than a confidently wrong address.
+    /// Argent's constructor shape is version-dependent, and the Cairo-0 proxy
+    /// hashes published by `getAccountClassHashes()` differ again, so guessing
+    /// hands back an undeployable address. Refuse rather than guess.
     fn calculate_address(&self, public_key: &Felt, salt_policy: SaltPolicy) -> Result<Felt> {
         if !Self::KNOWN_CLASS_HASHES.contains(&self.class_hash) {
             return Err(KmsError::InvalidClassHash(format!(

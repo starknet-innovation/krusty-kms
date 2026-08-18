@@ -276,12 +276,8 @@ fn account_class_vectors_match() {
 
         let class_hash = Felt::from_hex(&v.class_hash).unwrap();
 
-        // Argent and OZ take the vector's own class hash, so a per-version vector
-        // cannot silently verify another version's encoding. Braavos deliberately
-        // does not: its address always derives from the base deployment hash (see
-        // `BraavosAccount::CLASS_HASH`), so the vector's hash is asserted rather
-        // than used. The salt policy is fixed per account type; the vector's
-        // `salt` is checked against it below rather than driving it.
+        // Argent and OZ use the vector's own class hash, so per-version vectors
+        // cannot cross-verify; Braavos always derives from its base hash.
         let (account, salt_policy): (Box<dyn AccountClass>, SaltPolicy) =
             match v.account_type.as_str() {
                 "argent" => (
@@ -305,7 +301,7 @@ fn account_class_vectors_match() {
                 other => panic!("unknown account_type: {other}"),
             };
 
-        // Pin the calldata too — the address alone cannot say *why* it changed.
+        // Pin the calldata too: the address alone cannot say *why* it changed.
         let expected_calldata: Vec<Felt> = v
             .constructor_calldata
             .iter()

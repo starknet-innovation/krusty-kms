@@ -70,11 +70,8 @@ fn test_argent_v03x_calldata() {
     }
 }
 
-/// An unrecognised class hash must error, not return a guessed address.
-///
-/// `getAccountClassHashes()` publishes Argent Cairo-0 proxy hashes to JS
-/// callers; those take a different constructor shape, so guessing the
-/// v0.4.0 layout would hand back an undeployable address.
+/// An unrecognised class hash must error rather than guess — `getAccountClassHashes()`
+/// publishes Cairo-0 proxy hashes, which take a different constructor shape.
 #[test]
 fn test_argent_unknown_class_hash_is_rejected() {
     let pk = Felt::from(42u64);
