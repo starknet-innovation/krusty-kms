@@ -274,26 +274,58 @@ fn account_class_vectors_match() {
     for v in &file.vectors {
         let expected = Felt::from_hex(&v.expected_address).unwrap();
 
-        let actual = match v.account_type.as_str() {
-            "argent" => {
-                let account = ArgentAccount::new();
-                account
-                    .calculate_address(&pk, SaltPolicy::PublicKey)
-                    .unwrap()
-            }
-            "braavos" => {
-                let account = BraavosAccount::new();
-                account
-                    .calculate_address(&pk, SaltPolicy::PublicKey)
-                    .unwrap()
-            }
-            "oz" => {
-                let class_hash = Felt::from_hex(&v.class_hash).unwrap();
-                let oz = OpenZeppelinAccount::from_class_hash(class_hash);
-                oz.calculate_address(&pk, SaltPolicy::Zero).unwrap()
-            }
-            other => panic!("unknown account_type: {other}"),
-        };
+        let class_hash = Felt::from_hex(&v.class_hash).unwrap();
+
+        // Argent and OZ take the vector's own class hash, so a per-version vector
+        // cannot silently verify another version's encoding. Braavos deliberately
+        // does not: its address always derives from the base deployment hash (see
+        // `BraavosAccount::CLASS_HASH`), so the vector's hash is asserted rather
+        // than used. The salt policy is fixed per account type; the vector's
+        // `salt` is checked against it below rather than driving it.
+        let (account, salt_policy): (Box<dyn AccountClass>, SaltPolicy) =
+            match v.account_type.as_str() {
+                "argent" => (
+                    Box::new(ArgentAccount::with_class_hash(class_hash)),
+                    SaltPolicy::PublicKey,
+                ),
+                "braavos" => {
+                    assert_eq!(
+                        class_hash,
+                        Felt::from_hex(BraavosAccount::CLASS_HASH).unwrap(),
+                        "Braavos addresses always derive from the base deployment \
+                         class hash; vector '{}' pins a different one",
+                        v.name
+                    );
+                    (Box::new(BraavosAccount::new()), SaltPolicy::PublicKey)
+                }
+                "oz" => (
+                    Box::new(OpenZeppelinAccount::from_class_hash(class_hash)),
+                    SaltPolicy::Zero,
+                ),
+                other => panic!("unknown account_type: {other}"),
+            };
+
+        // Pin the calldata too — the address alone cannot say *why* it changed.
+        let expected_calldata: Vec<Felt> = v
+            .constructor_calldata
+            .iter()
+            .map(|f| Felt::from_hex(f).unwrap())
+            .collect();
+        assert_eq!(
+            account.build_constructor_calldata(&pk),
+            expected_calldata,
+            "account class vector '{}' constructor calldata mismatch",
+            v.name
+        );
+
+        assert_eq!(
+            Felt::from_hex(&v.salt).unwrap(),
+            salt_policy.resolve(&pk),
+            "account class vector '{}' salt mismatch",
+            v.name
+        );
+
+        let actual = account.calculate_address(&pk, salt_policy).unwrap();
 
         assert_eq!(
             actual, expected,
