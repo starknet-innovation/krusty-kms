@@ -20,8 +20,19 @@ Callers could not defend themselves: `Wallet.account` is private with no
 accessor, no submit path took a bounds parameter, and `estimate_fee` was a
 separate round trip whose result could not be fed back into `execute`.
 
-One root cause, three sites: `Wallet::execute`, `deploy_oz_account`, and the
-gateway's `deploy_open_zeppelin`.
+One root cause, four sites. Three are fixed here: `Wallet::execute`,
+`deploy_oz_account`, and the gateway's `deploy_open_zeppelin`.
+
+The fourth, `ControllerWallet` (`crates/controller/src/wallet.rs`), is
+deliberately out of scope. Its `execute` passes an endpoint estimate straight
+through unbounded, and both it and `deploy` track the endpoint's reported hash —
+the same two defects, so anything holding a `dyn WalletExecutor` loses both
+protections when the concrete type is `ControllerWallet`. Fixing it properly
+means either threading `FeeBounds` through the Cartridge `account_sdk` builder,
+whose fee semantics differ and may be paymaster-backed, or moving the bound to
+the `WalletExecutor` trait — a breaking change to a shared boundary. The crate
+is excluded from the workspace and its SDK path is behind a non-default feature.
+Tracked separately rather than widened into this change.
 
 ## Interface
 

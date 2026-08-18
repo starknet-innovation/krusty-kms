@@ -63,8 +63,8 @@ pub async fn deploy_oz_account(
 ///
 /// Identical to [`deploy_oz_account`] but lets the caller cap what the
 /// deployment may cost. The tip is pinned from `fee_bounds` rather than taken
-/// from a block median, the nonce is pinned locally, and the transaction hash
-/// is verified against the one the endpoint reports.
+/// from a block median, and the returned [`Tx`] tracks the locally computed
+/// transaction hash; the one the endpoint reports is ignored.
 pub async fn deploy_oz_account_with_bounds(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,

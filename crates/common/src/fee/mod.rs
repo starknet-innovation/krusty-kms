@@ -26,8 +26,14 @@ pub struct FeeEstimateInput {
     pub l1_data_gas_price: u128,
 }
 
-/// Bounds that passed the ceiling check — `#[non_exhaustive]` is what makes
-/// holding one proof of that, since no other crate can assemble one.
+/// Bounds that passed the ceiling check.
+///
+/// `#[non_exhaustive]` stops another crate constructing one from scratch, but
+/// the fields stay public and readable, so it is a value type rather than a
+/// capability token: a caller can still copy one and edit it. That is by
+/// design — the ceiling is the caller's own policy, and one who edits past it
+/// could equally have raised `max_fee_fri`. What it defends against is the
+/// *endpoint*, never the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ResolvedFeeBounds {
@@ -176,7 +182,9 @@ impl FeeBounds {
 /// with a zero price adds nothing to the total.
 fn scale_u64(value: u64, multiplier: f64) -> Result<u64> {
     let scaled = value as f64 * multiplier;
-    if scaled > u64::MAX as f64 {
+    // `>=`, not `>`: `u64::MAX as f64` rounds *up* to 2^64, so a product
+    // landing exactly there would pass `>` and then saturate.
+    if scaled >= u64::MAX as f64 {
         return Err(overflowed("gas amount", scaled));
     }
     Ok(scaled as u64)
@@ -184,7 +192,7 @@ fn scale_u64(value: u64, multiplier: f64) -> Result<u64> {
 
 fn scale_u128(value: u128, multiplier: f64) -> Result<u128> {
     let scaled = value as f64 * multiplier;
-    if scaled > u128::MAX as f64 {
+    if scaled >= u128::MAX as f64 {
         return Err(overflowed("gas price", scaled));
     }
     Ok(scaled as u128)

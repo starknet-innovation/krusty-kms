@@ -134,18 +134,27 @@ fn nonsense_multipliers_are_rejected() {
 
 /// A saturated amount paired with a zero price adds nothing to the total, so
 /// the ceiling alone would let it through.
+///
+/// The second case is the boundary: `u64::MAX as f64` rounds *up* to 2^64, so
+/// an amount whose scaled product lands exactly on 2^64 passes a `>` guard and
+/// then saturates. 12297829382473033728 * 1.5 is exactly that value.
 #[test]
 fn saturating_scale_is_rejected() {
-    let saturating = FeeEstimateInput {
-        l2_gas_consumed: u64::MAX,
-        l2_gas_price: 0,
-        ..cheap_estimate()
-    };
-    let err = FeeBounds::default()
-        .resolve(&saturating)
-        .unwrap_err()
-        .to_string();
-    assert!(err.contains("overflows its bound"), "got: {err}");
+    for l2_gas_consumed in [u64::MAX, 12_297_829_382_473_033_728] {
+        let saturating = FeeEstimateInput {
+            l2_gas_consumed,
+            l2_gas_price: 0,
+            ..cheap_estimate()
+        };
+        let err = FeeBounds::default()
+            .resolve(&saturating)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("overflows its bound"),
+            "l2_gas_consumed {l2_gas_consumed} got: {err}"
+        );
+    }
 }
 
 /// A ceiling exactly equal to the resolved total is allowed.
