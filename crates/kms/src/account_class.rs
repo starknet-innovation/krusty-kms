@@ -274,9 +274,7 @@ impl AccountClass for OpenZeppelinAccount {
 
 /// Argent account contract preset.
 ///
-/// Constructor calldata is version-dependent:
-/// - v0.4.0+: `(owner: Signer, guardian: Option<Signer>)` -> `[0, public_key, 1]`
-/// - v0.3.x:  `(owner: felt252, guardian: felt252)` -> `[public_key, 0]`
+/// Constructor: `(0, public_key, 1)` for v0.4.0+, `(public_key, 0)` for v0.3.x.
 pub struct ArgentAccount {
     class_hash: Felt,
 }
