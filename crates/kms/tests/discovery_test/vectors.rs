@@ -18,7 +18,11 @@ pub const ARGENT_PRIVATE_KEY: &str =
 pub const ARGENT_PUBLIC_KEY: &str =
     "0x048495fca9753cb0f4035eb4d2e2c1a22cc6d36fe4b73e17d9d6848333ff03a9";
 
-/// On-chain account address. This is a **smart** account (server-provided salt).
+/// On-chain account address. Fully derivable from the mnemonic.
+///
+/// A **standard** Argent account: `salt = publicKey` and constructor calldata
+/// `[0, publicKey, 1]`. Verified live on Sepolia — `getClassHashAt` returns the
+/// v0.4.0 class hash below.
 ///
 /// Class hash: Argent v0.4.0 (`0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f`)
 /// Contract version: 0.4.0 (get_version returns `{ major: 0, minor: 4, patch: 0 }`)

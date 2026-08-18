@@ -43,7 +43,9 @@ pub fn derive_oz_account_address(
 
 /// Derive an Argent account contract address from a public key.
 ///
-/// Uses the standard Argent constructor calldata format `(0, public_key, 0)`.
+/// Uses the version-appropriate Argent constructor calldata: `[0, public_key, 1]`
+/// for v0.4.0+ (`Signer::Starknet` = 0, `Option::None` = 1), or
+/// `[public_key, 0]` for the two-felt v0.3.x constructor.
 ///
 /// # Arguments
 /// * `public_key` - The Stark public key (hex string)
