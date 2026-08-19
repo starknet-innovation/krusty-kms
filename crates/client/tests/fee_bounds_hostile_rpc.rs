@@ -306,3 +306,71 @@ async fn approval_loop_completes_through_the_executor_trait() {
     );
     assert_eq!(state.submits.load(Ordering::SeqCst), 1);
 }
+
+/// The approval loop must work through `TxBuilder`, the advertised way to
+/// batch calls. A refusal must not destroy the transaction it refused: the
+/// caller needs those same calls to resubmit once the user consents.
+#[tokio::test]
+async fn approval_loop_completes_through_the_transaction_builder() {
+    use krusty_kms_client::fee_approval_required_fri;
+
+    let (state, provider, network) = hostile_context().await;
+    let wallet = Wallet::from_private_key_at_address(
+        provider,
+        Felt::from_hex_unchecked("0x1234"),
+        Address::from(Felt::from_hex_unchecked("0xabc")),
+        ChainId::Sepolia,
+        network,
+    );
+
+    let builder = wallet.tx().add(dummy_call()).add(dummy_call());
+
+    let err = match builder.send().await {
+        Ok(_) => panic!("an unapproved fee must not be signed"),
+        Err(e) => e,
+    };
+    assert_eq!(state.submits.load(Ordering::SeqCst), 0);
+    let total = fee_approval_required_fri(&err).expect("amount must be recoverable");
+
+    // The builder survived the refusal, so the same batch can be resubmitted.
+    assert!(
+        builder
+            .send_with_bounds(&FeeBounds::default().with_max_fee_fri(total))
+            .await
+            .is_ok(),
+        "the approved retry must submit the same calls"
+    );
+    assert_eq!(state.submits.load(Ordering::SeqCst), 1);
+    assert_eq!(builder.calls().len(), 2, "the batch must be intact");
+}
+
+/// The convenience wrappers (`Erc20`, `Staking`, multisig) borrow a
+/// `&dyn WalletExecutor` and take no bounds argument, so an owner must be able
+/// to raise the ceiling in place rather than rebuild around the moved key.
+#[tokio::test]
+async fn approved_bounds_can_be_applied_in_place() {
+    use krusty_kms_client::fee_approval_required_fri;
+
+    let (state, provider, network) = hostile_context().await;
+    let mut wallet = Wallet::from_private_key_at_address(
+        provider,
+        Felt::from_hex_unchecked("0x1234"),
+        Address::from(Felt::from_hex_unchecked("0xabc")),
+        ChainId::Sepolia,
+        network,
+    );
+
+    let err = match wallet.execute(vec![dummy_call()]).await {
+        Ok(_) => panic!("an unapproved fee must not be signed"),
+        Err(e) => e,
+    };
+    let total = fee_approval_required_fri(&err).expect("amount must be recoverable");
+
+    wallet.set_fee_bounds(FeeBounds::default().with_max_fee_fri(total));
+
+    assert!(
+        wallet.execute(vec![dummy_call()]).await.is_ok(),
+        "the same entry point must succeed once bounds are approved"
+    );
+    assert_eq!(state.submits.load(Ordering::SeqCst), 1);
+}

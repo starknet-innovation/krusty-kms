@@ -206,6 +206,18 @@ impl Wallet {
         fee_bounds.resolve(&estimate_input(&estimate))
     }
 
+    /// Replace the fee bounds in place.
+    ///
+    /// [`Self::with_fee_bounds`] consumes `self`, which the convenience
+    /// wrappers cannot use: [`crate::TongoContract`], `Erc20`, `Staking` and the
+    /// multisig actions all borrow a `&dyn WalletExecutor` and take no bounds
+    /// argument, so an owner raising a ceiling after an approval request has no
+    /// other way to apply it without rebuilding the wallet around the moved
+    /// signing key.
+    pub fn set_fee_bounds(&mut self, fee_bounds: FeeBounds) {
+        self.fee_bounds = fee_bounds;
+    }
+
     /// Execute a list of calls via `execute_v3`.
     ///
     /// Every V3 fee field is pinned before signing rather than left for the RPC
