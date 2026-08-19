@@ -127,13 +127,17 @@ part that actually matters exactly where it already is.
 
 ## Failure modes
 
-Missing or insufficient approval is a `KmsError::TransactionError` beginning
-with `fee approval required:` and carrying the resolved total and, when present,
-the approved ceiling in exact FRI and formatted STRK. The gateway classifies it
-as non-retryable `InvalidRequest`. `KmsError` is not `#[non_exhaustive]`, so
-adding a dedicated variant would be a breaking public-enum change; the stable
-prefix preserves the patch-release surface while giving hosts one flag to route
-into confirmation UI.
+Missing or insufficient approval is a `KmsError::TransactionError` carrying the
+resolved total and, when present, the approved ceiling in exact FRI and
+formatted STRK. The gateway classifies it as non-retryable `InvalidRequest`.
+
+Hosts route on `krusty_kms_common::is_fee_approval_required`, not on the message
+text. `KmsError` is not `#[non_exhaustive]`, so a dedicated variant would be a
+breaking public-enum change; a predicate keeps the patch-release surface while
+still giving hosts one reliable flag. It is deliberately not a *prefix* check:
+`TransactionError` renders as `"Transaction error: {0}"`, so the marker lands
+mid-string and `starts_with` would silently never match — a host implementing
+that would treat every consent request as a generic failure.
 
 ## Tests
 

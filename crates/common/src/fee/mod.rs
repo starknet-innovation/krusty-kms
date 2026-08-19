@@ -10,6 +10,22 @@ use crate::error::{KmsError, Result};
 /// [`fri_to_strk`](crate::utils::fri_to_strk) formats the approval errors below.
 pub const ONE_STRK_FRI: u128 = 1_000_000_000_000_000_000;
 
+/// Marks an error as a request for user consent rather than a failure.
+///
+/// Not a prefix: `KmsError::TransactionError` renders as `"Transaction error:
+/// {0}"`, so this appears mid-string. Hosts should route on
+/// [`is_fee_approval_required`] rather than matching either end of the text.
+const FEE_APPROVAL_REQUIRED: &str = "fee approval required:";
+
+/// Whether this error is a request for user approval of a resolved fee.
+///
+/// The one flag a host needs to route into a confirmation prompt instead of an
+/// error path. Prefer this over inspecting the message: the wording carries the
+/// amounts and is free to change, but this predicate is part of the API.
+pub fn is_fee_approval_required(error: &KmsError) -> bool {
+    matches!(error, KmsError::TransactionError(message) if message.contains(FEE_APPROVAL_REQUIRED))
+}
+
 /// Mirrors starknet-rs, so pinning bounds changes nothing on honest endpoints.
 const DEFAULT_ESTIMATE_MULTIPLIER: f64 = 1.5;
 
@@ -197,7 +213,7 @@ impl FeeBounds {
 
         let Some(max_fee_fri) = self.max_fee_fri else {
             return Err(KmsError::TransactionError(format!(
-                "fee approval required: resolved maximum is {total} FRI ({} STRK); ask the \
+                "{FEE_APPROVAL_REQUIRED} resolved maximum is {total} FRI ({} STRK); ask the \
                  user, then resubmit with FeeBounds::with_max_fee_fri(user_approved_fri)",
                 crate::utils::fri_to_strk(total),
             )));
@@ -205,7 +221,7 @@ impl FeeBounds {
 
         if total > max_fee_fri {
             return Err(KmsError::TransactionError(format!(
-                "fee approval required: resolved maximum {total} FRI ({} STRK) exceeds the \
+                "{FEE_APPROVAL_REQUIRED} resolved maximum {total} FRI ({} STRK) exceeds the \
                  approved {max_fee_fri} FRI ({} STRK); ask the user before raising \
                  FeeBounds::max_fee_fri",
                 crate::utils::fri_to_strk(total),

@@ -27,7 +27,9 @@ pub use address::Address;
 pub use amount::Amount;
 pub use chain::ChainId;
 pub use error::{KmsError, Result};
-pub use fee::{FeeBounds, FeeEstimateInput, ResolvedFeeBounds, ONE_STRK_FRI};
+pub use fee::{
+    is_fee_approval_required, FeeBounds, FeeEstimateInput, ResolvedFeeBounds, ONE_STRK_FRI,
+};
 pub use network::NetworkPreset;
 pub use secret_felt::SecretFelt;
 pub use serialization::{

@@ -1,6 +1,7 @@
 //! Unit tests for [`super::FeeBounds`] resolution and approval.
 
 use super::*;
+use crate::fee::is_fee_approval_required;
 
 /// ~0.0000002 STRK all in.
 fn cheap_estimate() -> FeeEstimateInput {
@@ -59,6 +60,37 @@ fn proof_sized_transaction_requires_then_accepts_user_approval() {
         "expected over 1 STRK: {total}"
     );
     assert!(total < 2 * ONE_STRK_FRI, "expected under approval: {total}");
+}
+
+/// The approval request must be detectable the way the docs tell hosts to
+/// detect it.
+///
+/// `KmsError::TransactionError` renders as `"Transaction error: {0}"`, so the
+/// marker lands mid-string: a host matching on the start of the message would
+/// silently treat every consent request as a generic failure.
+#[test]
+fn approval_requests_are_detectable_by_predicate() {
+    let err = FeeBounds::default()
+        .resolve(&cheap_estimate())
+        .expect_err("no approved ceiling means no signing");
+
+    assert!(is_fee_approval_required(&err), "predicate missed it: {err}");
+    assert!(
+        !err.to_string().starts_with("fee approval required"),
+        "if this ever starts matching, the docs may claim a prefix again"
+    );
+
+    // An unrelated failure must not be mistaken for a consent request.
+    let overflow = FeeBounds {
+        gas_multiplier: f64::NAN,
+        ..FeeBounds::default()
+    }
+    .resolve(&cheap_estimate())
+    .expect_err("NaN multiplier");
+    assert!(
+        !is_fee_approval_required(&overflow),
+        "false positive: {overflow}"
+    );
 }
 
 /// The default must never let a block body inject a tip.

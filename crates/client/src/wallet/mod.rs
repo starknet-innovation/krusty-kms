@@ -180,11 +180,16 @@ impl Wallet {
     }
 
     /// Bounds for this call, estimating only when the caller left a gap.
-    async fn resolve_bounds(&self, calls: &[Call], nonce: RsFelt) -> Result<ResolvedFeeBounds> {
+    async fn resolve_bounds(
+        &self,
+        calls: &[Call],
+        nonce: RsFelt,
+        fee_bounds: &FeeBounds,
+    ) -> Result<ResolvedFeeBounds> {
         use starknet_rust::accounts::Account;
 
         // Caller supplied every bound: no estimate, no endpoint input.
-        if let Some(resolved) = self.fee_bounds.explicit() {
+        if let Some(resolved) = fee_bounds.explicit() {
             return resolved;
         }
 
@@ -196,7 +201,7 @@ impl Wallet {
             .await
             .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
 
-        self.fee_bounds.resolve(&estimate_input(&estimate))
+        fee_bounds.resolve(&estimate_input(&estimate))
     }
 
     /// Execute a list of calls via `execute_v3`.
@@ -209,6 +214,24 @@ impl Wallet {
     /// returned [`Tx`] tracks the locally computed hash, so a
     /// lying endpoint cannot point the caller at a different transaction.
     pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
+        self.execute_with_bounds(calls, &self.fee_bounds).await
+    }
+
+    /// Execute with bounds supplied per call rather than per wallet.
+    ///
+    /// This is how a host acts on `fee approval required`. [`Self::with_fee_bounds`]
+    /// consumes `self`, so a caller holding an `Arc<Wallet>` or a
+    /// `&dyn WalletExecutor` could otherwise only raise a ceiling by rebuilding
+    /// the wallet — and every constructor moves the [`SigningKey`] in, so that
+    /// would mean retaining key material solely to approve a fee. This takes
+    /// `&self`, so the approved figure can be applied to the retry directly.
+    ///
+    /// [`SigningKey`]: starknet_rust::signers::SigningKey
+    pub async fn execute_with_bounds(
+        &self,
+        calls: Vec<Call>,
+        fee_bounds: &FeeBounds,
+    ) -> Result<Tx> {
         use starknet_rust::accounts::{Account, ConnectedAccount};
 
         let nonce = self
@@ -217,7 +240,7 @@ impl Wallet {
             .await
             .map_err(|e| KmsError::RpcError(e.to_string()))?;
 
-        let bounds = self.resolve_bounds(&calls, nonce).await?;
+        let bounds = self.resolve_bounds(&calls, nonce, fee_bounds).await?;
 
         let prepared = apply_bounds(self.account.execute_v3(calls).nonce(nonce), &bounds)
             .prepared()

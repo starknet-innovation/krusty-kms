@@ -265,10 +265,13 @@ async fn approved_deployment_pins_tip_and_tracks_the_local_hash() {
         krusty_kms_gateway::DeployExecution::Submitted { tx_hash } => tx_hash,
         other => panic!("expected submitted deployment, got {other:?}"),
     };
-    assert_ne!(
+    // Equality against an independent oracle, not `!= 0xdead`: a merely
+    // different hash would satisfy an inequality, including the query-only
+    // variant that no broadcast transaction ever has.
+    assert_eq!(
         tx_hash.to_felt(),
-        Felt::from_hex_unchecked("0xdead"),
-        "tracked the hash the endpoint made up instead of the one we signed"
+        expected_deploy_hash(&signing_key),
+        "tracked hash is not the one this deployment was signed with"
     );
 }
 
@@ -298,4 +301,53 @@ async fn fee_bounds_override_is_reachable_from_this_crate() {
         .with_fee_bounds(GatewayFeeBounds::default().with_max_fee_fri(5 * GATEWAY_ONE_STRK));
 
     assert_eq!(backend.chain_id(), ChainId::Sepolia);
+}
+
+/// The deploy-account-v3 hash the submitted deployment must carry, computed by
+/// the KMS crate rather than by the submission path under test.
+fn expected_deploy_hash(signing_key: &SigningKey) -> Felt {
+    use krusty_kms::tx_hash::{DaMode, ResourceBounds};
+
+    let public_key = Felt::from_bytes_be(&signing_key.verifying_key().scalar().to_bytes_be());
+    let amount = |v: u64| (v as f64 * 1.5) as u64;
+    let price = |v: u128| (v as f64 * 1.5) as u128;
+    let l1_gas = ResourceBounds {
+        max_amount: amount(0x100),
+        max_price_per_unit: price(0x100),
+    };
+    let l2_gas = ResourceBounds {
+        max_amount: amount(0x100000),
+        max_price_per_unit: price(0x38d7ea4c68000),
+    };
+    let l1_data_gas = ResourceBounds {
+        max_amount: amount(0x100),
+        max_price_per_unit: price(0x100),
+    };
+
+    // The factory signs with the address derived from class hash, salt and
+    // constructor calldata — not the descriptor's declared address, which this
+    // test fabricates as 0xabc.
+    let derived_address = krusty_kms::calculate_contract_address(
+        &Felt::ZERO,
+        &Felt::from_hex_unchecked("0xdef"),
+        &[public_key],
+        &Felt::ZERO,
+    )
+    .expect("derive deploy address");
+
+    krusty_kms::compute_deploy_account_v3_hash(
+        &derived_address,
+        &Felt::from_hex_unchecked("0xdef"),
+        &[public_key],
+        &Felt::ZERO,
+        &ChainId::Sepolia.as_felt(),
+        &Felt::ZERO,
+        0,
+        &l1_gas,
+        &l2_gas,
+        &l1_data_gas,
+        &[],
+        DaMode::L1,
+        DaMode::L1,
+    )
 }
