@@ -23,7 +23,25 @@ const FEE_APPROVAL_REQUIRED: &str = "fee approval required:";
 /// error path. Prefer this over inspecting the message: the wording carries the
 /// amounts and is free to change, but this predicate is part of the API.
 pub fn is_fee_approval_required(error: &KmsError) -> bool {
-    matches!(error, KmsError::TransactionError(message) if message.contains(FEE_APPROVAL_REQUIRED))
+    fee_approval_required_fri(error).is_some()
+}
+
+/// The resolved maximum, in FRI, that this error is asking the user to approve.
+///
+/// `Some` exactly when [`is_fee_approval_required`] holds. This is the figure
+/// to display and then hand back via [`FeeBounds::with_max_fee_fri`] — the
+/// wording around it is free to change, so callers must never scrape it from
+/// the message themselves.
+pub fn fee_approval_required_fri(error: &KmsError) -> Option<u128> {
+    let KmsError::TransactionError(message) = error else {
+        return None;
+    };
+    let rest = message.split_once(FEE_APPROVAL_REQUIRED)?.1;
+    // The first integer after the marker is the resolved total; both messages
+    // are built that way just below, and `approval_errors_carry_the_amount`
+    // fails if either stops doing so.
+    rest.split_whitespace()
+        .find_map(|word| word.parse::<u128>().ok())
 }
 
 /// Mirrors starknet-rs, so pinning bounds changes nothing on honest endpoints.
@@ -213,7 +231,7 @@ impl FeeBounds {
 
         let Some(max_fee_fri) = self.max_fee_fri else {
             return Err(KmsError::TransactionError(format!(
-                "{FEE_APPROVAL_REQUIRED} resolved maximum is {total} FRI ({} STRK); ask the \
+                "{FEE_APPROVAL_REQUIRED} {total} FRI ({} STRK) is the resolved maximum; ask the \
                  user, then resubmit with FeeBounds::with_max_fee_fri(user_approved_fri)",
                 crate::utils::fri_to_strk(total),
             )));
@@ -221,7 +239,7 @@ impl FeeBounds {
 
         if total > max_fee_fri {
             return Err(KmsError::TransactionError(format!(
-                "{FEE_APPROVAL_REQUIRED} resolved maximum {total} FRI ({} STRK) exceeds the \
+                "{FEE_APPROVAL_REQUIRED} {total} FRI ({} STRK) is the resolved maximum, over the \
                  approved {max_fee_fri} FRI ({} STRK); ask the user before raising \
                  FeeBounds::max_fee_fri",
                 crate::utils::fri_to_strk(total),

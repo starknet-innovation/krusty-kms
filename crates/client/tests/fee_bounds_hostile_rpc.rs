@@ -264,3 +264,45 @@ async fn approval_can_be_applied_to_a_retry_without_rebuilding_the_wallet() {
         "expected exactly one submission after approval"
     );
 }
+
+/// The whole approval loop must complete behind `&dyn WalletExecutor` — the
+/// type the transfer, staking, multisig and transaction-builder APIs accept.
+/// After that type erasure the concrete `Wallet` methods are unreachable, and
+/// rebuilding would mean retaining the moved signing key just to approve a fee.
+#[tokio::test]
+async fn approval_loop_completes_through_the_executor_trait() {
+    use krusty_kms_client::{fee_approval_required_fri, WalletExecutor};
+
+    let (state, provider, network) = hostile_context().await;
+    let wallet = Wallet::from_private_key_at_address(
+        provider,
+        Felt::from_hex_unchecked("0x1234"),
+        Address::from(Felt::from_hex_unchecked("0xabc")),
+        ChainId::Sepolia,
+        network,
+    );
+    let executor: &dyn WalletExecutor = &wallet;
+
+    // 1. Refused, with nothing sent.
+    let err = match executor.execute(vec![dummy_call()]).await {
+        Ok(_) => panic!("an unapproved fee must not be signed"),
+        Err(e) => e,
+    };
+    assert_eq!(state.submits.load(Ordering::SeqCst), 0);
+
+    // 2. The figure to show the user, as a number rather than scraped prose.
+    let total = fee_approval_required_fri(&err).expect("amount must be recoverable");
+
+    // 3. Approve exactly that and retry — through the trait, no rebuild.
+    assert!(
+        executor
+            .execute_with_bounds(
+                vec![dummy_call()],
+                &FeeBounds::default().with_max_fee_fri(total)
+            )
+            .await
+            .is_ok(),
+        "approving the reported amount must let the retry through"
+    );
+    assert_eq!(state.submits.load(Ordering::SeqCst), 1);
+}

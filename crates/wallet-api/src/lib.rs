@@ -9,6 +9,7 @@
 use async_trait::async_trait;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
+use krusty_kms_common::fee::FeeBounds;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use starknet_rust::core::types::StarknetError;
@@ -169,6 +170,26 @@ pub trait WalletExecutor: Send + Sync {
 
     /// Estimate the fee for a list of calls.
     async fn estimate_fee(&self, calls: Vec<Call>) -> Result<FeeEstimate>;
+
+    /// Execute with fee bounds supplied per call rather than per executor.
+    ///
+    /// This is how a caller completes the approval flow after a submission is
+    /// refused for want of an approved ceiling. It exists on the trait because
+    /// the higher-level APIs — transfers, staking, multisig, the transaction
+    /// builder — all take `&dyn WalletExecutor`, and after that type erasure
+    /// there is no other way to apply an approved figure: the concrete
+    /// constructors move the signing key in, so rebuilding would mean retaining
+    /// key material solely to approve a fee.
+    ///
+    /// Defaults to an error rather than silently ignoring `fee_bounds`, so an
+    /// executor that cannot honour per-call bounds says so instead of signing
+    /// something the caller did not approve.
+    async fn execute_with_bounds(&self, calls: Vec<Call>, fee_bounds: &FeeBounds) -> Result<Tx> {
+        let _ = (calls, fee_bounds);
+        Err(KmsError::TransactionError(
+            "this executor does not support per-call fee bounds".to_string(),
+        ))
+    }
 
     /// The wallet's on-chain address.
     fn address(&self) -> &Address;

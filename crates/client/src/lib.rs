@@ -29,7 +29,10 @@ pub use events::{
     BalanceDeclaredEvent, EventMetadata, FundEvent, OutsideFundEvent, RagequitEvent, RolloverEvent,
     TongoEvent, TransferDeclaredEvent, TransferEvent, WithdrawEvent,
 };
-pub use krusty_kms_common::fee::{FeeBounds, FeeEstimateInput, ResolvedFeeBounds, ONE_STRK_FRI};
+pub use krusty_kms_common::fee::{
+    fee_approval_required_fri, is_fee_approval_required, FeeBounds, FeeEstimateInput,
+    ResolvedFeeBounds, ONE_STRK_FRI,
+};
 pub use krusty_kms_common::{KmsError, Result};
 pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
 #[cfg(feature = "nats")]

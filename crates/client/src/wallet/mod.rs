@@ -314,6 +314,10 @@ impl WalletExecutor for Wallet {
         Wallet::estimate_fee(self, calls).await
     }
 
+    async fn execute_with_bounds(&self, calls: Vec<Call>, fee_bounds: &FeeBounds) -> Result<Tx> {
+        Wallet::execute_with_bounds(self, calls, fee_bounds).await
+    }
+
     fn address(&self) -> &Address {
         Wallet::address(self)
     }

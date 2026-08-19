@@ -1,7 +1,7 @@
 //! Unit tests for [`super::FeeBounds`] resolution and approval.
 
 use super::*;
-use crate::fee::is_fee_approval_required;
+use crate::fee::{fee_approval_required_fri, is_fee_approval_required};
 
 /// ~0.0000002 STRK all in.
 fn cheap_estimate() -> FeeEstimateInput {
@@ -91,6 +91,41 @@ fn approval_requests_are_detectable_by_predicate() {
         !is_fee_approval_required(&overflow),
         "false positive: {overflow}"
     );
+}
+
+/// The amount to approve must be reachable as a number, not scraped from prose.
+///
+/// A host needs it to call `with_max_fee_fri` after confirmation, and the
+/// message wording is explicitly unstable. Both refusal paths are covered: no
+/// ceiling at all, and a ceiling that is too low.
+#[test]
+fn approval_errors_carry_the_amount() {
+    let unapproved = FeeBounds::default()
+        .resolve(&cheap_estimate())
+        .expect_err("no ceiling means no signing");
+    let total = fee_approval_required_fri(&unapproved).expect("amount must be recoverable");
+
+    // Approving exactly the reported figure must let it through.
+    assert!(FeeBounds::default()
+        .with_max_fee_fri(total)
+        .resolve(&cheap_estimate())
+        .is_ok());
+
+    // A ceiling one FRI short reports the same figure to approve.
+    let short = FeeBounds::default()
+        .with_max_fee_fri(total - 1)
+        .resolve(&cheap_estimate())
+        .expect_err("one FRI short");
+    assert_eq!(fee_approval_required_fri(&short), Some(total));
+
+    // Unrelated failures carry no amount.
+    let nonsense = FeeBounds {
+        gas_multiplier: f64::NAN,
+        ..FeeBounds::default()
+    }
+    .resolve(&cheap_estimate())
+    .expect_err("NaN multiplier");
+    assert_eq!(fee_approval_required_fri(&nonsense), None);
 }
 
 /// The default must never let a block body inject a tip.
