@@ -58,7 +58,8 @@ impl SessionPolicy {
 /// Fee mode for Controller transactions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeeMode {
-    /// User pays gas (standard `execute_v3`).
+    /// User pays gas. Submission currently fails closed because the pinned
+    /// controller SDK cannot enforce caller-approved V3 fee bounds.
     UserPays,
     /// Cartridge paymaster sponsors gas (`execute_from_outside_v3`).
     Sponsored,
