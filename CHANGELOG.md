@@ -36,10 +36,6 @@ All notable changes to the published Rust crates are documented here.
   It is signature-committed, so a wrong value can only make a transaction
   unincludeable, never more expensive.
 
-  `ControllerWallet` user-paid execution and deployment now fail closed because
-  its pinned upstream SDK cannot enforce the same caller-approved fee fields and
-  local transaction hash. Sponsored and credit execution remain available.
-
 ## [0.7.0] - 2026-08-16
 
 ### Security

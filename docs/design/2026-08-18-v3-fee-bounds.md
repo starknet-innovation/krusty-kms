@@ -20,17 +20,9 @@ Callers could not defend themselves: `Wallet.account` is private with no
 accessor, no submit path took a bounds parameter, and `estimate_fee` was a
 separate round trip whose result could not be fed back into `execute`.
 
-One root cause, four sites. Three now prepare and hash locally:
+The three in-scope submission paths now prepare and hash locally:
 `Wallet::execute`, `deploy_oz_account`, and the gateway's
 `deploy_open_zeppelin`.
-
-The fourth, `ControllerWallet` (`crates/controller/src/wallet.rs`), cannot do so
-through the pinned Cartridge `account_sdk`: its user-paid API accepts an
-endpoint estimate but exposes neither a caller-pinned tip/resource builder nor
-the prepared local hash. User-paid execution and controller deployment therefore
-fail closed. Sponsored and credit execution remain available because the user is
-not the fee payer. This is deliberately less convenient than pretending the
-same security invariant can be enforced through an insufficient upstream API.
 
 ## Interface
 
@@ -132,8 +124,6 @@ part that actually matters exactly where it already is.
   inclusion during congestion must set `FeeBounds::tip`; the resolved approval
   amount includes `tip * l2_gas`. There is no safe default tip, because a
   non-zero default would reintroduce a number the caller did not choose.
-- Controller deployment and `FeeMode::UserPays` remain unavailable until the
-  pinned controller SDK exposes the same prepared fee/hash boundary.
 
 ## Failure modes
 
