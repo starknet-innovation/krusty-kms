@@ -69,8 +69,6 @@ async fn approval_can_be_applied_to_a_retry_without_rebuilding_the_wallet() {
 /// rebuilding would mean retaining the moved signing key just to approve a fee.
 #[tokio::test]
 async fn approval_loop_completes_through_the_executor_trait() {
-    use krusty_kms_client::{fee_approval_required_fri, WalletExecutor};
-
     let (state, provider, network) = hostile_context().await;
     let wallet = Wallet::from_private_key_at_address(
         provider,
@@ -110,8 +108,6 @@ async fn approval_loop_completes_through_the_executor_trait() {
 /// caller needs those same calls to resubmit once the user consents.
 #[tokio::test]
 async fn approval_loop_completes_through_the_transaction_builder() {
-    use krusty_kms_client::fee_approval_required_fri;
-
     let (state, provider, network) = hostile_context().await;
     let wallet = Wallet::from_private_key_at_address(
         provider,
@@ -147,8 +143,6 @@ async fn approval_loop_completes_through_the_transaction_builder() {
 /// to raise the ceiling in place rather than rebuild around the moved key.
 #[tokio::test]
 async fn approved_bounds_can_be_applied_in_place() {
-    use krusty_kms_client::fee_approval_required_fri;
-
     let (state, provider, network) = hostile_context().await;
     let mut wallet = Wallet::from_private_key_at_address(
         provider,
