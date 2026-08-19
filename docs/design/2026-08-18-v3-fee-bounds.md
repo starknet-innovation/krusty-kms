@@ -46,8 +46,10 @@ let wallet = Wallet::from_signing_key(..)?
 
 Also `deploy_oz_account_with_bounds` and
 `StarknetGatewayBackend::with_fee_bounds`. `FeeBounds::default()` pins the tip
-to 0 and caps the total at `DEFAULT_MAX_FEE_FRI` (1 STRK), so callers that never
-mention fees are protected without a code change.
+to 0 and caps the total at `DEFAULT_MAX_FEE_FRI` (10 STRK), so callers that
+never mention fees are protected without a code change. That ceiling is on the
+resolved bound; see "Deliberately not promised" below for what it admits as an
+estimate, and why it is sized the way it is.
 
 Two resolution modes, both funnelling through one ceiling check:
 

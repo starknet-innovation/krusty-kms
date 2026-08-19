@@ -19,7 +19,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 /// An l2 gas price high enough that any plausible gas amount blows past the
-/// 1 STRK default ceiling: 1e15 FRI per unit of L2 gas.
+/// default ceiling: 1e15 FRI per unit of L2 gas, which resolves to a bound in
+/// the thousands of STRK.
 const HOSTILE_L2_GAS_PRICE: &str = "0x38d7ea4c68000";
 
 /// The hash the endpoint fabricates in every submission response.

@@ -18,7 +18,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-/// High enough to blow past the 1 STRK default ceiling.
+/// High enough to blow past the default ceiling by orders of magnitude.
 const HOSTILE_L2_GAS_PRICE: &str = "0x38d7ea4c68000";
 
 const TEST_PRIVATE_KEY: &str = "0x1234";
