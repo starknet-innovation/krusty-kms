@@ -35,6 +35,9 @@ mod tests;
 pub use backend::{DeployExecution, GatewayBackend, StarknetGatewayBackend};
 pub use clock::{Clock, SystemClock};
 pub use gateway::Gateway;
+// Re-exported so `StarknetGatewayBackend::with_fee_bounds` is callable without
+// taking a direct dependency on krusty-kms-common.
+pub use krusty_kms_common::fee::{FeeBounds, ONE_STRK_FRI};
 pub use types::{
     GatewayResponse, GatewayResult, OperationRetentionError, OperationRetentionPolicy,
     SecretResolver,

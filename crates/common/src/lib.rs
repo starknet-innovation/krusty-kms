@@ -12,6 +12,7 @@ pub mod address;
 pub mod amount;
 pub mod chain;
 pub mod error;
+pub mod fee;
 pub mod network;
 #[allow(unsafe_code)] // volatile zeroization in Drop / Zeroize
 pub mod secret_felt;
@@ -26,6 +27,9 @@ pub use address::Address;
 pub use amount::Amount;
 pub use chain::ChainId;
 pub use error::{KmsError, Result};
+pub use fee::{
+    is_fee_approval_required, FeeBounds, FeeEstimateInput, ResolvedFeeBounds, ONE_STRK_FRI,
+};
 pub use network::NetworkPreset;
 pub use secret_felt::SecretFelt;
 pub use serialization::{

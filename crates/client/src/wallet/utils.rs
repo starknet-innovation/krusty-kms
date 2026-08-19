@@ -54,7 +54,7 @@ pub(crate) fn map_deploy_factory_error<S: std::fmt::Display>(
     }
 }
 
-fn map_deploy_provider_error(error: ProviderError) -> KmsError {
+pub(super) fn map_deploy_provider_error(error: ProviderError) -> KmsError {
     match error {
         ProviderError::StarknetError(error) => map_deploy_starknet_error(error),
         other => KmsError::RpcError(other.to_string()),

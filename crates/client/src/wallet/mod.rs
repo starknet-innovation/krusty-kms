@@ -1,23 +1,27 @@
 //! Wallet: owns a provider + account, can sign and execute transactions.
 
 pub mod deploy;
+mod fees;
 pub mod utils;
 
 use krusty_kms::{AccountClass, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
+use krusty_kms_common::fee::{FeeBounds, ResolvedFeeBounds};
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::Tx;
 pub use krusty_kms_wallet_api::WalletExecutor;
 use starknet_rust::accounts::{ExecutionEncoding, SingleOwnerAccount};
 use starknet_rust::core::types::Call;
+use starknet_rust::core::types::Felt as RsFelt;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
+use self::fees::{apply_bounds, estimate_input};
 use self::utils::{check_deployed, core_felt_to_rs};
 
 /// A Starknet wallet that can sign and submit transactions.
@@ -27,6 +31,7 @@ pub struct Wallet {
     address: Address,
     chain_id: ChainId,
     network: NetworkPreset,
+    fee_bounds: FeeBounds,
     deployed_cache: RwLock<Option<(bool, Instant)>>,
 }
 
@@ -71,6 +76,7 @@ impl Wallet {
             address,
             chain_id,
             network,
+            fee_bounds: FeeBounds::default(),
             deployed_cache: RwLock::new(None),
         })
     }
@@ -102,6 +108,7 @@ impl Wallet {
             address,
             chain_id,
             network,
+            fee_bounds: FeeBounds::default(),
             deployed_cache: RwLock::new(None),
         }
     }
@@ -164,18 +171,106 @@ impl Wallet {
         Ok(deployed)
     }
 
-    /// Execute a list of calls via `execute_v3`.
-    pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
+    /// Replace the fee bounds this wallet signs within.
+    ///
+    /// Defaults to [`FeeBounds::default`], which pins the tip to zero and asks
+    /// the caller to approve the resolved maximum before signing.
+    #[must_use]
+    pub fn with_fee_bounds(mut self, fee_bounds: FeeBounds) -> Self {
+        self.fee_bounds = fee_bounds;
+        self
+    }
+
+    /// Bounds for this call, estimating only when the caller left a gap.
+    async fn resolve_bounds(
+        &self,
+        calls: &[Call],
+        nonce: RsFelt,
+        fee_bounds: &FeeBounds,
+    ) -> Result<ResolvedFeeBounds> {
         use starknet_rust::accounts::Account;
-        let result = self
+
+        // Caller supplied every bound: no estimate, no endpoint input.
+        if let Some(resolved) = fee_bounds.explicit() {
+            return resolved;
+        }
+
+        let estimate = self
             .account
-            .execute_v3(calls)
+            .execute_v3(calls.to_vec())
+            .nonce(nonce)
+            .estimate_fee()
+            .await
+            .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
+
+        fee_bounds.resolve(&estimate_input(&estimate))
+    }
+
+    /// Replace the fee bounds in place.
+    ///
+    /// [`Self::with_fee_bounds`] consumes `self`, which the convenience
+    /// wrappers cannot use: [`crate::TongoContract`], `Erc20`, `Staking` and the
+    /// multisig actions all borrow a `&dyn WalletExecutor` and take no bounds
+    /// argument, so an owner raising a ceiling after an approval request has no
+    /// other way to apply it without rebuilding the wallet around the moved
+    /// signing key.
+    pub fn set_fee_bounds(&mut self, fee_bounds: FeeBounds) {
+        self.fee_bounds = fee_bounds;
+    }
+
+    /// Execute a list of calls via `execute_v3`.
+    ///
+    /// Every V3 fee field is pinned before signing rather than left for the RPC
+    /// endpoint to fill: the tip comes from the bounds set by
+    /// [`Self::with_fee_bounds`] (never from a block median), and the gas
+    /// bounds are checked against the caller's approval. With no approved
+    /// maximum, this returns `fee approval required` without signing. The
+    /// returned [`Tx`] tracks the locally computed hash, so a
+    /// lying endpoint cannot point the caller at a different transaction.
+    pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
+        self.execute_with_bounds(calls, &self.fee_bounds).await
+    }
+
+    /// Execute with bounds supplied per call rather than per wallet.
+    ///
+    /// This is how a host acts on `fee approval required`. [`Self::with_fee_bounds`]
+    /// consumes `self`, so a caller holding an `Arc<Wallet>` or a
+    /// `&dyn WalletExecutor` could otherwise only raise a ceiling by rebuilding
+    /// the wallet — and every constructor moves the [`SigningKey`] in, so that
+    /// would mean retaining key material solely to approve a fee. This takes
+    /// `&self`, so the approved figure can be applied to the retry directly.
+    ///
+    /// [`SigningKey`]: starknet_rust::signers::SigningKey
+    pub async fn execute_with_bounds(
+        &self,
+        calls: Vec<Call>,
+        fee_bounds: &FeeBounds,
+    ) -> Result<Tx> {
+        use starknet_rust::accounts::{Account, ConnectedAccount};
+
+        let nonce = self
+            .account
+            .get_nonce()
+            .await
+            .map_err(|e| KmsError::RpcError(e.to_string()))?;
+
+        let bounds = self.resolve_bounds(&calls, nonce, fee_bounds).await?;
+
+        let prepared = apply_bounds(self.account.execute_v3(calls).nonce(nonce), &bounds)
+            .prepared()
+            .map_err(|e| KmsError::TransactionError(e.to_string()))?;
+
+        let local_hash = prepared.transaction_hash(false);
+
+        prepared
             .send()
             .await
             .map_err(|e| KmsError::TransactionError(e.to_string()))?;
 
+        // The reported hash is never used: a substituted one could resolve to
+        // another transaction's receipt and be read as this one succeeding.
         Ok(Tx::new(
-            result.transaction_hash,
+            local_hash,
             self.provider.clone(),
             self.network.clone(),
         ))
@@ -229,6 +324,10 @@ impl WalletExecutor for Wallet {
         calls: Vec<Call>,
     ) -> Result<starknet_rust::core::types::FeeEstimate> {
         Wallet::estimate_fee(self, calls).await
+    }
+
+    async fn execute_with_bounds(&self, calls: Vec<Call>, fee_bounds: &FeeBounds) -> Result<Tx> {
+        Wallet::execute_with_bounds(self, calls, fee_bounds).await
     }
 
     fn address(&self) -> &Address {

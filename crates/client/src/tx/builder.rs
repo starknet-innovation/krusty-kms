@@ -5,6 +5,7 @@ use crate::staking::Staking;
 use crate::wallet::utils::core_felt_to_rs;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::amount::Amount;
+use krusty_kms_common::fee::FeeBounds;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::Result;
 use krusty_kms_wallet_api::{Tx, WalletExecutor};
@@ -110,7 +111,23 @@ impl<'w> TxBuilder<'w> {
     }
 
     /// Execute all accumulated calls as a single transaction.
-    pub async fn send(self) -> Result<Tx> {
-        self.wallet.execute(self.calls).await
+    ///
+    /// Borrows rather than consumes, so a submission refused for want of an
+    /// approved fee leaves the builder intact and the same calls can be retried
+    /// through [`Self::send_with_bounds`]. Consuming `self` here would destroy
+    /// the transaction at exactly the moment the caller needs to re-send it.
+    pub async fn send(&self) -> Result<Tx> {
+        self.wallet.execute(self.calls.clone()).await
+    }
+
+    /// Execute all accumulated calls within caller-approved fee bounds.
+    ///
+    /// The retry half of the approval loop: pair it with
+    /// [`krusty_kms_common::fee::fee_approval_required_fri`] to recover the
+    /// figure a refusal reported, show it, and resubmit these same calls.
+    pub async fn send_with_bounds(&self, fee_bounds: &FeeBounds) -> Result<Tx> {
+        self.wallet
+            .execute_with_bounds(self.calls.clone(), fee_bounds)
+            .await
     }
 }

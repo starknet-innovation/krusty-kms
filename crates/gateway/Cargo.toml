@@ -30,7 +30,8 @@ tokio = { workspace = true, features = ["sync", "time"] }
 zeroize.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time", "io-util", "net"] }
+serde_json.workspace = true
 
 [lints]
 workspace = true

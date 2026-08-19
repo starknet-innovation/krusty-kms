@@ -1,6 +1,8 @@
 //! Default Starknet JSON-RPC implementation of [`GatewayBackend`].
 
-use super::deploy::{map_deploy_submission_error, validate_open_zeppelin_descriptor};
+use super::deploy::{
+    map_deploy_provider_error, map_deploy_submission_error, validate_open_zeppelin_descriptor,
+};
 use super::interface::{DeployExecution, GatewayBackend};
 use super::rpc::{
     balance_of_camel_selector, balance_of_selector, call_erc20_balance_with_selector_fallback,
@@ -10,6 +12,7 @@ use super::rpc::{
 use super::wait::wait_for_acceptance;
 use crate::{map_kms_error, GatewayResult};
 use async_trait::async_trait;
+use krusty_kms_common::fee::{FeeBounds, FeeEstimateInput, ResolvedFeeBounds};
 use krusty_kms_common::{ChainId, KmsError, NetworkPreset, SecretFelt};
 use krusty_kms_domain::{
     AccountDescriptor, BlockSelector, DeployMode, FeltHex, GatewayError, GatewayErrorCode,
@@ -27,11 +30,26 @@ use std::sync::Arc;
 pub struct StarknetGatewayBackend {
     provider: Arc<JsonRpcClient<HttpTransport>>,
     network: NetworkPreset,
+    fee_bounds: FeeBounds,
 }
 
 impl StarknetGatewayBackend {
     pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, network: NetworkPreset) -> Self {
-        Self { provider, network }
+        Self {
+            provider,
+            network,
+            fee_bounds: FeeBounds::default(),
+        }
+    }
+
+    /// Replace the fee bounds every deployment is signed within.
+    ///
+    /// Defaults to [`FeeBounds::default`], which pins the tip to zero and asks
+    /// the caller to approve the resolved maximum before signing.
+    #[must_use]
+    pub fn with_fee_bounds(mut self, fee_bounds: FeeBounds) -> Self {
+        self.fee_bounds = fee_bounds;
+        self
     }
 
     pub fn provider(&self) -> &Arc<JsonRpcClient<HttpTransport>> {
@@ -66,6 +84,10 @@ impl GatewayBackend for StarknetGatewayBackend {
         }
     }
 
+    // NOTE: intentionally over the 40-line guideline, for the same reason as
+    // the client's deploy path: chain guard -> descriptor validation ->
+    // deployed-check -> nonce -> bounds -> submit -> wait is a sequence whose
+    // order is the point. It was already over before fee bounds were added.
     async fn deploy_open_zeppelin(
         &self,
         private_key: &SecretFelt,
@@ -105,19 +127,44 @@ impl GatewayBackend for StarknetGatewayBackend {
         .await
         .map_err(|error| map_kms_error(KmsError::CryptoError(error.to_string())))?;
 
-        let submission = factory
-            .deploy_v3(core_felt_to_rs(account.salt.to_felt()))
-            .send()
-            .await
-            .map_err(map_deploy_submission_error)?;
+        let salt = core_felt_to_rs(account.salt.to_felt());
 
-        let tx_hash = FeltHex::from_felt(rs_felt_to_core(submission.transaction_hash));
+        // Not pinned to zero: a reverted deploy still lands in a block and bumps
+        // the nonce of an account that is still undeployed. Untrusted input is
+        // fine here — a wrong nonce only makes the transaction unincludeable.
+        let nonce = factory
+            .deploy_v3(salt)
+            .fetch_nonce()
+            .await
+            .map_err(map_deploy_provider_error)?;
+
+        let bounds = resolve_bounds(&factory, salt, nonce, &self.fee_bounds).await?;
+
+        let prepared = apply_bounds(factory.deploy_v3(salt).nonce(nonce), &bounds)
+            // Deterministic: a missing setter can never succeed on retry, and
+            // map_kms_error would classify it as retryable RpcDegraded.
+            .prepared()
+            .map_err(|error| {
+                GatewayError::new(
+                    GatewayErrorCode::Internal,
+                    false,
+                    Some(format!("fee bounds were not fully applied: {error}")),
+                )
+            })?;
+
+        let local_hash = prepared.transaction_hash(false);
+
+        prepared.send().await.map_err(map_deploy_submission_error)?;
+
+        // The reported hash is never used: a substituted one could resolve to
+        // another transaction's receipt and be read as this one succeeding.
+        let tx_hash = FeltHex::from_felt(rs_felt_to_core(local_hash));
         match mode {
             DeployMode::SubmitOnly => Ok(DeployExecution::Submitted { tx_hash }),
             DeployMode::WaitForAcceptance(wait) => {
                 wait_for_acceptance(
                     &self.provider,
-                    submission.transaction_hash,
+                    local_hash,
                     wait.poll_interval_ms,
                     wait.timeout_ms,
                 )
@@ -217,4 +264,67 @@ impl GatewayBackend for StarknetGatewayBackend {
             block_number,
         })
     }
+}
+
+/// An approval refusal is the caller's own policy, so it is not retryable.
+///
+/// Not routed through `map_kms_error`, which classifies by substring and would
+/// land this in the retryable `RpcDegraded`.
+fn fee_bounds_rejected(error: KmsError) -> GatewayError {
+    GatewayError::new(
+        GatewayErrorCode::InvalidRequest,
+        false,
+        Some(error.to_string()),
+    )
+}
+
+/// Convert a provider fee estimate into the Starknet-free shape `FeeBounds` takes.
+fn estimate_input(estimate: &starknet_rust::core::types::FeeEstimate) -> FeeEstimateInput {
+    FeeEstimateInput {
+        l1_gas_consumed: estimate.l1_gas_consumed,
+        l1_gas_price: estimate.l1_gas_price,
+        l2_gas_consumed: estimate.l2_gas_consumed,
+        l2_gas_price: estimate.l2_gas_price,
+        l1_data_gas_consumed: estimate.l1_data_gas_consumed,
+        l1_data_gas_price: estimate.l1_data_gas_price,
+    }
+}
+
+/// Pin every fee field on a deploy builder so none is filled from RPC.
+fn apply_bounds<'a, F>(
+    deployment: starknet_rust::accounts::AccountDeploymentV3<'a, F>,
+    bounds: &ResolvedFeeBounds,
+) -> starknet_rust::accounts::AccountDeploymentV3<'a, F> {
+    deployment
+        .l1_gas(bounds.l1_gas)
+        .l1_gas_price(bounds.l1_gas_price)
+        .l2_gas(bounds.l2_gas)
+        .l2_gas_price(bounds.l2_gas_price)
+        .l1_data_gas(bounds.l1_data_gas)
+        .l1_data_gas_price(bounds.l1_data_gas_price)
+        .tip(bounds.tip)
+}
+
+/// Bounds for this deployment, estimating only when the caller left a gap.
+async fn resolve_bounds(
+    factory: &OpenZeppelinAccountFactory<LocalWallet, Arc<JsonRpcClient<HttpTransport>>>,
+    salt: starknet_rust::core::types::Felt,
+    nonce: starknet_rust::core::types::Felt,
+    fee_bounds: &FeeBounds,
+) -> GatewayResult<ResolvedFeeBounds> {
+    // Caller supplied every bound: no estimate, no endpoint input.
+    if let Some(resolved) = fee_bounds.explicit() {
+        return resolved.map_err(fee_bounds_rejected);
+    }
+
+    let estimate = factory
+        .deploy_v3(salt)
+        .nonce(nonce)
+        .estimate_fee()
+        .await
+        .map_err(map_deploy_submission_error)?;
+
+    fee_bounds
+        .resolve(&estimate_input(&estimate))
+        .map_err(fee_bounds_rejected)
 }
