@@ -27,6 +27,40 @@ fn explicit_bounds(l1: u64, l1p: u128, l2: u64, l2p: u128) -> FeeBounds {
     }
 }
 
+/// The default ceiling must not reject honest proof-verification traffic.
+///
+/// This encodes the workload the default is sized for: a Tongo proof call in
+/// the region of 10M L2 gas at a plausible price. It is the check on the
+/// judgement call in `DEFAULT_MAX_FEE_FRI` — if that constant is lowered, or
+/// the multipliers raised, this fails instead of honest transactions failing
+/// on mainnet.
+#[test]
+fn default_admits_a_proof_sized_transaction() {
+    let proof_call = FeeEstimateInput {
+        l1_gas_consumed: 1_000,
+        l1_gas_price: 1_000_000_000,
+        l2_gas_consumed: 10_000_000,
+        l2_gas_price: 50_000_000_000,
+        l1_data_gas_consumed: 10_000,
+        l1_data_gas_price: 1_000_000_000,
+    };
+
+    let resolved = FeeBounds::default()
+        .resolve(&proof_call)
+        .expect("the default ceiling must admit a proof-sized transaction");
+
+    // And the bound it signs is the inflated one, not the raw estimate.
+    let total = resolved.total_fri().expect("no overflow");
+    assert!(
+        total > 1_000_000_000_000_000_000,
+        "expected over 1 STRK: {total}"
+    );
+    assert!(
+        total < DEFAULT_MAX_FEE_FRI,
+        "expected under the ceiling: {total}"
+    );
+}
+
 /// The default must never let a block body inject a tip.
 #[test]
 fn default_pins_tip_to_zero() {

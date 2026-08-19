@@ -60,13 +60,22 @@ Two resolution modes, both funnelling through one ceiling check:
 which keeps `krusty-kms-common` free of a Starknet dependency and the resolution
 logic pure. Each of `client` and `gateway` maps its own estimate into it, and the
 builder-setter chain plus `estimate_input`/`resolve_bounds` are duplicated
-across the three sites. That duplication is a deliberate deferral, not a
-necessity: `krusty-kms-wallet-api` already depends on both `krusty-kms-common`
-and `starknet-rust`, and `client` already depends on it, so it could host all
-three helpers if `gateway` gained that one edge (legal in the DAG — wallet-api
-depends only on `common`, so no cycle). It is left for a follow-up rather than
-widening a security diff with a cross-crate move, and it matches the existing
-precedent of the duplicated deploy error mappers.
+across the three sites, and that is intentional.
+
+The security-critical part is not duplicated. The resolution order — scale by
+the multipliers, then check the ceiling — lives once, in `FeeBounds::resolve`
+and `finish`. Each `resolve_bounds` only picks estimate-vs-explicit, calls
+`estimate_fee` on its own builder type, and maps the error. Those mappers are
+the reason the helpers cannot merge: the client yields `KmsError` and the
+gateway `GatewayError` via `map_deploy_submission_error`, which supplies typed
+`InsufficientFeeBalance` / `AlreadyDeployed` classification that a shared helper
+would flatten.
+
+`krusty-kms-wallet-api` could host the mechanical parts — it already depends on
+`krusty-kms-common` and `starknet-rust`, and `client` already depends on it, so
+only a `gateway` edge and one DAG-policy line are missing. That was considered
+and rejected: it would move ~35 lines of glue, add a crate edge, and leave the
+part that actually matters exactly where it already is.
 
 ## Invariants
 
@@ -104,12 +113,16 @@ precedent of the duplicated deploy error mappers.
   an estimate and then submits still makes two estimate calls against different
   block states; the signed one is now ceiling-bounded, which is the security
   property. The display mismatch is a UX matter, not a drain.
-- `DEFAULT_MAX_FEE_FRI` is a judgment call, not a measured one.
+- `DEFAULT_MAX_FEE_FRI` (10 STRK) is a judgment call, not a measured one — no
+  gas figures for these operations are recorded in this repo. It is sized for
+  proof verification, the heaviest workload here, and
+  `default_admits_a_proof_sized_transaction` pins that intent so a later change
+  fails in the test suite rather than against honest mainnet traffic. It should
+  still be checked against a real Sepolia estimate before release.
 - The ceiling applies to the **bound**, not the estimate. That is deliberate:
   the bound is what a sequencer may actually charge, so it is the quantity a
   spend limit has to constrain. But the 1.5x amount and 1.5x price multipliers
-  compound, so a 1 STRK ceiling rejects an *estimated* fee above ~0.44 STRK —
-  roughly 44x typical headroom, not 100x. Raise `max_fee_fri` accordingly.
+  compound, so the 10 STRK ceiling admits an *estimated* fee up to ~4.4 STRK.
 - The ceiling constrains an endpoint that **inflates** the fee. One that
   **deflates** `l2_gas_consumed` is not addressed: the bound resolves well under
   the ceiling, is signed, and the transaction then runs out of L2 gas and

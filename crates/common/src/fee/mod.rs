@@ -10,8 +10,19 @@ use crate::error::{KmsError, Result};
 /// [`fri_to_strk`](crate::utils::fri_to_strk) formats the ceiling errors below.
 pub const ONE_STRK_FRI: u128 = 1_000_000_000_000_000_000;
 
-/// Ceiling applied when the caller sets none. Real fees sit far below this.
-pub const DEFAULT_MAX_FEE_FRI: u128 = ONE_STRK_FRI;
+/// Ceiling applied when the caller sets none.
+///
+/// Sized for the heaviest legitimate workload here — verifying a Tongo proof,
+/// which is L2-gas-hungry — with room for a price spike. Because the ceiling is
+/// checked against the resolved *bound*, and the default multipliers compound
+/// to 2.25x, this admits an estimate up to ~4.4 STRK. A proof call in the
+/// 0.5 STRK range therefore clears it by roughly 9x.
+///
+/// The figure is reasoned, not measured: no gas numbers for these operations
+/// are recorded in this repo. `default_admits_a_proof_sized_transaction` in the
+/// tests pins the intent, so a future change that would start rejecting honest
+/// proof traffic fails there rather than in production.
+pub const DEFAULT_MAX_FEE_FRI: u128 = 10 * ONE_STRK_FRI;
 
 /// Mirrors starknet-rs, so pinning bounds changes nothing on honest endpoints.
 const DEFAULT_ESTIMATE_MULTIPLIER: f64 = 1.5;

@@ -14,7 +14,7 @@ All notable changes to the published Rust crates are documented here.
   `(l2_gas_price + tip) * l2_gas_consumed + ...`, an endpoint could pick values
   that drain the account with no collusion required. All three paths now resolve
   fees through the new `krusty_kms_common::fee::FeeBounds`, which pins the tip
-  locally (default 0), caps the total (default 1 STRK), and can supply every
+  locally (default 0), caps the total (default 10 STRK), and can supply every
   bound explicitly so no estimate is requested at all. Each path also tracks the
   locally computed transaction hash and never reads the one the endpoint
   reports, so a substituted hash cannot point the caller at someone else's
@@ -24,8 +24,10 @@ All notable changes to the published Rust crates are documented here.
 
   Two caveats worth reading before upgrading. The ceiling applies to the
   *bound* — the most a sequencer could charge — which the 1.5x gas and 1.5x
-  price multipliers inflate to 2.25x the estimate, so the 1 STRK default rejects
-  transactions whose estimated fee exceeds roughly 0.44 STRK. And pinning the
+  price multipliers inflate to 2.25x the estimate, so the 10 STRK default
+  rejects transactions whose estimated fee exceeds roughly 4.4 STRK. That is
+  sized for proof verification, the heaviest workload here; the figure is
+  reasoned rather than measured, and a unit test pins the intent. And pinning the
   tip to 0 is an availability trade-off: under the v0.14 tip-ordered mempool a
   zero-tip transaction sorts below tipped ones, so callers who need inclusion
   during congestion should set `FeeBounds::tip` explicitly and raise
