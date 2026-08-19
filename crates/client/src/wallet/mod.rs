@@ -202,8 +202,9 @@ impl Wallet {
     /// Execute a list of calls via `execute_v3`.
     ///
     /// Every V3 fee field is pinned before signing rather than left for the RPC
-    /// endpoint to fill: the tip comes from [`Self::fee_bounds`] (never from a
-    /// block median), and the gas bounds are checked against the caller's
+    /// endpoint to fill: the tip comes from the bounds set by
+    /// [`Self::with_fee_bounds`] (never from a block median), and the gas
+    /// bounds are checked against the caller's
     /// ceiling. The returned [`Tx`] tracks the locally computed hash, so a
     /// lying endpoint cannot point the caller at a different transaction.
     pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
