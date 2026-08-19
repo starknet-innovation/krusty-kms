@@ -266,7 +266,7 @@ impl GatewayBackend for StarknetGatewayBackend {
     }
 }
 
-/// A ceiling refusal is the caller's own policy, so it is not retryable.
+/// An approval refusal is the caller's own policy, so it is not retryable.
 ///
 /// Not routed through `map_kms_error`, which classifies by substring and would
 /// land this in the retryable `RpcDegraded`.

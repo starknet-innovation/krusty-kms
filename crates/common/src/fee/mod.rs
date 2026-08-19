@@ -24,12 +24,12 @@ pub struct FeeEstimateInput {
     pub l1_data_gas_price: u128,
 }
 
-/// Bounds that passed the ceiling check.
+/// Bounds that passed the caller's approval check.
 ///
 /// `#[non_exhaustive]` stops another crate constructing one from scratch, but
 /// the fields stay public and readable, so it is a value type rather than a
 /// capability token: a caller can still copy one and edit it. That is by
-/// design — the ceiling is the caller's own policy, and one who edits past it
+/// design — approval is the caller's own policy, and one who edits past it
 /// could equally have raised `max_fee_fri`. What it defends against is the
 /// *endpoint*, never the caller.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -197,16 +197,17 @@ impl FeeBounds {
 
         let Some(max_fee_fri) = self.max_fee_fri else {
             return Err(KmsError::TransactionError(format!(
-                "fee approval required: resolved maximum is {} STRK; ask the user, then \
-                 resubmit with FeeBounds::with_max_fee_fri(user_approved_fri)",
+                "fee approval required: resolved maximum is {total} FRI ({} STRK); ask the \
+                 user, then resubmit with FeeBounds::with_max_fee_fri(user_approved_fri)",
                 crate::utils::fri_to_strk(total),
             )));
         };
 
         if total > max_fee_fri {
             return Err(KmsError::TransactionError(format!(
-                "fee approval required: resolved maximum {} STRK exceeds the approved {} STRK; \
-                 ask the user before raising FeeBounds::max_fee_fri",
+                "fee approval required: resolved maximum {total} FRI ({} STRK) exceeds the \
+                 approved {max_fee_fri} FRI ({} STRK); ask the user before raising \
+                 FeeBounds::max_fee_fri",
                 crate::utils::fri_to_strk(total),
                 crate::utils::fri_to_strk(max_fee_fri)
             )));
@@ -218,7 +219,7 @@ impl FeeBounds {
 
 /// Scale an estimate, rejecting a product too large for the target type.
 ///
-/// The ceiling would miss it: casts saturate, and a saturated amount paired
+/// The approval check would miss it: casts saturate, and a saturated amount paired
 /// with a zero price adds nothing to the total.
 fn scale_u64(value: u64, multiplier: f64) -> Result<u64> {
     let scaled = value as f64 * multiplier;

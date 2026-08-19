@@ -14,28 +14,31 @@ All notable changes to the published Rust crates are documented here.
   `(l2_gas_price + tip) * l2_gas_consumed + ...`, an endpoint could pick values
   that drain the account with no collusion required. All three paths now resolve
   fees through the new `krusty_kms_common::fee::FeeBounds`, which pins the tip
-  locally (default 0), caps the total (default 10 STRK), and can supply every
-  bound explicitly so no estimate is requested at all. Each path also tracks the
-  locally computed transaction hash and never reads the one the endpoint
-  reports, so a substituted hash cannot point the caller at someone else's
-  transaction. Configure via `Wallet::with_fee_bounds`,
-  `deploy_oz_account_with_bounds`, and `StarknetGatewayBackend::with_fee_bounds`;
-  defaults are safe and no existing signature changed.
+  locally (default 0), resolves every signed bound, and requires a
+  caller-supplied approval ceiling. With no ceiling, submission returns a
+  non-retryable `fee approval required` error containing the resolved maximum
+  in exact FRI and formatted STRK; the host should show it to the user and
+  resubmit with `FeeBounds::with_max_fee_fri` after consent. No universal fee
+  amount is hard-coded. Each path also tracks the locally computed transaction
+  hash and never reads the one the endpoint reports, so a substituted hash
+  cannot point the caller at someone else's transaction. Configure via
+  `Wallet::with_fee_bounds`, `deploy_oz_account_with_bounds`, and
+  `StarknetGatewayBackend::with_fee_bounds`.
 
-  Two caveats worth reading before upgrading. The ceiling applies to the
-  *bound* — the most a sequencer could charge — which the 1.5x gas and 1.5x
-  price multipliers inflate to 2.25x the estimate, so the 10 STRK default
-  rejects transactions whose estimated fee exceeds roughly 4.4 STRK. That is
-  sized for proof verification, the heaviest workload here; the figure is
-  reasoned rather than measured, and a unit test pins the intent. And pinning the
-  tip to 0 is an availability trade-off: under the v0.14 tip-ordered mempool a
-  zero-tip transaction sorts below tipped ones, so callers who need inclusion
-  during congestion should set `FeeBounds::tip` explicitly and raise
-  `max_fee_fri` to cover `tip * l2_gas`.
+  This intentionally changes default submission behavior: callers must provide
+  an existing policy limit or implement the approval/resubmission interaction.
+  The approved amount applies to the resolved *bound* — the most a sequencer
+  could charge — after the 1.5x gas and 1.5x price multipliers. Pinning the tip
+  to 0 is an availability trade-off under a tip-ordered mempool; callers who
+  choose a nonzero tip must approve the resulting `tip * l2_gas` term too.
 
   The `nonce` is unchanged and still comes from the endpoint on all three paths.
   It is signature-committed, so a wrong value can only make a transaction
   unincludeable, never more expensive.
+
+  `ControllerWallet` user-paid execution and deployment now fail closed because
+  its pinned upstream SDK cannot enforce the same caller-approved fee fields and
+  local transaction hash. Sponsored and credit execution remain available.
 
 ## [0.7.0] - 2026-08-16
 

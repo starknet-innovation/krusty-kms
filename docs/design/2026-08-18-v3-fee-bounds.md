@@ -20,41 +20,45 @@ Callers could not defend themselves: `Wallet.account` is private with no
 accessor, no submit path took a bounds parameter, and `estimate_fee` was a
 separate round trip whose result could not be fed back into `execute`.
 
-One root cause, four sites. Three are fixed here: `Wallet::execute`,
-`deploy_oz_account`, and the gateway's `deploy_open_zeppelin`.
+One root cause, four sites. Three now prepare and hash locally:
+`Wallet::execute`, `deploy_oz_account`, and the gateway's
+`deploy_open_zeppelin`.
 
-The fourth, `ControllerWallet` (`crates/controller/src/wallet.rs`), is
-deliberately out of scope. Its `execute` passes an endpoint estimate straight
-through unbounded, and both it and `deploy` track the endpoint's reported hash —
-the same two defects, so anything holding a `dyn WalletExecutor` loses both
-protections when the concrete type is `ControllerWallet`. Fixing it properly
-means either threading `FeeBounds` through the Cartridge `account_sdk` builder,
-whose fee semantics differ and may be paymaster-backed, or moving the bound to
-the `WalletExecutor` trait — a breaking change to a shared boundary. The crate
-is excluded from the workspace and its SDK path is behind a non-default feature.
-Tracked separately rather than widened into this change.
+The fourth, `ControllerWallet` (`crates/controller/src/wallet.rs`), cannot do so
+through the pinned Cartridge `account_sdk`: its user-paid API accepts an
+endpoint estimate but exposes neither a caller-pinned tip/resource builder nor
+the prepared local hash. User-paid execution and controller deployment therefore
+fail closed. Sponsored and credit execution remain available because the user is
+not the fee payer. This is deliberately less convenient than pretending the
+same security invariant can be enforced through an insufficient upstream API.
 
 ## Interface
 
-`krusty_kms_common::fee::FeeBounds` — what a caller is willing to spend. All
-three paths resolve through it; no existing signature changed.
+`krusty_kms_common::fee::FeeBounds` records what a caller has approved. All
+three direct paths resolve through it; no existing function signature changed.
 
 ```rust
+// Supplied by the host's policy or confirmation UI after it shows the
+// `fee approval required` amount from an earlier attempt.
+let user_approved_fri = approved_fee_from_host;
 let wallet = Wallet::from_signing_key(..)?
-    .with_fee_bounds(FeeBounds { max_fee_fri: 5 * ONE_STRK_FRI, ..Default::default() });
+    .with_fee_bounds(FeeBounds::default().with_max_fee_fri(user_approved_fri));
 ```
 
 Also `deploy_oz_account_with_bounds` and
 `StarknetGatewayBackend::with_fee_bounds`. `FeeBounds::default()` pins the tip
-to 0 and caps the total at `DEFAULT_MAX_FEE_FRI` (10 STRK), so callers that
-never mention fees are protected without a code change. That ceiling is on the
-resolved bound; see "Deliberately not promised" below for what it admits as an
-estimate, and why it is sized the way it is.
+to 0 but approves no fee. It obtains and scales the estimate, then returns a
+non-retryable `fee approval required` error containing the resolved maximum
+in exact FRI and formatted STRK without signing. A UI or CLI displays that
+amount, asks the user, and resubmits with `with_max_fee_fri`. A caller with an
+existing policy limit can supply it on the first attempt. The library itself
+never invents a threshold or owns a prompt.
 
-Two resolution modes, both funnelling through one ceiling check:
+Two resolution modes, both funnelling through one approval check:
 
 - `explicit()` — `Some` only when all six gas fields are set, in which case no
-  estimate is requested and the endpoint contributes nothing to the signature.
+  estimate is requested and the endpoint contributes no fee field to the
+  signature. The nonce still comes from the endpoint.
 - `resolve(&estimate)` — explicit fields win; the rest are the estimate scaled
   by the multipliers (1.5, matching prior starknet-rs behaviour).
 
@@ -65,7 +69,7 @@ builder-setter chain plus `estimate_input`/`resolve_bounds` are duplicated
 across the three sites, and that is intentional.
 
 The security-critical part is not duplicated. The resolution order — scale by
-the multipliers, then check the ceiling — lives once, in `FeeBounds::resolve`
+the multipliers, then check the approval — lives once, in `FeeBounds::resolve`
 and `finish`. Each `resolve_bounds` only picks estimate-vs-explicit, calls
 `estimate_fee` on its own builder type, and maps the error. Those mappers are
 the reason the helpers cannot merge: the client yields `KmsError` and the
@@ -82,17 +86,18 @@ part that actually matters exactly where it already is.
 ## Invariants
 
 - The tip is always locally chosen. No block body can inject one.
-- A `ResolvedFeeBounds` only exists if it passed the ceiling check, so holding
-  one is proof the ceiling held for the value as returned. `#[non_exhaustive]`
+- A `ResolvedFeeBounds` only exists if it passed the caller's approval, so
+  holding one proves the approval held for the value as returned.
+  `#[non_exhaustive]`
   stops another crate constructing one from scratch, but the fields are public
   and the type is `Copy`, so it is a value type, not a capability token — a
-  caller can copy one and edit it. That is deliberate: the ceiling is the
+  caller can copy one and edit it. That is deliberate: the approval is the
   caller's own policy, and one who edits past it could equally have raised
   `max_fee_fri`. It defends against the endpoint, never against the caller.
-- `max_fee_fri()` mirrors the protocol formula:
+- `ResolvedFeeBounds::total_fri()` mirrors the protocol formula:
   `sum(amount * price) + tip * l2_gas`. Arithmetic is checked throughout;
   overflow is a rejection, never a wrap.
-- The ceiling is inclusive: `total == max_fee_fri` is allowed.
+- Approval is inclusive: `total == max_fee_fri` is allowed.
 - The transaction hash is computed locally from the prepared transaction and is
   the only hash used. The endpoint's reported `transaction_hash` is never read.
   Comparing the two and erroring on mismatch would be worse on both counts: it
@@ -105,62 +110,56 @@ part that actually matters exactly where it already is.
   a block and bumps the nonce of an account that is still undeployed, so
   `check_deployed` says nothing about it; `fetch_nonce` maps ContractNotFound to
   zero itself. The nonce is signature-committed, so an endpoint lying about it
-  costs availability, never money — it is outside this ceiling's threat model.
+  costs availability, never money — it is outside this approval's threat model.
 
 ## Deliberately not promised
 
-- The ceiling bounds what can be *signed*, not what a sequencer charges. An
+- The approval bounds what can be *signed*, not what a sequencer charges. An
   honest sequencer charges less.
-- `estimate_fee` remains a separate read-only round trip. A caller that displays
-  an estimate and then submits still makes two estimate calls against different
-  block states; the signed one is now ceiling-bounded, which is the security
-  property. The display mismatch is a UX matter, not a drain.
-- `DEFAULT_MAX_FEE_FRI` (10 STRK) is a judgment call, not a measured one — no
-  gas figures for these operations are recorded in this repo. It is sized for
-  proof verification, the heaviest workload here, and
-  `default_admits_a_proof_sized_transaction` pins that intent so a later change
-  fails in the test suite rather than against honest mainnet traffic. It should
-  still be checked against a real Sepolia estimate before release.
-- The ceiling applies to the **bound**, not the estimate. That is deliberate:
+- The approval applies to the **resolved bound**, not the raw estimate. That is
+  deliberate:
   the bound is what a sequencer may actually charge, so it is the quantity a
-  spend limit has to constrain. But the 1.5x amount and 1.5x price multipliers
-  compound, so the 10 STRK ceiling admits an *estimated* fee up to ~4.4 STRK.
-- The ceiling constrains an endpoint that **inflates** the fee. One that
+  spend limit has to constrain. The 1.5x amount and 1.5x price multipliers
+  compound, so the value shown for approval can be up to 2.25x the raw estimate.
+- The approval constrains an endpoint that **inflates** the fee. One that
   **deflates** `l2_gas_consumed` is not addressed: the bound resolves well under
-  the ceiling, is signed, and the transaction then runs out of L2 gas and
+  the approval, is signed, and the transaction then runs out of L2 gas and
   reverts — with the consumed gas still charged. That is a slow drain plus a
   denial of service, bounded by real gas rather than by the balance. A minimum
   floor, or comparing successive estimates, would be the missing control.
 - Pinning the tip to 0 trades inclusion for safety. Under the v0.14 tip-ordered
   mempool a zero-tip transaction sorts below tipped ones, so callers who need
-  inclusion during congestion must set `FeeBounds::tip` and raise `max_fee_fri`
-  to cover the `tip * l2_gas` term. There is no safe default tip, because a
+  inclusion during congestion must set `FeeBounds::tip`; the resolved approval
+  amount includes `tip * l2_gas`. There is no safe default tip, because a
   non-zero default would reintroduce a number the caller did not choose.
+- Controller deployment and `FeeMode::UserPays` remain unavailable until the
+  pinned controller SDK exposes the same prepared fee/hash boundary.
 
 ## Failure modes
 
-Every rejection is `KmsError::TransactionError` carrying both the resolved total
-and the ceiling. `KmsError` is not `#[non_exhaustive]`, so a dedicated variant
-would force a minor bump; reusing the existing variant keeps this releasable as
-a patch.
+Missing or insufficient approval is a `KmsError::TransactionError` beginning
+with `fee approval required:` and carrying the resolved total and, when present,
+the approved ceiling in exact FRI and formatted STRK. The gateway classifies it
+as non-retryable `InvalidRequest`. `KmsError` is not `#[non_exhaustive]`, so
+adding a dedicated variant would be a breaking public-enum change; the stable
+prefix preserves the patch-release surface while giving hosts one flag to route
+into confirmation UI.
 
 ## Tests
 
-`crates/common/src/fee/tests.rs` unit-tests the resolution laws: tip pinned to zero by
-default, multipliers applied, explicit fields overriding, tip counted toward the
-ceiling, overflow rejected, nonsense multipliers rejected, ceiling inclusive.
+`crates/common/src/fee/tests.rs` unit-tests the resolution laws: no default
+approval, proof-sized traffic requiring then accepting user approval, tip
+pinned to zero, multipliers applied, explicit fields overriding, tip counted,
+overflow rejected, nonsense multipliers rejected, and inclusive approval.
 
 `crates/client/tests/fee_bounds_hostile_rpc.rs` covers both client paths and
 `crates/gateway/tests/fee_bounds_hostile_rpc.rs` covers the gateway, additionally
-asserting the refusal is classified non-retryable: `map_kms_error` matches by
-substring and would otherwise land it in `RpcDegraded`, advertising a
-deterministic refusal as a transient hiccup a client should retry. Each: a
-canned-response JSON-RPC server answers `starknet_estimateFee` with an inflated
+asserting the refusal is classified non-retryable. Each uses a canned-response
+JSON-RPC server that answers `starknet_estimateFee` with an inflated
 `l2_gas_price` and asserts `Wallet::execute` refuses before signing, with a
 submit counter that must stay at zero. It fails against the pre-fix code (the
 transaction is submitted at a bound of ~2359 STRK, from a ~1048 STRK estimate)
-and fails again if the ceiling check is removed, so it is load-bearing rather
-than tautological. It answers
-`starknet_getBlockWithTxs` too, so a regression that reintroduces the median-tip
-path still reaches submission and is caught by the counter rather than by an
-incidental transport error.
+and fails again if the approval check is removed. Successful approved cases
+inspect the submitted JSON to assert `tip = 0`, assert no block-body request was
+made, and return a fabricated transaction hash that must not be tracked. Those
+assertions cover wallet execution, client deployment, and gateway deployment.

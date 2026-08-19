@@ -36,7 +36,9 @@ pub struct DeployResult {
 ///    canonical path used for address derivation).
 /// 2. Resolves the deploy salt from `salt_policy`.
 /// 3. Checks whether the account is already deployed on-chain.
-/// 4. If not, submits a `DEPLOY_ACCOUNT` v3 transaction.
+/// 4. If not, estimates the fee and returns `fee approval required` without
+///    signing. Resubmit through [`deploy_oz_account_with_bounds`] after the
+///    caller approves a maximum.
 ///
 /// Provider errors are mapped to typed [`KmsError`] variants.
 pub async fn deploy_oz_account(
@@ -61,9 +63,10 @@ pub async fn deploy_oz_account(
 
 /// Deploy an OpenZeppelin account within caller-supplied fee bounds.
 ///
-/// Identical to [`deploy_oz_account`] but lets the caller cap what the
-/// deployment may cost. The tip is pinned from `fee_bounds` rather than taken
-/// from a block median, and the returned [`Tx`] tracks the locally computed
+/// Identical to [`deploy_oz_account`] but lets the caller approve what the
+/// deployment may cost. `max_fee_fri = None` still requests approval. The tip
+/// is pinned from `fee_bounds` rather than taken from a block median, and the
+/// returned [`Tx`] tracks the locally computed
 /// transaction hash; the one the endpoint reports is ignored.
 // NOTE: intentionally over the 40-line guideline. This is the canonical
 // derivation-to-deployment path, and splitting it further would scatter the

@@ -1,4 +1,4 @@
-//! Unit tests for [`super::FeeBounds`] resolution and its ceiling.
+//! Unit tests for [`super::FeeBounds`] resolution and approval.
 
 use super::*;
 
@@ -103,7 +103,7 @@ fn explicit_is_some_only_when_every_field_is_set() {
 
 /// The headline case: an inflated gas price must be refused.
 #[test]
-fn hostile_gas_price_trips_the_ceiling() {
+fn hostile_gas_price_requires_new_approval() {
     let hostile = FeeEstimateInput {
         l2_gas_price: 1_000_000_000_000_000, // 1e15 FRI per L2 gas unit
         ..cheap_estimate()
@@ -116,10 +116,10 @@ fn hostile_gas_price_trips_the_ceiling() {
     assert!(err.contains("fee approval required"), "got: {err}");
 }
 
-/// The tip is charged per unit of L2 gas, so it counts against the ceiling
+/// The tip is charged per unit of L2 gas, so it counts against approval
 /// even when the estimate itself is honest.
 #[test]
-fn tip_counts_toward_the_ceiling() {
+fn tip_counts_toward_approval() {
     let benign = FeeBounds::default()
         .with_max_fee_fri(ONE_STRK_FRI)
         .resolve(&cheap_estimate());
@@ -194,7 +194,7 @@ fn explicit_rejects_multipliers_that_resolve_rejects() {
 }
 
 /// A saturated amount paired with a zero price adds nothing to the total, so
-/// the ceiling alone would let it through.
+/// the approval check alone would let it through.
 ///
 /// The second case is the boundary: `u64::MAX as f64` rounds *up* to 2^64, so
 /// an amount whose scaled product lands exactly on 2^64 passes a `>` guard and
@@ -218,9 +218,9 @@ fn saturating_scale_is_rejected() {
     }
 }
 
-/// A ceiling exactly equal to the resolved total is allowed.
+/// Approval exactly equal to the resolved total is allowed.
 #[test]
-fn ceiling_is_inclusive() {
+fn approval_is_inclusive() {
     let bounds = FeeBounds {
         max_fee_fri: Some(100),
         ..explicit_bounds(10, 10, 0, 0)
