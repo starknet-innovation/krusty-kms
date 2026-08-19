@@ -36,6 +36,12 @@ All notable changes to the published Rust crates are documented here.
   It is signature-committed, so a wrong value can only make a transaction
   unincludeable, never more expensive.
 
+### Changed
+
+- Refresh compatible Cargo dependencies, upgrade the direct
+  `starknet-rust-crypto` dependency from 0.9 to 0.19.1, and update the
+  cross-compatibility test runner and pinned GitHub Actions.
+
 ## [0.7.0] - 2026-08-16
 
 ### Security
