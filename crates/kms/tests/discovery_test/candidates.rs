@@ -118,16 +118,13 @@ fn discovery_argent_legacy_candidate_matches_known_address() {
 
     let candidate = matching[0];
 
-    let candidate_addr = Felt::from_hex(&candidate.address).unwrap();
-    let expected_addr = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
     assert_eq!(
-        candidate_addr, expected_addr,
+        Felt::from_hex(&candidate.address).unwrap(),
+        Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap(),
         "ArgentLegacy v0.4.0 candidate must match the account deployed on Sepolia"
     );
-
-    let candidate_pubk = Felt::from_hex(&candidate.public_key).unwrap();
     assert_eq!(
-        candidate_pubk,
+        Felt::from_hex(&candidate.public_key).unwrap(),
         Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap(),
         "ArgentLegacy candidate public key must match the known test vector"
     );

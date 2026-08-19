@@ -66,6 +66,14 @@ allocates on every request that names a class hash.
   the fixture runner asserts each Braavos vector pins that hash rather than
   deriving from whatever the vector supplies.
 
+## Guardrail baseline
+
+`account_class.rs` had grown past its file-size ratchet baseline. Rather than bump
+it, the unit tests moved to `account_class/tests.rs` — the approach taken in #97
+("split ElGamal FFI tests into module"). The baseline therefore *drops* from 585 to
+416 lines, tightening the ratchet rather than loosening it, and no new oversized
+file is introduced. The FFI and WASM surface snapshots are unchanged.
+
 ## Failure modes
 
 Callers passing a custom or legacy Argent class hash — including via the
