@@ -271,3 +271,31 @@ async fn approved_deployment_pins_tip_and_tracks_the_local_hash() {
         "tracked the hash the endpoint made up instead of the one we signed"
     );
 }
+
+/// The fee override must be reachable using only this crate's own exports.
+///
+/// The tests above import `FeeBounds` from `krusty-kms-common`, which works
+/// inside this workspace. An external consumer of the published gateway crate
+/// has no such dependency, so without the re-export `with_fee_bounds` is public
+/// but uncallable. This fails to compile if that re-export is dropped.
+#[tokio::test]
+async fn fee_bounds_override_is_reachable_from_this_crate() {
+    use krusty_kms_gateway::{FeeBounds as GatewayFeeBounds, ONE_STRK_FRI as GATEWAY_ONE_STRK};
+
+    let state: SharedRpcState = Arc::new(RpcState::default());
+    let url = spawn_hostile_rpc(state.clone()).await;
+    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+        Url::parse(&url).expect("url"),
+    )));
+    let network = NetworkPreset {
+        chain_id: ChainId::Sepolia,
+        rpc_url: url,
+        explorer_base_url: String::new(),
+        name: "hostile".into(),
+    };
+
+    let backend = StarknetGatewayBackend::new(provider, network)
+        .with_fee_bounds(GatewayFeeBounds::default().with_max_fee_fri(5 * GATEWAY_ONE_STRK));
+
+    assert_eq!(backend.chain_id(), ChainId::Sepolia);
+}
