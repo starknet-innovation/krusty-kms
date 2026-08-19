@@ -32,6 +32,11 @@ All notable changes to the published Rust crates are documented here.
   to 0 is an availability trade-off under a tip-ordered mempool; callers who
   choose a nonzero tip must approve the resulting `tip * l2_gas` term too.
 
+  Known limitation: a gateway deployment cannot yet be re-approved without
+  reconstructing the gateway, since the backend is private and
+  `DeployAccountRequest` carries no bounds. The refusal is still correct and
+  nothing is signed; see the design note. Client paths are unaffected.
+
   The `nonce` is unchanged and still comes from the endpoint on all three paths.
   It is signature-committed, so a wrong value can only make a transaction
   unincludeable, never more expensive.

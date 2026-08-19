@@ -119,6 +119,20 @@ part that actually matters exactly where it already is.
   reverts — with the consumed gas still charged. That is a slow drain plus a
   denial of service, bounded by real gas rather than by the balance. A minimum
   floor, or comparing successive estimates, would be the missing control.
+- **The approval loop is completable on every client path, but not yet on the
+  gateway.** `Wallet::execute_with_bounds`, the `WalletExecutor` method,
+  `TxBuilder::send_with_bounds` and `Wallet::set_fee_bounds` each let a caller
+  apply an approved figure after a refusal. A gateway deployment cannot: the
+  backend is moved into `Gateway` and kept private, and `DeployAccountRequest`
+  carries no bounds, so a remote caller can only re-approve by tearing down and
+  reconstructing the gateway with a global ceiling. The refusal itself is
+  correct — nothing is signed, and it is classified non-retryable — so this is a
+  usability gap, not a hole in the guarantee. Closing it means choosing between
+  bounds on the serialised `DeployAccountRequest` (a wire-format change,
+  and `FeeBounds` is not `Serialize` today), a per-call argument on
+  `GatewayBackend::deploy_open_zeppelin` (a breaking trait change, including its
+  test double), or an accessor that reopens the `Gateway`/backend boundary.
+  Deferred to a follow-up rather than settled inside a security fix.
 - Pinning the tip to 0 trades inclusion for safety. Under the v0.14 tip-ordered
   mempool a zero-tip transaction sorts below tipped ones, so callers who need
   inclusion during congestion must set `FeeBounds::tip`; the resolved approval
