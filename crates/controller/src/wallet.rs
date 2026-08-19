@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use account_sdk::controller::Controller;
+use account_sdk::errors::ControllerError as SdkControllerError;
 use account_sdk::execute_from_outside::FeeSource;
 use account_sdk::signers::{Owner, Signer};
 use krusty_kms_common::address::Address;
@@ -143,10 +144,18 @@ impl ControllerWallet {
         self.create_dangerous_wildcard_session(expires_secs).await
     }
 
-    /// Controller deployment is disabled until the pinned SDK exposes a
-    /// caller-approved fee and local-hash boundary.
+    /// Deploy the controller account on-chain.
     pub async fn deploy(&self) -> Result<Tx> {
-        Err(unsupported_user_paid("deployment"))
+        let ctrl = self.controller.lock().await;
+        let result = ctrl
+            .deploy()
+            .send()
+            .await
+            .map_err(SdkControllerError::from)
+            .map_err(error::controller_error_to_kms)?;
+
+        let hash = convert::felt_sdk_to_ours(result.transaction_hash);
+        Ok(Tx::new(hash, self.provider.clone(), self.network.clone()))
     }
 
     /// Disconnect and clean up session state.
@@ -212,16 +221,27 @@ impl ControllerWallet {
 impl WalletExecutor for ControllerWallet {
     async fn execute(&self, calls: Vec<starknet_rust::core::types::Call>) -> Result<Tx> {
         let sdk_calls: Vec<_> = calls.iter().map(convert::call_to_sdk).collect();
-        let fee_source = match self.fee_mode {
-            FeeMode::UserPays => return Err(unsupported_user_paid("execution")),
-            FeeMode::Sponsored => FeeSource::Paymaster,
-            FeeMode::Credits => FeeSource::Credits,
-        };
         let mut ctrl = self.controller.lock().await;
-        let result = ctrl
-            .execute(sdk_calls, None, Some(fee_source))
-            .await
-            .map_err(error::controller_error_to_kms)?;
+
+        let result = match self.fee_mode {
+            FeeMode::UserPays => {
+                let fee = ctrl
+                    .estimate_invoke_fee(sdk_calls.clone())
+                    .await
+                    .map_err(error::controller_error_to_kms)?;
+                ctrl.execute(sdk_calls, Some(fee), None)
+                    .await
+                    .map_err(error::controller_error_to_kms)?
+            }
+            FeeMode::Sponsored => ctrl
+                .execute(sdk_calls, None, Some(FeeSource::Paymaster))
+                .await
+                .map_err(error::controller_error_to_kms)?,
+            FeeMode::Credits => ctrl
+                .execute(sdk_calls, None, Some(FeeSource::Credits))
+                .await
+                .map_err(error::controller_error_to_kms)?,
+        };
 
         let hash = convert::felt_sdk_to_ours(result.transaction_hash);
         Ok(Tx::new(hash, self.provider.clone(), self.network.clone()))
@@ -256,14 +276,6 @@ impl WalletExecutor for ControllerWallet {
         let address_rs = convert::felt_core_to_ours(self.address.as_felt());
         check_deployed(&self.provider, address_rs).await
     }
-}
-
-fn unsupported_user_paid(operation: &str) -> KmsError {
-    KmsError::ControllerError(format!(
-        "controller {operation} is disabled: the pinned account_sdk cannot enforce \
-         caller-approved fee bounds and a locally computed transaction hash; use sponsored or \
-         credit execution for already-deployed accounts until that boundary is available"
-    ))
 }
 
 async fn check_deployed(
@@ -310,12 +322,5 @@ mod tests {
     #[test]
     fn validate_network_chain_accepts_matching_network() {
         assert!(validate_network_chain(ChainId::Sepolia, &NetworkPreset::sepolia()).is_ok());
-    }
-
-    #[test]
-    fn user_paid_guard_fails_closed_with_a_remediation() {
-        let error = unsupported_user_paid("execution").to_string();
-        assert!(error.contains("caller-approved fee bounds"), "got: {error}");
-        assert!(error.contains("sponsored or credit"), "got: {error}");
     }
 }
