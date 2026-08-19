@@ -14,7 +14,7 @@ use starknet_rust::providers::Url;
 use starknet_rust::signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
@@ -23,9 +23,17 @@ const HOSTILE_L2_GAS_PRICE: &str = "0x38d7ea4c68000";
 
 const TEST_PRIVATE_KEY: &str = "0x1234";
 
-type SubmitCounter = Arc<AtomicUsize>;
+#[derive(Default)]
+struct RpcState {
+    submits: AtomicUsize,
+    submitted_tip: Mutex<Option<serde_json::Value>>,
+}
 
-fn respond(method: &str, id: &serde_json::Value, submits: &SubmitCounter) -> String {
+type SharedRpcState = Arc<RpcState>;
+
+fn respond(req: &serde_json::Value, state: &RpcState) -> String {
+    let method = req["method"].as_str().unwrap_or_default();
+    let id = &req["id"];
     let result = match method {
         "starknet_getNonce" => serde_json::json!("0x0"),
         "starknet_specVersion" => serde_json::json!("0.9.0"),
@@ -45,7 +53,11 @@ fn respond(method: &str, id: &serde_json::Value, submits: &SubmitCounter) -> Str
             "unit": "FRI",
         }]),
         "starknet_addDeployAccountTransaction" => {
-            submits.fetch_add(1, Ordering::SeqCst);
+            state.submits.fetch_add(1, Ordering::SeqCst);
+            *state.submitted_tip.lock().expect("submitted_tip lock") = req["params"]
+                .get("deploy_account_transaction")
+                .and_then(|tx| tx.get("tip"))
+                .cloned();
             serde_json::json!({ "transaction_hash": "0xdead", "contract_address": "0xabc" })
         }
         other => return error_response(id, -32601, &format!("unexpected method {other}")),
@@ -93,7 +105,7 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-async fn spawn_hostile_rpc(submits: SubmitCounter) -> String {
+async fn spawn_hostile_rpc(state: SharedRpcState) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("local_addr");
 
@@ -102,18 +114,14 @@ async fn spawn_hostile_rpc(submits: SubmitCounter) -> String {
             let Ok((mut stream, _)) = listener.accept().await else {
                 return;
             };
-            let submits = submits.clone();
+            let state = state.clone();
             tokio::spawn(async move {
                 let mut buf = Vec::new();
                 while let Some(body) = read_request(&mut stream, &mut buf).await {
                     let Ok(req) = serde_json::from_str::<serde_json::Value>(&body) else {
                         return;
                     };
-                    let payload = respond(
-                        req["method"].as_str().unwrap_or_default(),
-                        &req["id"],
-                        &submits,
-                    );
+                    let payload = respond(&req, &state);
                     let response = format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\
                          Content-Length: {}\r\n\r\n{}",
@@ -156,8 +164,8 @@ fn descriptor_for(signing_key: &SigningKey) -> AccountDescriptor {
 
 #[tokio::test]
 async fn hostile_gas_price_is_refused_and_not_retryable() {
-    let submits: SubmitCounter = Arc::new(AtomicUsize::new(0));
-    let url = spawn_hostile_rpc(submits.clone()).await;
+    let state = Arc::new(RpcState::default());
+    let url = spawn_hostile_rpc(state.clone()).await;
 
     let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
         Url::parse(&url).expect("url"),
@@ -185,7 +193,7 @@ async fn hostile_gas_price_is_refused_and_not_retryable() {
         .await;
 
     assert_eq!(
-        submits.load(Ordering::SeqCst),
+        state.submits.load(Ordering::SeqCst),
         0,
         "a deployment was signed and submitted with endpoint-dictated fees"
     );
@@ -207,5 +215,59 @@ async fn hostile_gas_price_is_refused_and_not_retryable() {
         error.code,
         GatewayErrorCode::InvalidRequest,
         "the caller's own bounds rejected this, not the RPC"
+    );
+}
+
+#[tokio::test]
+async fn approved_deployment_pins_tip_and_tracks_the_local_hash() {
+    let state = Arc::new(RpcState::default());
+    let url = spawn_hostile_rpc(state.clone()).await;
+    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+        Url::parse(&url).expect("url"),
+    )));
+    let network = NetworkPreset {
+        chain_id: ChainId::Sepolia,
+        rpc_url: url,
+        explorer_base_url: String::new(),
+        name: "hostile".into(),
+    };
+    let backend = StarknetGatewayBackend::new(provider, network)
+        .with_fee_bounds(FeeBounds::default().with_max_fee_fri(u128::MAX));
+    let signing_key = SigningKey::from_secret_scalar(
+        starknet_rust::core::types::Felt::from_hex_unchecked(TEST_PRIVATE_KEY),
+    );
+    let private_key = SecretFelt::new(Felt::from_hex_unchecked(TEST_PRIVATE_KEY));
+
+    let result = backend
+        .deploy_open_zeppelin(
+            &private_key,
+            &descriptor_for(&signing_key),
+            DeployMode::SubmitOnly,
+        )
+        .await
+        .expect("approved deployment should submit");
+
+    assert_eq!(
+        state.submits.load(Ordering::SeqCst),
+        1,
+        "expected one submission"
+    );
+    assert_eq!(
+        state
+            .submitted_tip
+            .lock()
+            .expect("submitted_tip lock")
+            .as_ref(),
+        Some(&serde_json::json!("0x0")),
+        "the signed deployment did not carry the caller's zero tip"
+    );
+    let tx_hash = match result {
+        krusty_kms_gateway::DeployExecution::Submitted { tx_hash } => tx_hash,
+        other => panic!("expected submitted deployment, got {other:?}"),
+    };
+    assert_ne!(
+        tx_hash.to_felt(),
+        Felt::from_hex_unchecked("0xdead"),
+        "tracked the hash the endpoint made up instead of the one we signed"
     );
 }
