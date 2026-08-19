@@ -1,12 +1,13 @@
 //! Wallet: owns a provider + account, can sign and execute transactions.
 
 pub mod deploy;
+mod fees;
 pub mod utils;
 
 use krusty_kms::{AccountClass, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
-use krusty_kms_common::fee::{FeeBounds, FeeEstimateInput, ResolvedFeeBounds};
+use krusty_kms_common::fee::{FeeBounds, ResolvedFeeBounds};
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::Tx;
@@ -20,6 +21,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
+use self::fees::{apply_bounds, estimate_input};
 use self::utils::{check_deployed, core_felt_to_rs};
 
 /// A Starknet wallet that can sign and submit transactions.
@@ -297,35 +299,6 @@ impl Wallet {
     pub fn tx(&self) -> crate::tx::TxBuilder<'_> {
         crate::tx::TxBuilder::new(self)
     }
-}
-
-/// Convert a provider fee estimate into the Starknet-free shape `FeeBounds` takes.
-pub(crate) fn estimate_input(
-    estimate: &starknet_rust::core::types::FeeEstimate,
-) -> FeeEstimateInput {
-    FeeEstimateInput {
-        l1_gas_consumed: estimate.l1_gas_consumed,
-        l1_gas_price: estimate.l1_gas_price,
-        l2_gas_consumed: estimate.l2_gas_consumed,
-        l2_gas_price: estimate.l2_gas_price,
-        l1_data_gas_consumed: estimate.l1_data_gas_consumed,
-        l1_data_gas_price: estimate.l1_data_gas_price,
-    }
-}
-
-/// Pin every fee field on an execution builder so none is filled from RPC.
-fn apply_bounds<'a, A>(
-    execution: starknet_rust::accounts::ExecutionV3<'a, A>,
-    bounds: &ResolvedFeeBounds,
-) -> starknet_rust::accounts::ExecutionV3<'a, A> {
-    execution
-        .l1_gas(bounds.l1_gas)
-        .l1_gas_price(bounds.l1_gas_price)
-        .l2_gas(bounds.l2_gas)
-        .l2_gas_price(bounds.l2_gas_price)
-        .l1_data_gas(bounds.l1_data_gas)
-        .l1_data_gas_price(bounds.l1_data_gas_price)
-        .tip(bounds.tip)
 }
 
 #[async_trait::async_trait]
