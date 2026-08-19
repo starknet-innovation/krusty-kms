@@ -1,6 +1,8 @@
 //! Default Starknet JSON-RPC implementation of [`GatewayBackend`].
 
-use super::deploy::{map_deploy_submission_error, validate_open_zeppelin_descriptor};
+use super::deploy::{
+    map_deploy_provider_error, map_deploy_submission_error, validate_open_zeppelin_descriptor,
+};
 use super::interface::{DeployExecution, GatewayBackend};
 use super::rpc::{
     balance_of_camel_selector, balance_of_selector, call_erc20_balance_with_selector_fallback,
@@ -48,11 +50,6 @@ impl StarknetGatewayBackend {
     pub fn with_fee_bounds(mut self, fee_bounds: FeeBounds) -> Self {
         self.fee_bounds = fee_bounds;
         self
-    }
-
-    /// The fee bounds applied to every deployment this backend submits.
-    pub fn fee_bounds(&self) -> &FeeBounds {
-        &self.fee_bounds
     }
 
     pub fn provider(&self) -> &Arc<JsonRpcClient<HttpTransport>> {
@@ -139,13 +136,21 @@ impl GatewayBackend for StarknetGatewayBackend {
             .deploy_v3(salt)
             .fetch_nonce()
             .await
-            .map_err(|error| provider_transport_error(error.to_string()))?;
+            .map_err(map_deploy_provider_error)?;
 
         let bounds = resolve_bounds(&factory, salt, nonce, &self.fee_bounds).await?;
 
         let prepared = apply_bounds(factory.deploy_v3(salt).nonce(nonce), &bounds)
+            // Deterministic: a missing setter can never succeed on retry, and
+            // map_kms_error would classify it as retryable RpcDegraded.
             .prepared()
-            .map_err(|error| map_kms_error(KmsError::TransactionError(error.to_string())))?;
+            .map_err(|error| {
+                GatewayError::new(
+                    GatewayErrorCode::Internal,
+                    false,
+                    Some(format!("fee bounds were not fully applied: {error}")),
+                )
+            })?;
 
         let local_hash = prepared.transaction_hash(false);
 

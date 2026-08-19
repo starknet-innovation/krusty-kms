@@ -58,17 +58,26 @@ Two resolution modes, both funnelling through one ceiling check:
 
 `FeeEstimateInput` is six plain scalars rather than `starknet_rust::FeeEstimate`,
 which keeps `krusty-kms-common` free of a Starknet dependency and the resolution
-logic pure. Each of `client` and `gateway` maps its own estimate into it; the
-~8-line builder-setter chain is duplicated because the two crates share no
-dependency edge that could host it, matching the existing precedent of the
-duplicated deploy error mappers.
+logic pure. Each of `client` and `gateway` maps its own estimate into it, and the
+builder-setter chain plus `estimate_input`/`resolve_bounds` are duplicated
+across the three sites. That duplication is a deliberate deferral, not a
+necessity: `krusty-kms-wallet-api` already depends on both `krusty-kms-common`
+and `starknet-rust`, and `client` already depends on it, so it could host all
+three helpers if `gateway` gained that one edge (legal in the DAG — wallet-api
+depends only on `common`, so no cycle). It is left for a follow-up rather than
+widening a security diff with a cross-crate move, and it matches the existing
+precedent of the duplicated deploy error mappers.
 
 ## Invariants
 
 - The tip is always locally chosen. No block body can inject one.
 - A `ResolvedFeeBounds` only exists if it passed the ceiling check, so holding
-  one is proof the ceiling held. Enforced by `#[non_exhaustive]`, not just
-  documented: no other crate can assemble one by hand.
+  one is proof the ceiling held for the value as returned. `#[non_exhaustive]`
+  stops another crate constructing one from scratch, but the fields are public
+  and the type is `Copy`, so it is a value type, not a capability token — a
+  caller can copy one and edit it. That is deliberate: the ceiling is the
+  caller's own policy, and one who edits past it could equally have raised
+  `max_fee_fri`. It defends against the endpoint, never against the caller.
 - `max_fee_fri()` mirrors the protocol formula:
   `sum(amount * price) + tip * l2_gas`. Arithmetic is checked throughout;
   overflow is a rejection, never a wrap.
@@ -101,6 +110,12 @@ duplicated deploy error mappers.
   spend limit has to constrain. But the 1.5x amount and 1.5x price multipliers
   compound, so a 1 STRK ceiling rejects an *estimated* fee above ~0.44 STRK —
   roughly 44x typical headroom, not 100x. Raise `max_fee_fri` accordingly.
+- The ceiling constrains an endpoint that **inflates** the fee. One that
+  **deflates** `l2_gas_consumed` is not addressed: the bound resolves well under
+  the ceiling, is signed, and the transaction then runs out of L2 gas and
+  reverts — with the consumed gas still charged. That is a slow drain plus a
+  denial of service, bounded by real gas rather than by the balance. A minimum
+  floor, or comparing successive estimates, would be the missing control.
 - Pinning the tip to 0 trades inclusion for safety. Under the v0.14 tip-ordered
   mempool a zero-tip transaction sorts below tipped ones, so callers who need
   inclusion during congestion must set `FeeBounds::tip` and raise `max_fee_fri`
@@ -116,7 +131,7 @@ a patch.
 
 ## Tests
 
-`crates/common/src/fee.rs` unit-tests the resolution laws: tip pinned to zero by
+`crates/common/src/fee/tests.rs` unit-tests the resolution laws: tip pinned to zero by
 default, multipliers applied, explicit fields overriding, tip counted toward the
 ceiling, overflow rejected, nonsense multipliers rejected, ceiling inclusive.
 

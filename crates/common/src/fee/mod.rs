@@ -6,7 +6,8 @@
 
 use crate::error::{KmsError, Result};
 
-/// One STRK expressed in FRI (10^-18 STRK).
+/// One STRK expressed in FRI. Matches `utils::STRK_DECIMALS`, whose
+/// [`fri_to_strk`](crate::utils::fri_to_strk) formats the ceiling errors below.
 pub const ONE_STRK_FRI: u128 = 1_000_000_000_000_000_000;
 
 /// Ceiling applied when the caller sets none. Real fees sit far below this.
@@ -47,8 +48,10 @@ pub struct ResolvedFeeBounds {
 }
 
 impl ResolvedFeeBounds {
-    /// Max cost in FRI: each resource at its max price, plus tip per L2 gas.
-    pub fn max_fee_fri(&self) -> Option<u128> {
+    /// Total cost in FRI if every resource is consumed at its max price, plus
+    /// the tip per unit of L2 gas. Named to stay distinct from
+    /// [`FeeBounds::max_fee_fri`], the ceiling this is compared against.
+    pub fn total_fri(&self) -> Option<u128> {
         let l1 = (self.l1_gas as u128).checked_mul(self.l1_gas_price)?;
         let l2 = (self.l2_gas as u128).checked_mul(self.l2_gas_price)?;
         let data = (self.l1_data_gas as u128).checked_mul(self.l1_data_gas_price)?;
@@ -59,6 +62,13 @@ impl ResolvedFeeBounds {
 
 /// What a caller is willing to spend. The default pins the tip to zero and
 /// caps the total; setting all six gas fields skips the estimate entirely.
+///
+/// Deliberately *not* `#[non_exhaustive]`, unlike [`ResolvedFeeBounds`]: that
+/// attribute blocks functional-update syntax from other crates too, so
+/// `FeeBounds { max_fee_fri: x, ..Default::default() }` — the documented way to
+/// use this — would stop compiling and every field would need a builder method.
+/// The cost is that a future field is a breaking change, which
+/// `cargo-semver-checks` will catch and turn into a version bump.
 #[derive(Debug, Clone, Copy)]
 pub struct FeeBounds {
     /// Per-L2-gas-unit tip, never taken from the endpoint's block median.
@@ -97,23 +107,38 @@ impl Default for FeeBounds {
 impl FeeBounds {
     /// `Some` when every gas field is explicit, so no estimate is needed.
     pub fn explicit(&self) -> Option<Result<ResolvedFeeBounds>> {
-        Some(self.finish(
-            self.l1_gas?,
-            self.l1_gas_price?,
-            self.l2_gas?,
-            self.l2_gas_price?,
-            self.l1_data_gas?,
-            self.l1_data_gas_price?,
-        ))
+        let l1_gas = self.l1_gas?;
+        let l1_gas_price = self.l1_gas_price?;
+        let l2_gas = self.l2_gas?;
+        let l2_gas_price = self.l2_gas_price?;
+        let l1_data_gas = self.l1_data_gas?;
+        let l1_data_gas_price = self.l1_data_gas_price?;
+
+        Some(self.check_multipliers().and_then(|()| {
+            self.finish(
+                l1_gas,
+                l1_gas_price,
+                l2_gas,
+                l2_gas_price,
+                l1_data_gas,
+                l1_data_gas_price,
+            )
+        }))
+    }
+
+    /// Both multipliers, checked even when this call will not apply them: one
+    /// left unused by a particular set of explicit fields is still a
+    /// misconfiguration, and accepting it here but rejecting it in `resolve`
+    /// would make the same value valid or invalid depending on the caller.
+    fn check_multipliers(&self) -> Result<()> {
+        check_multiplier("gas_multiplier", self.gas_multiplier)?;
+        check_multiplier("price_multiplier", self.price_multiplier)
     }
 
     /// Explicit fields win; the rest are the estimate scaled. Errors above
     /// [`max_fee_fri`](Self::max_fee_fri).
     pub fn resolve(&self, estimate: &FeeEstimateInput) -> Result<ResolvedFeeBounds> {
-        // Up front, not inside the scalers: a multiplier left unused by this
-        // particular set of explicit fields is still a misconfiguration.
-        check_multiplier("gas_multiplier", self.gas_multiplier)?;
-        check_multiplier("price_multiplier", self.price_multiplier)?;
+        self.check_multipliers()?;
 
         let amount = |explicit: Option<u64>, estimated: u64| -> Result<u64> {
             match explicit {
@@ -158,7 +183,7 @@ impl FeeBounds {
             tip: self.tip,
         };
 
-        let total = resolved.max_fee_fri().ok_or_else(|| {
+        let total = resolved.total_fri().ok_or_else(|| {
             KmsError::TransactionError(
                 "fee bounds exceeded: resolved fee overflows u128 FRI".to_string(),
             )
@@ -166,9 +191,10 @@ impl FeeBounds {
 
         if total > self.max_fee_fri {
             return Err(KmsError::TransactionError(format!(
-                "fee bounds exceeded: resolved max fee {total} FRI exceeds ceiling {} FRI \
+                "fee bounds exceeded: resolved max fee {} STRK exceeds ceiling {} STRK \
                  (raise FeeBounds::max_fee_fri if this is expected)",
-                self.max_fee_fri
+                crate::utils::fri_to_strk(total),
+                crate::utils::fri_to_strk(self.max_fee_fri)
             )));
         }
 

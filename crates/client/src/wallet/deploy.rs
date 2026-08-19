@@ -115,7 +115,7 @@ pub async fn deploy_oz_account_with_bounds(
         .deploy_v3(salt_rs)
         .fetch_nonce()
         .await
-        .map_err(|e| KmsError::RpcError(e.to_string()))?;
+        .map_err(super::utils::map_deploy_provider_error)?;
 
     let bounds = resolve_bounds(&factory, salt_rs, nonce, fee_bounds).await?;
 

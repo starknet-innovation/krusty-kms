@@ -132,6 +132,25 @@ fn nonsense_multipliers_are_rejected() {
     }
 }
 
+/// `explicit()` and `resolve()` must agree about a bad multiplier. Rejecting it
+/// on one path and accepting it on the other would make the same FeeBounds
+/// valid or invalid depending on how many fields the caller happened to set.
+#[test]
+fn explicit_rejects_multipliers_that_resolve_rejects() {
+    let mut bounds = explicit_bounds(1, 1, 1, 1);
+    bounds.gas_multiplier = f64::NAN;
+    assert!(
+        bounds.explicit().unwrap().is_err(),
+        "explicit() accepted NaN"
+    );
+
+    bounds.l1_gas = None;
+    assert!(
+        bounds.resolve(&cheap_estimate()).is_err(),
+        "resolve() accepted NaN"
+    );
+}
+
 /// A saturated amount paired with a zero price adds nothing to the total, so
 /// the ceiling alone would let it through.
 ///

@@ -179,11 +179,6 @@ impl Wallet {
         self
     }
 
-    /// The fee bounds applied to every transaction this wallet sends.
-    pub fn fee_bounds(&self) -> &FeeBounds {
-        &self.fee_bounds
-    }
-
     /// Bounds for this call, estimating only when the caller left a gap.
     async fn resolve_bounds(&self, calls: &[Call], nonce: RsFelt) -> Result<ResolvedFeeBounds> {
         use starknet_rust::accounts::Account;
