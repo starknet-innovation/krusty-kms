@@ -5,7 +5,7 @@
 //! submit paths must refuse before signing. Covers the inflated-gas-price
 //! vector — the tip vector is covered by the `FeeBounds::resolve` unit tests.
 
-use krusty_kms_client::{FeeBounds, Wallet};
+use krusty_kms_client::{FeeBounds, Wallet, ONE_STRK_FRI};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
@@ -194,7 +194,8 @@ async fn hostile_gas_price_is_refused_before_signing() {
         Address::from(Felt::from_hex_unchecked("0xabc")),
         ChainId::Sepolia,
         network,
-    );
+    )
+    .with_fee_bounds(FeeBounds::default().with_max_fee_fri(ONE_STRK_FRI));
 
     let result = wallet.execute(vec![dummy_call()]).await;
 
@@ -210,8 +211,8 @@ async fn hostile_gas_price_is_refused_before_signing() {
     // Specific on purpose: `contains("fee")` would also match
     // `FeeEstimationFailed` and pass vacuously if the canned estimate broke.
     assert!(
-        err.contains("fee bounds exceeded"),
-        "error should name the fee ceiling, got: {err}"
+        err.contains("fee approval required"),
+        "error should request approval for the higher fee, got: {err}"
     );
 }
 
@@ -238,13 +239,14 @@ async fn hostile_gas_price_is_refused_before_signing_a_deployment() {
     );
     let account_class = OpenZeppelinAccount::from_class_hash(Felt::from_hex_unchecked("0xdef"));
 
-    let result = krusty_kms_client::deploy_oz_account(
+    let result = krusty_kms_client::deploy_oz_account_with_bounds(
         provider,
         &signing_key,
         &account_class,
         SaltPolicy::Zero,
         ChainId::Sepolia,
         network,
+        &FeeBounds::default().with_max_fee_fri(ONE_STRK_FRI),
     )
     .await;
 
@@ -258,8 +260,8 @@ async fn hostile_gas_price_is_refused_before_signing_a_deployment() {
         Err(e) => e.to_string(),
     };
     assert!(
-        err.contains("fee bounds exceeded"),
-        "error should name the fee ceiling, got: {err}"
+        err.contains("fee approval required"),
+        "error should request approval for the higher fee, got: {err}"
     );
 }
 
@@ -288,10 +290,7 @@ async fn submitted_transaction_is_tracked_by_the_locally_computed_hash() {
         ChainId::Sepolia,
         network,
     )
-    .with_fee_bounds(FeeBounds {
-        max_fee_fri: u128::MAX,
-        ..FeeBounds::default()
-    });
+    .with_fee_bounds(FeeBounds::default().with_max_fee_fri(u128::MAX));
 
     let tx = wallet
         .execute(vec![dummy_call()])

@@ -44,8 +44,8 @@ impl StarknetGatewayBackend {
 
     /// Replace the fee bounds every deployment is signed within.
     ///
-    /// Defaults to [`FeeBounds::default`], which pins the tip to zero and caps
-    /// the total at [`krusty_kms_common::fee::DEFAULT_MAX_FEE_FRI`].
+    /// Defaults to [`FeeBounds::default`], which pins the tip to zero and asks
+    /// the caller to approve the resolved maximum before signing.
     #[must_use]
     pub fn with_fee_bounds(mut self, fee_bounds: FeeBounds) -> Self {
         self.fee_bounds = fee_bounds;

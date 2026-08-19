@@ -17,6 +17,7 @@ fn cheap_estimate() -> FeeEstimateInput {
 /// Every gas field pinned, so no estimate is consulted.
 fn explicit_bounds(l1: u64, l1p: u128, l2: u64, l2p: u128) -> FeeBounds {
     FeeBounds {
+        max_fee_fri: Some(u128::MAX),
         l1_gas: Some(l1),
         l1_gas_price: Some(l1p),
         l2_gas: Some(l2),
@@ -27,15 +28,10 @@ fn explicit_bounds(l1: u64, l1p: u128, l2: u64, l2p: u128) -> FeeBounds {
     }
 }
 
-/// The default ceiling must not reject honest proof-verification traffic.
-///
-/// This encodes the workload the default is sized for: a Tongo proof call in
-/// the region of 10M L2 gas at a plausible price. It is the check on the
-/// judgement call in `DEFAULT_MAX_FEE_FRI` — if that constant is lowered, or
-/// the multipliers raised, this fails instead of honest transactions failing
-/// on mainnet.
+/// A proof-sized fee has no special hard-coded policy: it is shown to the
+/// caller and proceeds only after approval of that resolved maximum.
 #[test]
-fn default_admits_a_proof_sized_transaction() {
+fn proof_sized_transaction_requires_then_accepts_user_approval() {
     let proof_call = FeeEstimateInput {
         l1_gas_consumed: 1_000,
         l1_gas_price: 1_000_000_000,
@@ -45,9 +41,16 @@ fn default_admits_a_proof_sized_transaction() {
         l1_data_gas_price: 1_000_000_000,
     };
 
+    let error = FeeBounds::default().resolve(&proof_call).unwrap_err();
+    assert!(
+        error.to_string().contains("fee approval required"),
+        "got: {error}"
+    );
+
     let resolved = FeeBounds::default()
+        .with_max_fee_fri(2 * ONE_STRK_FRI)
         .resolve(&proof_call)
-        .expect("the default ceiling must admit a proof-sized transaction");
+        .expect("the user-approved ceiling should admit the proof transaction");
 
     // And the bound it signs is the inflated one, not the raw estimate.
     let total = resolved.total_fri().expect("no overflow");
@@ -55,22 +58,22 @@ fn default_admits_a_proof_sized_transaction() {
         total > 1_000_000_000_000_000_000,
         "expected over 1 STRK: {total}"
     );
-    assert!(
-        total < DEFAULT_MAX_FEE_FRI,
-        "expected under the ceiling: {total}"
-    );
+    assert!(total < 2 * ONE_STRK_FRI, "expected under approval: {total}");
 }
 
 /// The default must never let a block body inject a tip.
 #[test]
 fn default_pins_tip_to_zero() {
     assert_eq!(FeeBounds::default().tip, 0);
-    assert_eq!(FeeBounds::default().max_fee_fri, DEFAULT_MAX_FEE_FRI);
+    assert_eq!(FeeBounds::default().max_fee_fri, None);
 }
 
 #[test]
 fn estimate_is_scaled_by_multipliers() {
-    let resolved = FeeBounds::default().resolve(&cheap_estimate()).unwrap();
+    let resolved = FeeBounds::default()
+        .with_max_fee_fri(ONE_STRK_FRI)
+        .resolve(&cheap_estimate())
+        .unwrap();
     assert_eq!(resolved.l1_gas, 150);
     assert_eq!(resolved.l1_gas_price, 1_500);
     assert_eq!(resolved.l2_gas, 150_000);
@@ -80,6 +83,7 @@ fn estimate_is_scaled_by_multipliers() {
 #[test]
 fn explicit_fields_override_the_estimate() {
     let bounds = FeeBounds {
+        max_fee_fri: Some(ONE_STRK_FRI),
         l2_gas_price: Some(7),
         ..FeeBounds::default()
     };
@@ -105,31 +109,35 @@ fn hostile_gas_price_trips_the_ceiling() {
         ..cheap_estimate()
     };
     let err = FeeBounds::default()
+        .with_max_fee_fri(ONE_STRK_FRI)
         .resolve(&hostile)
         .unwrap_err()
         .to_string();
-    assert!(err.contains("fee bounds exceeded"), "got: {err}");
+    assert!(err.contains("fee approval required"), "got: {err}");
 }
 
 /// The tip is charged per unit of L2 gas, so it counts against the ceiling
 /// even when the estimate itself is honest.
 #[test]
 fn tip_counts_toward_the_ceiling() {
-    let benign = FeeBounds::default().resolve(&cheap_estimate());
+    let benign = FeeBounds::default()
+        .with_max_fee_fri(ONE_STRK_FRI)
+        .resolve(&cheap_estimate());
     assert!(benign.is_ok(), "honest estimate must pass");
 
     let tipped = FeeBounds {
         tip: 100_000_000_000_000,
+        max_fee_fri: Some(ONE_STRK_FRI),
         ..FeeBounds::default()
     };
     let err = tipped.resolve(&cheap_estimate()).unwrap_err().to_string();
-    assert!(err.contains("fee bounds exceeded"), "got: {err}");
+    assert!(err.contains("fee approval required"), "got: {err}");
 }
 
 #[test]
 fn overflow_is_rejected_not_wrapped() {
     let bounds = FeeBounds {
-        max_fee_fri: u128::MAX,
+        max_fee_fri: Some(u128::MAX),
         ..explicit_bounds(u64::MAX, u128::MAX, 1, 1)
     };
     let err = bounds.explicit().unwrap().unwrap_err().to_string();
@@ -214,7 +222,7 @@ fn saturating_scale_is_rejected() {
 #[test]
 fn ceiling_is_inclusive() {
     let bounds = FeeBounds {
-        max_fee_fri: 100,
+        max_fee_fri: Some(100),
         ..explicit_bounds(10, 10, 0, 0)
     };
     assert_eq!(bounds.explicit().unwrap().unwrap().l1_gas, 10);

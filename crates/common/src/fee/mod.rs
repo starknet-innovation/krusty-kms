@@ -7,22 +7,8 @@
 use crate::error::{KmsError, Result};
 
 /// One STRK expressed in FRI. Matches `utils::STRK_DECIMALS`, whose
-/// [`fri_to_strk`](crate::utils::fri_to_strk) formats the ceiling errors below.
+/// [`fri_to_strk`](crate::utils::fri_to_strk) formats the approval errors below.
 pub const ONE_STRK_FRI: u128 = 1_000_000_000_000_000_000;
-
-/// Ceiling applied when the caller sets none.
-///
-/// Sized for the heaviest legitimate workload here — verifying a Tongo proof,
-/// which is L2-gas-hungry — with room for a price spike. Because the ceiling is
-/// checked against the resolved *bound*, and the default multipliers compound
-/// to 2.25x, this admits an estimate up to ~4.4 STRK. A proof call in the
-/// 0.5 STRK range therefore clears it by roughly 9x.
-///
-/// The figure is reasoned, not measured: no gas numbers for these operations
-/// are recorded in this repo. `default_admits_a_proof_sized_transaction` in the
-/// tests pins the intent, so a future change that would start rejecting honest
-/// proof traffic fails there rather than in production.
-pub const DEFAULT_MAX_FEE_FRI: u128 = 10 * ONE_STRK_FRI;
 
 /// Mirrors starknet-rs, so pinning bounds changes nothing on honest endpoints.
 const DEFAULT_ESTIMATE_MULTIPLIER: f64 = 1.5;
@@ -61,7 +47,7 @@ pub struct ResolvedFeeBounds {
 impl ResolvedFeeBounds {
     /// Total cost in FRI if every resource is consumed at its max price, plus
     /// the tip per unit of L2 gas. Named to stay distinct from
-    /// [`FeeBounds::max_fee_fri`], the ceiling this is compared against.
+    /// [`FeeBounds::max_fee_fri`], the user approval this is compared against.
     pub fn total_fri(&self) -> Option<u128> {
         let l1 = (self.l1_gas as u128).checked_mul(self.l1_gas_price)?;
         let l2 = (self.l2_gas as u128).checked_mul(self.l2_gas_price)?;
@@ -71,21 +57,22 @@ impl ResolvedFeeBounds {
     }
 }
 
-/// What a caller is willing to spend. The default pins the tip to zero and
-/// caps the total; setting all six gas fields skips the estimate entirely.
+/// What a caller is willing to spend. The default pins the tip to zero but
+/// approves no fee; setting all six gas fields skips the estimate entirely.
 ///
 /// Deliberately *not* `#[non_exhaustive]`, unlike [`ResolvedFeeBounds`]: that
 /// attribute blocks functional-update syntax from other crates too, so
-/// `FeeBounds { max_fee_fri: x, ..Default::default() }` — the documented way to
-/// use this — would stop compiling and every field would need a builder method.
+/// `FeeBounds { max_fee_fri: Some(x), ..Default::default() }` would stop
+/// compiling and every field would need a builder method.
 /// The cost is that a future field is a breaking change, which
 /// `cargo-semver-checks` will catch and turn into a version bump.
 #[derive(Debug, Clone, Copy)]
 pub struct FeeBounds {
     /// Per-L2-gas-unit tip, never taken from the endpoint's block median.
     pub tip: u64,
-    /// Hard ceiling in FRI; signing is refused above it.
-    pub max_fee_fri: u128,
+    /// User-approved ceiling in FRI. `None` estimates but never signs, allowing
+    /// the caller to show the resolved bound and ask for approval.
+    pub max_fee_fri: Option<u128>,
     /// `None` means "take it from the estimate and scale".
     pub l1_gas: Option<u64>,
     pub l1_gas_price: Option<u128>,
@@ -102,7 +89,7 @@ impl Default for FeeBounds {
     fn default() -> Self {
         Self {
             tip: 0,
-            max_fee_fri: DEFAULT_MAX_FEE_FRI,
+            max_fee_fri: None,
             l1_gas: None,
             l1_gas_price: None,
             l2_gas: None,
@@ -116,6 +103,14 @@ impl Default for FeeBounds {
 }
 
 impl FeeBounds {
+    /// Approve signing up to `max_fee_fri` after the endpoint's estimate is
+    /// scaled and all resource bounds are resolved.
+    #[must_use]
+    pub fn with_max_fee_fri(mut self, max_fee_fri: u128) -> Self {
+        self.max_fee_fri = Some(max_fee_fri);
+        self
+    }
+
     /// `Some` when every gas field is explicit, so no estimate is needed.
     pub fn explicit(&self) -> Option<Result<ResolvedFeeBounds>> {
         let l1_gas = self.l1_gas?;
@@ -146,8 +141,8 @@ impl FeeBounds {
         check_multiplier("price_multiplier", self.price_multiplier)
     }
 
-    /// Explicit fields win; the rest are the estimate scaled. Errors above
-    /// [`max_fee_fri`](Self::max_fee_fri).
+    /// Explicit fields win; the rest are the estimate scaled. Signing requires
+    /// an approved [`max_fee_fri`](Self::max_fee_fri) at least this large.
     pub fn resolve(&self, estimate: &FeeEstimateInput) -> Result<ResolvedFeeBounds> {
         self.check_multipliers()?;
 
@@ -200,12 +195,20 @@ impl FeeBounds {
             )
         })?;
 
-        if total > self.max_fee_fri {
+        let Some(max_fee_fri) = self.max_fee_fri else {
             return Err(KmsError::TransactionError(format!(
-                "fee bounds exceeded: resolved max fee {} STRK exceeds ceiling {} STRK \
-                 (raise FeeBounds::max_fee_fri if this is expected)",
+                "fee approval required: resolved maximum is {} STRK; ask the user, then \
+                 resubmit with FeeBounds::with_max_fee_fri(user_approved_fri)",
                 crate::utils::fri_to_strk(total),
-                crate::utils::fri_to_strk(self.max_fee_fri)
+            )));
+        };
+
+        if total > max_fee_fri {
+            return Err(KmsError::TransactionError(format!(
+                "fee approval required: resolved maximum {} STRK exceeds the approved {} STRK; \
+                 ask the user before raising FeeBounds::max_fee_fri",
+                crate::utils::fri_to_strk(total),
+                crate::utils::fri_to_strk(max_fee_fri)
             )));
         }
 

@@ -4,7 +4,7 @@
 //! The flag matters as much as the refusal: `map_kms_error` would classify this
 //! as retryable `RpcDegraded`, and a client honouring that would loop forever.
 
-use krusty_kms_common::{ChainId, NetworkPreset, SecretFelt};
+use krusty_kms_common::{ChainId, FeeBounds, NetworkPreset, SecretFelt, ONE_STRK_FRI};
 use krusty_kms_domain::{
     AccountDescriptor, DeployMode, DerivationPath, FeltHex, GatewayErrorCode, KeyDomain, Provenance,
 };
@@ -168,7 +168,8 @@ async fn hostile_gas_price_is_refused_and_not_retryable() {
         explorer_base_url: String::new(),
         name: "hostile".into(),
     };
-    let backend = StarknetGatewayBackend::new(provider, network);
+    let backend = StarknetGatewayBackend::new(provider, network)
+        .with_fee_bounds(FeeBounds::default().with_max_fee_fri(ONE_STRK_FRI));
 
     let signing_key = SigningKey::from_secret_scalar(
         starknet_rust::core::types::Felt::from_hex_unchecked(TEST_PRIVATE_KEY),
@@ -195,8 +196,8 @@ async fn hostile_gas_price_is_refused_and_not_retryable() {
             .message
             .as_deref()
             .unwrap_or_default()
-            .contains("fee bounds exceeded"),
-        "error should name the fee ceiling, got: {error:?}"
+            .contains("fee approval required"),
+        "error should request approval for the higher fee, got: {error:?}"
     );
     assert!(
         !error.retryable,
