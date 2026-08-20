@@ -61,9 +61,9 @@ fn felt_hex(f: &Felt) -> String {
 /// - **Direct**: `m/44'/9004'/0'/0/{index}` — the key used by Braavos, new Argent, and OZ
 /// - **ArgentLegacy**: double derivation via ETH key — the key used by old Argent
 ///
-/// These public keys can be used to query external APIs (e.g., Argent's smart
-/// account discovery endpoint) to find accounts whose addresses aren't locally
-/// derivable because they used a server-provided salt.
+/// Standard Argent accounts use `salt = publicKey` and are derived locally by
+/// [`generate_candidates`]. These keys are for the rest — e.g. smart accounts
+/// with a server-assigned salt, looked up by public key via an external API.
 ///
 /// This is much cheaper than `generate_candidates` since it skips address computation.
 pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<DerivedKeypair>> {

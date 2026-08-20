@@ -53,8 +53,8 @@
       "salt_description": "publicKey",
       "class_hash": "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f",
       "deployer": "0x0",
-      "calldata_description": "[0, publicKey, 0]",
-      "expected": ""
+      "calldata_description": "[0, publicKey, 1]",
+      "expected": "0x7be1181834bdcd1e8089152a5288070260d5bbd6c1f25740f7bc24422474510"
     }
   },
   "short_string": {

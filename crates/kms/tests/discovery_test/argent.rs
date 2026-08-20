@@ -51,99 +51,32 @@ fn argent_direct_derivation_does_not_match() {
     );
 }
 
-// -- Address derivation -------------------------------------------------------
+// -- Address derivation -----------------------------------------------------
 
-/// Verify that standard (non-smart) Argent v0.4.0 addresses ARE derivable
-/// from the mnemonic alone.
-///
-/// Standard accounts use `salt = publicKey`, making the address deterministic.
-/// The constructor calldata is `[0, publicKey, 0]`:
-/// - `0` = `Signer::Starknet` enum variant index
-/// - `publicKey` = the Stark public key (felt252)
-/// - `0` = `Option::None` for the guardian (no guardian)
-///
-/// This calldata format comes from the Argent contract's Cairo constructor:
-/// ```cairo
-/// fn constructor(ref self: ContractState, owner: Signer, guardian: Option<Signer>)
-/// ```
-/// Where `Signer::Starknet(StarknetSigner { pubkey })` serializes as `[0, pubkey]`.
+/// Standard accounts use `salt = publicKey`, so the address is deterministic and
+/// must reproduce the account deployed on Sepolia for this mnemonic. See
+/// `ArgentAccount::build_constructor_calldata` for why the guardian felt is `1`.
+/// The mnemonic → address pipeline is gated in `candidates.rs`.
 #[test]
-fn argent_standard_account_address_is_derivable() {
+fn argent_standard_account_address_matches_onchain() {
     let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
     let class_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
 
     let argent = ArgentAccount::with_class_hash(class_hash);
-    let standard_addr = argent
-        .calculate_address(&pubk, SaltPolicy::PublicKey)
-        .unwrap();
 
-    // The address is deterministic and non-zero
-    assert_ne!(standard_addr, Felt::ZERO);
-    let standard_addr_again = argent
-        .calculate_address(&pubk, SaltPolicy::PublicKey)
-        .unwrap();
     assert_eq!(
-        standard_addr, standard_addr_again,
-        "Address must be deterministic"
+        argent.build_constructor_calldata(&pubk),
+        vec![Felt::ZERO, pubk, Felt::ONE],
+        "v0.4.0 guardian must be Option::None (variant 1)"
     );
 
-    // The test data account is a "smart" account with a server-provided salt,
-    // so it won't match the standard salt=publicKey formula.
-    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
-    assert_ne!(
-        standard_addr, expected,
-        "Test account is a 'smart' account — its salt was provided by Argent's server, \
-         not derived from the public key. Standard accounts DO match."
-    );
-}
-
-/// End-to-end: mnemonic → Argent legacy keys → standard account address.
-///
-/// This is the full pipeline a wallet would use to discover standard Argent
-/// accounts from a mnemonic, using krusty-kms APIs.
-#[test]
-fn argent_standard_discovery_end_to_end() {
-    // Step 1: Derive keys using Argent's double derivation
-    let pk = krusty_kms::derive_argent_legacy_private_key(MNEMONIC, 0, 0).unwrap();
-    let pubk = stark_public_key(&pk).unwrap();
-    assert_eq!(pubk, Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap());
-
-    // Step 2: Compute the standard account address
-    let argent = ArgentAccount::with_class_hash(Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap());
     let addr = argent
         .calculate_address(&pubk, SaltPolicy::PublicKey)
         .unwrap();
 
-    // Step 3: This address can be checked on-chain for existence
-    assert_ne!(
+    assert_eq!(
         addr,
-        Felt::ZERO,
-        "Derived a valid Argent address from mnemonic"
-    );
-}
-
-/// Argent "smart" accounts receive their deployment salt from a server-side API,
-/// not from the mnemonic or public key. These addresses cannot be derived locally.
-#[test]
-fn argent_smart_account_salt_is_not_derivable() {
-    let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
-    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
-    let class_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
-
-    // salt = publicKey (the standard formula) does NOT produce the right address
-    let argent = ArgentAccount::with_class_hash(class_hash);
-    let addr_with_pk_salt = argent
-        .calculate_address(&pubk, SaltPolicy::PublicKey)
-        .unwrap();
-    assert_ne!(
-        addr_with_pk_salt, expected,
-        "Smart account salt != publicKey — it was assigned by Argent's server"
-    );
-
-    // salt = 0 also doesn't match
-    let addr_with_zero_salt = argent.calculate_address(&pubk, SaltPolicy::Zero).unwrap();
-    assert_ne!(
-        addr_with_zero_salt, expected,
-        "Smart account salt != 0 either"
+        Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap(),
+        "Derived address must equal the account deployed on Sepolia for this mnemonic"
     );
 }

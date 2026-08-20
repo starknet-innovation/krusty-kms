@@ -274,7 +274,7 @@ impl AccountClass for OpenZeppelinAccount {
 
 /// Argent account contract preset.
 ///
-/// Constructor: `(0, public_key, 0)` - CairoCustomEnum StarknetSigner variant + no guardian.
+/// Constructor: `(0, public_key, 1)` for v0.4.0+, `(public_key, 0)` for v0.3.x.
 pub struct ArgentAccount {
     class_hash: Felt,
 }
@@ -292,16 +292,17 @@ impl ArgentAccount {
     pub const CLASS_HASH_V030: &str =
         "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
 
+    const V040_HASH: Felt = Felt::from_hex_unchecked(Self::CLASS_HASH);
+    const V031_HASH: Felt = Felt::from_hex_unchecked(Self::CLASS_HASH_V031);
+    const V030_HASH: Felt = Felt::from_hex_unchecked(Self::CLASS_HASH_V030);
+
+    /// The allowlist and the constructor-layout dispatch both read this, so they
+    /// cannot drift. A new Argent version needs adding here and to the dispatch.
+    const KNOWN_CLASS_HASHES: [Felt; 3] = [Self::V040_HASH, Self::V031_HASH, Self::V030_HASH];
+
     /// Class hashes accepted for Argent Cairo 1 deployments.
     pub fn known_class_hashes() -> Vec<Felt> {
-        [
-            Self::CLASS_HASH,
-            Self::CLASS_HASH_V031,
-            Self::CLASS_HASH_V030,
-        ]
-        .into_iter()
-        .map(|hash| Felt::from_hex(hash).expect("static Argent class hash"))
-        .collect()
+        Self::KNOWN_CLASS_HASHES.to_vec()
     }
 
     pub fn new() -> Self {
@@ -327,8 +328,35 @@ impl AccountClass for ArgentAccount {
         self.class_hash
     }
 
+    /// Layouts verified against the deployed class ABIs. In v0.4.0+,
+    /// `Signer::Starknet` is variant 0 and `Option::None` is variant **1**
+    /// (`Some` is 0) — a trailing `0` encodes a truncated `Some` that fails to
+    /// deserialize, giving an address that can never be deployed.
+    ///
+    /// Assumes a known class hash; [`Self::calculate_address`] rejects the rest.
     fn build_constructor_calldata(&self, public_key: &Felt) -> Vec<Felt> {
-        vec![Felt::ZERO, *public_key, Felt::ZERO]
+        if self.class_hash == Self::V030_HASH || self.class_hash == Self::V031_HASH {
+            vec![*public_key, Felt::ZERO]
+        } else {
+            vec![Felt::ZERO, *public_key, Felt::ONE]
+        }
+    }
+
+    /// Argent's constructor shape is version-dependent, and the Cairo-0 proxy
+    /// hashes published by `getAccountClassHashes()` differ again, so guessing
+    /// hands back an undeployable address. Refuse rather than guess.
+    fn calculate_address(&self, public_key: &Felt, salt_policy: SaltPolicy) -> Result<Felt> {
+        if !Self::KNOWN_CLASS_HASHES.contains(&self.class_hash) {
+            return Err(KmsError::InvalidClassHash(format!(
+                "Argent class hash {:#x} has no known constructor layout; \
+                 expected one of v0.4.0, v0.3.1 or v0.3.0",
+                self.class_hash
+            )));
+        }
+
+        let salt = salt_policy.resolve(public_key);
+        let calldata = self.build_constructor_calldata(public_key);
+        calculate_contract_address(&salt, &self.class_hash(), &calldata, &Felt::ZERO)
     }
 }
 
@@ -385,201 +413,4 @@ impl AccountClass for BraavosAccount {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_oz_manifest_class_hash() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        assert_ne!(oz.class_hash(), Felt::ZERO);
-    }
-
-    #[test]
-    fn test_oz_manifest_source_metadata() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let source = oz.class_config().source();
-        match source {
-            OzAccountClassSource::Manifest {
-                chain_id,
-                package_name,
-                package_version,
-                contract_name,
-                ..
-            } => {
-                assert_eq!(*chain_id, ChainId::Sepolia);
-                assert_eq!(package_name, "openzeppelin_presets");
-                assert_eq!(package_version, "3.0.0");
-                assert_eq!(contract_name, "AccountUpgradeable");
-            }
-            OzAccountClassSource::Custom => panic!("expected manifest-backed source"),
-        }
-    }
-
-    #[test]
-    fn test_oz_calldata() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(42u64);
-        let cd = oz.build_constructor_calldata(&pk);
-        assert_eq!(cd, vec![pk]);
-    }
-
-    #[test]
-    fn test_argent_calldata() {
-        let argent = ArgentAccount::new();
-        let pk = Felt::from(42u64);
-        let cd = argent.build_constructor_calldata(&pk);
-        assert_eq!(cd, vec![Felt::ZERO, pk, Felt::ZERO]);
-    }
-
-    #[test]
-    fn test_braavos_calldata() {
-        let braavos = BraavosAccount::new();
-        let pk = Felt::from(42u64);
-        let cd = braavos.build_constructor_calldata(&pk);
-        assert_eq!(cd, vec![pk]);
-    }
-
-    #[test]
-    fn test_address_deterministic() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(12345u64);
-        let addr1 = oz.calculate_address(&pk, SaltPolicy::PublicKey).unwrap();
-        let addr2 = oz.calculate_address(&pk, SaltPolicy::PublicKey).unwrap();
-        assert_eq!(addr1, addr2);
-    }
-
-    #[test]
-    fn test_different_classes_different_addresses() {
-        let pk = Felt::from(12345u64);
-        let oz_addr = OpenZeppelinAccount::latest(ChainId::Sepolia)
-            .unwrap()
-            .calculate_address(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        let argent_addr = ArgentAccount::new()
-            .calculate_address(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        let braavos_addr = BraavosAccount::new()
-            .calculate_address(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-
-        assert_ne!(oz_addr, argent_addr);
-        assert_ne!(oz_addr, braavos_addr);
-        assert_ne!(argent_addr, braavos_addr);
-    }
-
-    #[test]
-    fn test_public_key_salt_policy() {
-        let pk = Felt::from(999u64);
-        assert_eq!(SaltPolicy::PublicKey.resolve(&pk), pk);
-    }
-
-    #[test]
-    fn test_zero_salt_policy() {
-        let pk = Felt::from(999u64);
-        assert_eq!(SaltPolicy::Zero.resolve(&pk), Felt::ZERO);
-    }
-
-    #[test]
-    fn test_explicit_salt_policy() {
-        let pk = Felt::from(999u64);
-        let salt = Felt::from(777u64);
-        assert_eq!(SaltPolicy::Explicit(salt).resolve(&pk), salt);
-    }
-
-    #[test]
-    fn test_custom_class_hash() {
-        let custom_hash = Felt::from(0xDEADBEEFu64);
-        let oz = OpenZeppelinAccount::from_class_hash(custom_hash);
-        assert_eq!(oz.class_hash(), custom_hash);
-        assert!(matches!(
-            oz.class_config().source(),
-            OzAccountClassSource::Custom
-        ));
-    }
-
-    // -----------------------------------------------------------------------
-    // OzDeploymentDescriptor consistency tests
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_descriptor_address_matches_calculate_address() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(12345u64);
-        let descriptor = oz
-            .deployment_descriptor(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        let addr = oz.calculate_address(&pk, SaltPolicy::PublicKey).unwrap();
-        assert_eq!(descriptor.address, addr);
-    }
-
-    #[test]
-    fn test_descriptor_public_key_salt() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(42u64);
-        let descriptor = oz
-            .deployment_descriptor(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        assert_eq!(descriptor.salt, pk);
-    }
-
-    #[test]
-    fn test_descriptor_zero_salt() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(42u64);
-        let descriptor = oz.deployment_descriptor(&pk, SaltPolicy::Zero).unwrap();
-        assert_eq!(descriptor.salt, Felt::ZERO);
-    }
-
-    #[test]
-    fn test_descriptor_deployer_is_zero() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(42u64);
-        let descriptor = oz
-            .deployment_descriptor(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        assert_eq!(descriptor.deployer_address, Felt::ZERO);
-    }
-
-    #[test]
-    fn test_descriptor_calldata_is_pubkey() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(42u64);
-        let descriptor = oz
-            .deployment_descriptor(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        assert_eq!(descriptor.constructor_calldata, vec![pk]);
-    }
-
-    #[test]
-    fn test_normalized_hex_has_leading_zeros() {
-        let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
-        let pk = Felt::from(1u64);
-        let descriptor = oz
-            .deployment_descriptor(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        let hex = descriptor.normalized_address_hex();
-        assert_eq!(
-            hex.len(),
-            66,
-            "expected 66 chars, got {}: {}",
-            hex.len(),
-            hex
-        );
-        assert!(hex.starts_with("0x"));
-    }
-
-    #[test]
-    fn test_custom_class_hash_descriptor() {
-        let custom_hash = Felt::from(0xDEADBEEFu64);
-        let oz = OpenZeppelinAccount::from_class_hash(custom_hash);
-        let pk = Felt::from(99u64);
-        let descriptor = oz
-            .deployment_descriptor(&pk, SaltPolicy::PublicKey)
-            .unwrap();
-        assert_eq!(descriptor.class_hash, custom_hash);
-        assert_eq!(
-            descriptor.address,
-            oz.calculate_address(&pk, SaltPolicy::PublicKey).unwrap()
-        );
-    }
-}
+mod tests;

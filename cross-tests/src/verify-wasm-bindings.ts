@@ -233,11 +233,13 @@ function main() {
       "expected"
     );
 
-    // Argent account
+    // Argent account (v0.4.0). Calldata is
+    // [Signer::Starknet = 0, pubKey, Option::None = 1] — `None` is variant 1,
+    // `Some` is variant 0, so a trailing 0 here is a truncated `Some`.
     const argentAddr = hash.calculateContractAddressFromHash(
       pubKey, // salt = publicKey
       ref.contract_address.argent_account.class_hash,
-      ["0x0", pubKey, "0x0"],
+      ["0x0", pubKey, "0x1"],
       ref.contract_address.argent_account.deployer
     );
     pinAndAssert(

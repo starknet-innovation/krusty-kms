@@ -1,7 +1,8 @@
 //! Discovery API tests — `generate_candidates` orchestration.
 
 use crate::vectors::{
-    ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, BRAAVOS_ACCOUNT_ADDRESS, BRAAVOS_PUBLIC_KEY, MNEMONIC,
+    ARGENT_ACCOUNT_ADDRESS, ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, ARGENT_V040_CLASS_HASH,
+    BRAAVOS_ACCOUNT_ADDRESS, BRAAVOS_PUBLIC_KEY, MNEMONIC,
 };
 use krusty_kms::{generate_candidates, WalletType};
 use starknet_types_core::felt::Felt;
@@ -89,6 +90,43 @@ fn discovery_braavos_candidate_matches_known_address() {
     assert_eq!(
         candidate_pubk, expected_pubk,
         "Braavos candidate public key must match the known test vector"
+    );
+}
+
+/// The discovery-level counterpart to
+/// `discovery_braavos_candidate_matches_known_address`: without it, a wrong
+/// Argent constructor encoding yields an undeployable address unnoticed.
+#[test]
+fn discovery_argent_legacy_candidate_matches_known_address() {
+    let candidates = generate_candidates(MNEMONIC, 1).unwrap();
+
+    let v040_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
+    let matching: Vec<_> = candidates
+        .iter()
+        .filter(|c| {
+            c.wallet_type == WalletType::ArgentLegacy
+                && c.derivation_index == 0
+                && Felt::from_hex(&c.class_hash).unwrap() == v040_hash
+        })
+        .collect();
+
+    assert_eq!(
+        matching.len(),
+        1,
+        "Expected exactly one ArgentLegacy v0.4.0 candidate at index 0"
+    );
+
+    let candidate = matching[0];
+
+    assert_eq!(
+        Felt::from_hex(&candidate.address).unwrap(),
+        Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap(),
+        "ArgentLegacy v0.4.0 candidate must match the account deployed on Sepolia"
+    );
+    assert_eq!(
+        Felt::from_hex(&candidate.public_key).unwrap(),
+        Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap(),
+        "ArgentLegacy candidate public key must match the known test vector"
     );
 }
 
