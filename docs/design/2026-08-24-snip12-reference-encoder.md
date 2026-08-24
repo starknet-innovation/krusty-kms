@@ -21,6 +21,8 @@ the reference revision-0, revision-1 string, and revision-1 preset-type hashes,
 plus negative vectors for extra fields, missing fields, inconsistent revisions,
 and oversized documents.
 
+Protocol reference: [SNIP-12](https://github.com/starknet-io/SNIPs/blob/main/SNIPS/snip-12.md).
+
 ## Compatibility and failure modes
 
 This is intentionally compatibility-affecting. Documents previously accepted
