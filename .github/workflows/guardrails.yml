@@ -15,6 +15,7 @@ on:
       - "docs/design/**"
       - ".github/guardrails/**"
       - ".github/scripts/**"
+      - ".github/workflows/publish.yml"
       - ".github/workflows/publish-npm.yml"
       - ".github/workflows/guardrails.yml"
   pull_request:
@@ -30,6 +31,7 @@ on:
       - "docs/design/**"
       - ".github/guardrails/**"
       - ".github/scripts/**"
+      - ".github/workflows/publish.yml"
       - ".github/workflows/publish-npm.yml"
       - ".github/workflows/guardrails.yml"
 
@@ -77,7 +79,9 @@ jobs:
         run: bash .github/scripts/check-secret-hygiene.sh
 
       - name: Release action pinning
-        run: bash .github/scripts/check-publish-actions-pinned.sh
+        run: |
+          bash .github/scripts/check-publish-actions-pinned.sh
+          bash .github/scripts/test-check-publish-actions-pinned.sh
 
       - name: FFI surface freeze
         run: bash .github/scripts/check-ffi-surface.sh

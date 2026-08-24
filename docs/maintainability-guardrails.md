@@ -25,6 +25,20 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 Workflow entrypoint: [`.github/workflows/guardrails.yml`](../.github/workflows/guardrails.yml).
 Push runs are limited to `main` (PR events cover branches) with a concurrency group.
 
+### npm trusted-publishing prerequisites
+
+The `npm` GitHub environment is a required security control, not optional release
+metadata. Repository administrators must configure it with at least one required
+reviewer and a deployment-branch policy before enabling npm trusted publishing. The
+publish job queries the environment and fails before package publication if either
+control is absent.
+
+Configure npm's trusted publisher for this repository, the `publish-npm.yml` workflow,
+and the `npm` environment. Do not add a long-lived npm token as a fallback. The workflow
+passes only an inspected `.tgz` artifact to the privileged job, rejects any `scripts`
+key in its package metadata, and invokes both `npm pack` and `npm publish` with
+`--ignore-scripts`.
+
 ## Baselines
 
 Committed under [`.github/guardrails/`](../.github/guardrails/):

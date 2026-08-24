@@ -27,6 +27,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -52,6 +54,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -64,14 +68,27 @@ jobs:
           wasm-pack build --release --target web --scope starknetfoundation
           --out-dir pkg
         working-directory: crates/wasm
-      - name: Inspect npm package
-        run: npm pack --dry-run
+      - name: Reject npm lifecycle scripts
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          if (Object.hasOwn(packageJson, "scripts")) {
+            throw new Error("generated npm package must not contain lifecycle scripts");
+          }
+          NODE
+        working-directory: crates/wasm/pkg
+      - name: Create inspected npm tarball
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/npm-package"
+          npm pack --ignore-scripts --pack-destination "${RUNNER_TEMP}/npm-package"
         working-directory: crates/wasm/pkg
       - name: Upload verified npm package
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: krusty-kms-wasm-${{ github.sha }}
-          path: crates/wasm/pkg
+          path: ${{ runner.temp }}/npm-package/*.tgz
           if-no-files-found: error
           retention-days: 1
 
@@ -80,19 +97,56 @@ jobs:
     runs-on: ubuntu-latest
     environment: npm
     permissions:
+      actions: read
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/publish-npm.sh
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - name: Require a protected npm environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          environment_json="${RUNNER_TEMP}/npm-environment.json"
+          gh api "repos/${GITHUB_REPOSITORY}/environments/npm" > "${environment_json}"
+          node - "${environment_json}" <<'NODE'
+          const fs = require("node:fs");
+          const environment = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const reviewerRule = environment.protection_rules?.find(
+            (rule) => rule.type === "required_reviewers",
+          );
+          if (!reviewerRule?.reviewers?.length) {
+            throw new Error("the npm environment must have at least one required reviewer");
+          }
+          const branchPolicy = environment.deployment_branch_policy;
+          if (
+            !branchPolicy ||
+            (!branchPolicy.protected_branches && !branchPolicy.custom_branch_policies)
+          ) {
+            throw new Error("the npm environment must restrict deployment branches");
+          }
+          NODE
       - name: Download verified npm package
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: krusty-kms-wasm-${{ github.sha }}
-          path: crates/wasm/pkg
+          path: ${{ runner.temp }}/npm-package
       - name: Publish npm package
-        run: bash .github/scripts/publish-npm.sh crates/wasm/pkg
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          package_tarballs=("${RUNNER_TEMP}/npm-package/"*.tgz)
+          if ((${#package_tarballs[@]} != 1)); then
+            echo "::error::expected exactly one npm tarball, found ${#package_tarballs[@]}"
+            exit 1
+          fi
+          bash .github/scripts/publish-npm.sh "${package_tarballs[0]}"
