@@ -52,7 +52,7 @@ pub unsafe extern "C" fn kms_account_create_from_mnemonic(
 
         let addr = match kms_to_felt(&*contract_address) {
             Ok(felt) => felt,
-            Err(code) => return code,
+            Err(err) => return err.into(),
         };
         let pass = if p.is_empty() { None } else { Some(p) };
 
@@ -86,11 +86,11 @@ pub unsafe extern "C" fn kms_account_create_from_private_key(
 
         let sk = match kms_to_felt(&*private_key) {
             Ok(felt) => felt,
-            Err(code) => return code,
+            Err(err) => return err.into(),
         };
         let addr = match kms_to_felt(&*contract_address) {
             Ok(felt) => felt,
-            Err(code) => return code,
+            Err(err) => return err.into(),
         };
 
         let account = match TongoAccount::from_private_key(sk, addr) {

@@ -22,11 +22,11 @@ pub unsafe extern "C" fn kms_pedersen_hash(
         }
         let l = match kms_to_felt(&*left) {
             Ok(felt) => felt,
-            Err(code) => return code,
+            Err(err) => return err.into(),
         };
         let r = match kms_to_felt(&*right) {
             Ok(felt) => felt,
-            Err(code) => return code,
+            Err(err) => return err.into(),
         };
         let h = Pedersen::hash(&l, &r);
         *out = felt_to_kms(&h);
@@ -58,7 +58,7 @@ pub unsafe extern "C" fn kms_poseidon_hash_many(
             let kms_felts = slice::from_raw_parts(values, values_len);
             match kms_slice_to_felts(kms_felts) {
                 Ok(felts) => felts,
-                Err(code) => return code,
+                Err(err) => return err.into(),
             }
         };
 

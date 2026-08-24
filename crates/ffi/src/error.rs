@@ -16,6 +16,33 @@ pub const KMS_ERR_INVALID_HANDLE: i32 = 6;
 pub const KMS_ERR_JSON: i32 = 7;
 
 // ---------------------------------------------------------------------------
+// Decode failures
+// ---------------------------------------------------------------------------
+
+/// A struct-passing FFI input that failed to decode.
+///
+/// The `KmsFelt` / `KmsProjectivePoint` decoders in [`crate::helpers`] report
+/// failure with this rather than a bare status code, so a rejected input and a
+/// decoded value never share one all-numeric `Result`. The error arm carries no
+/// number at all; the C status code is produced only at the boundary, via
+/// `i32::from`.
+///
+/// That also removes the only path a checker can see from an error-code
+/// constant into a decoded field element: `Err(KMS_ERR_INVALID_INPUT)` beside
+/// `Ok(felt)` reads as a possibly-`2` felt to taint tracking that is not
+/// variant-sensitive across `Result`, which is what CodeQL reported as a
+/// hard-coded salt reaching `calculate_contract_address`
+/// (`rust/hard-coded-cryptographic-value`). Keep the two arms in two types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidInput;
+
+impl From<InvalidInput> for i32 {
+    fn from(_: InvalidInput) -> Self {
+        KMS_ERR_INVALID_INPUT
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Error tables
 // ---------------------------------------------------------------------------
 
@@ -60,5 +87,17 @@ pub extern "C" fn kms_error_message(code: i32) -> *const c_char {
         ERROR_MESSAGES[code as usize].as_ptr() as *const c_char
     } else {
         ERROR_MESSAGES[KMS_ERR_INTERNAL as usize].as_ptr() as *const c_char
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_input_maps_to_the_invalid_input_status() {
+        // Every decoder call site returns `err.into()`, so this impl is the one
+        // place the numeric contract with C callers is decided.
+        assert_eq!(i32::from(InvalidInput), KMS_ERR_INVALID_INPUT);
     }
 }
