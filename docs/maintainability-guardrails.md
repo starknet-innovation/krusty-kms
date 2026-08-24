@@ -12,6 +12,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
 | `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny`/`allow(unsafe_code)`; stray `unsafe` |
 | Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / missing Debug redaction |
+| Release action pinning | `.github/scripts/check-publish-actions-pinned.sh` | Mutable action tags in trusted publishing workflows |
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |
 | WASM export freeze | `.github/scripts/check-wasm-exports.sh` | `wasm_bindgen` surface drift |
 | Design note | `.github/scripts/check-design-note.sh` | Public API / dep / surface changes without design note |

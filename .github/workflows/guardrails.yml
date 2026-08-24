@@ -15,6 +15,7 @@ on:
       - "docs/design/**"
       - ".github/guardrails/**"
       - ".github/scripts/**"
+      - ".github/workflows/publish-npm.yml"
       - ".github/workflows/guardrails.yml"
   pull_request:
     paths:
@@ -29,6 +30,7 @@ on:
       - "docs/design/**"
       - ".github/guardrails/**"
       - ".github/scripts/**"
+      - ".github/workflows/publish-npm.yml"
       - ".github/workflows/guardrails.yml"
 
 concurrency:
@@ -73,6 +75,9 @@ jobs:
 
       - name: Secret hygiene
         run: bash .github/scripts/check-secret-hygiene.sh
+
+      - name: Release action pinning
+        run: bash .github/scripts/check-publish-actions-pinned.sh
 
       - name: FFI surface freeze
         run: bash .github/scripts/check-ffi-surface.sh
