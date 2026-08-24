@@ -11,6 +11,10 @@ All notable changes to the published Rust crates are documented here.
   wall time, pages, events, serialized bytes, and continuation-token size. RPC
   redirects and ambient proxies are disabled so request bodies remain on the
   configured origin.
+- Use the canonical SNIP-12 encoder for typed-data hashing. Previously accepted
+  noncanonical documents can now produce a different hash or fail closed, and
+  signatures created over those old hashes must not be treated as canonical
+  SNIP-12 signatures.
 
 ## [0.7.0] - 2026-08-16
 

@@ -10,10 +10,14 @@ use starknet_types_core::felt::Felt;
 
 /// Maximum accepted typed-data JSON size.
 ///
-/// Typed data is normally small and may arrive through FFI or WASM. Rejecting
-/// oversized documents before deserialization keeps those boundaries from
-/// turning a signing request into an unbounded allocation.
+/// Typed data is normally small and may arrive through FFI or WASM. Callers
+/// have already allocated the input string by this point; this limit bounds
+/// JSON parsing work and the amplified in-memory typed-data tree.
 const MAX_TYPED_DATA_JSON_BYTES: usize = 256 * 1024;
+
+/// Do not surface reference-encoder details because they can contain
+/// attacker-controlled field or type names that callers may log.
+const INVALID_TYPED_DATA_ERROR: &str = "typed data is not valid canonical SNIP-12";
 
 /// Compute the canonical SNIP-12 message hash for an account.
 ///
@@ -34,166 +38,70 @@ pub fn compute_typed_data_message_hash(
     let typed_data: StarknetTypedData = serde_json::from_str(typed_data_json)?;
     typed_data
         .message_hash(*account_address)
-        .map_err(|error| KmsError::SerializationError(error.to_string()))
+        .map_err(|_| KmsError::SerializationError(INVALID_TYPED_DATA_ERROR.to_owned()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const VALID_V0_DATA: &str = r#"{
-      "types": {
-        "StarkNetDomain": [
-          { "name": "name", "type": "felt" },
-          { "name": "version", "type": "felt" },
-          { "name": "chainId", "type": "felt" }
-        ],
-        "Example Message": [
-          { "name": "Name", "type": "string" },
-          { "name": "Some Array", "type": "u128*" },
-          { "name": "Some Object", "type": "My Object" }
-        ],
-        "My Object": [
-          { "name": "Some Selector", "type": "selector" },
-          { "name": "Some Contract Address", "type": "ContractAddress" }
-        ]
-      },
-      "primaryType": "Example Message",
-      "domain": {
-        "name": "Starknet Example",
-        "version": "1",
-        "chainId": "SN_MAIN"
-      },
-      "message": {
-        "Name": "some name",
-        "Some Array": [1, 2, 3, 4],
-        "Some Object": {
-          "Some Selector": "transfer",
-          "Some Contract Address": "0x0123"
-        }
-      }
-    }"#;
+    #[derive(serde::Deserialize)]
+    struct Fixture {
+        vectors: Vec<Vector>,
+    }
 
-    const VALID_V1_DATA: &str = r#"{
-      "types": {
-        "StarknetDomain": [
-          { "name": "name", "type": "shortstring" },
-          { "name": "version", "type": "shortstring" },
-          { "name": "chainId", "type": "shortstring" },
-          { "name": "revision", "type": "shortstring" }
-        ],
-        "Example Message": [
-          { "name": "Name", "type": "string" },
-          { "name": "Some Array", "type": "u128*" },
-          { "name": "Some Object", "type": "My Object" }
-        ],
-        "My Object": [
-          { "name": "Some Selector", "type": "selector" },
-          { "name": "Some Contract Address", "type": "ContractAddress" }
-        ]
-      },
-      "primaryType": "Example Message",
-      "domain": {
-        "name": "Starknet Example",
-        "version": "1",
-        "chainId": "SN_MAIN",
-        "revision": "1"
-      },
-      "message": {
-        "Name": "some name",
-        "Some Array": [1, 2, 3, 4],
-        "Some Object": {
-          "Some Selector": "transfer",
-          "Some Contract Address": "0x0123"
-        }
-      }
-    }"#;
+    #[derive(serde::Deserialize)]
+    struct Vector {
+        name: String,
+        account_address: String,
+        expected_hash: String,
+        typed_data: serde_json::Value,
+    }
 
-    const VALID_V1_U256_DATA: &str = r#"{
-      "types": {
-        "StarknetDomain": [
-          { "name": "name", "type": "shortstring" },
-          { "name": "version", "type": "shortstring" },
-          { "name": "chainId", "type": "shortstring" },
-          { "name": "revision", "type": "shortstring" }
-        ],
-        "Example Message": [
-          { "name": "Uint", "type": "u256" },
-          { "name": "Amount", "type": "TokenAmount" },
-          { "name": "Id", "type": "NftId" }
-        ]
-      },
-      "primaryType": "Example Message",
-      "domain": {
-        "name": "Starknet Example",
-        "version": "1",
-        "chainId": "SN_MAIN",
-        "revision": "1"
-      },
-      "message": {
-        "Uint": { "low": "1234", "high": "0x5678" },
-        "Amount": {
-          "token_address": "0x11223344",
-          "amount": { "low": 1000000, "high": 0 }
-        },
-        "Id": {
-          "collection_address": "0x55667788",
-          "token_id": { "low": "0x12345678", "high": 0 }
-        }
-      }
-    }"#;
+    fn vector(name: &str) -> Vector {
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../tests/fixtures/snip12_typed_data_vectors.json"
+        ))
+        .unwrap();
+
+        fixture
+            .vectors
+            .into_iter()
+            .find(|vector| vector.name == name)
+            .unwrap_or_else(|| panic!("missing SNIP-12 vector {name}"))
+    }
+
+    fn assert_vector(name: &str) {
+        let vector = vector(name);
+        let account = Felt::from_hex(&vector.account_address).unwrap();
+        let hash = compute_typed_data_message_hash(&vector.typed_data.to_string(), &account)
+            .expect("fixture must hash");
+
+        assert_eq!(hash, Felt::from_hex(&vector.expected_hash).unwrap());
+    }
 
     #[test]
     fn hashes_revision_0_with_pedersen() {
-        let hash =
-            compute_typed_data_message_hash(VALID_V0_DATA, &Felt::from_hex_unchecked("0x1234"))
-                .unwrap();
-
-        assert_eq!(
-            hash,
-            Felt::from_hex_unchecked(
-                "0x0778d68fe2baf73ee78a6711c29bad4722680984c1553a8035c8cb3feb5310c9"
-            )
-        );
+        assert_vector("revision_0_struct");
     }
 
     #[test]
     fn hashes_revision_1_strings_with_poseidon() {
-        let hash =
-            compute_typed_data_message_hash(VALID_V1_DATA, &Felt::from_hex_unchecked("0x1234"))
-                .unwrap();
-
-        assert_eq!(
-            hash,
-            Felt::from_hex_unchecked(
-                "0x045bca39274d2b7fdf7dc7c4ecf75f6549f614ce44359cc62ec106f4e5cc87b4"
-            )
-        );
+        assert_vector("revision_1_struct");
     }
 
     #[test]
     fn hashes_revision_1_preset_types() {
-        let hash = compute_typed_data_message_hash(
-            VALID_V1_U256_DATA,
-            &Felt::from_hex_unchecked("0x1234"),
-        )
-        .unwrap();
-
-        assert_eq!(
-            hash,
-            Felt::from_hex_unchecked(
-                "0x068b85f4061d8155c0445f7e3c6bae1e7641b88b1d3b7c034c0b4f6c30eb5049"
-            )
-        );
+        assert_vector("revision_1_preset_types");
     }
 
     #[test]
     fn rejects_extra_message_fields() {
-        let mut value: serde_json::Value = serde_json::from_str(VALID_V1_DATA).unwrap();
-        value["message"]["Undeclared"] = serde_json::json!("misleading display text");
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]["Undeclared"] = serde_json::json!("misleading display text");
 
         assert!(compute_typed_data_message_hash(
-            &value.to_string(),
+            &vector.typed_data.to_string(),
             &Felt::from_hex_unchecked("0x1234")
         )
         .is_err());
@@ -201,11 +109,14 @@ mod tests {
 
     #[test]
     fn rejects_missing_message_fields() {
-        let mut value: serde_json::Value = serde_json::from_str(VALID_V1_DATA).unwrap();
-        value["message"].as_object_mut().unwrap().remove("Name");
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]
+            .as_object_mut()
+            .unwrap()
+            .remove("Name");
 
         assert!(compute_typed_data_message_hash(
-            &value.to_string(),
+            &vector.typed_data.to_string(),
             &Felt::from_hex_unchecked("0x1234")
         )
         .is_err());
@@ -213,18 +124,53 @@ mod tests {
 
     #[test]
     fn rejects_inconsistent_revisions() {
-        let mut value: serde_json::Value = serde_json::from_str(VALID_V0_DATA).unwrap();
-        value["domain"]["revision"] = serde_json::json!("1");
+        let mut vector = vector("revision_0_struct");
+        vector.typed_data["domain"]["revision"] = serde_json::json!("1");
 
         assert!(compute_typed_data_message_hash(
-            &value.to_string(),
+            &vector.typed_data.to_string(),
             &Felt::from_hex_unchecked("0x1234")
         )
         .is_err());
     }
 
     #[test]
+    fn encoder_errors_do_not_echo_attacker_controlled_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]["TOP_SECRET_FIELD_NAME"] = serde_json::json!("secret");
+
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("TOP_SECRET_FIELD_NAME"));
+    }
+
+    #[test]
+    fn accepts_document_at_exact_size_limit() {
+        let vector = vector("revision_1_struct");
+        let mut json = vector.typed_data.to_string();
+        json.extend(std::iter::repeat_n(
+            ' ',
+            MAX_TYPED_DATA_JSON_BYTES - json.len(),
+        ));
+
+        assert_eq!(json.len(), MAX_TYPED_DATA_JSON_BYTES);
+        assert!(
+            compute_typed_data_message_hash(&json, &Felt::from_hex_unchecked("0x1234")).is_ok()
+        );
+    }
+
+    #[test]
     fn rejects_oversized_documents_before_parsing() {
+        // Whitespace is invalid as a complete JSON document, so this assertion
+        // distinguishes the byte-limit check from a later parser error.
         let oversized = " ".repeat(MAX_TYPED_DATA_JSON_BYTES + 1);
         let error = compute_typed_data_message_hash(&oversized, &Felt::ZERO).unwrap_err();
 
