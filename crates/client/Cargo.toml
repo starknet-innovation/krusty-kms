@@ -41,7 +41,7 @@ bs58 = "0.5"
 async-trait.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["full"] }
+tokio = { workspace = true, features = ["full", "test-util"] }
 
 [[example]]
 name = "oz_multisig_coordination"

@@ -30,6 +30,9 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// also disable proxies and redirects so a 307 or `http_proxy` cannot send
 /// the JSON-RPC POST off-loopback.
 ///
+/// HTTPS clients also disable ambient proxies and redirects. This keeps RPC
+/// request bodies and query metadata bound to the configured origin.
+///
 /// Everything this provider reports (nonces, balances, deployment state,
 /// contract parameters) feeds signing decisions, so a cleartext remote
 /// transport would hand a network attacker that influence.
@@ -72,6 +75,8 @@ fn rpc_http_client_builder(
 
 fn bounded_rpc_http_client() -> Result<reqwest::Client> {
     rpc_http_client_builder(RPC_CONNECT_TIMEOUT, RPC_READ_TIMEOUT, RPC_REQUEST_TIMEOUT)
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| {
             krusty_kms_common::KmsError::RpcError(format!(
@@ -175,7 +180,7 @@ fn require_loopback_addrs(host: &str, addrs: &[SocketAddr]) -> Result<()> {
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
-    use std::time::Instant;
+    use tokio::time::Instant;
 
     #[test]
     fn test_create_provider() {
@@ -183,7 +188,7 @@ mod tests {
         assert!(provider.is_ok());
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn rpc_client_timeout_bounds_a_stalled_response() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -205,7 +210,7 @@ mod tests {
             .unwrap_err();
 
         assert!(error.is_timeout());
-        assert!(started.elapsed() < Duration::from_millis(500));
+        assert_eq!(started.elapsed(), timeout);
         server.abort();
     }
 

@@ -7,9 +7,14 @@ use super::types::{
     validate_envelope_payload, validate_incoming_envelope, MultisigCoordinationEnvelope,
     MultisigCoordinator, MultisigTopic,
 };
+#[cfg(test)]
+use super::types::{MultisigCoordinationMessage, MultisigSignerNotice};
 use async_trait::async_trait;
 use krusty_kms_common::{KmsError, Result};
+use serde::de::{Error as _, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use ssrf::{build_ssrf_safe_client, validate_coordinator_url};
+use std::fmt;
 use std::time::Duration;
 use url::Url;
 
@@ -35,8 +40,10 @@ pub struct HttpMultisigCoordinator {
 impl HttpMultisigCoordinator {
     /// Create a coordinator from a parsed base URL **without** SSRF checks.
     ///
-    /// Prefer [`Self::from_url`] for untrusted URLs. This constructor uses the
-    /// default reqwest redirect policy and does not validate resolved IPs.
+    /// Prefer [`Self::from_url`] for untrusted URLs. This constructor does not
+    /// validate resolved IPs, proxies, or redirect targets, but it does apply
+    /// the same connect, read-idle, and total request deadlines as the checked
+    /// constructor.
     #[must_use]
     pub fn new_unchecked(mut base_url: Url) -> Self {
         if !base_url.path().ends_with('/') {
@@ -46,7 +53,12 @@ impl HttpMultisigCoordinator {
 
         Self {
             base_url,
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(COORDINATOR_CONNECT_TIMEOUT)
+                .read_timeout(COORDINATOR_READ_TIMEOUT)
+                .timeout(COORDINATOR_REQUEST_TIMEOUT)
+                .build()
+                .expect("fixed coordinator HTTP client settings must be valid"),
         }
     }
 
@@ -135,22 +147,55 @@ async fn read_bounded_response(mut response: reqwest::Response) -> Result<Vec<u8
     Ok(body)
 }
 
-fn decode_envelopes(body: &[u8]) -> Result<Vec<MultisigCoordinationEnvelope>> {
-    let values: Vec<serde_json::Value> =
-        serde_json::from_slice(body).map_err(|error| KmsError::MultisigError(error.to_string()))?;
-    if values.len() > MAX_COORDINATOR_ENVELOPES {
-        return Err(KmsError::MultisigError(format!(
-            "coordinator response exceeds the {MAX_COORDINATOR_ENVELOPES} envelope limit"
-        )));
-    }
+struct BoundedEnvelopes(Vec<MultisigCoordinationEnvelope>);
 
-    values
-        .into_iter()
-        .map(|value| {
-            serde_json::from_value(value)
-                .map_err(|error| KmsError::MultisigError(error.to_string()))
-        })
-        .collect()
+impl<'de> Deserialize<'de> for BoundedEnvelopes {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BoundedEnvelopesVisitor;
+
+        impl<'de> Visitor<'de> for BoundedEnvelopesVisitor {
+            type Value = BoundedEnvelopes;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(
+                    formatter,
+                    "an array of at most {MAX_COORDINATOR_ENVELOPES} coordinator envelopes"
+                )
+            }
+
+            fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut envelopes = Vec::with_capacity(
+                    sequence
+                        .size_hint()
+                        .unwrap_or(0)
+                        .min(MAX_COORDINATOR_ENVELOPES),
+                );
+                while let Some(envelope) = sequence.next_element()? {
+                    if envelopes.len() == MAX_COORDINATOR_ENVELOPES {
+                        return Err(A::Error::custom(format!(
+                            "coordinator response exceeds the {MAX_COORDINATOR_ENVELOPES} envelope limit"
+                        )));
+                    }
+                    envelopes.push(envelope);
+                }
+                Ok(BoundedEnvelopes(envelopes))
+            }
+        }
+
+        deserializer.deserialize_seq(BoundedEnvelopesVisitor)
+    }
+}
+
+fn decode_envelopes(body: &[u8]) -> Result<Vec<MultisigCoordinationEnvelope>> {
+    serde_json::from_slice::<BoundedEnvelopes>(body)
+        .map(|bounded| bounded.0)
+        .map_err(|error| KmsError::MultisigError(error.to_string()))
 }
 
 #[async_trait]
@@ -160,7 +205,6 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
 
         self.client
             .post(self.messages_url()?)
-            .timeout(COORDINATOR_REQUEST_TIMEOUT)
             .json(&envelope)
             .send()
             .await
@@ -180,7 +224,6 @@ impl MultisigCoordinator for HttpMultisigCoordinator {
         let response = self
             .client
             .get(url)
-            .timeout(COORDINATOR_REQUEST_TIMEOUT)
             .send()
             .await
             .map_err(|error| KmsError::MultisigError(error.to_string()))?
@@ -209,10 +252,19 @@ mod tests {
     }
 
     #[test]
-    fn envelope_count_limit_is_enforced_before_decoding_elements() {
+    fn envelope_count_limit_is_enforced_during_typed_decoding() {
+        let envelope = MultisigCoordinationEnvelope::Unsigned(
+            MultisigCoordinationMessage::Confirmation(MultisigSignerNotice::new(
+                krusty_kms_common::Address::from(starknet_types_core::felt::Felt::ONE),
+                krusty_kms_common::ChainId::Sepolia,
+                starknet_types_core::felt::Felt::TWO,
+                krusty_kms_common::Address::from(starknet_types_core::felt::Felt::THREE),
+            )),
+        );
+        let encoded = serde_json::to_string(&envelope).unwrap();
         let body = format!(
             "[{}]",
-            vec!["null"; MAX_COORDINATOR_ENVELOPES + 1].join(",")
+            vec![encoded; MAX_COORDINATOR_ENVELOPES + 1].join(",")
         );
         let error = decode_envelopes(body.as_bytes()).unwrap_err();
         assert!(error.to_string().contains("envelope limit"));
