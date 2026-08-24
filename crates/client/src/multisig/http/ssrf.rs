@@ -5,6 +5,7 @@
 use krusty_kms_common::{KmsError, Result};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
+use std::time::Duration;
 use url::Url;
 
 #[derive(Debug)]
@@ -77,8 +78,16 @@ impl reqwest::dns::Resolve for PublicOnlyResolver {
     }
 }
 
-pub(super) fn build_ssrf_safe_client(url: &Url) -> Result<reqwest::Client> {
+pub(super) fn build_ssrf_safe_client(
+    url: &Url,
+    connect_timeout: Duration,
+    read_timeout: Duration,
+    request_timeout: Duration,
+) -> Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder()
+        .connect_timeout(connect_timeout)
+        .read_timeout(read_timeout)
+        .timeout(request_timeout)
         // Bypass env/system proxies so DNS pinning and PublicOnlyResolver
         // apply to the actual coordinator destination (not a proxy hop).
         .no_proxy()
