@@ -24,6 +24,7 @@ parallel = ["krusty-kms-crypto/parallel"]
 krusty-kms-common = { version = "0.7.0", path = "../common" }
 krusty-kms-crypto = { version = "0.7.0", path = "../crypto", default-features = false }
 starknet-types-core.workspace = true
+starknet-rust-core = "0.19.1"
 bip39.workspace = true
 hmac.workspace = true
 sha2.workspace = true

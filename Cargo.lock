@@ -1701,6 +1701,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "sha3 0.12.0",
+ "starknet-rust-core",
  "starknet-rust-crypto 0.9.0",
  "starknet-types-core",
  "subtle",
