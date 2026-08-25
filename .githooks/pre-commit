@@ -21,4 +21,3 @@ fi
 
 # Use the same fast maintainability checks exposed to agents and contributors.
 bash tools/check.sh guardrails
-python3 .github/scripts/check-code-complexity.py

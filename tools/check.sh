@@ -81,6 +81,8 @@ check_guardrails() {
   for script in "${scripts[@]}"; do
     run bash "$script"
   done
+
+  run python3 .github/scripts/check-code-complexity.py
 }
 
 check_wasm() {

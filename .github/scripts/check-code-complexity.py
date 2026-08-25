@@ -47,9 +47,9 @@ class RustBraceScanner:
         self.string_escape = False
         self.raw_string_hashes: int | None = None
 
-    def scan_line(self, line: str) -> tuple[int, int]:
+    def scan_line(self, line: str) -> tuple[int, list[str]]:
         delta = 0
-        opens = 0
+        structural_tokens: list[str] = []
         index = 0
         while index < len(line):
             if self.block_comment_depth:
@@ -106,13 +106,14 @@ class RustBraceScanner:
                 if char_literal:
                     index = char_literal.end()
                     continue
+            if char in "{}()[]<>":
+                structural_tokens.append(char)
             if char == "{":
                 delta += 1
-                opens += 1
             elif char == "}":
                 delta -= 1
             index += 1
-        return delta, opens
+        return delta, structural_tokens
 
 
 def is_rust_source(relative: str) -> bool:
@@ -135,12 +136,42 @@ def function_spans_from_sources(sources: list[tuple[str, str]]) -> dict[str, int
             key = f"{relative}::{name}#{names[(relative, name)]}"
             balance = 0
             saw_body = False
+            saw_parameters = False
+            parentheses = 0
+            brackets = 0
+            angles = 0
+            const_argument_braces = 0
             scanner = RustBraceScanner()
             end = start
             for end in range(start, len(lines)):
-                delta, opens = scanner.scan_line(lines[end])
+                delta, structural_tokens = scanner.scan_line(lines[end])
+                for token in structural_tokens:
+                    if token == "(":
+                        saw_parameters = True
+                        parentheses += 1
+                    elif token == ")" and parentheses:
+                        parentheses -= 1
+                    elif token == "[":
+                        brackets += 1
+                    elif token == "]" and brackets:
+                        brackets -= 1
+                    elif token == "<":
+                        angles += 1
+                    elif token == ">" and angles and not const_argument_braces:
+                        angles -= 1
+                    elif token == "{" and angles:
+                        const_argument_braces += 1
+                    elif token == "}" and const_argument_braces:
+                        const_argument_braces -= 1
+                    elif (
+                        token == "{"
+                        and saw_parameters
+                        and not parentheses
+                        and not brackets
+                        and not angles
+                    ):
+                        saw_body = True
                 balance += delta
-                saw_body = saw_body or opens > 0
                 if saw_body and balance <= 0:
                     break
             spans[key] = end - start + 1
