@@ -17,7 +17,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   # Gate npm publishing on tests and the dependency audit: a merge to main
@@ -27,13 +26,17 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
       - run: rustup target add wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
+        with:
+          version: v0.15.0
       # krusty-kms-wasm is excluded from the native run because its tests only
       # execute under wasm-pack (see rust.yml).
       - run: cargo test --workspace --locked --exclude krusty-kms-wasm
@@ -46,26 +49,121 @@ jobs:
       - run: cargo install cargo-audit --locked
       - run: cargo audit
 
-  publish:
+  build:
     needs: verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
           package-manager-cache: false
       - run: rustup target add wasm32-unknown-unknown
       - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
+        with:
+          version: v0.15.0
       - name: Build @starknetfoundation/krusty-kms-wasm
         run: >
           wasm-pack build --release --target web --scope starknetfoundation
           --out-dir pkg
         working-directory: crates/wasm
-      - name: Inspect npm package
-        run: npm pack --dry-run
+      - name: Reject npm lifecycle scripts
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          if (Object.hasOwn(packageJson, "scripts")) {
+            throw new Error("generated npm package must not contain lifecycle scripts");
+          }
+          NODE
         working-directory: crates/wasm/pkg
+      - name: Create inspected npm tarball
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/npm-package"
+          npm pack --ignore-scripts --pack-destination "${RUNNER_TEMP}/npm-package"
+        working-directory: crates/wasm/pkg
+      - name: Upload verified npm package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: krusty-kms-wasm-${{ github.sha }}
+          path: ${{ runner.temp }}/npm-package/*.tgz
+          if-no-files-found: error
+          # Protected-environment approval can outlive a weekend or release
+          # freeze; retain the exact reviewed tarball throughout that window.
+          retention-days: 30
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts/publish-npm.sh
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Require a protected npm environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          environment_json="${RUNNER_TEMP}/npm-environment.json"
+          branch_policies_json="${RUNNER_TEMP}/npm-branch-policies.json"
+          gh api "repos/${GITHUB_REPOSITORY}/environments/npm" > "${environment_json}"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/environments/npm/deployment-branch-policies?per_page=100" \
+            > "${branch_policies_json}"
+          node - "${environment_json}" "${branch_policies_json}" <<'NODE'
+          const fs = require("node:fs");
+          const environment = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const policies = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+          const reviewerRule = environment.protection_rules?.find(
+            (rule) => rule.type === "required_reviewers",
+          );
+          if (!reviewerRule?.reviewers?.length) {
+            throw new Error("the npm environment must have at least one required reviewer");
+          }
+          const branchPolicy = environment.deployment_branch_policy;
+          if (!branchPolicy?.custom_branch_policies || branchPolicy.protected_branches) {
+            throw new Error("the npm environment must use a custom main-only branch policy");
+          }
+          const branchPolicies = policies.branch_policies ?? [];
+          if (
+            policies.total_count !== 1 ||
+            branchPolicies.length !== 1 ||
+            branchPolicies[0].name !== "main" ||
+            (branchPolicies[0].type && branchPolicies[0].type !== "branch")
+          ) {
+            throw new Error("the npm environment must allow exactly the main branch");
+          }
+          NODE
+      - name: Download verified npm package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: krusty-kms-wasm-${{ github.sha }}
+          path: ${{ runner.temp }}/npm-package
       - name: Publish npm package
-        run: bash .github/scripts/publish-npm.sh crates/wasm/pkg
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          package_tarballs=("${RUNNER_TEMP}/npm-package/"*.tgz)
+          if ((${#package_tarballs[@]} != 1)); then
+            echo "::error::expected exactly one npm tarball, found ${#package_tarballs[@]}"
+            exit 1
+          fi
+          bash .github/scripts/publish-npm.sh "${package_tarballs[0]}"
