@@ -1,814 +1,394 @@
-//! SNIP-12 typed data message hash computation.
+//! SNIP-12 typed-data message hashing.
 //!
-//! Implements the Starknet equivalent of EIP-712, allowing off-chain typed
-//! structured data to be hashed in a domain-separated, collision-resistant
-//! manner suitable for signing.
+//! Parsing and encoding are delegated to the locked `starknet-rust-core`
+//! implementation so accepted documents match the Starknet ecosystem for
+//! both revision 0 and revision 1.
 
-use std::collections::{BTreeSet, HashMap};
-
-use serde::Deserialize;
+use krusty_kms_common::{KmsError, Result};
+use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
+use starknet_rust_core::types::TypedData as StarknetTypedData;
 use starknet_types_core::felt::Felt;
-use starknet_types_core::hash::{Poseidon, StarkHash};
+use std::{collections::HashSet, fmt};
 
-use krusty_kms_common::Result;
+/// Maximum accepted typed-data JSON size.
+///
+/// Typed data is normally small and may arrive through FFI or WASM. Callers
+/// have already allocated the input string by this point; this limit bounds
+/// JSON parsing work and the amplified in-memory typed-data tree.
+const MAX_TYPED_DATA_JSON_BYTES: usize = 256 * 1024;
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+/// Do not surface reference-encoder details because they can contain
+/// attacker-controlled field or type names that callers may log.
+const INVALID_TYPED_DATA_ERROR: &str = "typed data is not valid canonical SNIP-12";
 
-/// Compute the SNIP-12 message hash for the given typed-data JSON and account.
+/// Validate the signed envelope before handing its fields to the reference
+/// encoder. `TypedData` itself intentionally ignores unknown top-level keys,
+/// which is unsafe for signing UIs that display the complete JSON document.
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalTypedDataEnvelope {
+    types: serde_json::Value,
+    domain: CanonicalTypedDataDomain,
+    #[serde(rename = "primaryType")]
+    primary_type: serde_json::Value,
+    message: serde_json::Value,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalTypedDataDomain {
+    name: serde_json::Value,
+    version: serde_json::Value,
+    #[serde(rename = "chainId")]
+    chain_id: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    revision: Option<serde_json::Value>,
+}
+
+fn invalid_typed_data_error() -> KmsError {
+    KmsError::SerializationError(INVALID_TYPED_DATA_ERROR.to_owned())
+}
+
+struct RejectDuplicateKeys;
+
+impl<'de> DeserializeSeed<'de> for RejectDuplicateKeys {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+}
+
+impl<'de> Visitor<'de> for RejectDuplicateKeys {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a JSON value without duplicate object keys")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<(), A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        let mut keys = HashSet::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key) {
+                return Err(A::Error::custom("duplicate JSON object key"));
+            }
+            map.next_value_seed(RejectDuplicateKeys)?;
+        }
+        Ok(())
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while sequence.next_element_seed(RejectDuplicateKeys)?.is_some() {}
+        Ok(())
+    }
+
+    fn visit_bool<E>(self, _value: bool) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_i64<E>(self, _value: i64) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_u64<E>(self, _value: u64) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_f64<E>(self, _value: f64) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_str<E>(self, _value: &str) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_none<E>(self) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_unit<E>(self) -> std::result::Result<(), E> {
+        Ok(())
+    }
+}
+
+fn reject_duplicate_json_keys(json: &str) -> serde_json::Result<()> {
+    let mut deserializer = serde_json::Deserializer::from_str(json);
+    RejectDuplicateKeys.deserialize(&mut deserializer)?;
+    deserializer.end()
+}
+
+/// Compute the canonical SNIP-12 message hash for an account.
 ///
-/// This is the value that should be signed to produce a valid SNIP-12
-/// signature over the typed data message.
-///
-/// # Arguments
-/// * `typed_data_json` - JSON string conforming to the SNIP-12 typed data
-///   schema (types, primaryType, domain, message).
-/// * `account_address` - The signer's Starknet account address.
-///
-/// # Returns
-/// The Poseidon hash that should be signed.
+/// The document's domain and type definitions select SNIP-12 revision 0 or 1.
+/// Unsupported, inconsistent, or noncanonical documents are rejected by the
+/// reference encoder rather than being partially interpreted.
 pub fn compute_typed_data_message_hash(
     typed_data_json: &str,
     account_address: &Felt,
 ) -> Result<Felt> {
-    let typed_data: TypedData = serde_json::from_str(typed_data_json)?;
-
-    let domain_hash = struct_hash("StarknetDomain", &typed_data.domain, &typed_data.types)?;
-    let message_hash = struct_hash(
-        &typed_data.primary_type,
-        &typed_data.message,
-        &typed_data.types,
-    )?;
-
-    // SNIP-12 prefixes the message hash with the short-string encoding of
-    // "StarkNet Message" (the ASCII bytes read as a felt) — NOT its hash. This
-    // is the felt `0x537461726b4e6574204d657373616765`, the same constant Cairo
-    // accounts use in `is_valid_signature` and that starknet.js
-    // `typedData.getMessageHash` uses. Hashing the string (e.g. via
-    // starknet_keccak) yields a digest no SNIP-12 verifier will accept.
-    let prefix = Felt::from_bytes_be_slice(b"StarkNet Message");
-
-    Ok(Poseidon::hash_array(&[
-        prefix,
-        domain_hash,
-        *account_address,
-        message_hash,
-    ]))
-}
-
-// ---------------------------------------------------------------------------
-// Internal types
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TypedData {
-    types: HashMap<String, Vec<TypeMember>>,
-    primary_type: String,
-    domain: serde_json::Value,
-    message: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct TypeMember {
-    name: String,
-    #[serde(rename = "type")]
-    type_: String,
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Compute a Starknet-flavoured Keccak256 (top 6 bits masked to fit 250 bits).
-fn starknet_keccak(data: &[u8]) -> Felt {
-    use sha3::Digest;
-    let mut hasher = sha3::Keccak256::new();
-    hasher.update(data);
-    let result = hasher.finalize();
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(&result);
-    // Mask the top 6 bits so the result fits in a 250-bit Stark field element.
-    bytes[0] &= 0x03;
-    Felt::from_bytes_be_slice(&bytes)
-}
-
-/// Produce the canonical type encoding string for `type_name`.
-///
-/// For a type `T` with fields `(f1:t1, f2:t2, ...)` the encoding is:
-///   `T(f1:t1,f2:t2,...)`
-///
-/// If any field type is itself a struct defined in `types`, those referenced
-/// types are appended (sorted alphabetically, deduplicated).
-fn encode_type(type_name: &str, types: &HashMap<String, Vec<TypeMember>>) -> String {
-    let members = match types.get(type_name) {
-        Some(m) => m,
-        None => return String::new(),
-    };
-
-    let self_encoding = format!(
-        "\"{}\"({})",
-        type_name,
-        members
-            .iter()
-            .map(|m| format!("\"{}\":\"{}\"", m.name, m.type_))
-            .collect::<Vec<_>>()
-            .join(",")
-    );
-
-    // Collect referenced struct types (excluding self to avoid duplication).
-    let mut referenced = BTreeSet::new();
-    collect_referenced_types(type_name, types, &mut referenced);
-    referenced.remove(type_name);
-
-    let mut result = self_encoding;
-    for dep in &referenced {
-        if let Some(dep_members) = types.get(dep.as_str()) {
-            result.push_str(&format!(
-                "\"{}\"({})",
-                dep,
-                dep_members
-                    .iter()
-                    .map(|m| format!("\"{}\":\"{}\"", m.name, m.type_))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ));
-        }
+    if typed_data_json.len() > MAX_TYPED_DATA_JSON_BYTES {
+        return Err(KmsError::SerializationError(format!(
+            "typed data JSON exceeds the {} byte limit",
+            MAX_TYPED_DATA_JSON_BYTES
+        )));
     }
 
-    result
+    reject_duplicate_json_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
+    let envelope: CanonicalTypedDataEnvelope =
+        serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
+    let typed_data: StarknetTypedData = serde_json::from_value(
+        serde_json::to_value(envelope).map_err(|_| invalid_typed_data_error())?,
+    )
+    .map_err(|_| invalid_typed_data_error())?;
+    typed_data
+        .message_hash(*account_address)
+        .map_err(|_| invalid_typed_data_error())
 }
-
-/// Recursively collect all struct types referenced by `type_name`.
-fn collect_referenced_types(
-    type_name: &str,
-    types: &HashMap<String, Vec<TypeMember>>,
-    out: &mut BTreeSet<String>,
-) {
-    let members = match types.get(type_name) {
-        Some(m) => m,
-        None => return,
-    };
-
-    for member in members {
-        let base_type = strip_array_suffix(&member.type_);
-        if types.contains_key(base_type) && !out.contains(base_type) {
-            out.insert(base_type.to_string());
-            collect_referenced_types(base_type, types, out);
-        }
-    }
-}
-
-/// Strip a trailing `*` (array marker) from a type name.
-fn strip_array_suffix(type_name: &str) -> &str {
-    type_name.strip_suffix('*').unwrap_or(type_name)
-}
-
-/// Compute the type hash: `starknet_keccak(encode_type(name, types))`.
-fn type_hash(type_name: &str, types: &HashMap<String, Vec<TypeMember>>) -> Felt {
-    let encoded = encode_type(type_name, types);
-    starknet_keccak(encoded.as_bytes())
-}
-
-/// Compute the struct hash for a typed value:
-/// `Poseidon::hash_array(&[type_hash, encoded_field_1, encoded_field_2, ...])`
-fn struct_hash(
-    type_name: &str,
-    value: &serde_json::Value,
-    types: &HashMap<String, Vec<TypeMember>>,
-) -> Result<Felt> {
-    let members = types.get(type_name).ok_or_else(|| {
-        krusty_kms_common::KmsError::SerializationError(format!(
-            "Unknown type in typed data: {type_name}"
-        ))
-    })?;
-
-    let th = type_hash(type_name, types);
-    let mut elements = vec![th];
-
-    for member in members {
-        let field_value = &value[&member.name];
-        let encoded = encode_value(&member.type_, field_value, types)?;
-        elements.extend(encoded);
-    }
-
-    Ok(Poseidon::hash_array(&elements))
-}
-
-/// Encode a single value according to its SNIP-12 type.
-///
-/// Returns one or more `Felt` values (most types produce exactly one; `u256`
-/// produces two: `[low, high]`).
-fn encode_value(
-    type_name: &str,
-    value: &serde_json::Value,
-    types: &HashMap<String, Vec<TypeMember>>,
-) -> Result<Vec<Felt>> {
-    // --- Array types (ending with `*`) ---
-    if let Some(elem_type) = type_name.strip_suffix('*') {
-        let arr = value.as_array().ok_or_else(|| {
-            krusty_kms_common::KmsError::SerializationError(format!(
-                "Expected array for type {type_name}"
-            ))
-        })?;
-        let mut inner = Vec::new();
-        for elem in arr {
-            inner.extend(encode_value(elem_type, elem, types)?);
-        }
-        return Ok(vec![Poseidon::hash_array(&inner)]);
-    }
-
-    // --- Enum types (contain parentheses like "MyEnum(Variant1,Variant2)") ---
-    if type_name.contains('(') && type_name.contains(')') {
-        return encode_enum_value(type_name, value, types);
-    }
-
-    // --- Struct types (defined in the types map) ---
-    if types.contains_key(type_name) {
-        let h = struct_hash(type_name, value, types)?;
-        return Ok(vec![h]);
-    }
-
-    // --- Scalar / basic types ---
-    match type_name {
-        "felt" | "ContractAddress" | "ClassHash" | "EthAddress" | "timestamp" => {
-            Ok(vec![parse_felt_from_json(value)?])
-        }
-        "u128" => Ok(vec![parse_felt_from_json(value)?]),
-        "i128" => {
-            // i128: if negative, add PRIME implicitly; for now just parse as felt.
-            Ok(vec![parse_felt_from_json(value)?])
-        }
-        "u256" => {
-            // Encode as two felts: [low_128, high_128].
-            let big = parse_u256_from_json(value)?;
-            let mask_128 = (num_bigint::BigUint::from(1u128) << 128) - 1u32;
-            let low = &big & &mask_128;
-            let high = &big >> 128;
-            let low_felt = felt_from_biguint(&low);
-            let high_felt = felt_from_biguint(&high);
-            Ok(vec![low_felt, high_felt])
-        }
-        "bool" => {
-            let b = value.as_bool().ok_or_else(|| {
-                krusty_kms_common::KmsError::SerializationError("Expected bool value".to_string())
-            })?;
-            Ok(vec![if b { Felt::ONE } else { Felt::ZERO }])
-        }
-        "shortstring" => Ok(vec![parse_short_string(value)?]),
-        "string" => {
-            let s = value.as_str().ok_or_else(|| {
-                krusty_kms_common::KmsError::SerializationError("Expected string value".to_string())
-            })?;
-            Ok(vec![starknet_keccak(s.as_bytes())])
-        }
-        "merkletree" => {
-            // The value is a pre-computed root.
-            Ok(vec![parse_felt_from_json(value)?])
-        }
-        "NoneType" => Ok(vec![Poseidon::hash_array(&[])]),
-        _ => Err(krusty_kms_common::KmsError::SerializationError(format!(
-            "Unsupported SNIP-12 type: {type_name}"
-        ))),
-    }
-}
-
-/// Encode an enum value.
-///
-/// Enum type strings look like `"MyEnum(Variant1,Variant2)"`. The JSON value
-/// is expected to be an object with a single key matching one of the variants.
-fn encode_enum_value(
-    type_name: &str,
-    value: &serde_json::Value,
-    types: &HashMap<String, Vec<TypeMember>>,
-) -> Result<Vec<Felt>> {
-    // Parse "EnumName(V1,V2,...)" into name and variants. Dapp-supplied typed
-    // data is untrusted: malformed strings like "a)b(" must error, not panic
-    // on an out-of-bounds or non-char-boundary slice.
-    let paren_idx = type_name.find('(').ok_or_else(|| {
-        krusty_kms_common::KmsError::SerializationError(format!("Malformed enum type: {type_name}"))
-    })?;
-    let variants_str = type_name
-        .strip_suffix(')')
-        .and_then(|without_close| without_close.get(paren_idx + 1..))
-        .ok_or_else(|| {
-            krusty_kms_common::KmsError::SerializationError(format!(
-                "Malformed enum type: {type_name}"
-            ))
-        })?;
-    let variants: Vec<&str> = variants_str.split(',').collect();
-
-    let th = starknet_keccak(type_name.as_bytes());
-
-    let obj = value.as_object().ok_or_else(|| {
-        krusty_kms_common::KmsError::SerializationError(
-            "Expected object for enum value".to_string(),
-        )
-    })?;
-
-    let (variant_key, variant_value) = obj.iter().next().ok_or_else(|| {
-        krusty_kms_common::KmsError::SerializationError(
-            "Enum object must have exactly one key".to_string(),
-        )
-    })?;
-
-    let variant_index = variants
-        .iter()
-        .position(|v| v.trim() == variant_key)
-        .ok_or_else(|| {
-            krusty_kms_common::KmsError::SerializationError(format!(
-                "Unknown enum variant: {variant_key}"
-            ))
-        })?;
-
-    let mut elements = vec![th, Felt::from(variant_index as u64)];
-
-    // Encode the variant data. If it's an array, encode each element; if it's
-    // a single value, encode it directly. For tuple-style variants the value
-    // is typically an array; for unit variants it may be null.
-    if variant_value.is_array() {
-        for elem in variant_value.as_array().unwrap() {
-            elements.extend(encode_value("felt", elem, types)?);
-        }
-    } else if !variant_value.is_null() {
-        elements.extend(encode_value("felt", variant_value, types)?);
-    }
-
-    Ok(vec![Poseidon::hash_array(&elements)])
-}
-
-/// Encode a SNIP-12 (revision 1) `shortstring` value, matching starknet.js and
-/// starknet.py `parse_felt`: a numeric value — an integer, a decimal string, or
-/// a `0x`-prefixed hex string — is the felt itself; any other string is encoded
-/// as a short string (its ASCII bytes read as a felt).
-///
-/// This is why a `StarknetDomain` `version`/`revision` of `"1"` encodes as the
-/// felt `1`, not the short string `'1'` (`0x31`). Encoding those as short
-/// strings yields a domain separator no SNIP-12 verifier / `is_valid_signature`
-/// agrees with. Only lowercase `0x` is treated as hex, mirroring the reference.
-fn parse_short_string(value: &serde_json::Value) -> Result<Felt> {
-    match value {
-        serde_json::Value::Number(_) => parse_felt_from_json(value),
-        serde_json::Value::String(s) => {
-            if s.starts_with("0x") {
-                Felt::from_hex(s).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!(
-                        "Invalid hex felt: {e}"
-                    ))
-                })
-            } else if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) {
-                Felt::from_dec_str(s).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!(
-                        "Invalid decimal felt: {e}"
-                    ))
-                })
-            } else {
-                Ok(Felt::from_bytes_be_slice(s.as_bytes()))
-            }
-        }
-        _ => Err(krusty_kms_common::KmsError::SerializationError(format!(
-            "Expected string or number for shortstring, got: {value}"
-        ))),
-    }
-}
-
-/// Parse a felt from a JSON value (hex string, decimal string, or number).
-fn parse_felt_from_json(value: &serde_json::Value) -> Result<Felt> {
-    match value {
-        serde_json::Value::String(s) => {
-            if s.starts_with("0x") || s.starts_with("0X") {
-                Felt::from_hex(s).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!(
-                        "Invalid hex felt: {e}"
-                    ))
-                })
-            } else {
-                // Decimal string
-                Felt::from_dec_str(s).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!(
-                        "Invalid decimal felt: {e}"
-                    ))
-                })
-            }
-        }
-        serde_json::Value::Number(n) => {
-            if let Some(u) = n.as_u64() {
-                Ok(Felt::from(u))
-            } else {
-                Err(krusty_kms_common::KmsError::SerializationError(format!(
-                    "Number out of range for felt: {n}"
-                )))
-            }
-        }
-        _ => Err(krusty_kms_common::KmsError::SerializationError(format!(
-            "Cannot parse felt from: {value}"
-        ))),
-    }
-}
-
-/// Parse a u256 from a JSON value.
-fn parse_u256_from_json(value: &serde_json::Value) -> Result<num_bigint::BigUint> {
-    use num_traits::Num;
-
-    // If the value is an object with "low" and "high" keys, combine them.
-    if let Some(obj) = value.as_object() {
-        if let (Some(low_val), Some(high_val)) = (obj.get("low"), obj.get("high")) {
-            let low = parse_u256_from_json(low_val)?;
-            let high = parse_u256_from_json(high_val)?;
-            return Ok((high << 128) | low);
-        }
-    }
-
-    match value {
-        serde_json::Value::String(s) => {
-            if let Some(hex) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-                num_bigint::BigUint::from_str_radix(hex, 16).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!(
-                        "Invalid hex u256: {e}"
-                    ))
-                })
-            } else {
-                num_bigint::BigUint::from_str_radix(s, 10).map_err(|e| {
-                    krusty_kms_common::KmsError::SerializationError(format!(
-                        "Invalid decimal u256: {e}"
-                    ))
-                })
-            }
-        }
-        serde_json::Value::Number(n) => {
-            if let Some(u) = n.as_u64() {
-                Ok(num_bigint::BigUint::from(u))
-            } else {
-                Err(krusty_kms_common::KmsError::SerializationError(format!(
-                    "Number out of range for u256: {n}"
-                )))
-            }
-        }
-        _ => Err(krusty_kms_common::KmsError::SerializationError(format!(
-            "Cannot parse u256 from: {value}"
-        ))),
-    }
-}
-
-/// Convert a `BigUint` to a `Felt`.
-fn felt_from_biguint(n: &num_bigint::BigUint) -> Felt {
-    let bytes = n.to_bytes_be();
-    Felt::from_bytes_be_slice(&bytes)
-}
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Malformed enum type strings from dapp-supplied typed data must error,
-    /// not panic on an out-of-bounds slice (M-08).
+    #[derive(serde::Deserialize)]
+    struct Fixture {
+        vectors: Vec<Vector>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Vector {
+        name: String,
+        account_address: String,
+        expected_hash: String,
+        typed_data: serde_json::Value,
+    }
+
+    fn vector(name: &str) -> Vector {
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../tests/fixtures/snip12_typed_data_vectors.json"
+        ))
+        .unwrap();
+
+        fixture
+            .vectors
+            .into_iter()
+            .find(|vector| vector.name == name)
+            .unwrap_or_else(|| panic!("missing SNIP-12 vector {name}"))
+    }
+
+    fn assert_vector(name: &str) {
+        let vector = vector(name);
+        let account = Felt::from_hex(&vector.account_address).unwrap();
+        let hash = compute_typed_data_message_hash(&vector.typed_data.to_string(), &account)
+            .expect("fixture must hash");
+
+        assert_eq!(hash, Felt::from_hex(&vector.expected_hash).unwrap());
+    }
+
     #[test]
-    fn test_malformed_enum_type_errors_instead_of_panicking() {
-        let types = HashMap::new();
-        let value = serde_json::json!({ "V1": [] });
-        for malformed in ["a)b(", "E(V1", ")E(V1)x", "(", ")("] {
-            let result = encode_value(malformed, &value, &types);
-            assert!(result.is_err(), "expected error for {malformed:?}");
+    fn hashes_revision_0_with_pedersen() {
+        assert_vector("revision_0_struct");
+    }
+
+    #[test]
+    fn hashes_revision_1_strings_with_poseidon() {
+        assert_vector("revision_1_struct");
+    }
+
+    #[test]
+    fn hashes_revision_1_preset_types() {
+        assert_vector("revision_1_preset_types");
+    }
+
+    #[test]
+    fn rejects_extra_message_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]["Undeclared"] = serde_json::json!("misleading display text");
+
+        assert!(compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejects_extra_nested_message_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]["Some Object"]["Undeclared"] =
+            serde_json::json!("misleading display text");
+
+        assert!(compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejects_extra_envelope_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["warning"] = serde_json::json!("you are sending 100 ETH");
+
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("warning"));
+    }
+
+    #[test]
+    fn rejects_extra_domain_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["domain"]["warning"] =
+            serde_json::json!("this text is not covered by the signature");
+
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("warning"));
+    }
+
+    #[test]
+    fn rejects_duplicate_envelope_fields() {
+        let vector = vector("revision_1_struct");
+        let canonical = vector.typed_data.to_string();
+        let duplicate = format!(
+            "{{\"message\":{},{}",
+            vector.typed_data["message"],
+            &canonical[1..]
+        );
+
+        assert!(
+            compute_typed_data_message_hash(&duplicate, &Felt::from_hex_unchecked("0x1234"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_keys_recursively() {
+        let canonical = vector("revision_1_struct").typed_data.to_string();
+        let duplicates = [
+            ("\"name\":\"Name\"", "\"name\":\"Name\",\"name\":\"Name\""),
+            (
+                "\"revision\":\"1\"",
+                "\"revision\":\"1\",\"revision\":\"1\"",
+            ),
+            (
+                "\"Name\":\"some name\"",
+                "\"Name\":\"some name\",\"Name\":\"some name\"",
+            ),
+            (
+                "\"Some Selector\":\"transfer\"",
+                "\"Some Selector\":\"transfer\",\"Some Selector\":\"transfer\"",
+            ),
+        ];
+
+        for (needle, replacement) in duplicates {
+            assert!(canonical.contains(needle));
+            let duplicate = canonical.replacen(needle, replacement, 1);
+            assert!(compute_typed_data_message_hash(
+                &duplicate,
+                &Felt::from_hex_unchecked("0x1234")
+            )
+            .is_err());
         }
-        // A well-formed enum still encodes.
-        let ok = encode_value("E(V1,V2)", &value, &types);
-        assert!(ok.is_ok(), "well-formed enum must encode: {ok:?}");
     }
 
     #[test]
-    fn test_encode_type_starknet_domain() {
-        let mut types = HashMap::new();
-        types.insert(
-            "StarknetDomain".to_string(),
-            vec![
-                TypeMember {
-                    name: "name".to_string(),
-                    type_: "shortstring".to_string(),
-                },
-                TypeMember {
-                    name: "version".to_string(),
-                    type_: "shortstring".to_string(),
-                },
-                TypeMember {
-                    name: "chainId".to_string(),
-                    type_: "shortstring".to_string(),
-                },
-                TypeMember {
-                    name: "revision".to_string(),
-                    type_: "shortstring".to_string(),
-                },
-            ],
-        );
+    fn rejects_missing_message_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]
+            .as_object_mut()
+            .unwrap()
+            .remove("Name");
 
-        let encoded = encode_type("StarknetDomain", &types);
+        assert!(compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejects_inconsistent_revisions() {
+        let mut vector = vector("revision_0_struct");
+        vector.typed_data["domain"]["revision"] = serde_json::json!("1");
+
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
+
         assert_eq!(
-            encoded,
-            "\"StarknetDomain\"(\"name\":\"shortstring\",\"version\":\"shortstring\",\"chainId\":\"shortstring\",\"revision\":\"shortstring\")"
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
         );
+        assert!(!error.to_string().contains("revision"));
     }
 
     #[test]
-    fn test_type_hash_is_deterministic() {
-        let mut types = HashMap::new();
-        types.insert(
-            "StarknetDomain".to_string(),
-            vec![
-                TypeMember {
-                    name: "name".to_string(),
-                    type_: "shortstring".to_string(),
-                },
-                TypeMember {
-                    name: "version".to_string(),
-                    type_: "shortstring".to_string(),
-                },
-            ],
-        );
+    fn encoder_errors_do_not_echo_attacker_controlled_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]["TOP_SECRET_FIELD_NAME"] = serde_json::json!("secret");
 
-        let h1 = type_hash("StarknetDomain", &types);
-        let h2 = type_hash("StarknetDomain", &types);
-        assert_eq!(h1, h2);
-        assert_ne!(h1, Felt::ZERO);
-    }
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
 
-    #[test]
-    fn test_starknet_keccak_fits_250_bits() {
-        let hash = starknet_keccak(b"StarkNet Message");
-        // The top 6 bits should be cleared (byte[0] & 0xFC == 0).
-        let bytes = hash.to_bytes_be();
-        assert_eq!(bytes[0] & 0xFC, 0);
-    }
-
-    #[test]
-    fn test_compute_typed_data_message_hash_simple() {
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Example": [
-                    { "name": "value", "type": "felt" }
-                ]
-            },
-            "primaryType": "Example",
-            "domain": {
-                "name": "StarkNet",
-                "version": "1",
-                "chainId": "SN_MAIN",
-                "revision": "1"
-            },
-            "message": {
-                "value": "0x1"
-            }
-        });
-
-        let account = Felt::from(0x1234u64);
-        let hash =
-            compute_typed_data_message_hash(&json.to_string(), &account).expect("should compute");
-        assert_ne!(hash, Felt::ZERO);
-
-        // Must be deterministic.
-        let hash2 =
-            compute_typed_data_message_hash(&json.to_string(), &account).expect("should compute");
-        assert_eq!(hash, hash2);
-    }
-
-    #[test]
-    fn test_compute_typed_data_with_u256() {
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Transfer": [
-                    { "name": "amount", "type": "u256" },
-                    { "name": "recipient", "type": "ContractAddress" }
-                ]
-            },
-            "primaryType": "Transfer",
-            "domain": {
-                "name": "StarkNet",
-                "version": "1",
-                "chainId": "SN_MAIN",
-                "revision": "1"
-            },
-            "message": {
-                "amount": { "low": "0x100", "high": "0x0" },
-                "recipient": "0xdeadbeef"
-            }
-        });
-
-        let account = Felt::from(0xABCDu64);
-        let hash =
-            compute_typed_data_message_hash(&json.to_string(), &account).expect("should compute");
-        assert_ne!(hash, Felt::ZERO);
-    }
-
-    #[test]
-    fn test_encode_type_with_nested_struct() {
-        let mut types = HashMap::new();
-        types.insert(
-            "Order".to_string(),
-            vec![
-                TypeMember {
-                    name: "price".to_string(),
-                    type_: "felt".to_string(),
-                },
-                TypeMember {
-                    name: "item".to_string(),
-                    type_: "Item".to_string(),
-                },
-            ],
-        );
-        types.insert(
-            "Item".to_string(),
-            vec![TypeMember {
-                name: "name".to_string(),
-                type_: "shortstring".to_string(),
-            }],
-        );
-
-        let encoded = encode_type("Order", &types);
-        // The primary type comes first, then referenced types sorted alphabetically.
-        assert!(encoded.starts_with("\"Order\"("));
-        assert!(encoded.contains("\"Item\"("));
-    }
-
-    #[test]
-    fn test_bool_encoding() {
-        let true_val = serde_json::Value::Bool(true);
-        let false_val = serde_json::Value::Bool(false);
-        let types = HashMap::new();
-
-        let t = encode_value("bool", &true_val, &types).unwrap();
-        let f = encode_value("bool", &false_val, &types).unwrap();
-
-        assert_eq!(t, vec![Felt::ONE]);
-        assert_eq!(f, vec![Felt::ZERO]);
-    }
-
-    #[test]
-    fn test_shortstring_encoding() {
-        let val = serde_json::Value::String("hello".to_string());
-        let types = HashMap::new();
-        let result = encode_value("shortstring", &val, &types).unwrap();
-        assert_eq!(result, vec![Felt::from_bytes_be_slice(b"hello")]);
-    }
-
-    #[test]
-    fn test_string_encoding() {
-        let val = serde_json::Value::String("hello world".to_string());
-        let types = HashMap::new();
-        let result = encode_value("string", &val, &types).unwrap();
-        assert_eq!(result, vec![starknet_keccak(b"hello world")]);
-    }
-
-    #[test]
-    fn test_message_prefix_is_snip12_short_string() {
-        // The SNIP-12 message prefix is the short-string 'StarkNet Message',
-        // i.e. the ASCII bytes read as a felt — not any hash of them. This is
-        // the constant Cairo `is_valid_signature` and starknet.js expect.
         assert_eq!(
-            Felt::from_bytes_be_slice(b"StarkNet Message"),
-            Felt::from_hex("0x537461726b4e6574204d657373616765").unwrap(),
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("TOP_SECRET_FIELD_NAME"));
+    }
+
+    #[test]
+    fn accepts_document_at_exact_size_limit() {
+        let vector = vector("revision_1_struct");
+        let mut json = vector.typed_data.to_string();
+        json.extend(std::iter::repeat_n(
+            ' ',
+            MAX_TYPED_DATA_JSON_BYTES - json.len(),
+        ));
+
+        assert_eq!(json.len(), MAX_TYPED_DATA_JSON_BYTES);
+        assert!(
+            compute_typed_data_message_hash(&json, &Felt::from_hex_unchecked("0x1234")).is_ok()
         );
     }
 
     #[test]
-    fn test_shortstring_parse_felt_semantics() {
-        // SNIP-12 rev-1 `shortstring` = starknet.js/starknet.py `parse_felt`:
-        // numeric strings are the felt itself; other text is a short string.
-        let types = HashMap::new();
-        let one = encode_value("shortstring", &serde_json::json!("1"), &types).unwrap();
-        assert_eq!(
-            one,
-            vec![Felt::ONE],
-            "numeric '1' must encode as felt 1, not 0x31"
-        );
-        let hex = encode_value("shortstring", &serde_json::json!("0x10"), &types).unwrap();
-        assert_eq!(hex, vec![Felt::from(0x10u64)]);
-        let num = encode_value("shortstring", &serde_json::json!(5), &types).unwrap();
-        assert_eq!(num, vec![Felt::from(5u64)]);
-        let text = encode_value("shortstring", &serde_json::json!("SN_MAIN"), &types).unwrap();
-        assert_eq!(text, vec![Felt::from_bytes_be_slice(b"SN_MAIN")]);
-    }
+    fn rejects_oversized_documents_before_parsing() {
+        // Whitespace is invalid as a complete JSON document, so this assertion
+        // distinguishes the byte-limit check from a later parser error.
+        let oversized = " ".repeat(MAX_TYPED_DATA_JSON_BYTES + 1);
+        let error = compute_typed_data_message_hash(&oversized, &Felt::ZERO).unwrap_err();
 
-    #[test]
-    fn test_message_hash_matches_starknet_js_reference() {
-        // Golden vector cross-checked against starknet.py `TypedData.message_hash`
-        // (which matches starknet.js and on-chain is_valid_signature). Guards both
-        // fixes: the short-string prefix AND parse_felt shortstring encoding
-        // (domain version/revision "1" -> felt 1).
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Message": [ { "name": "contents", "type": "felt" } ]
-            },
-            "primaryType": "Message",
-            "domain": { "name": "strkd", "version": "1", "chainId": "SN_SEPOLIA", "revision": "1" },
-            "message": { "contents": "0x1" }
-        });
-        let account =
-            Felt::from_hex("0x02000ba5ba904aed0858233e8f782bbc07fd31298824074e05a871f28642342c")
-                .unwrap();
-        let hash =
-            compute_typed_data_message_hash(&json.to_string(), &account).expect("should compute");
-        assert_eq!(
-            hash,
-            Felt::from_hex("0x68b4250d022dce3e45e64683935b0e0f8bf95e3dbf17eb9839e255578ddc061")
-                .unwrap(),
-        );
-    }
-
-    #[test]
-    fn test_message_hash_uses_short_string_prefix_not_keccak() {
-        // Guards the fix: the top-level hash must compose the short-string
-        // prefix (what every SNIP-12 verifier uses), and must NOT equal the
-        // old keccak-prefixed digest, which no on-chain account would accept.
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Example": [ { "name": "value", "type": "felt" } ]
-            },
-            "primaryType": "Example",
-            "domain": { "name": "StarkNet", "version": "1", "chainId": "SN_SEPOLIA", "revision": "1" },
-            "message": { "value": "0x1" }
-        });
-        let account = Felt::from(0x1234u64);
-        let td: TypedData = serde_json::from_str(&json.to_string()).unwrap();
-        let domain_hash = struct_hash("StarknetDomain", &td.domain, &td.types).unwrap();
-        let message_hash = struct_hash(&td.primary_type, &td.message, &td.types).unwrap();
-
-        let expected = Poseidon::hash_array(&[
-            Felt::from_bytes_be_slice(b"StarkNet Message"),
-            domain_hash,
-            account,
-            message_hash,
-        ]);
-        let old_buggy = Poseidon::hash_array(&[
-            starknet_keccak(b"StarkNet Message"),
-            domain_hash,
-            account,
-            message_hash,
-        ]);
-
-        let got = compute_typed_data_message_hash(&json.to_string(), &account).unwrap();
-        assert_eq!(got, expected, "must use the short-string prefix");
-        assert_ne!(got, old_buggy, "must not regress to the keccak prefix");
-    }
-
-    #[test]
-    fn test_different_accounts_produce_different_hashes() {
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Example": [
-                    { "name": "value", "type": "felt" }
-                ]
-            },
-            "primaryType": "Example",
-            "domain": {
-                "name": "StarkNet",
-                "version": "1",
-                "chainId": "SN_MAIN",
-                "revision": "1"
-            },
-            "message": {
-                "value": "0x1"
-            }
-        });
-
-        let account1 = Felt::from(0x1111u64);
-        let account2 = Felt::from(0x2222u64);
-
-        let hash1 = compute_typed_data_message_hash(&json.to_string(), &account1).unwrap();
-        let hash2 = compute_typed_data_message_hash(&json.to_string(), &account2).unwrap();
-
-        assert_ne!(hash1, hash2);
+        assert!(error.to_string().contains("exceeds"));
     }
 }

@@ -9,6 +9,7 @@
   "scripts": {
     "verify": "tsx src/verify-rust-proofs.ts",
     "verify:wasm": "tsx src/verify-wasm-bindings.ts",
+    "verify:snip12": "tsx src/verify-snip12-vectors.ts",
     "verify:tx-hashes": "tsx src/generate-tx-hash-vectors.ts",
     "test": "npm run verify"
   },

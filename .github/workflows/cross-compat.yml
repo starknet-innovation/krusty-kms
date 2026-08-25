@@ -8,6 +8,7 @@ on:
       - "Cargo.lock"
       - "crates/common/**"
       - "crates/crypto/**"
+      - "crates/kms/**"
       - "crates/sdk/**"
       - "cross-tests/**"
       - ".github/workflows/cross-compat.yml"
@@ -17,6 +18,7 @@ on:
       - "Cargo.lock"
       - "crates/common/**"
       - "crates/crypto/**"
+      - "crates/kms/**"
       - "crates/sdk/**"
       - "cross-tests/**"
       - ".github/workflows/cross-compat.yml"
@@ -52,3 +54,7 @@ jobs:
       - name: Verify Rust proofs with TypeScript
         working-directory: cross-tests
         run: npx tsx src/verify-rust-proofs.ts
+
+      - name: Verify SNIP-12 vectors with starknet.js
+        working-directory: cross-tests
+        run: npm run verify:snip12
