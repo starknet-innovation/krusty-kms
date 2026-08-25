@@ -178,7 +178,7 @@
     },
     {
       "path": "crates/wasm/src/tx_hash.rs",
-      "lines": 552
+      "lines": 571
     },
     {
       "path": "crates/wasm/src/types.rs",

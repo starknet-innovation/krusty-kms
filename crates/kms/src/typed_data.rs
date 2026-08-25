@@ -8,6 +8,8 @@ use krusty_kms_common::{KmsError, Result};
 use starknet_rust_core::types::TypedData as StarknetTypedData;
 use starknet_types_core::felt::Felt;
 
+mod strict_json;
+
 /// Maximum accepted typed-data JSON size.
 ///
 /// Typed data is normally small and may arrive through FFI or WASM. Callers
@@ -52,6 +54,7 @@ pub fn compute_typed_data_message_hash(
         )));
     }
 
+    strict_json::reject_duplicate_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
     let envelope: CanonicalTypedDataEnvelope =
         serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
     let typed_data: StarknetTypedData = serde_json::from_value(
@@ -174,6 +177,36 @@ mod tests {
             compute_typed_data_message_hash(&duplicate, &Felt::from_hex_unchecked("0x1234"))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn rejects_duplicate_keys_recursively() {
+        let canonical = vector("revision_1_struct").typed_data.to_string();
+        let duplicates = [
+            ("\"name\":\"Name\"", "\"name\":\"Name\",\"name\":\"Name\""),
+            (
+                "\"revision\":\"1\"",
+                "\"revision\":\"1\",\"revision\":\"1\"",
+            ),
+            (
+                "\"Name\":\"some name\"",
+                "\"Name\":\"some name\",\"Name\":\"some name\"",
+            ),
+            (
+                "\"Some Selector\":\"transfer\"",
+                "\"Some Selector\":\"transfer\",\"Some Selector\":\"transfer\"",
+            ),
+        ];
+
+        for (needle, replacement) in duplicates {
+            assert!(canonical.contains(needle));
+            let duplicate = canonical.replacen(needle, replacement, 1);
+            assert!(compute_typed_data_message_hash(
+                &duplicate,
+                &Felt::from_hex_unchecked("0x1234")
+            )
+            .is_err());
+        }
     }
 
     #[test]
