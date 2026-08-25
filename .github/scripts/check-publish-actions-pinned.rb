@@ -9,6 +9,7 @@ DEFAULT_WORKFLOWS = [
 ].freeze
 FULL_COMMIT_SHA = /\A[0-9a-fA-F]{40}\z/.freeze
 DOCKER_DIGEST = /\Adocker:\/\/[^@\s]+@sha256:[0-9a-fA-F]{64}\z/.freeze
+IMAGE_DIGEST = /\A[^@\s]+@sha256:[0-9a-fA-F]{64}\z/.freeze
 
 def annotation(file, node, message)
   line = node.respond_to?(:start_line) ? node.start_line + 1 : 1
@@ -53,6 +54,22 @@ def validate_reference(file, key_node, value_node)
   false
 end
 
+def validate_image(file, key_node, value_node)
+  unless value_node.is_a?(Psych::Nodes::Scalar)
+    annotation(file, key_node, "publishing container image must be a scalar or image mapping")
+    return false
+  end
+
+  return true if IMAGE_DIGEST.match?(value_node.value)
+
+  annotation(
+    file,
+    value_node,
+    "publishing container image must use a sha256 digest: #{value_node.value}"
+  )
+  false
+end
+
 def inspect_node(file, node, state)
   if node.is_a?(Psych::Nodes::Alias)
     annotation(file, node, "YAML aliases are forbidden in publishing workflows")
@@ -62,9 +79,23 @@ def inspect_node(file, node, state)
 
   if node.is_a?(Psych::Nodes::Mapping)
     node.children.each_slice(2) do |key_node, value_node|
-      if key_node.is_a?(Psych::Nodes::Scalar) && key_node.value == "uses"
-        state[:uses] += 1
-        state[:valid] = false unless validate_reference(file, key_node, value_node)
+      if key_node.is_a?(Psych::Nodes::Scalar)
+        case key_node.value
+        when "uses"
+          state[:uses] += 1
+          state[:valid] = false unless validate_reference(file, key_node, value_node)
+        when "container"
+          if value_node.is_a?(Psych::Nodes::Scalar)
+            state[:images] += 1
+            state[:valid] = false unless validate_image(file, key_node, value_node)
+          elsif !value_node.is_a?(Psych::Nodes::Mapping)
+            annotation(file, key_node, "publishing container must name a digest-pinned image")
+            state[:valid] = false
+          end
+        when "image"
+          state[:images] += 1
+          state[:valid] = false unless validate_image(file, key_node, value_node)
+        end
       end
       inspect_node(file, key_node, state)
       inspect_node(file, value_node, state)
@@ -83,6 +114,7 @@ end
 workflow_files = ARGV.empty? ? DEFAULT_WORKFLOWS : ARGV
 valid = true
 references = 0
+images = 0
 
 workflow_files.each do |file|
   begin
@@ -93,10 +125,11 @@ workflow_files.each do |file|
       next
     end
 
-    state = { valid: true, uses: 0 }
+    state = { valid: true, uses: 0, images: 0 }
     inspect_node(file, document, state)
     valid &&= state[:valid]
     references += state[:uses]
+    images += state[:images]
   rescue Errno::ENOENT, Errno::EACCES => error
     warn "::error file=#{file}::publishing workflow cannot be read: #{error.message}"
     valid = false
@@ -109,4 +142,4 @@ end
 exit 1 unless valid
 
 puts "Publishing workflow actions are structurally parsed and pinned " \
-     "to immutable revisions (#{references} references)."
+     "to immutable revisions (#{references} references, #{images} container images)."

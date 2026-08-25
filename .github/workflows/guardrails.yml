@@ -82,6 +82,7 @@ jobs:
         run: |
           bash .github/scripts/check-publish-actions-pinned.sh
           bash .github/scripts/test-check-publish-actions-pinned.sh
+          bash .github/scripts/test-publish-npm.sh
 
       - name: FFI surface freeze
         run: bash .github/scripts/check-ffi-surface.sh

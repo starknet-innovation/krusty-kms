@@ -27,6 +27,10 @@ printf '%s\n' \
   "      - { \"uses\": actions/cache@${full_sha} }" \
   '      - ? uses' \
   "        : actions/setup-node@${full_sha}" \
+  "    container: ghcr.io/example/release@sha256:${full_digest}" \
+  '    services:' \
+  '      database:' \
+  "        image: postgres@sha256:${full_digest}" \
   >"$fixture_dir/valid.yml"
 "$checker" "$fixture_dir/valid.yml" >/dev/null
 
@@ -35,6 +39,18 @@ expect_failure "mutable GitHub action" "$checker" "$fixture_dir/mutable.yml"
 
 printf '%s\n' 'steps:' '  - uses: docker://alpine:latest' >"$fixture_dir/docker-tag.yml"
 expect_failure "mutable Docker action" "$checker" "$fixture_dir/docker-tag.yml"
+
+printf '%s\n' 'jobs:' '  publish:' '    container: alpine:latest' >"$fixture_dir/container.yml"
+expect_failure "mutable job container" "$checker" "$fixture_dir/container.yml"
+
+printf '%s\n' \
+  'jobs:' \
+  '  publish:' \
+  '    services:' \
+  '      database:' \
+  '        image: postgres:latest' \
+  >"$fixture_dir/service.yml"
+expect_failure "mutable service container" "$checker" "$fixture_dir/service.yml"
 
 printf '%s\n' 'steps:' "  - uses: './local-action'" >"$fixture_dir/local.yml"
 expect_failure "repository-local action" "$checker" "$fixture_dir/local.yml"
@@ -51,5 +67,7 @@ printf '%s\n' \
 expect_failure "YAML aliases" "$checker" "$fixture_dir/alias.yml"
 
 expect_failure "unreadable workflow" "$checker" "$fixture_dir/missing.yml"
+
+(cd "$fixture_dir" && "$checker" >/dev/null)
 
 echo "Publishing action pinning self-tests passed."

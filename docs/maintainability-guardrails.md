@@ -29,9 +29,12 @@ Push runs are limited to `main` (PR events cover branches) with a concurrency gr
 
 The `npm` GitHub environment is a required security control, not optional release
 metadata. Repository administrators must configure it with at least one required
-reviewer and a deployment-branch policy before enabling npm trusted publishing. The
-publish job queries the environment and fails before package publication if either
-control is absent.
+reviewer and exactly one custom deployment-branch policy named `main` before enabling
+npm trusted publishing. A wildcard policy is not acceptable, and the generic
+"protected branches" option is insufficient because it may admit protected release
+branches. Enable prevention of self-review and disable administrator bypass as
+defense-in-depth. The publish job queries the environment and its custom policies and
+fails before package publication if the required controls are absent.
 
 Configure npm's trusted publisher for this repository, the `publish-npm.yml` workflow,
 and the `npm` environment. Do not add a long-lived npm token as a fallback. The workflow
@@ -43,6 +46,9 @@ The release-action checker parses the workflow YAML structure rather than matchi
 source text, so quoted, flow-style, and explicit mapping keys cannot bypass it.
 Repository-local actions and YAML aliases are prohibited in publishing workflows;
 this keeps nested action dependencies from escaping the immutable-reference check.
+Job containers and service images must also use immutable SHA-256 digests. The
+`wasm-pack-action` installer and the `wasm-pack` binary version are pinned separately,
+so a mutable tool download cannot change the package handed to the OIDC job.
 
 ## Baselines
 
