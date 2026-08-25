@@ -40,16 +40,16 @@ pub fn felt_to_kms(f: &Felt) -> KmsFelt {
 /// Canonical encodings are the unique 32-byte big-endian integers in
 /// `0..=p-1`. The bound is checked against `Felt::MAX` *before* decoding so
 /// secret-bearing inputs never get an extra `to_bytes_be()` plaintext copy.
-pub fn kms_to_felt(k: &KmsFelt) -> Result<Felt, i32> {
+pub fn kms_to_felt(k: &KmsFelt) -> Result<Felt, InvalidInput> {
     if k.bytes > Felt::MAX.to_bytes_be() {
-        return Err(KMS_ERR_INVALID_INPUT);
+        return Err(InvalidInput);
     }
     Ok(Felt::from_bytes_be_slice(&k.bytes))
 }
 
 /// Decode a slice of `KmsFelt` values, failing closed on the first
 /// non-canonical encoding.
-pub fn kms_slice_to_felts(values: &[KmsFelt]) -> Result<Vec<Felt>, i32> {
+pub fn kms_slice_to_felts(values: &[KmsFelt]) -> Result<Vec<Felt>, InvalidInput> {
     values.iter().map(kms_to_felt).collect()
 }
 
@@ -65,9 +65,9 @@ pub fn proj_to_kms(p: &ProjectivePoint) -> KmsProjectivePoint {
     }
 }
 
-pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, i32> {
+pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, InvalidInput> {
     // Decode every coordinate first. A canonical `z == 0` identity must not
-    // smuggle a non-canonical `x`/`y` past `KMS_ERR_INVALID_INPUT`.
+    // smuggle a non-canonical `x`/`y` past the canonicality check.
     let x = kms_to_felt(&k.x)?;
     let y = kms_to_felt(&k.y)?;
     let z = kms_to_felt(&k.z)?;
@@ -77,10 +77,10 @@ pub fn kms_to_proj(k: &KmsProjectivePoint) -> Result<ProjectivePoint, i32> {
     // Convert projective (X, Y, Z) → affine, avoiding ProjectivePoint::new
     // which changed signature in starknet-types-core 0.2.4.
     // Homogeneous projective: affine = (X/Z, Y/Z).
-    let nz: NonZeroFelt = z.try_into().map_err(|_| KMS_ERR_INVALID_INPUT)?;
+    let nz: NonZeroFelt = z.try_into().map_err(|_| InvalidInput)?;
     let ax = x.field_div(&nz);
     let ay = y.field_div(&nz);
-    ProjectivePoint::from_affine(ax, ay).map_err(|_| KMS_ERR_INVALID_INPUT)
+    ProjectivePoint::from_affine(ax, ay).map_err(|_| InvalidInput)
 }
 
 pub fn affine_to_kms(a: &AffinePoint) -> KmsAffinePoint {
@@ -276,17 +276,17 @@ mod tests {
         let prime = KmsFelt {
             bytes: prime_bytes(),
         };
-        assert_eq!(kms_to_felt(&prime), Err(KMS_ERR_INVALID_INPUT));
+        assert_eq!(kms_to_felt(&prime), Err(InvalidInput));
 
         let all_ff = KmsFelt { bytes: [0xff; 32] };
-        assert_eq!(kms_to_felt(&all_ff), Err(KMS_ERR_INVALID_INPUT));
+        assert_eq!(kms_to_felt(&all_ff), Err(InvalidInput));
     }
 
     #[test]
     fn kms_slice_to_felts_fails_closed_on_first_noncanonical() {
         let ok = felt_to_kms(&Felt::from(1u64));
         let bad = KmsFelt { bytes: [0xff; 32] };
-        assert_eq!(kms_slice_to_felts(&[ok, bad]), Err(KMS_ERR_INVALID_INPUT));
+        assert_eq!(kms_slice_to_felts(&[ok, bad]), Err(InvalidInput));
         assert_eq!(kms_slice_to_felts(&[ok]).unwrap(), vec![Felt::from(1u64)]);
     }
 
@@ -303,7 +303,7 @@ mod tests {
                 y: zero,
                 z: zero,
             }),
-            Err(KMS_ERR_INVALID_INPUT)
+            Err(InvalidInput)
         );
         assert_eq!(
             kms_to_proj(&KmsProjectivePoint {
@@ -311,7 +311,7 @@ mod tests {
                 y: noncanonical,
                 z: zero,
             }),
-            Err(KMS_ERR_INVALID_INPUT)
+            Err(InvalidInput)
         );
     }
 }

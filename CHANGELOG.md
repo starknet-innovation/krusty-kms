@@ -16,6 +16,15 @@ All notable changes to the published Rust crates are documented here.
   signatures created over those old hashes must not be treated as canonical
   SNIP-12 signatures.
 
+### Changed
+
+- C-ABI `KmsFelt` / `KmsProjectivePoint` decode sites bail with `let ... else`
+  rather than a match arm, and the decoders report failure as a typed
+  `InvalidInput` widened to `KMS_ERR_INVALID_INPUT` once at the boundary. No
+  ABI, status-code, or behaviour change; it clears a critical
+  `rust/hard-coded-cryptographic-value` alert in which an error-code constant
+  returned from a match arm appeared to reach a `salt` argument.
+
 ## [0.7.0] - 2026-08-16
 
 ### Security

@@ -55,9 +55,8 @@ pub unsafe extern "C" fn kms_felt_to_hex(
         if value.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let felt = match kms_to_felt(&*value) {
-            Ok(felt) => felt,
-            Err(code) => return code,
+        let Ok(felt) = kms_to_felt(&*value) else {
+            return InvalidInput.to_status();
         };
         let hex = format!("0x{:064x}", felt);
         write_string_output(&hex, out, out_len, out_written)
@@ -106,9 +105,8 @@ pub unsafe extern "C" fn kms_felt_to_bytes_be(
         if value.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let felt = match kms_to_felt(&*value) {
-            Ok(felt) => felt,
-            Err(code) => return code,
+        let Ok(felt) = kms_to_felt(&*value) else {
+            return InvalidInput.to_status();
         };
         let bytes = felt.to_bytes_be();
         write_bytes_output(&bytes, out, out_len, out_written)

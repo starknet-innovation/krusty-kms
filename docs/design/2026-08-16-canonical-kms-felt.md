@@ -2,6 +2,12 @@
 
 Date: 2026-08-16
 
+Superseded in part by
+[`2026-08-24-ffi-decode-bail-shape.md`](2026-08-24-ffi-decode-bail-shape.md):
+the decoders now return `Result<_, InvalidInput>` rather than `Result<_, i32>`,
+and call sites bail with `let ... else` rather than a match arm. The
+canonicality rule and the `KMS_ERR_INVALID_INPUT` status code are unchanged.
+
 ## Problem
 
 M-25 taught the hex and bytes parsers to reject values `>= p` instead of

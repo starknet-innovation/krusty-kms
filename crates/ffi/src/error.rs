@@ -16,6 +16,42 @@ pub const KMS_ERR_INVALID_HANDLE: i32 = 6;
 pub const KMS_ERR_JSON: i32 = 7;
 
 // ---------------------------------------------------------------------------
+// Decode failures
+// ---------------------------------------------------------------------------
+
+/// A struct-passing FFI input that failed to decode.
+///
+/// The `KmsFelt` / `KmsProjectivePoint` decoders in [`crate::helpers`] report
+/// failure with this rather than a bare status code, so a rejected input and a
+/// decoded value never share one all-numeric `Result`. The error arm carries no
+/// number at all; the C status code is produced only at the boundary, by
+/// [`InvalidInput::to_status`].
+///
+/// This is a type-safety change, and on its own it is *not* what closed CodeQL
+/// alert #56. That alert is about the shape of the bail, not the error type: an
+/// early `return <status>` inside a `match` arm is modelled as a value of that
+/// `match`, so the binding inherited the error constant and read as a
+/// hard-coded salt reaching `calculate_contract_address`. Decoder call sites
+/// bail with `let ... else` for that reason -- see
+/// `docs/design/2026-08-24-typed-ffi-decode-failure.md` before turning one back
+/// into a `match`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidInput;
+
+impl InvalidInput {
+    /// The status code a C caller sees for a rejected input.
+    ///
+    /// Deliberately an inherent method rather than `From<InvalidInput> for
+    /// i32`: `From` would let `?` widen a decode failure into any helper
+    /// returning `Result<_, i32>`, putting a status code back beside a decoded
+    /// value one layer up. Widening happens explicitly, at an `extern "C"`
+    /// boundary, or it does not compile.
+    pub const fn to_status(self) -> i32 {
+        KMS_ERR_INVALID_INPUT
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Error tables
 // ---------------------------------------------------------------------------
 
@@ -60,5 +96,18 @@ pub extern "C" fn kms_error_message(code: i32) -> *const c_char {
         ERROR_MESSAGES[code as usize].as_ptr() as *const c_char
     } else {
         ERROR_MESSAGES[KMS_ERR_INTERNAL as usize].as_ptr() as *const c_char
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_input_maps_to_the_invalid_input_status() {
+        // Every decoder call site bails with `InvalidInput.to_status()`, so
+        // this method is the one place the numeric contract with C callers is
+        // decided.
+        assert_eq!(InvalidInput.to_status(), KMS_ERR_INVALID_INPUT);
     }
 }
