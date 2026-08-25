@@ -5,8 +5,21 @@
 Krusty (`krusty-kms`) is a Rust workspace of cryptography / Starknet key-management
 crates. It is a **library/SDK**, not a long-running service — there is no web server,
 database, or daemon to start. "Running the app" means running the crate examples and
-the test suites. Standard commands live in `README.md`, `crates/CLAUDE.md`, and
-`.github/workflows/rust.yml`; prefer those over duplicating here.
+the test suites. `tools/check.sh` is the canonical command surface used by both local
+work and `.github/workflows/rust.yml`; do not duplicate its cargo command sequences.
+
+### Start here
+
+- Run `bash tools/check.sh quick` before editing to catch existing local drift.
+- Read the affected crate's `Cargo.toml` and `src/lib.rs` before changing internals;
+  those files define its dependencies, safety policy, and public boundary.
+- Use `bash tools/check.sh rust` for native Rust changes, add
+  `bash tools/check.sh wasm` for WASM changes, and run `bash tools/check.sh all`
+  before handing off a cross-cutting change.
+- Keep validation proportional while iterating: a focused `cargo test -p <crate>
+  <test-name>` is preferred, followed by the appropriate canonical check mode.
+- `CONTRIBUTING.md` owns design policy and the current crate map;
+  `docs/maintainability-guardrails.md` explains CI-enforced boundaries.
 
 ### Toolchain notes (non-obvious)
 
@@ -19,16 +32,13 @@ the test suites. Standard commands live in `README.md`, `crates/CLAUDE.md`, and
 
 ### Build / lint / test
 
-- Build/lint/test the Rust workspace with the commands in `README.md` and
-  `.github/workflows/rust.yml`.
+- Build/lint/test the Rust workspace through `tools/check.sh`; CI calls the same modes.
 - Maintainability fitness checks (file-size ratchet, dependency DAG, `unsafe`
   allowlist, secret hygiene, FFI/WASM freezes, `cargo-deny`, rustdoc links,
   semver-checks) live in `.github/workflows/guardrails.yml` and are documented in
   [`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md).
-- **Gotcha:** exclude the WASM crate from normal cargo runs — it only builds/tests under
-  `wasm-pack`. CI uses `cargo test --workspace --exclude krusty-kms-wasm`. Running plain
-  `cargo test --workspace` will try to native-compile `krusty-kms-wasm`.
-- Run the WASM boundary tests separately with `wasm-pack test --node crates/wasm`.
+- **Gotcha:** exclude the WASM crate from native cargo tests. `tools/check.sh test`
+  does this automatically; `tools/check.sh wasm` runs the boundary tests separately.
 - Examples double as the "hello world" smoke test, e.g.
   `cargo run -p krusty-kms --example key_derivation` (also `stark_sign`, `oz_address`,
   and `cargo run -p krusty-kms-sdk --example tongo_proof_generation`).

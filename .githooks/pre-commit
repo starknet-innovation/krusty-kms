@@ -9,7 +9,7 @@ fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-# Auto-format Rust workspace before committing
+# Auto-format Rust workspace before committing.
 if command -v cargo >/dev/null 2>&1; then
     if ! cargo fmt --all -- --check 2>/dev/null; then
         echo "Running cargo fmt..."
@@ -19,18 +19,5 @@ if command -v cargo >/dev/null 2>&1; then
     fi
 fi
 
-# Fast maintainability fitness checks (also enforced in CI).
-scripts=(
-  .github/scripts/check-file-size-ratchet.sh
-  .github/scripts/check-dependency-layers.sh
-  .github/scripts/check-unsafe-allowlist.sh
-  .github/scripts/check-secret-hygiene.sh
-  .github/scripts/check-ffi-surface.sh
-  .github/scripts/check-wasm-exports.sh
-)
-
-for script in "${scripts[@]}"; do
-  if [[ -f "$script" ]]; then
-    bash "$script"
-  fi
-done
+# Use the same fast maintainability checks exposed to agents and contributors.
+bash tools/check.sh guardrails

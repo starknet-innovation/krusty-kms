@@ -56,12 +56,14 @@ qb-game               Experimental game crate
 ## Quick Start
 
 ```bash
-cargo test                          # Run default-member tests
-cargo test --workspace              # Run all workspace tests
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all
-wasm-pack test --node crates/wasm   # Run the JS/WASM boundary tests
+bash tools/check.sh quick  # Formatting and fast maintainability checks
+bash tools/check.sh rust   # CI-equivalent native Rust lint/examples/tests
+bash tools/check.sh wasm   # JS/WASM boundary tests under Node
+bash tools/check.sh all    # Standard pre-handoff check
 ```
+
+Use `bash tools/check.sh help` for granular modes. Native workspace tests exclude
+`krusty-kms-wasm`; its boundary is exercised separately through `wasm-pack`.
 
 ## Examples
 

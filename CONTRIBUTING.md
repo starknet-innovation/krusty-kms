@@ -39,19 +39,29 @@ If you want a mental model: changes should read like a "functional pearl" even i
 ```
 crates/
   common/                  # Shared types, errors, utilities (krusty-kms-common)
+  wallet-api/              # Wallet execution interfaces (krusty-kms-wallet-api)
+  domain/                  # Pure gateway/client contracts (krusty-kms-domain)
   crypto/                  # Cryptographic primitives and proofs (krusty-kms-crypto)
   kms/                     # Key management and derivation (krusty-kms)
   sdk/                     # Confidential transaction SDK (krusty-kms-sdk)
   client/                  # Starknet RPC client (krusty-kms-client)
+  gateway/                 # Stateful application runtime (krusty-kms-gateway)
+  oracle/                  # Versioned stdio adapter (krusty-kms-oracle)
   wasm/                    # WASM bindings (krusty-kms-wasm)
   ffi/                     # C ABI shared library (krusty-kms-cabi)
+  controller/              # Cartridge adapter; excluded from workspace
   experimental/            # Non-default crates/packages
     gaming-experimental/
 ```
 
 Rules:
-- `crates/{common,crypto,kms,sdk,client}` is the stable production dependency chain.
-- `crates/wasm` contains WASM bindings; `crates/ffi` provides the C ABI.
+- `common`, `crypto`, `kms`, and `sdk` form the cryptographic core.
+- `wallet-api` and `domain` define integration contracts; `client` and `gateway`
+  implement network/runtime behavior, and `oracle` adapts the gateway to stdio.
+- `wasm` and `ffi` are boundary crates. Public changes there also require updating
+  their frozen surface snapshots through the documented guardrail workflow.
+- `controller` is intentionally excluded from the workspace because its upstream SDK
+  is git-only; check it explicitly when touching that adapter.
 - `crates/experimental/*` is intentionally non-default and can evolve faster.
 
 ### Conventions
@@ -358,12 +368,16 @@ Prefer "show one good example" over "explain every possibility."
 4. Implement in small steps:
    - keep commits coherent
    - keep code compiling / tests passing
-5. Run the full check suite locally (format/lint/tests) plus:
+5. Run the canonical local checks. Choose the narrow mode while iterating and `all`
+   before handing off a cross-cutting change:
    ```bash
-   bash .github/scripts/check-file-size-ratchet.sh
-   bash .github/scripts/check-dependency-layers.sh
+   bash tools/check.sh quick
+   bash tools/check.sh rust
+   bash tools/check.sh wasm  # when the WASM boundary is affected
+   bash tools/check.sh all   # standard pre-handoff check
    ```
-   See [`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md).
+   CI has additional release, MSRV, documentation, dependency, and semver jobs; see
+   [`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md).
 6. Open a PR early if you want feedback; mark it as draft.
 
 **Non-trivial** includes:
