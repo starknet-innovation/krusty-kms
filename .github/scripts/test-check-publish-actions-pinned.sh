@@ -23,8 +23,10 @@ printf '%s\n' \
   '  test:' \
   '    steps:' \
   "      - uses : \"actions/checkout@${full_sha}\"" \
-  "      - 'uses' : './local-action'" \
   "      - \"uses\": docker://alpine@sha256:${full_digest}" \
+  "      - { \"uses\": actions/cache@${full_sha} }" \
+  '      - ? uses' \
+  "        : actions/setup-node@${full_sha}" \
   >"$fixture_dir/valid.yml"
 "$checker" "$fixture_dir/valid.yml" >/dev/null
 
@@ -34,11 +36,19 @@ expect_failure "mutable GitHub action" "$checker" "$fixture_dir/mutable.yml"
 printf '%s\n' 'steps:' '  - uses: docker://alpine:latest' >"$fixture_dir/docker-tag.yml"
 expect_failure "mutable Docker action" "$checker" "$fixture_dir/docker-tag.yml"
 
+printf '%s\n' 'steps:' "  - uses: './local-action'" >"$fixture_dir/local.yml"
+expect_failure "repository-local action" "$checker" "$fixture_dir/local.yml"
+
+printf '%s\n' 'steps:' '  - ? uses' '    : actions/checkout@v7' >"$fixture_dir/explicit-key.yml"
+expect_failure "mutable action under an explicit YAML key" "$checker" "$fixture_dir/explicit-key.yml"
+
 printf '%s\n' \
+  'pinned: &pinned' \
+  "  uses: actions/checkout@${full_sha}" \
   'steps:' \
-  "  - { \"uses\": actions/checkout@${full_sha} }" \
-  >"$fixture_dir/unsupported.yml"
-expect_failure "unsupported YAML must fail closed" "$checker" "$fixture_dir/unsupported.yml"
+  '  - *pinned' \
+  >"$fixture_dir/alias.yml"
+expect_failure "YAML aliases" "$checker" "$fixture_dir/alias.yml"
 
 expect_failure "unreadable workflow" "$checker" "$fixture_dir/missing.yml"
 

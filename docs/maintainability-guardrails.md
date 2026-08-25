@@ -12,7 +12,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
 | `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny`/`allow(unsafe_code)`; stray `unsafe` |
 | Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / missing Debug redaction |
-| Release action pinning | `.github/scripts/check-publish-actions-pinned.sh` | Mutable action tags in trusted publishing workflows |
+| Release action pinning | `.github/scripts/check-publish-actions-pinned.sh` | Mutable refs, local actions, aliases, or invalid YAML in trusted publishing workflows |
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |
 | WASM export freeze | `.github/scripts/check-wasm-exports.sh` | `wasm_bindgen` surface drift |
 | Design note | `.github/scripts/check-design-note.sh` | Public API / dep / surface changes without design note |
@@ -38,6 +38,11 @@ and the `npm` environment. Do not add a long-lived npm token as a fallback. The 
 passes only an inspected `.tgz` artifact to the privileged job, rejects any `scripts`
 key in its package metadata, and invokes both `npm pack` and `npm publish` with
 `--ignore-scripts`.
+
+The release-action checker parses the workflow YAML structure rather than matching
+source text, so quoted, flow-style, and explicit mapping keys cannot bypass it.
+Repository-local actions and YAML aliases are prohibited in publishing workflows;
+this keeps nested action dependencies from escaping the immutable-reference check.
 
 ## Baselines
 
