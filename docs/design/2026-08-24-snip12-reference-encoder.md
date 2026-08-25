@@ -25,6 +25,13 @@ cross-compatibility suite independently hashes with starknet.js 10.0.2. Negative
 vectors cover extra fields, missing fields, inconsistent revisions, redacted
 encoder errors, and the exact and over-limit size boundaries.
 
+The KMS validates an exact four-key top-level envelope (`types`, `domain`,
+`primaryType`, and `message`) before invoking the reference encoder. This rejects
+unknown or duplicate sibling keys that the upstream `TypedData` deserializer
+otherwise ignores, preventing raw-JSON signing displays from showing unsigned
+envelope content. All parse, revision, and encoder failures use the same fixed
+error text so attacker-controlled keys and type names do not reach logs.
+
 Protocol reference: [SNIP-12](https://github.com/starknet-io/SNIPs/blob/main/SNIPS/snip-12.md).
 
 The SNIP-12 message prefix is the felt encoding of the short string
@@ -39,9 +46,9 @@ but encoded noncanonically now either produce the standard hash or fail closed.
 Consumers must not retain old signatures for those documents as canonical
 SNIP-12 signatures.
 
-Malformed documents surface as the existing KMS JSON/serialization errors, so
-the Rust and WASM function signatures remain unchanged. Reference-encoder
-details are replaced with a fixed error string because field and type names are
-attacker-controlled and may be logged. The encoder selects Pedersen for
-revision 0 and Poseidon for revision 1 and enforces exact field/type semantics
-at hash time.
+Malformed documents surface as the existing KMS serialization error variant, so
+the Rust and WASM function signatures remain unchanged. JSON-parser and
+reference-encoder details are replaced with a fixed error string because field
+and type names are attacker-controlled and may be logged. The encoder selects
+Pedersen for revision 0 and Poseidon for revision 1 and enforces exact
+field/type semantics at hash time.

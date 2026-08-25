@@ -3,7 +3,7 @@
 import { readFileSync } from "fs";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import { typedData, type TypedData } from "starknet";
+import { typedData, type TypedData } from "starknet-10";
 
 interface Vector {
   name: string;

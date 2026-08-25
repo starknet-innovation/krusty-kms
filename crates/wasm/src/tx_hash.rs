@@ -533,6 +533,25 @@ mod wasm_tests {
     }
 
     #[wasm_bindgen_test]
+    fn typed_data_binding_matches_official_vector() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../kms/tests/fixtures/snip12_typed_data_vectors.json"
+        ))
+        .unwrap();
+        let vector = &fixture["vectors"][0];
+        let account = vector["account_address"].as_str().unwrap();
+        let expected = vector["expected_hash"].as_str().unwrap();
+
+        let actual = compute_typed_data_message_hash(&vector["typed_data"].to_string(), account)
+            .expect("official vector must hash through the WASM boundary");
+
+        assert_eq!(
+            parse_felt(&actual).unwrap(),
+            Felt::from_hex(expected).unwrap()
+        );
+    }
+
+    #[wasm_bindgen_test]
     fn invoke_v3_empty_proof_facts_match_omitted_proof_facts() {
         assert_eq!(compute_v3(None), compute_v3(Some(vec![])));
     }

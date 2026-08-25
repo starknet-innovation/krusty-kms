@@ -19,6 +19,23 @@ const MAX_TYPED_DATA_JSON_BYTES: usize = 256 * 1024;
 /// attacker-controlled field or type names that callers may log.
 const INVALID_TYPED_DATA_ERROR: &str = "typed data is not valid canonical SNIP-12";
 
+/// Validate the signed envelope before handing its fields to the reference
+/// encoder. `TypedData` itself intentionally ignores unknown top-level keys,
+/// which is unsafe for signing UIs that display the complete JSON document.
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalTypedDataEnvelope {
+    types: serde_json::Value,
+    domain: serde_json::Value,
+    #[serde(rename = "primaryType")]
+    primary_type: serde_json::Value,
+    message: serde_json::Value,
+}
+
+fn invalid_typed_data_error() -> KmsError {
+    KmsError::SerializationError(INVALID_TYPED_DATA_ERROR.to_owned())
+}
+
 /// Compute the canonical SNIP-12 message hash for an account.
 ///
 /// The document's domain and type definitions select SNIP-12 revision 0 or 1.
@@ -35,10 +52,15 @@ pub fn compute_typed_data_message_hash(
         )));
     }
 
-    let typed_data: StarknetTypedData = serde_json::from_str(typed_data_json)?;
+    let envelope: CanonicalTypedDataEnvelope =
+        serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
+    let typed_data: StarknetTypedData = serde_json::from_value(
+        serde_json::to_value(envelope).map_err(|_| invalid_typed_data_error())?,
+    )
+    .map_err(|_| invalid_typed_data_error())?;
     typed_data
         .message_hash(*account_address)
-        .map_err(|_| KmsError::SerializationError(INVALID_TYPED_DATA_ERROR.to_owned()))
+        .map_err(|_| invalid_typed_data_error())
 }
 
 #[cfg(test)]
@@ -108,6 +130,53 @@ mod tests {
     }
 
     #[test]
+    fn rejects_extra_nested_message_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["message"]["Some Object"]["Undeclared"] =
+            serde_json::json!("misleading display text");
+
+        assert!(compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn rejects_extra_envelope_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["warning"] = serde_json::json!("you are sending 100 ETH");
+
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("warning"));
+    }
+
+    #[test]
+    fn rejects_duplicate_envelope_fields() {
+        let vector = vector("revision_1_struct");
+        let canonical = vector.typed_data.to_string();
+        let duplicate = format!(
+            "{{\"message\":{},{}",
+            vector.typed_data["message"],
+            &canonical[1..]
+        );
+
+        assert!(
+            compute_typed_data_message_hash(&duplicate, &Felt::from_hex_unchecked("0x1234"))
+                .is_err()
+        );
+    }
+
+    #[test]
     fn rejects_missing_message_fields() {
         let mut vector = vector("revision_1_struct");
         vector.typed_data["message"]
@@ -127,11 +196,17 @@ mod tests {
         let mut vector = vector("revision_0_struct");
         vector.typed_data["domain"]["revision"] = serde_json::json!("1");
 
-        assert!(compute_typed_data_message_hash(
+        let error = compute_typed_data_message_hash(
             &vector.typed_data.to_string(),
-            &Felt::from_hex_unchecked("0x1234")
+            &Felt::from_hex_unchecked("0x1234"),
         )
-        .is_err());
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("revision"));
     }
 
     #[test]
