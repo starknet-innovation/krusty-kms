@@ -5,10 +5,10 @@
 //! both revision 0 and revision 1.
 
 use krusty_kms_common::{KmsError, Result};
+use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 use starknet_rust_core::types::TypedData as StarknetTypedData;
 use starknet_types_core::felt::Felt;
-
-mod strict_json;
+use std::{collections::HashSet, fmt};
 
 /// Maximum accepted typed-data JSON size.
 ///
@@ -28,14 +28,102 @@ const INVALID_TYPED_DATA_ERROR: &str = "typed data is not valid canonical SNIP-1
 #[serde(deny_unknown_fields)]
 struct CanonicalTypedDataEnvelope {
     types: serde_json::Value,
-    domain: serde_json::Value,
+    domain: CanonicalTypedDataDomain,
     #[serde(rename = "primaryType")]
     primary_type: serde_json::Value,
     message: serde_json::Value,
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct CanonicalTypedDataDomain {
+    name: serde_json::Value,
+    version: serde_json::Value,
+    #[serde(rename = "chainId")]
+    chain_id: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    revision: Option<serde_json::Value>,
+}
+
 fn invalid_typed_data_error() -> KmsError {
     KmsError::SerializationError(INVALID_TYPED_DATA_ERROR.to_owned())
+}
+
+struct RejectDuplicateKeys;
+
+impl<'de> DeserializeSeed<'de> for RejectDuplicateKeys {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> std::result::Result<(), D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_any(self)
+    }
+}
+
+impl<'de> Visitor<'de> for RejectDuplicateKeys {
+    type Value = ();
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a JSON value without duplicate object keys")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<(), A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        let mut keys = HashSet::new();
+        while let Some(key) = map.next_key::<String>()? {
+            if !keys.insert(key) {
+                return Err(A::Error::custom("duplicate JSON object key"));
+            }
+            map.next_value_seed(RejectDuplicateKeys)?;
+        }
+        Ok(())
+    }
+
+    fn visit_seq<A>(self, mut sequence: A) -> std::result::Result<(), A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while sequence.next_element_seed(RejectDuplicateKeys)?.is_some() {}
+        Ok(())
+    }
+
+    fn visit_bool<E>(self, _value: bool) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_i64<E>(self, _value: i64) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_u64<E>(self, _value: u64) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_f64<E>(self, _value: f64) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_str<E>(self, _value: &str) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_none<E>(self) -> std::result::Result<(), E> {
+        Ok(())
+    }
+
+    fn visit_unit<E>(self) -> std::result::Result<(), E> {
+        Ok(())
+    }
+}
+
+fn reject_duplicate_json_keys(json: &str) -> serde_json::Result<()> {
+    let mut deserializer = serde_json::Deserializer::from_str(json);
+    RejectDuplicateKeys.deserialize(&mut deserializer)?;
+    deserializer.end()
 }
 
 /// Compute the canonical SNIP-12 message hash for an account.
@@ -54,7 +142,7 @@ pub fn compute_typed_data_message_hash(
         )));
     }
 
-    strict_json::reject_duplicate_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
+    reject_duplicate_json_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
     let envelope: CanonicalTypedDataEnvelope =
         serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
     let typed_data: StarknetTypedData = serde_json::from_value(
@@ -149,6 +237,25 @@ mod tests {
     fn rejects_extra_envelope_fields() {
         let mut vector = vector("revision_1_struct");
         vector.typed_data["warning"] = serde_json::json!("you are sending 100 ETH");
+
+        let error = compute_typed_data_message_hash(
+            &vector.typed_data.to_string(),
+            &Felt::from_hex_unchecked("0x1234"),
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!("Serialization error: {INVALID_TYPED_DATA_ERROR}")
+        );
+        assert!(!error.to_string().contains("warning"));
+    }
+
+    #[test]
+    fn rejects_extra_domain_fields() {
+        let mut vector = vector("revision_1_struct");
+        vector.typed_data["domain"]["warning"] =
+            serde_json::json!("this text is not covered by the signature");
 
         let error = compute_typed_data_message_hash(
             &vector.typed_data.to_string(),
