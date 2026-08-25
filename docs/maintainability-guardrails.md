@@ -86,6 +86,17 @@ git config core.hooksPath .githooks
 
 Requires bash ≥ 4. The hook runs `cargo fmt` plus the fast fitness scripts.
 
+The same checks are available without installing the hook:
+
+```bash
+bash tools/check.sh quick       # formatting + fast fitness checks
+bash tools/check.sh guardrails  # fitness checks only
+bash tools/check.sh all         # native Rust + fitness + WASM boundary
+```
+
+`.github/workflows/rust.yml` calls the granular `tools/check.sh` modes, keeping the
+local agent/contributor path and the core Rust CI commands in sync.
+
 ## Design notes
 
 Non-trivial public API, dependency, or boundary changes need:
