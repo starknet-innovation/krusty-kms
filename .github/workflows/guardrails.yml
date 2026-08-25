@@ -58,30 +58,7 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      - name: File-size ratchet
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          if [[ -n "${BASE_REF:-}" ]]; then
-            export GUARDRAILS_BASE_REF="origin/${BASE_REF}"
-          elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
-            git fetch --no-tags origin "${BEFORE_SHA}" || true
-            export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
-          fi
-          bash .github/scripts/check-file-size-ratchet.sh
-
-      - name: Dependency layering
-        run: bash .github/scripts/check-dependency-layers.sh
-
-      - name: Unsafe policy
-        run: bash .github/scripts/check-unsafe-allowlist.sh
-
-      - name: Surface parser self-checks
-        run: python3 .github/scripts/lib/surfaces.py
-
-      - name: Function-size ratchet
+      - name: Resolve guardrail base revision
         env:
           BASE_REF: ${{ github.base_ref }}
           BEFORE_SHA: ${{ github.event.before }}
@@ -93,17 +70,32 @@ jobs:
             git fetch --no-tags origin "${BEFORE_SHA}" || true
             base_ref="${BEFORE_SHA}"
           else
-            echo "::error::could not determine the function-ratchet base revision"
+            echo "::error::could not determine the guardrail base revision"
             exit 1
           fi
           git rev-parse --verify "${base_ref}^{commit}"
-          python3 .github/scripts/check-code-complexity.py --base-ref "${base_ref}"
+          echo "GUARDRAILS_BASE_REF=${base_ref}" >> "$GITHUB_ENV"
+
+      - name: File-size ratchet
+        run: bash .github/scripts/check-file-size-ratchet.sh
+
+      - name: Dependency layering
+        run: bash .github/scripts/check-dependency-layers.sh
+
+      - name: Unsafe policy
+        run: bash .github/scripts/check-unsafe-allowlist.sh
+
+      - name: Surface parser self-checks
+        run: python3 .github/scripts/lib/surfaces.py
+
+      - name: Function-size ratchet
+        run: python3 .github/scripts/check-code-complexity.py --base-ref "$GUARDRAILS_BASE_REF"
 
       - name: Cognitive-complexity lint
         run: bash tools/check.sh lint-complexity
 
       - name: Scoped coverage floors
-        run: bash .github/scripts/check-coverage-floors.sh
+        run: bash .github/scripts/check-coverage-floors.sh --base-ref "$GUARDRAILS_BASE_REF"
 
       - name: Secret hygiene
         run: bash .github/scripts/check-secret-hygiene.sh
