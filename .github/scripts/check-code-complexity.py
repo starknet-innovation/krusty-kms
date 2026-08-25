@@ -36,7 +36,7 @@ def brace_delta(line: str) -> int:
 def function_spans(root: Path) -> dict[str, int]:
     spans: dict[str, int] = {}
     names: defaultdict[tuple[str, str], int] = defaultdict(int)
-    for path in sorted(root.glob("crates/**/src/**/*.rs")):
+    for path in sorted(root.glob("crates/**/*.rs")):
         if "/experimental/" in path.as_posix():
             continue
         lines = path.read_text().splitlines()
