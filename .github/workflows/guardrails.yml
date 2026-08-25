@@ -82,7 +82,22 @@ jobs:
         run: python3 .github/scripts/lib/surfaces.py
 
       - name: Function-size ratchet
-        run: python3 .github/scripts/check-code-complexity.py
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${BASE_REF:-}" ]]; then
+            base_ref="origin/${BASE_REF}"
+          elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git fetch --no-tags origin "${BEFORE_SHA}" || true
+            base_ref="${BEFORE_SHA}"
+          else
+            echo "::error::could not determine the function-ratchet base revision"
+            exit 1
+          fi
+          git rev-parse --verify "${base_ref}^{commit}"
+          python3 .github/scripts/check-code-complexity.py --base-ref "${base_ref}"
 
       - name: Cognitive-complexity lint
         run: bash tools/check.sh lint-complexity

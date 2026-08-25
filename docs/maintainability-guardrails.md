@@ -58,7 +58,9 @@ so a mutable tool download cannot change the package handed to the OIDC job.
 Committed under [`.github/guardrails/`](../.github/guardrails/):
 
 - `file-size-baseline.json` — ratchet for files already over the soft limit
-- `function-size-baseline.json` — ratchet for functions already over 80 lines
+- `function-size-baseline.json` — recorded sizes for functions already over 80 lines;
+  CI compares the PR head to base-revision source spans so a baseline edit cannot
+  bypass the ratchet
 - `coverage-floors.json` — minimum line coverage for critical crate / directory scopes
 - `ffi-kms.h.snapshot` — canonical C ABI header
 - `wasm-exports.txt` — `wasm_bindgen` export surface

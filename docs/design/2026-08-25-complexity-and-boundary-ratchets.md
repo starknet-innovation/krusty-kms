@@ -32,6 +32,10 @@ Guardrails now ratchet functions over 80 lines, deny Clippy cognitive-complexity
 findings, and enforce line-coverage floors for the client crate, contract
 adapter, and wallet adapter. The committed floors are deliberately current
 baselines; each subsequent focused test should raise the applicable floor.
+The function ratchet lexically ignores braces in comments and strings, scans
+all non-experimental Rust targets, and compares the PR head to source spans at
+the base revision. Updating its committed baseline therefore cannot permit a
+new or expanded oversized function.
 
 ## Failure modes
 
