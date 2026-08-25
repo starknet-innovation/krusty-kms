@@ -1,11 +1,12 @@
 //! Tongo event reader — fetches and parses on-chain events.
 
+mod pagination;
+
 use crate::abi::tongo_events;
 use crate::types::{AEBalance, CipherBalance};
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::types::{AddressFilter, BlockId, BlockTag, EmittedEvent, EventFilter};
+use starknet_rust::core::types::EmittedEvent;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Provider;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt as CoreFelt;
 use std::sync::Arc;
@@ -226,43 +227,6 @@ impl TongoEventReader {
             provider,
             contract_address: core_felt_to_rs(contract_address),
         }
-    }
-
-    /// Fetch raw events matching the given keys, paginating through all results.
-    async fn fetch_events(
-        &self,
-        keys: Vec<Vec<StarknetRsFelt>>,
-        from_block: Option<u64>,
-        to_block: Option<u64>,
-    ) -> Result<Vec<EmittedEvent>> {
-        let filter = EventFilter {
-            from_block: from_block.map(BlockId::Number),
-            to_block: to_block
-                .map(BlockId::Number)
-                .or(Some(BlockId::Tag(BlockTag::Latest))),
-            address: Some(AddressFilter::Single(self.contract_address)),
-            keys: Some(keys),
-        };
-
-        let mut all_events = Vec::new();
-        let mut continuation_token: Option<String> = None;
-
-        loop {
-            let page = self
-                .provider
-                .get_events(filter.clone(), continuation_token, 100)
-                .await
-                .map_err(|e| KmsError::RpcError(e.to_string()))?;
-
-            all_events.extend(page.events);
-
-            match page.continuation_token {
-                Some(token) => continuation_token = Some(token),
-                None => break,
-            }
-        }
-
-        Ok(all_events)
     }
 
     // ── Per-type fetchers ───────────────────────────────────────────────

@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Bound Starknet RPC and multisig coordinator connect/read/request deadlines,
+  cap coordinator bodies before JSON parsing, and bound event pagination by
+  wall time, pages, events, serialized bytes, and continuation-token size. RPC
+  redirects and ambient proxies are disabled so request bodies remain on the
+  configured origin.
+
 ## [0.7.0] - 2026-08-16
 
 ### Security

@@ -3,7 +3,12 @@
 use krusty_kms_common::Result;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::time::Duration;
 use url::Url;
+
+const RPC_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const RPC_READ_TIMEOUT: Duration = Duration::from_secs(15);
+const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Create a Starknet JSON-RPC provider from a URL.
 ///
@@ -25,6 +30,9 @@ use url::Url;
 /// also disable proxies and redirects so a 307 or `http_proxy` cannot send
 /// the JSON-RPC POST off-loopback.
 ///
+/// HTTPS clients also disable ambient proxies and redirects. This keeps RPC
+/// request bodies and query metadata bound to the configured origin.
+///
 /// Everything this provider reports (nonces, balances, deployment state,
 /// contract parameters) feeds signing decisions, so a cleartext remote
 /// transport would hand a network attacker that influence.
@@ -40,7 +48,10 @@ pub fn create_provider(rpc_url: &str) -> Result<JsonRpcClient<HttpTransport>> {
 
 fn rpc_http_transport(url: Url) -> Result<HttpTransport> {
     match url.scheme() {
-        "https" => Ok(HttpTransport::new(url)),
+        "https" => Ok(HttpTransport::new_with_client(
+            url,
+            bounded_rpc_http_client()?,
+        )),
         "http" => {
             let client = cleartext_loopback_http_client(&url)?;
             Ok(HttpTransport::new_with_client(url, client))
@@ -51,15 +62,39 @@ fn rpc_http_transport(url: Url) -> Result<HttpTransport> {
     }
 }
 
+fn rpc_http_client_builder(
+    connect_timeout: Duration,
+    read_timeout: Duration,
+    request_timeout: Duration,
+) -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .connect_timeout(connect_timeout)
+        .read_timeout(read_timeout)
+        .timeout(request_timeout)
+}
+
+fn bounded_rpc_http_client() -> Result<reqwest::Client> {
+    rpc_http_client_builder(RPC_CONNECT_TIMEOUT, RPC_READ_TIMEOUT, RPC_REQUEST_TIMEOUT)
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|error| {
+            krusty_kms_common::KmsError::RpcError(format!(
+                "failed to build RPC HTTP client: {error}"
+            ))
+        })
+}
+
 /// Build a cleartext HTTP client that can only reach loopback.
 ///
 /// Loopback IP literals need no DNS pin. For `localhost`, resolve now, require
 /// every answer to be loopback, and pin **all** of those addresses so later
 /// requests neither rebind nor drop a dual-stack fallback.
 fn cleartext_loopback_http_client(url: &Url) -> Result<reqwest::Client> {
-    let mut builder = reqwest::Client::builder()
-        .no_proxy()
-        .redirect(reqwest::redirect::Policy::none());
+    let mut builder =
+        rpc_http_client_builder(RPC_CONNECT_TIMEOUT, RPC_READ_TIMEOUT, RPC_REQUEST_TIMEOUT)
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none());
     if let Some((host, addrs)) = localhost_loopback_pin(url)? {
         builder = builder.resolve_to_addrs(&host, &addrs);
     }
@@ -145,11 +180,38 @@ fn require_loopback_addrs(host: &str, addrs: &[SocketAddr]) -> Result<()> {
 mod tests {
     use super::*;
     use std::net::{Ipv4Addr, Ipv6Addr};
+    use tokio::time::Instant;
 
     #[test]
     fn test_create_provider() {
         let provider = create_provider("https://api.cartridge.gg/x/starknet/sepolia");
         assert!(provider.is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn rpc_client_timeout_bounds_a_stalled_response() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let _connection = listener.accept().await.unwrap();
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        });
+
+        let timeout = Duration::from_millis(50);
+        let client = rpc_http_client_builder(timeout, timeout, timeout)
+            .no_proxy()
+            .build()
+            .unwrap();
+        let started = Instant::now();
+        let error = client
+            .get(format!("http://{address}"))
+            .send()
+            .await
+            .unwrap_err();
+
+        assert!(error.is_timeout());
+        assert_eq!(started.elapsed(), timeout);
+        server.abort();
     }
 
     /// Cleartext transports for remote RPC endpoints are rejected (M-14);

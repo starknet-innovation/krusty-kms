@@ -9,8 +9,10 @@ use starknet_rust::core::types::{
 };
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::providers::{Provider, ProviderError};
+use std::future::Future;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum TransactionObservation {
@@ -44,7 +46,16 @@ pub(super) async fn wait_for_acceptance(
             )));
         }
 
-        match observe_transaction(provider, tx_hash).await? {
+        let observation =
+            await_before_deadline(deadline, observe_transaction(provider, tx_hash), || {
+                format!(
+                    "transaction {} not accepted within {}ms",
+                    tx_hash, timeout_ms
+                )
+            })
+            .await?;
+
+        match observation {
             // Never sleep past the deadline: `poll_interval_ms` is
             // caller-controlled, so a huge interval would otherwise park the
             // task far beyond the requested timeout.
@@ -60,6 +71,21 @@ pub(super) async fn wait_for_acceptance(
             }
         }
     }
+}
+
+async fn await_before_deadline<T, F, M>(
+    deadline: Instant,
+    future: F,
+    timeout_message: M,
+) -> Result<T, KmsError>
+where
+    F: Future<Output = Result<T, KmsError>>,
+    M: FnOnce() -> String,
+{
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    tokio::time::timeout(remaining, future)
+        .await
+        .map_err(|_| KmsError::Timeout(timeout_message()))?
 }
 
 async fn observe_transaction(
@@ -131,4 +157,27 @@ pub(super) fn is_transaction_hash_not_found(error: &ProviderError) -> bool {
         error,
         ProviderError::StarknetError(StarknetError::TransactionHashNotFound)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn in_flight_rpc_work_is_bounded_by_the_deadline() {
+        let deadline = Instant::now() + Duration::from_millis(20);
+        let result = await_before_deadline(
+            deadline,
+            async {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                Ok(())
+            },
+            || "bounded wait expired".to_string(),
+        )
+        .await;
+
+        assert!(
+            matches!(result, Err(KmsError::Timeout(message)) if message == "bounded wait expired")
+        );
+    }
 }
