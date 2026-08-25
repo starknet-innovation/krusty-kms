@@ -141,6 +141,10 @@
       "lines": 1147
     },
     {
+      "path": "crates/kms/src/typed_data.rs",
+      "lines": 814
+    },
+    {
       "path": "crates/kms/tests/tx_hash_parity.rs",
       "lines": 459
     },
@@ -178,7 +182,7 @@
     },
     {
       "path": "crates/wasm/src/tx_hash.rs",
-      "lines": 571
+      "lines": 552
     },
     {
       "path": "crates/wasm/src/types.rs",
