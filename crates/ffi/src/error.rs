@@ -24,8 +24,8 @@ pub const KMS_ERR_JSON: i32 = 7;
 /// The `KmsFelt` / `KmsProjectivePoint` decoders in [`crate::helpers`] report
 /// failure with this rather than a bare status code, so a rejected input and a
 /// decoded value never share one all-numeric `Result`. The error arm carries no
-/// number at all; the C status code is produced only at the boundary, via
-/// `i32::from`.
+/// number at all; the C status code is produced only at the boundary, by
+/// [`InvalidInput::to_status`].
 ///
 /// That also removes the only path a checker can see from an error-code
 /// constant into a decoded field element: `Err(KMS_ERR_INVALID_INPUT)` beside
@@ -36,8 +36,15 @@ pub const KMS_ERR_JSON: i32 = 7;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidInput;
 
-impl From<InvalidInput> for i32 {
-    fn from(_: InvalidInput) -> Self {
+impl InvalidInput {
+    /// The status code a C caller sees for a rejected input.
+    ///
+    /// Deliberately an inherent method rather than `From<InvalidInput> for
+    /// i32`: `From` would let `?` widen a decode failure into any helper
+    /// returning `Result<_, i32>`, rebuilding one layer up the exact
+    /// code-beside-value shape this type exists to remove. Widening happens
+    /// explicitly, at an `extern "C"` boundary, or it does not compile.
+    pub const fn to_status(self) -> i32 {
         KMS_ERR_INVALID_INPUT
     }
 }
@@ -96,8 +103,8 @@ mod tests {
 
     #[test]
     fn invalid_input_maps_to_the_invalid_input_status() {
-        // Every decoder call site returns `err.into()`, so this impl is the one
-        // place the numeric contract with C callers is decided.
-        assert_eq!(i32::from(InvalidInput), KMS_ERR_INVALID_INPUT);
+        // Every decoder call site returns `err.to_status()`, so this method is
+        // the one place the numeric contract with C callers is decided.
+        assert_eq!(InvalidInput.to_status(), KMS_ERR_INVALID_INPUT);
     }
 }

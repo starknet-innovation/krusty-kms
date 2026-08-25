@@ -31,15 +31,15 @@ pub unsafe extern "C" fn kms_calculate_contract_address(
 
         let s = match kms_to_felt(&*salt) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         let ch = match kms_to_felt(&*class_hash) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         let da = match kms_to_felt(&*deployer_address) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
 
         let calldata: Vec<Felt> = if constructor_calldata_len == 0 {
@@ -48,7 +48,7 @@ pub unsafe extern "C" fn kms_calculate_contract_address(
             let kms_cd = slice::from_raw_parts(constructor_calldata, constructor_calldata_len);
             match kms_slice_to_felts(kms_cd) {
                 Ok(felts) => felts,
-                Err(err) => return err.into(),
+                Err(err) => return err.to_status(),
             }
         };
 
@@ -77,18 +77,18 @@ pub unsafe extern "C" fn kms_derive_oz_account_address(
 
         let pk = match kms_to_felt(&*public_key_x) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         let ch = match kms_to_felt(&*class_hash) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         let s = if salt.is_null() {
             None
         } else {
             match kms_to_felt(&*salt) {
                 Ok(felt) => Some(felt),
-                Err(err) => return err.into(),
+                Err(err) => return err.to_status(),
             }
         };
 
@@ -231,5 +231,24 @@ mod tests {
             KMS_OK
         );
         assert_eq!(kms_to_felt(&out).unwrap(), expected);
+
+        // The explicit-salt arm is the one that decodes a `KmsFelt` and hands
+        // the result straight to a `salt` parameter -- the alert's sink. Pin it
+        // too, and pin that it is not silently the NULL-salt result.
+        let explicit = krusty_kms::derive_oz_account_address(&public_key, &class_hash, Some(&salt))
+            .expect("canonical inputs");
+        assert_ne!(explicit, expected);
+        assert_eq!(
+            unsafe {
+                kms_derive_oz_account_address(
+                    &felt_to_kms(&public_key),
+                    &felt_to_kms(&class_hash),
+                    &felt_to_kms(&salt),
+                    &mut out,
+                )
+            },
+            KMS_OK
+        );
+        assert_eq!(kms_to_felt(&out).unwrap(), explicit);
     }
 }

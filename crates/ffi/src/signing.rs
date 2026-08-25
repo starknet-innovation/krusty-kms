@@ -32,12 +32,12 @@ pub unsafe extern "C" fn kms_stark_sign(
 
         let msg = match kms_to_felt(&*hash) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         // SecretFelt zeroizes on drop (volatile write); plain assignment can be DCE'd.
         let sk = match kms_to_felt(&*private_key) {
             Ok(felt) => SecretFelt::new(felt),
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
 
         match krusty_kms::sign_stark_hash(sk.expose_secret(), &msg) {
@@ -73,7 +73,7 @@ pub unsafe extern "C" fn kms_eth_sign(
 
         let h = match kms_to_felt(&*hash) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         let pk_slice = slice::from_raw_parts(eth_private_key_bytes, 32);
         let mut pk_arr = [0u8; 32];

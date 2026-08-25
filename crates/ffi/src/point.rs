@@ -19,11 +19,11 @@ pub unsafe extern "C" fn kms_projective_from_affine(
         }
         let x = match kms_to_felt(&(*affine).x) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         let y = match kms_to_felt(&(*affine).y) {
             Ok(felt) => felt,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
 
         let ap = match AffinePoint::new(x, y) {
@@ -48,7 +48,7 @@ pub unsafe extern "C" fn kms_projective_to_affine(
         }
         let proj = match kms_to_proj(&*point) {
             Ok(p) => p,
-            Err(err) => return err.into(),
+            Err(err) => return err.to_status(),
         };
         match krusty_kms_crypto::StarkCurve::projective_to_affine(&proj) {
             Ok(ap) => {
