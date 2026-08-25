@@ -90,7 +90,9 @@ jobs:
           name: krusty-kms-wasm-${{ github.sha }}
           path: ${{ runner.temp }}/npm-package/*.tgz
           if-no-files-found: error
-          retention-days: 1
+          # Protected-environment approval can outlive a weekend or release
+          # freeze; retain the exact reviewed tarball throughout that window.
+          retention-days: 30
 
   publish:
     needs: build
