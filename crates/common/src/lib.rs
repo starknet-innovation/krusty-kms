@@ -29,10 +29,11 @@ pub use error::{KmsError, Result};
 pub use network::NetworkPreset;
 pub use secret_felt::SecretFelt;
 pub use serialization::{
-    deserialize_projective_point, serialize_ae_balance, serialize_audit_proof, serialize_bit_proof,
-    serialize_cairo_none, serialize_cairo_some, serialize_cipher_balance, serialize_elgamal_proof,
-    serialize_poe2_proof, serialize_poe_proof, serialize_projective_point,
-    serialize_proof_of_transfer, serialize_range, u128_to_u256, u256_to_u128,
+    deserialize_projective_point, serialize_ae_balance, serialize_audit_option,
+    serialize_audit_proof, serialize_bit_proof, serialize_cairo_none, serialize_cairo_some,
+    serialize_cipher_balance, serialize_elgamal_proof, serialize_poe2_proof, serialize_poe_proof,
+    serialize_projective_point, serialize_proof_of_transfer, serialize_range, u128_to_u256,
+    u256_to_u128, AuditCalldata,
 };
 pub use starknet::is_already_deployed_validation_failure;
 pub use token::Token;

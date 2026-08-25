@@ -5,9 +5,9 @@
 //! calldata format.
 
 use crate::serialization;
-use krusty_kms_common::Result;
+use krusty_kms_common::{AuditCalldata, Result};
 use krusty_kms_sdk::operations::{
-    FundProof, RagequitProof, RolloverProof, TransferProof, WithdrawProof,
+    Audit, FundProof, RagequitProof, RolloverProof, TransferProof, WithdrawProof,
 };
 use starknet_rust::core::types::Call;
 use starknet_rust::core::utils::get_selector_from_name;
@@ -21,6 +21,21 @@ type StarknetRsFelt = starknet_rust::core::types::Felt;
 #[must_use]
 fn core_felt_to_rs(felt: CoreFelt) -> StarknetRsFelt {
     StarknetRsFelt::from_bytes_be(&felt.to_bytes_be())
+}
+
+fn append_audit_option(calldata: &mut Vec<StarknetRsFelt>, audit: Option<&Audit>) -> Result<()> {
+    let audit = audit.map(|audit| AuditCalldata {
+        audited_balance: &audit.audited_balance,
+        hint_ciphertext: &audit.hint_ciphertext,
+        hint_nonce: &audit.hint_nonce,
+        proof: &audit.proof,
+    });
+    calldata.extend(
+        serialization::serialize_audit_option(audit)?
+            .into_iter()
+            .map(core_felt_to_rs),
+    );
+    Ok(())
 }
 
 /// Build a Call for the Fund operation.
@@ -73,34 +88,7 @@ pub fn build_fund_calls(
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // Serialize audit (CairoOption<Audit>)
-    if let Some(ref audit) = proof.audit {
-        // CairoOption::Some(Audit)
-        // Format: [0, audited_balance (4 felts), hint (6 felts), proof (11 felts)]
-        calldata.push(core_felt_to_rs(CoreFelt::ZERO)); // Some variant
-
-        // Serialize audited balance (CipherBalance: 4 felts)
-        let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
-        for felt in balance_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts =
-            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
-        for felt in audit_hint_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit proof (11 felts)
-        let audit_proof_felts = serialization::serialize_audit_proof(&audit.proof)?;
-        for felt in audit_proof_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-    } else {
-        // CairoOption::None
-        calldata.push(core_felt_to_rs(CoreFelt::ONE)); // None variant
-    }
+    append_audit_option(&mut calldata, proof.audit.as_ref())?;
 
     let fund_call = Call {
         to: core_felt_to_rs(tongo_address),
@@ -257,34 +245,7 @@ pub fn build_withdraw_call(
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // 7. Serialize auditPart
-    if let Some(ref audit) = proof.audit {
-        // CairoOption::Some(Audit)
-        // Format: [0, audited_balance (4 felts), hint (6 felts), proof (11 felts)]
-        calldata.push(core_felt_to_rs(CoreFelt::ZERO)); // Some variant
-
-        // Serialize audited balance (CipherBalance: 4 felts)
-        let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
-        for felt in balance_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts =
-            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
-        for felt in audit_hint_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit proof (11 felts)
-        let audit_proof_felts = serialization::serialize_audit_proof(&audit.proof)?;
-        for felt in audit_proof_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-    } else {
-        // CairoOption::None
-        calldata.push(core_felt_to_rs(CoreFelt::ONE)); // None variant
-    }
+    append_audit_option(&mut calldata, proof.audit.as_ref())?;
 
     Ok(Call {
         to: core_felt_to_rs(tongo_address),
@@ -386,61 +347,8 @@ pub fn build_transfer_call(
         calldata.push(core_felt_to_rs(felt));
     }
 
-    // 10. Serialize auditPart (sender's balance after transfer)
-    if let Some(ref audit) = proof.audit_balance {
-        // CairoOption::Some = 0
-        calldata.push(core_felt_to_rs(CoreFelt::ZERO));
-
-        // Serialize audited balance (CipherBalance: 4 felts)
-        let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
-        for felt in balance_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts =
-            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
-        for felt in audit_hint_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit proof (11 felts)
-        let audit_proof_felts = serialization::serialize_audit_proof(&audit.proof)?;
-        for felt in audit_proof_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-    } else {
-        // CairoOption::None = 1
-        calldata.push(core_felt_to_rs(CoreFelt::ONE));
-    }
-
-    // 11. Serialize auditPartTransfer (transfer cipher audit)
-    if let Some(ref audit) = proof.audit_transfer {
-        // CairoOption::Some = 0
-        calldata.push(core_felt_to_rs(CoreFelt::ZERO));
-
-        // Serialize audited balance (CipherBalance: 4 felts)
-        let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
-        for felt in balance_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts =
-            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
-        for felt in audit_hint_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit proof (11 felts)
-        let audit_proof_felts = serialization::serialize_audit_proof(&audit.proof)?;
-        for felt in audit_proof_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-    } else {
-        // CairoOption::None = 1
-        calldata.push(core_felt_to_rs(CoreFelt::ONE));
-    }
+    append_audit_option(&mut calldata, proof.audit_balance.as_ref())?;
+    append_audit_option(&mut calldata, proof.audit_transfer.as_ref())?;
 
     Ok(Call {
         to: core_felt_to_rs(tongo_address),
@@ -503,33 +411,7 @@ pub fn build_ragequit_call(
     // sx (1 felt)
     calldata.push(core_felt_to_rs(proof.sx));
 
-    // 6. Serialize auditPart (Optional)
-    if let Some(ref audit) = proof.audit {
-        // CairoOption::Some = 0
-        calldata.push(core_felt_to_rs(CoreFelt::ZERO));
-
-        // Serialize audited balance (CipherBalance: 4 felts)
-        let balance_felts = serialization::serialize_cipher_balance(&audit.audited_balance)?;
-        for felt in balance_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit hint (AEBalance: 6 felts)
-        let audit_hint_felts =
-            serialization::serialize_ae_balance(&audit.hint_ciphertext, &audit.hint_nonce)?;
-        for felt in audit_hint_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-
-        // Serialize audit proof (11 felts)
-        let audit_proof_felts = serialization::serialize_audit_proof(&audit.proof)?;
-        for felt in audit_proof_felts {
-            calldata.push(core_felt_to_rs(felt));
-        }
-    } else {
-        // CairoOption::None = 1
-        calldata.push(core_felt_to_rs(CoreFelt::ONE));
-    }
+    append_audit_option(&mut calldata, proof.audit.as_ref())?;
 
     Ok(Call {
         to: core_felt_to_rs(tongo_address),

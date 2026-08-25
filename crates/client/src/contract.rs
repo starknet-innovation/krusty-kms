@@ -16,6 +16,26 @@ use std::sync::Arc;
 type StarknetRsFelt = starknet_rust::core::types::Felt;
 type CoreFelt = starknet_types_core::felt::Felt;
 
+#[async_trait::async_trait]
+trait TongoProvider: Send + Sync {
+    async fn call(
+        &self,
+        request: FunctionCall,
+        block_id: BlockId,
+    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust::providers::ProviderError>;
+}
+
+#[async_trait::async_trait]
+impl TongoProvider for JsonRpcClient<HttpTransport> {
+    async fn call(
+        &self,
+        request: FunctionCall,
+        block_id: BlockId,
+    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust::providers::ProviderError> {
+        Provider::call(self, request, block_id).await
+    }
+}
+
 /// Convert from starknet-types-core Felt to starknet-rs Felt.
 fn core_felt_to_rs(felt: CoreFelt) -> StarknetRsFelt {
     StarknetRsFelt::from_bytes_be(&felt.to_bytes_be())
@@ -28,7 +48,7 @@ fn rs_felt_to_core(felt: StarknetRsFelt) -> CoreFelt {
 
 /// Tongo contract client for querying state and parameters.
 pub struct TongoContract {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<dyn TongoProvider>,
     address: StarknetRsFelt,
 }
 
@@ -45,11 +65,18 @@ impl TongoContract {
         }
     }
 
+    #[cfg(test)]
+    fn with_provider<P: TongoProvider + 'static>(provider: Arc<P>, address: CoreFelt) -> Self {
+        Self {
+            provider,
+            address: core_felt_to_rs(address),
+        }
+    }
+
     /// Query the account state for a given public key.
     ///
     /// Returns the encrypted balance, pending balance, and nonce.
     ///
-    /// # Cyclomatic Complexity: 2
     pub async fn get_state(&self, public_key: &ProjectivePoint) -> Result<AccountState> {
         let affine = public_key.to_affine().map_err(|_| {
             krusty_kms_common::KmsError::CryptoError("Invalid public key".to_string())
@@ -466,31 +493,4 @@ fn felt_to_u32_checked(felt: &StarknetRsFelt, context: &str) -> Result<u32> {
 }
 
 #[cfg(test)]
-mod tests {
-    // Note: Contract-call tests require a running Starknet node with the Tongo
-    // contract deployed. See integration tests for full examples with RPC access.
-    use super::*;
-
-    /// Oversized RPC felts must error instead of silently truncating (M-13):
-    /// a truncated `rate` feeds `approve(amount * rate)`.
-    #[test]
-    fn felt_conversions_reject_truncation() {
-        assert_eq!(
-            felt_to_u128_checked(&StarknetRsFelt::from(42u64), "test").unwrap(),
-            42
-        );
-        assert_eq!(
-            felt_to_u128_checked(&StarknetRsFelt::from(u128::MAX), "test").unwrap(),
-            u128::MAX
-        );
-        let over_u128 = StarknetRsFelt::from(u128::MAX) + StarknetRsFelt::ONE;
-        assert!(felt_to_u128_checked(&over_u128, "test").is_err());
-
-        assert_eq!(
-            felt_to_u32_checked(&StarknetRsFelt::from(u32::MAX), "test").unwrap(),
-            u32::MAX
-        );
-        let over_u32 = StarknetRsFelt::from(u64::from(u32::MAX) + 1);
-        assert!(felt_to_u32_checked(&over_u32, "test").is_err());
-    }
-}
+mod tests;

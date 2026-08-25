@@ -18,7 +18,7 @@
     },
     {
       "path": "crates/client/src/operations.rs",
-      "lines": 629
+      "lines": 511
     },
     {
       "path": "crates/client/tests/oz_multisig_devnet.rs",
@@ -27,6 +27,10 @@
     {
       "path": "crates/client/tests/tongo_sepolia_integration.rs",
       "lines": 1225
+    },
+    {
+      "path": "crates/common/src/serialization.rs",
+      "lines": 355
     },
     {
       "path": "crates/common/src/utils.rs",
@@ -114,7 +118,7 @@
     },
     {
       "path": "crates/ffi/src/calldata.rs",
-      "lines": 1205
+      "lines": 1201
     },
     {
       "path": "crates/ffi/src/proof.rs",
@@ -157,8 +161,8 @@
       "lines": 439
     },
     {
-      "path": "crates/sdk/src/operations/transfer.rs",
-      "lines": 389
+      "path": "crates/sdk/src/operations/transfer_state.rs",
+      "lines": 378
     },
     {
       "path": "crates/sdk/tests/cross_compat.rs",

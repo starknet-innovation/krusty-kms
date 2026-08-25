@@ -183,6 +183,35 @@ pub fn serialize_audit_proof(proof: &AuditProof) -> Result<Vec<Felt>> {
     ])
 }
 
+/// Typed fields for the Cairo Audit payload.
+///
+/// Boundary crates construct this borrowed view after parsing their input, then
+/// delegate the protocol layout to serialize_audit_option.
+pub struct AuditCalldata<'a> {
+    pub audited_balance: &'a ElGamalCiphertext,
+    pub hint_ciphertext: &'a [u8; 64],
+    pub hint_nonce: &'a [u8; 24],
+    pub proof: &'a AuditProof,
+}
+
+/// Serialize the Cairo Audit option without exposing its field layout to adapters.
+///
+/// Cairo represents Some with a zero tag and None with a one tag.
+pub fn serialize_audit_option(audit: Option<AuditCalldata<'_>>) -> Result<Vec<Felt>> {
+    let Some(audit) = audit else {
+        return Ok(serialize_cairo_none());
+    };
+
+    let mut felts = serialize_cairo_some(Vec::new);
+    felts.extend(serialize_cipher_balance(audit.audited_balance)?);
+    felts.extend(serialize_ae_balance(
+        audit.hint_ciphertext,
+        audit.hint_nonce,
+    )?);
+    felts.extend(serialize_audit_proof(audit.proof)?);
+    Ok(felts)
+}
+
 /// Serialize CipherBalance (ElGamal ciphertext) for Cairo.
 pub fn serialize_cipher_balance(cipher: &ElGamalCiphertext) -> Result<Vec<Felt>> {
     let (l_x, l_y) = serialize_projective_point(&cipher.l)?;
@@ -267,6 +296,11 @@ mod tests {
     fn serialize_ae_balance_validates_sizes() {
         assert!(serialize_ae_balance(&[0u8; 63], &[0u8; 24]).is_err());
         assert!(serialize_ae_balance(&[0u8; 64], &[0u8; 23]).is_err());
+    }
+
+    #[test]
+    fn serialize_audit_option_keeps_the_cairo_option_shape() {
+        assert_eq!(serialize_audit_option(None).unwrap(), vec![Felt::ONE]);
     }
 
     #[test]

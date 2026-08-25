@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "soft_limit": 80,
+  "notes": "Existing functions over the soft limit. They cannot grow; new functions must stay at or below the limit.",
+  "functions": {
+    "crates/client/src/contract.rs::get_state#1": 81,
+    "crates/client/src/operations.rs::build_transfer_call#1": 96,
+    "crates/client/src/operations.rs::build_withdraw_call#1": 89,
+    "crates/crypto/src/audit.rs::prove_with_validation#1": 203,
+    "crates/crypto/src/audit.rs::test_audit_typescript_test_vector#1": 110,
+    "crates/crypto/src/audit.rs::verify#1": 118,
+    "crates/crypto/src/range.rs::prove_with_randomness#1": 89,
+    "crates/ffi/src/elgamal_ffi/tests.rs::test_elgamal_encrypt_decrypt_roundtrip#1": 98,
+    "crates/ffi/src/proof.rs::proof_endpoints_two_call_pattern_is_stable#1": 88,
+    "crates/gateway/src/accounts.rs::deploy_account#1": 111,
+    "crates/gateway/src/signing.rs::sign#1": 169,
+    "crates/kms/src/discovery/generate.rs::generate_candidates#1": 149,
+    "crates/kms/src/keystore.rs::decrypt_ethers_keystore#1": 106,
+    "crates/kms/src/typed_data.rs::rejects_duplicate_envelope_fields#1": 121,
+    "crates/oracle/src/stdio.rs::handle_request#1": 85,
+    "crates/oracle/src/tests/dispatch.rs::handle_line_returns_invalid_request_for_bad_json#1": 121,
+    "crates/sdk/src/operations/fund.rs::fund#1": 95,
+    "crates/sdk/src/operations/ragequit.rs::ragequit#1": 124,
+    "crates/sdk/src/operations/withdraw.rs::withdraw#1": 187,
+    "crates/wasm/src/proof.rs::generate_transfer_proof#1": 95
+  }
+}
