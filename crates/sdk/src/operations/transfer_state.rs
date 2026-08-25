@@ -20,9 +20,9 @@ where
 }
 
 /// Validated inputs shared by each transfer construction phase.
-pub(super) struct TransferBuildState {
+pub(super) struct TransferBuildState<'a> {
     params: TransferParams,
-    secret: Felt,
+    secret: &'a Felt,
     owner: ProjectivePoint,
     amount: u128,
     leftover: u128,
@@ -43,8 +43,8 @@ struct PreparedCiphertexts {
     auxiliar_cipher2: ElGamalCiphertext,
 }
 
-impl TransferBuildState {
-    pub(super) fn new(account: &TongoAccount, params: TransferParams) -> Result<Self> {
+impl<'a> TransferBuildState<'a> {
+    pub(super) fn new(account: &'a TongoAccount, params: TransferParams) -> Result<Self> {
         if params.amount == 0 {
             return Err(KmsError::InvalidAmount(
                 "Amount must be greater than zero".to_string(),
@@ -54,11 +54,11 @@ impl TransferBuildState {
             return Err(KmsError::InsufficientBalance);
         }
 
-        let secret = *account.owner_private_key().expose_secret();
+        let secret = account.owner_private_key().expose_secret();
         let generator = StarkCurve::generator();
         verify_cipher_encrypts_balance(
             &params.current_balance,
-            &secret,
+            secret,
             account.balance(),
             &generator,
         )?;
@@ -267,7 +267,7 @@ impl TransferBuildState {
             a_v: krusty_kms_common::SerializablePoint::try_from_projective(&a_v)?,
             a_v2: krusty_kms_common::SerializablePoint::try_from_projective(&a_v2)?,
             a_bar: krusty_kms_common::SerializablePoint::try_from_projective(&a_bar)?,
-            s_x: response(&kx, &challenge, &self.secret)?,
+            s_x: response(&kx, &challenge, self.secret)?,
             s_r: response(&kr, &challenge, &prepared.randomness)?,
             s_b: response(&kb, &challenge, &Felt::from(self.amount))?,
             s_b2: response(&kb2, &challenge, &Felt::from(self.leftover))?,
@@ -305,7 +305,7 @@ impl TransferBuildState {
             user_pub_key: self.owner.clone(),
         };
         let (balance_proof, audited_balance) = AuditProver::prove_with_validation(
-            &self.secret,
+            self.secret,
             self.leftover,
             new_balance,
             auditor,
@@ -313,20 +313,20 @@ impl TransferBuildState {
             Some(&prefix),
         )?;
         let (balance_hint, balance_nonce) =
-            encrypt_for_auditor(self.leftover, &self.secret, auditor)?;
+            encrypt_for_auditor(self.leftover, self.secret, auditor)?;
         let transfer_self = ElGamalCiphertext {
             l: prepared.transfer_balance_self_l.clone(),
             r: prepared.transfer_balance_self_r.clone(),
         };
         let (transfer_proof, audited_transfer) = AuditProver::prove(
-            &self.secret,
+            self.secret,
             self.amount,
             &transfer_self,
             auditor,
             Some(&prefix),
         )?;
         let (transfer_hint, transfer_nonce) =
-            encrypt_for_auditor(self.amount, &self.secret, auditor)?;
+            encrypt_for_auditor(self.amount, self.secret, auditor)?;
 
         Ok((
             Some(Audit {
