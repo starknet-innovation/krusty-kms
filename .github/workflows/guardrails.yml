@@ -83,9 +83,7 @@ jobs:
         run: python3 .github/scripts/check-code-complexity.py
 
       - name: Cognitive-complexity lint
-        run: >
-          cargo clippy --workspace --exclude krusty-kms-wasm --all-targets --locked --
-          -D warnings -D clippy::cognitive_complexity
+        run: bash tools/check.sh lint-complexity
 
       - name: Scoped coverage floors
         run: bash .github/scripts/check-coverage-floors.sh
