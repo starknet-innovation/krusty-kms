@@ -27,12 +27,14 @@ pub const KMS_ERR_JSON: i32 = 7;
 /// number at all; the C status code is produced only at the boundary, by
 /// [`InvalidInput::to_status`].
 ///
-/// That also removes the only path a checker can see from an error-code
-/// constant into a decoded field element: `Err(KMS_ERR_INVALID_INPUT)` beside
-/// `Ok(felt)` reads as a possibly-`2` felt to taint tracking that is not
-/// variant-sensitive across `Result`, which is what CodeQL reported as a
-/// hard-coded salt reaching `calculate_contract_address`
-/// (`rust/hard-coded-cryptographic-value`). Keep the two arms in two types.
+/// This is a type-safety change, and on its own it is *not* what closed CodeQL
+/// alert #56. That alert is about the shape of the bail, not the error type: an
+/// early `return <status>` inside a `match` arm is modelled as a value of that
+/// `match`, so the binding inherited the error constant and read as a
+/// hard-coded salt reaching `calculate_contract_address`. Decoder call sites
+/// bail with `let ... else` for that reason -- see
+/// `docs/design/2026-08-24-typed-ffi-decode-failure.md` before turning one back
+/// into a `match`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidInput;
 
@@ -41,9 +43,9 @@ impl InvalidInput {
     ///
     /// Deliberately an inherent method rather than `From<InvalidInput> for
     /// i32`: `From` would let `?` widen a decode failure into any helper
-    /// returning `Result<_, i32>`, rebuilding one layer up the exact
-    /// code-beside-value shape this type exists to remove. Widening happens
-    /// explicitly, at an `extern "C"` boundary, or it does not compile.
+    /// returning `Result<_, i32>`, putting a status code back beside a decoded
+    /// value one layer up. Widening happens explicitly, at an `extern "C"`
+    /// boundary, or it does not compile.
     pub const fn to_status(self) -> i32 {
         KMS_ERR_INVALID_INPUT
     }
@@ -103,8 +105,9 @@ mod tests {
 
     #[test]
     fn invalid_input_maps_to_the_invalid_input_status() {
-        // Every decoder call site returns `err.to_status()`, so this method is
-        // the one place the numeric contract with C callers is decided.
+        // Every decoder call site bails with `InvalidInput.to_status()`, so
+        // this method is the one place the numeric contract with C callers is
+        // decided.
         assert_eq!(InvalidInput.to_status(), KMS_ERR_INVALID_INPUT);
     }
 }

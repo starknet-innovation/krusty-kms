@@ -17,13 +17,11 @@ pub unsafe extern "C" fn kms_projective_from_affine(
         if affine.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let x = match kms_to_felt(&(*affine).x) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(x) = kms_to_felt(&(*affine).x) else {
+            return InvalidInput.to_status();
         };
-        let y = match kms_to_felt(&(*affine).y) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(y) = kms_to_felt(&(*affine).y) else {
+            return InvalidInput.to_status();
         };
 
         let ap = match AffinePoint::new(x, y) {
@@ -46,9 +44,8 @@ pub unsafe extern "C" fn kms_projective_to_affine(
         if point.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let proj = match kms_to_proj(&*point) {
-            Ok(p) => p,
-            Err(err) => return err.to_status(),
+        let Ok(proj) = kms_to_proj(&*point) else {
+            return InvalidInput.to_status();
         };
         match krusty_kms_crypto::StarkCurve::projective_to_affine(&proj) {
             Ok(ap) => {

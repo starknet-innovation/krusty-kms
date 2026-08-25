@@ -14,12 +14,12 @@ All notable changes to the published Rust crates are documented here.
 
 ### Changed
 
-- The C-ABI `KmsFelt` / `KmsProjectivePoint` decoders report failure as a typed
-  `InvalidInput` rather than a bare `i32`, widened to `KMS_ERR_INVALID_INPUT`
-  once at the boundary. No ABI, status-code, or behaviour change; it removes the
-  `Result<Felt, i32>` shape behind a critical
+- C-ABI `KmsFelt` / `KmsProjectivePoint` decode sites bail with `let ... else`
+  rather than a match arm, and the decoders report failure as a typed
+  `InvalidInput` widened to `KMS_ERR_INVALID_INPUT` once at the boundary. No
+  ABI, status-code, or behaviour change; it clears a critical
   `rust/hard-coded-cryptographic-value` alert in which an error-code constant
-  appeared to reach a `salt` argument.
+  returned from a match arm appeared to reach a `salt` argument.
 
 ## [0.7.0] - 2026-08-16
 

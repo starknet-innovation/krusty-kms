@@ -20,13 +20,11 @@ pub unsafe extern "C" fn kms_pedersen_hash(
         if left.is_null() || right.is_null() || out.is_null() {
             return KMS_ERR_NULL_POINTER;
         }
-        let l = match kms_to_felt(&*left) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(l) = kms_to_felt(&*left) else {
+            return InvalidInput.to_status();
         };
-        let r = match kms_to_felt(&*right) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(r) = kms_to_felt(&*right) else {
+            return InvalidInput.to_status();
         };
         let h = Pedersen::hash(&l, &r);
         *out = felt_to_kms(&h);
@@ -56,10 +54,10 @@ pub unsafe extern "C" fn kms_poseidon_hash_many(
             vec![]
         } else {
             let kms_felts = slice::from_raw_parts(values, values_len);
-            match kms_slice_to_felts(kms_felts) {
-                Ok(felts) => felts,
-                Err(err) => return err.to_status(),
-            }
+            let Ok(felts) = kms_slice_to_felts(kms_felts) else {
+                return InvalidInput.to_status();
+            };
+            felts
         };
 
         let h = krusty_kms_crypto::poseidon_hash_many(&felts);

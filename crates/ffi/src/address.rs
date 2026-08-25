@@ -29,27 +29,24 @@ pub unsafe extern "C" fn kms_calculate_contract_address(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let s = match kms_to_felt(&*salt) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(s) = kms_to_felt(&*salt) else {
+            return InvalidInput.to_status();
         };
-        let ch = match kms_to_felt(&*class_hash) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(ch) = kms_to_felt(&*class_hash) else {
+            return InvalidInput.to_status();
         };
-        let da = match kms_to_felt(&*deployer_address) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(da) = kms_to_felt(&*deployer_address) else {
+            return InvalidInput.to_status();
         };
 
         let calldata: Vec<Felt> = if constructor_calldata_len == 0 {
             vec![]
         } else {
             let kms_cd = slice::from_raw_parts(constructor_calldata, constructor_calldata_len);
-            match kms_slice_to_felts(kms_cd) {
-                Ok(felts) => felts,
-                Err(err) => return err.to_status(),
-            }
+            let Ok(felts) = kms_slice_to_felts(kms_cd) else {
+                return InvalidInput.to_status();
+            };
+            felts
         };
 
         match krusty_kms::calculate_contract_address(&s, &ch, &calldata, &da) {
@@ -75,21 +72,19 @@ pub unsafe extern "C" fn kms_derive_oz_account_address(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let pk = match kms_to_felt(&*public_key_x) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(pk) = kms_to_felt(&*public_key_x) else {
+            return InvalidInput.to_status();
         };
-        let ch = match kms_to_felt(&*class_hash) {
-            Ok(felt) => felt,
-            Err(err) => return err.to_status(),
+        let Ok(ch) = kms_to_felt(&*class_hash) else {
+            return InvalidInput.to_status();
         };
         let s = if salt.is_null() {
             None
         } else {
-            match kms_to_felt(&*salt) {
-                Ok(felt) => Some(felt),
-                Err(err) => return err.to_status(),
-            }
+            let Ok(felt) = kms_to_felt(&*salt) else {
+                return InvalidInput.to_status();
+            };
+            Some(felt)
         };
 
         match krusty_kms::derive_oz_account_address(&pk, &ch, s.as_ref()) {

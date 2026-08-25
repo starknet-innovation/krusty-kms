@@ -118,21 +118,19 @@ unsafe fn elgamal_encrypt_inner(
     // SecretFelt zeroizes on drop (volatile write). Plain Felt copies of the
     // plaintext amount and blinding scalar would linger in stack memory on
     // every path; knowing either reveals the plaintext point (L - pk^r).
-    let msg = match kms_to_felt(&*message) {
-        Ok(felt) => SecretFelt::new(felt),
-        Err(err) => return err.to_status(),
+    let Ok(felt) = kms_to_felt(&*message) else {
+        return InvalidInput.to_status();
     };
-    let pk = match kms_to_proj(&*public_key) {
-        Ok(p) => p,
-        Err(err) => return err.to_status(),
+    let msg = SecretFelt::new(felt);
+    let Ok(pk) = kms_to_proj(&*public_key) else {
+        return InvalidInput.to_status();
     };
-    let rnd = match kms_to_felt(&*random) {
-        Ok(felt) => SecretFelt::new(felt),
-        Err(err) => return err.to_status(),
+    let Ok(felt) = kms_to_felt(&*random) else {
+        return InvalidInput.to_status();
     };
-    let pfx = match kms_to_felt(&*prefix) {
-        Ok(felt) => felt,
-        Err(err) => return err.to_status(),
+    let rnd = SecretFelt::new(felt);
+    let Ok(pfx) = kms_to_felt(&*prefix) else {
+        return InvalidInput.to_status();
     };
 
     let enc = match encrypt(msg.expose_secret(), &pk, rnd.expose_secret(), &pfx) {
@@ -182,19 +180,17 @@ pub unsafe extern "C" fn kms_elgamal_decrypt(
             return KMS_ERR_NULL_POINTER;
         }
 
-        let l = match kms_to_proj(&*ciphertext_l) {
-            Ok(p) => p,
-            Err(err) => return err.to_status(),
+        let Ok(l) = kms_to_proj(&*ciphertext_l) else {
+            return InvalidInput.to_status();
         };
-        let r = match kms_to_proj(&*ciphertext_r) {
-            Ok(p) => p,
-            Err(err) => return err.to_status(),
+        let Ok(r) = kms_to_proj(&*ciphertext_r) else {
+            return InvalidInput.to_status();
         };
         // SecretFelt zeroizes on drop (volatile write); plain assignment can be DCE'd.
-        let sk = match kms_to_felt(&*private_key) {
-            Ok(felt) => SecretFelt::new(felt),
-            Err(err) => return err.to_status(),
+        let Ok(felt) = kms_to_felt(&*private_key) else {
+            return InvalidInput.to_status();
         };
+        let sk = SecretFelt::new(felt);
 
         let cipher = ElGamalCiphertext { l, r };
         match ElGamal::decrypt(&cipher, sk.expose_secret()) {
