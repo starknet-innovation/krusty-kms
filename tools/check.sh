@@ -17,6 +17,8 @@ Modes:
   all         rust + guardrails + wasm (standard pre-handoff check)
   fmt         Check Rust formatting
   lint        Run the workspace and NATS-feature Clippy checks
+  lint-complexity
+              Run the workspace and NATS-feature Clippy cognitive-complexity checks
   examples    Check the maintained examples
   test        Run native workspace and NATS-feature tests
   guardrails  Run fast local maintainability fitness checks
@@ -36,9 +38,18 @@ check_fmt() {
   run cargo fmt --all -- --check
 }
 
+check_lint_with() {
+  local lint_args=("$@")
+  run cargo clippy --workspace --all-targets --locked -- -D warnings "${lint_args[@]}"
+  run cargo clippy -p krusty-kms-client --all-targets --features nats --locked -- -D warnings "${lint_args[@]}"
+}
+
 check_lint() {
-  run cargo clippy --workspace --all-targets --locked -- -D warnings
-  run cargo clippy -p krusty-kms-client --all-targets --features nats --locked -- -D warnings
+  check_lint_with
+}
+
+check_cognitive_lint() {
+  check_lint_with -D clippy::cognitive_complexity
 }
 
 check_examples() {
@@ -70,6 +81,8 @@ check_guardrails() {
   for script in "${scripts[@]}"; do
     run bash "$script"
   done
+
+  run python3 .github/scripts/check-code-complexity.py
 }
 
 check_wasm() {
@@ -110,6 +123,9 @@ case "$mode" in
     ;;
   lint)
     check_lint
+    ;;
+  lint-complexity)
+    check_cognitive_lint
     ;;
   examples)
     check_examples

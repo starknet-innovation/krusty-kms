@@ -12,7 +12,7 @@
 use std::ffi::c_char;
 use std::panic::catch_unwind;
 
-use krusty_kms_common::{AuditProof, ElGamalCiphertext, PoeProof, ProofOfTransfer};
+use krusty_kms_common::{AuditCalldata, AuditProof, ElGamalCiphertext, PoeProof, ProofOfTransfer};
 use krusty_kms_sdk::serialization;
 use serde::{Deserialize, Serialize};
 use starknet_types_core::curve::ProjectivePoint;
@@ -128,27 +128,23 @@ fn append_audit_option(calldata: &mut Vec<String>, audit_json: Option<&str>) -> 
         Some(audit_json) => {
             let audit: AuditJsonData =
                 serde_json::from_str(audit_json).map_err(|_| KMS_ERR_JSON)?;
-
-            // CairoOption::Some
-            calldata.push(felt_hex(&Felt::ZERO));
-
             let l = parse_projective_point(&audit.audited_balance.l.x, &audit.audited_balance.l.y)?;
             let r = parse_projective_point(&audit.audited_balance.r.x, &audit.audited_balance.r.y)?;
-            let balance_felts =
-                serialization::serialize_cipher_balance(&ElGamalCiphertext { l, r })
-                    .map_err(|_| KMS_ERR_CRYPTO)?;
-            calldata.extend(felts_to_hex_vec(&balance_felts));
-
-            append_hint_felts(calldata, &audit.hint_ciphertext, &audit.hint_nonce)?;
-
-            let audit_proof_felts =
-                serialization::serialize_audit_proof(&audit.proof).map_err(|_| KMS_ERR_CRYPTO)?;
-            calldata.extend(felts_to_hex_vec(&audit_proof_felts));
+            let hint_ciphertext = decode_hex_bytes::<64>(&audit.hint_ciphertext)?;
+            let hint_nonce = decode_hex_bytes::<24>(&audit.hint_nonce)?;
+            let felts = serialization::serialize_audit_option(Some(AuditCalldata {
+                audited_balance: &ElGamalCiphertext { l, r },
+                hint_ciphertext: &hint_ciphertext,
+                hint_nonce: &hint_nonce,
+                proof: &audit.proof,
+            }))
+            .map_err(|_| KMS_ERR_CRYPTO)?;
+            calldata.extend(felts_to_hex_vec(&felts));
             Ok(())
         }
         None => {
-            // CairoOption::None
-            calldata.push(felt_hex(&Felt::ONE));
+            let felts = serialization::serialize_audit_option(None).map_err(|_| KMS_ERR_CRYPTO)?;
+            calldata.extend(felts_to_hex_vec(&felts));
             Ok(())
         }
     }

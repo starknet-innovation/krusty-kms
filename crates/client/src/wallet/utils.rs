@@ -13,6 +13,24 @@ pub type StarknetRsFelt = starknet_rust::core::types::Felt;
 /// Type alias for starknet-types-core Felt.
 pub type CoreFelt = starknet_types_core::felt::Felt;
 
+#[async_trait::async_trait]
+trait DeploymentProvider: Send + Sync {
+    async fn get_class_hash_at(
+        &self,
+        address: StarknetRsFelt,
+    ) -> std::result::Result<StarknetRsFelt, ProviderError>;
+}
+
+#[async_trait::async_trait]
+impl DeploymentProvider for JsonRpcClient<HttpTransport> {
+    async fn get_class_hash_at(
+        &self,
+        address: StarknetRsFelt,
+    ) -> std::result::Result<StarknetRsFelt, ProviderError> {
+        Provider::get_class_hash_at(self, BlockId::Tag(BlockTag::Latest), address).await
+    }
+}
+
 /// Convert from starknet-types-core Felt to starknet-rs Felt.
 #[inline]
 pub fn core_felt_to_rs(felt: CoreFelt) -> StarknetRsFelt {
@@ -32,10 +50,14 @@ pub async fn check_deployed(
     provider: &Arc<JsonRpcClient<HttpTransport>>,
     address: StarknetRsFelt,
 ) -> Result<bool> {
-    match provider
-        .get_class_hash_at(BlockId::Tag(BlockTag::Latest), address)
-        .await
-    {
+    check_deployed_with_provider(provider.as_ref(), address).await
+}
+
+async fn check_deployed_with_provider<P: DeploymentProvider>(
+    provider: &P,
+    address: StarknetRsFelt,
+) -> Result<bool> {
+    match provider.get_class_hash_at(address).await {
         Ok(_) => Ok(true),
         Err(error) if is_contract_not_found(&error) => Ok(false),
         Err(error) => Err(KmsError::RpcError(error.to_string())),
@@ -107,6 +129,56 @@ pub(crate) fn felt_to_u16(felt: &StarknetRsFelt) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::VecDeque;
+    use std::sync::Mutex;
+
+    struct MockDeploymentProvider {
+        responses: Mutex<VecDeque<std::result::Result<StarknetRsFelt, ProviderError>>>,
+        requests: Mutex<Vec<StarknetRsFelt>>,
+    }
+
+    impl MockDeploymentProvider {
+        fn with_response(response: std::result::Result<StarknetRsFelt, ProviderError>) -> Self {
+            Self {
+                responses: Mutex::new(VecDeque::from([response])),
+                requests: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl DeploymentProvider for MockDeploymentProvider {
+        async fn get_class_hash_at(
+            &self,
+            address: StarknetRsFelt,
+        ) -> std::result::Result<StarknetRsFelt, ProviderError> {
+            self.requests.lock().unwrap().push(address);
+            self.responses.lock().unwrap().pop_front().unwrap()
+        }
+    }
+
+    #[tokio::test]
+    async fn mocked_provider_classifies_deployment_results() {
+        let deployed = MockDeploymentProvider::with_response(Ok(StarknetRsFelt::from(7u64)));
+        assert!(
+            check_deployed_with_provider(&deployed, StarknetRsFelt::from(9u64))
+                .await
+                .unwrap()
+        );
+        assert_eq!(
+            deployed.requests.lock().unwrap().as_slice(),
+            &[StarknetRsFelt::from(9u64)]
+        );
+
+        let missing = MockDeploymentProvider::with_response(Err(ProviderError::StarknetError(
+            StarknetError::ContractNotFound,
+        )));
+        assert!(
+            !check_deployed_with_provider(&missing, StarknetRsFelt::from(9u64))
+                .await
+                .unwrap()
+        );
+    }
 
     #[test]
     fn test_felt_roundtrip() {

@@ -51,5 +51,7 @@ exports = extract_wasm_exports(root)
 print(f"updated wasm exports ({len(exports)} entries)")
 PY
 
+python3 .github/scripts/check-code-complexity.py --write-baseline
+
 echo "Baselines regenerated. Review the diff before committing."
 echo "Note: file-size baseline bumps require a docs/design/ note."

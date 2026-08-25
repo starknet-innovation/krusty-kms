@@ -8,6 +8,9 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Check | Script / tool | Failure mode |
 | --- | --- | --- |
 | File-size ratchet | `.github/scripts/check-file-size-ratchet.sh` | Existing oversized files cannot grow; new files cannot exceed 500 lines |
+| Function-size ratchet | `.github/scripts/check-code-complexity.py` | PR-head functions are compared to the base revision; new functions must remain at or below 80 lines |
+| Cognitive complexity | Clippy `cognitive_complexity` | New control-flow complexity over Clippy's threshold fails the build |
+| Scoped coverage floors | `.github/scripts/check-coverage-floors.sh` | Client crate and RPC-adapter directory coverage must meet committed line floors, which cannot decrease from the base revision |
 | PR size | `.github/scripts/check-pr-size.sh` | >400 changed lines or >10 production Rust files without justification |
 | Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
 | `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny`/`allow(unsafe_code)`; stray `unsafe` |
@@ -55,6 +58,11 @@ so a mutable tool download cannot change the package handed to the OIDC job.
 Committed under [`.github/guardrails/`](../.github/guardrails/):
 
 - `file-size-baseline.json` — ratchet for files already over the soft limit
+- `function-size-baseline.json` — recorded sizes for functions already over 80 lines;
+  CI compares the PR head to base-revision source spans so a baseline edit cannot
+  bypass the ratchet
+- `coverage-floors.json` — minimum line coverage for critical crate / directory scopes;
+  CI rejects lowered or removed floors relative to the base revision
 - `ffi-kms.h.snapshot` — canonical C ABI header
 - `wasm-exports.txt` — `wasm_bindgen` export surface
 

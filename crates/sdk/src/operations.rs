@@ -67,6 +67,7 @@ mod ragequit;
 mod rollover;
 mod shared;
 mod transfer;
+mod transfer_state;
 mod withdraw;
 
 pub use fund::fund;

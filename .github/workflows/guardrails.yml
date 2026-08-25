@@ -15,6 +15,7 @@ on:
       - "docs/design/**"
       - ".github/guardrails/**"
       - ".github/scripts/**"
+      - "tools/check.sh"
       - ".github/workflows/publish.yml"
       - ".github/workflows/publish-npm.yml"
       - ".github/workflows/guardrails.yml"
@@ -31,6 +32,7 @@ on:
       - "docs/design/**"
       - ".github/guardrails/**"
       - ".github/scripts/**"
+      - "tools/check.sh"
       - ".github/workflows/publish.yml"
       - ".github/workflows/publish-npm.yml"
       - ".github/workflows/guardrails.yml"
@@ -51,20 +53,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - uses: taiki-e/install-action@ba47c86ac325773530516bb756137ac718732518 # v2
+        with:
+          tool: cargo-llvm-cov
 
-      - name: File-size ratchet
+      - name: Resolve guardrail base revision
         env:
           BASE_REF: ${{ github.base_ref }}
           BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
           if [[ -n "${BASE_REF:-}" ]]; then
-            export GUARDRAILS_BASE_REF="origin/${BASE_REF}"
+            base_ref="origin/${BASE_REF}"
           elif [[ -n "${BEFORE_SHA:-}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
             git fetch --no-tags origin "${BEFORE_SHA}" || true
-            export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
+            base_ref="${BEFORE_SHA}"
+          else
+            echo "::error::could not determine the guardrail base revision"
+            exit 1
           fi
-          bash .github/scripts/check-file-size-ratchet.sh
+          git rev-parse --verify "${base_ref}^{commit}"
+          echo "GUARDRAILS_BASE_REF=${base_ref}" >> "$GITHUB_ENV"
+
+      - name: File-size ratchet
+        run: bash .github/scripts/check-file-size-ratchet.sh
 
       - name: Dependency layering
         run: bash .github/scripts/check-dependency-layers.sh
@@ -74,6 +87,15 @@ jobs:
 
       - name: Surface parser self-checks
         run: python3 .github/scripts/lib/surfaces.py
+
+      - name: Function-size ratchet
+        run: python3 .github/scripts/check-code-complexity.py --base-ref "$GUARDRAILS_BASE_REF"
+
+      - name: Cognitive-complexity lint
+        run: bash tools/check.sh lint-complexity
+
+      - name: Scoped coverage floors
+        run: bash .github/scripts/check-coverage-floors.sh --base-ref "$GUARDRAILS_BASE_REF"
 
       - name: Secret hygiene
         run: bash .github/scripts/check-secret-hygiene.sh

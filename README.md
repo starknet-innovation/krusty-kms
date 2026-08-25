@@ -82,6 +82,9 @@ crates/sdk/examples/tongo_proof_generation.rs
 OpenZeppelin multisig wallet integration, devnet tests, and the CLI-style
 transaction lifecycle are documented in
 [`docs/oz-multisig-wallet-guide.md`](docs/oz-multisig-wallet-guide.md).
+Architecture, trust boundaries, upgrade assumptions, and transaction-ordering
+limits are documented in
+[`docs/architecture-and-trust-boundaries.md`](docs/architecture-and-trust-boundaries.md).
 
 ### WASM
 

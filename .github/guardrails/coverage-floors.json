@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "metric": "lines",
+  "notes": "Floors focus on the client adapter seams that protect RPC and calldata boundaries. Raise each floor with the next meaningful test addition.",
+  "floors": {
+    "crates/client": 49.0,
+    "crates/client/src/contract.rs": 38.0,
+    "crates/client/src/wallet": 31.0
+  }
+}
