@@ -9,7 +9,6 @@ use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use k256::{PublicKey, SecretKey};
 use krusty_kms_common::KmsError;
-use rand_core::TryRng;
 use sha2::Sha256;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -109,9 +108,7 @@ pub(crate) fn encrypt(
     peer_public_key: &[u8; 32],
     plaintext: &str,
 ) -> Result<String, KmsError> {
-    let mut nonce = [0u8; 32];
-    rand::rngs::SysRng
-        .try_fill_bytes(&mut nonce)
+    let mut nonce = krusty_kms_crypto::try_random_bytes::<32>()
         .map_err(|error| KmsError::CryptoError(format!("NIP-44 entropy unavailable: {error}")))?;
     let result = encrypt_with_nonce(private_key, peer_public_key, plaintext, &nonce);
     nonce.zeroize();
