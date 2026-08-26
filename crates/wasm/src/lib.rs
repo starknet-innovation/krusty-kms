@@ -11,6 +11,7 @@ pub mod discovery;
 pub mod encryption;
 pub mod error;
 pub mod hashing;
+pub mod nostr_application_data;
 pub mod proof;
 pub mod signing;
 pub mod strk20;
@@ -20,10 +21,9 @@ pub mod utils;
 
 use wasm_bindgen::prelude::*;
 
-// Re-export main types for convenience
 pub use account::{
-    derive_keypair, derive_nostr_keypair, generate_mnemonic, get_nostr_coin_type,
-    validate_mnemonic, WasmAccount,
+    derive_keypair, derive_nostr_keypair, derive_nostr_public_key, generate_mnemonic,
+    get_nostr_coin_type, validate_mnemonic, WasmAccount,
 };
 pub use error::WasmError;
 pub use proof::{
@@ -33,7 +33,8 @@ pub use proof::{
     WasmTransferProofResult, WasmWithdrawParams, WasmWithdrawProofResult,
 };
 pub use types::{
-    WasmAccountState, WasmCiphertext, WasmKeypair, WasmNostrKeypair, WasmPoint, WasmTxType,
+    WasmAccountState, WasmCiphertext, WasmKeypair, WasmNostrKeypair, WasmNostrPublicKey, WasmPoint,
+    WasmTxType,
 };
 
 /// Initialize the WASM module.

@@ -247,6 +247,22 @@ impl WasmNostrKeypair {
     }
 }
 
+/// Public-only Nostr key (x-only, BIP-340). No private key material.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[wasm_bindgen(getter_with_clone)]
+pub struct WasmNostrPublicKey {
+    /// Public key as x-only hex string (64 hex chars, no 0x prefix)
+    pub public_key: String,
+}
+
+#[wasm_bindgen]
+impl WasmNostrPublicKey {
+    #[wasm_bindgen(constructor)]
+    pub fn new(public_key: String) -> Self {
+        Self { public_key }
+    }
+}
+
 /// Stark ECDSA signature result.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[wasm_bindgen(getter_with_clone)]

@@ -6,6 +6,7 @@
 use crate::error::{from_sdk_result, WasmError, WasmResult};
 use crate::types::{
     WasmAccountState, WasmCiphertext, WasmDecryptedPoint, WasmKeypair, WasmNostrKeypair,
+    WasmNostrPublicKey,
 };
 use krusty_kms::AccountClass;
 use starknet_types_core::felt::Felt;
@@ -391,6 +392,27 @@ pub fn derive_nostr_keypair(
     })
 }
 
+/// Derive only the public Nostr identity; private key material stays in Rust.
+#[wasm_bindgen(js_name = "deriveNostrPublicKey")]
+pub fn derive_nostr_public_key(
+    mnemonic: &str,
+    address_index: u32,
+    account_index: u32,
+    passphrase: Option<String>,
+) -> Result<WasmNostrPublicKey, JsValue> {
+    let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
+        mnemonic,
+        address_index,
+        account_index,
+        passphrase.as_deref(),
+    ))
+    .map_err(JsValue::from)?;
+
+    Ok(WasmNostrPublicKey {
+        public_key: hex::encode(kp.public_key),
+    })
+}
+
 /// Derive a Starknet keypair using old Argent's "double derivation" scheme.
 ///
 /// Old Argent wallets use a two-step derivation:
@@ -767,6 +789,14 @@ mod tests {
         // Should be valid hex
         assert!(hex::decode(&keypair.private_key).is_ok());
         assert!(hex::decode(&keypair.public_key).is_ok());
+    }
+
+    #[wasm_bindgen_test]
+    fn test_derive_nostr_public_key() {
+        let key = derive_nostr_public_key(TEST_MNEMONIC, 0, 0, None).unwrap();
+        let pair = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
+
+        assert_eq!(key.public_key, pair.public_key);
     }
 
     #[wasm_bindgen_test]
