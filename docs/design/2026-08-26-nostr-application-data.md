@@ -14,8 +14,9 @@ and payload bounds before returning the sender public key and content.
 ## Invariants and failures
 
 - Nostr keys use the existing `m/44'/1237'/account'/0/index` derivation.
-- Application identifiers are 1-128 printable ASCII bytes; content is 1-32,768 UTF-8 bytes so
-  both nested NIP-44 envelopes stay below the protocol's 65,535-byte plaintext limit.
+- Application identifiers are 1-128 printable ASCII bytes; content is 1-32,768 UTF-8 bytes. The
+  serialized rumor and seal are each checked independently against NIP-44's 65,535-byte plaintext
+  limit because JSON escaping can expand otherwise bounded content.
 - Events and recipient keys are parsed strictly; NIP-44 compatibility is pinned by the official
   v2 known-answer vector.
 - Authentication, decryption, kind, identifier, or size failures return `KmsError` and no content.

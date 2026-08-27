@@ -9,7 +9,7 @@ fn gift_wrap_round_trip_authenticates_sender_and_content() {
     let event = wrap_nostr_application_data(
         &SENDER,
         &recipient,
-        "mc-wallet.multisig",
+        "mc wallet.multisig",
         r#"{"kind":"intent"}"#,
     )
     .unwrap();
@@ -19,7 +19,7 @@ fn gift_wrap_round_trip_authenticates_sender_and_content() {
         opened.sender_public_key,
         hex::encode(nostr_public_key(&SENDER).unwrap())
     );
-    assert_eq!(opened.identifier, "mc-wallet.multisig");
+    assert_eq!(opened.identifier, "mc wallet.multisig");
     assert_eq!(opened.content, r#"{"kind":"intent"}"#);
     assert!(open_nostr_application_data(&SENDER, &event).is_err());
 }
@@ -40,4 +40,13 @@ fn gift_wrap_rejects_tampering_and_unbounded_inputs() {
         &"x".repeat(MAX_CONTENT_BYTES + 1)
     )
     .is_err());
+    assert!(wrap_nostr_application_data(
+        &SENDER,
+        &recipient,
+        "mc-wallet.multisig",
+        &"\"".repeat(MAX_CONTENT_BYTES)
+    )
+    .unwrap_err()
+    .to_string()
+    .contains("nested envelope limit"));
 }

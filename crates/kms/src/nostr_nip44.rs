@@ -17,6 +17,10 @@ const MIN_PAYLOAD_BYTES: usize = 99;
 const MAX_PAYLOAD_BYTES: usize = 65_603;
 const MAX_PLAINTEXT_BYTES: usize = 65_535;
 
+pub(crate) const fn valid_plaintext(plaintext: &[u8]) -> bool {
+    !plaintext.is_empty() && plaintext.len() <= MAX_PLAINTEXT_BYTES
+}
+
 fn conversation_key(
     private_key: &[u8; 32],
     peer_public_key: &[u8; 32],
@@ -61,7 +65,7 @@ const fn padded_length(length: usize) -> usize {
 }
 
 fn padded(plaintext: &[u8]) -> Result<Zeroizing<Vec<u8>>, KmsError> {
-    if plaintext.is_empty() || plaintext.len() > MAX_PLAINTEXT_BYTES {
+    if !valid_plaintext(plaintext) {
         return Err(KmsError::SerializationError(
             "NIP-44 plaintext must be 1-65535 bytes".to_string(),
         ));
