@@ -9,7 +9,6 @@ use hmac::digest::KeyInit;
 use hmac::{Hmac, Mac};
 use k256::{ecdh::diffie_hellman, PublicKey, SecretKey};
 use krusty_kms_common::KmsError;
-use rand_core::TryRngCore;
 use sha2::Sha256;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -109,9 +108,7 @@ pub(crate) fn encrypt(
     peer_public_key: &[u8; 32],
     plaintext: &str,
 ) -> Result<String, KmsError> {
-    let mut nonce = [0u8; 32];
-    rand::rngs::OsRng
-        .try_fill_bytes(&mut nonce)
+    let mut nonce = krusty_kms_crypto::try_random_bytes::<32>()
         .map_err(|error| KmsError::CryptoError(format!("NIP-44 entropy unavailable: {error}")))?;
     let result = encrypt_with_nonce(private_key, peer_public_key, plaintext, &nonce);
     nonce.zeroize();
@@ -183,6 +180,7 @@ pub(crate) fn decrypt(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::Digest;
 
     fn bytes<const N: usize>(value: &str) -> [u8; N] {
         hex::decode(value).unwrap().try_into().unwrap()
@@ -223,5 +221,29 @@ mod tests {
             expected
         );
         assert_eq!(decrypt(&first, &peer, expected).unwrap(), "🍕🫃");
+    }
+
+    #[test]
+    fn matches_official_nip44_u16_boundary_vector() {
+        let first = bytes::<32>("0000000000000000000000000000000000000000000000000000000000000001");
+        let second =
+            bytes::<32>("0000000000000000000000000000000000000000000000000000000000000002");
+        let peer = crate::nostr_public_key(&second).unwrap();
+        let nonce = bytes::<32>("0000000000000000000000000000000000000000000000000000000000000001");
+        let plaintext = "a".repeat(MAX_PLAINTEXT_BYTES);
+        let payload = encrypt_with_nonce(&first, &peer, &plaintext, &nonce).unwrap();
+
+        assert_eq!(
+            hex::encode(Sha256::digest(payload.as_bytes())),
+            "6d8c2810d1e870fbaa1f0a0937126cca837a15f9260e27060c331d70a3c0bc84"
+        );
+        assert_eq!(
+            decrypt(&second, &crate::nostr_public_key(&first).unwrap(), &payload).unwrap(),
+            plaintext
+        );
+        assert!(
+            encrypt_with_nonce(&first, &peer, &"a".repeat(MAX_PLAINTEXT_BYTES + 1), &nonce)
+                .is_err()
+        );
     }
 }

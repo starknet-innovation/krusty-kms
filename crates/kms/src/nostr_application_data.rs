@@ -5,7 +5,6 @@ use crate::nostr_signing::{nostr_public_key, sign_nostr_event_id};
 use k256::schnorr::signature::hazmat::PrehashVerifier;
 use k256::schnorr::{Signature, VerifyingKey};
 use krusty_kms_common::KmsError;
-use rand_core::TryRngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -162,21 +161,19 @@ fn now_seconds() -> Result<u64, KmsError> {
 }
 
 fn randomized_past_timestamp(now: u64) -> Result<u64, KmsError> {
-    let offset = rand::rngs::OsRng
-        .try_next_u64()
-        .map_err(|error| KmsError::CryptoError(format!("Nostr entropy unavailable: {error}")))?
-        % (TWO_DAYS_SECONDS + 1);
+    let offset =
+        u64::from_be_bytes(krusty_kms_crypto::try_random_bytes::<8>().map_err(|error| {
+            KmsError::CryptoError(format!("Nostr entropy unavailable: {error}"))
+        })?) % (TWO_DAYS_SECONDS + 1);
     Ok(now.saturating_sub(offset))
 }
 
 fn ephemeral_private_key() -> Result<Zeroizing<[u8; 32]>, KmsError> {
     for _ in 0..8 {
         let mut candidate = Zeroizing::new([0u8; 32]);
-        rand::rngs::OsRng
-            .try_fill_bytes(candidate.as_mut())
-            .map_err(|error| {
-                KmsError::CryptoError(format!("Nostr entropy unavailable: {error}"))
-            })?;
+        krusty_kms_crypto::try_fill_random_bytes(candidate.as_mut()).map_err(|error| {
+            KmsError::CryptoError(format!("Nostr entropy unavailable: {error}"))
+        })?;
         if nostr_public_key(&candidate).is_ok() {
             return Ok(candidate);
         }

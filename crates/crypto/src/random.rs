@@ -109,17 +109,23 @@ pub fn clear_deterministic_rng() {
 /// Fills a byte slice from either deterministic parity RNG (if enabled)
 /// or cryptographic system randomness.
 pub fn fill_random_bytes(out: &mut [u8]) {
+    try_fill_random_bytes(out).expect("OS entropy source unavailable");
+}
+
+/// Fallible variant of [`fill_random_bytes`] for request paths that must
+/// return an error rather than abort the task when OS entropy is unavailable.
+pub fn try_fill_random_bytes(out: &mut [u8]) -> Result<(), getrandom::Error> {
     #[cfg(feature = "test-utils")]
     {
         let mut guard = DETERMINISTIC_RNG.lock().expect("rng mutex poisoned");
         if let Some(state) = guard.as_mut() {
             state.fill(out);
-            return;
+            return Ok(());
         }
         drop(guard);
     }
 
-    getrandom::fill(out).expect("OS entropy source unavailable");
+    getrandom::fill(out)
 }
 
 /// Generate a fixed-size byte array from the configured cryptographic RNG.
@@ -130,6 +136,14 @@ pub fn random_bytes<const N: usize>() -> [u8; N] {
     let mut bytes = [u8::default(); N];
     fill_random_bytes(&mut bytes);
     bytes
+}
+
+/// Fallible variant of [`random_bytes`]: reports OS entropy failures instead
+/// of panicking.
+pub fn try_random_bytes<const N: usize>() -> Result<[u8; N], getrandom::Error> {
+    let mut bytes = [u8::default(); N];
+    try_fill_random_bytes(&mut bytes)?;
+    Ok(bytes)
 }
 
 /// Generate a single random Felt from OS entropy.
