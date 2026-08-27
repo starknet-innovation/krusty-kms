@@ -52,13 +52,22 @@ struct SignedEvent {
 fn valid_identifier(identifier: &str) -> bool {
     !identifier.is_empty()
         && identifier.len() <= MAX_IDENTIFIER_BYTES
-        && identifier.bytes().all(|byte| byte.is_ascii_graphic())
+        && identifier.bytes().all(|byte| (b' '..=b'~').contains(&byte))
 }
 
 fn validate_content(content: &str) -> Result<(), KmsError> {
     if content.is_empty() || content.len() > MAX_CONTENT_BYTES {
         return Err(KmsError::SerializationError(
             "Nostr application data must be 1-32768 UTF-8 bytes".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_nested_plaintext(value: &str) -> Result<(), KmsError> {
+    if !nostr_nip44::valid_plaintext(value.as_bytes()) {
+        return Err(KmsError::SerializationError(
+            "Nostr application data exceeds the nested envelope limit".to_string(),
         ));
     }
     Ok(())
@@ -226,6 +235,7 @@ pub fn wrap_nostr_application_data_at(
         content.to_string(),
     )?;
     let rumor_json = serde_json::to_string(&rumor)?;
+    validate_nested_plaintext(&rumor_json)?;
     let seal_content = nostr_nip44::encrypt(private_key, &recipient, &rumor_json)?;
     let seal = signed_event(
         private_key,
@@ -235,6 +245,7 @@ pub fn wrap_nostr_application_data_at(
         seal_content,
     )?;
     let seal_json = serde_json::to_string(&seal)?;
+    validate_nested_plaintext(&seal_json)?;
     let ephemeral = ephemeral_private_key()?;
     let wrap_content = nostr_nip44::encrypt(&ephemeral, &recipient, &seal_json)?;
     let wrap = signed_event(
