@@ -64,6 +64,8 @@ crates/wasm/src/lib.rs: wasm_bindgen(js_name=pointAdd) | pub fn point_add(p1_x: 
 crates/wasm/src/lib.rs: wasm_bindgen(js_name=randomFelt) | pub fn random_felt() -> String
 crates/wasm/src/lib.rs: wasm_bindgen(js_name=serializePublicKey) | pub fn serialize_public_key(x: &str, y: &str) -> Result<String, JsValue>
 crates/wasm/src/lib.rs: wasm_bindgen(js_name=deserializePublicKey) | pub fn deserialize_public_key(hex: &str) -> Result<types::WasmPoint, JsValue>
+crates/wasm/src/nostr_application_data.rs: wasm_bindgen(js_name=wrapNostrApplicationData) | pub fn wrap_nostr_application_data(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>, recipient_public_key: &str, identifier: &str, content: &str) -> Result<String, JsValue>
+crates/wasm/src/nostr_application_data.rs: wasm_bindgen(js_name=openNostrApplicationData) | pub fn open_nostr_application_data(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>, event_json: &str) -> Result<String, JsValue>
 crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmFundParams { pub amount: String; pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String; pub current_cipher_l_x: String; pub current_cipher_l_y: String; pub current_cipher_r_x: String; pub current_cipher_r_y: String; pub auditor_public_key: Option<String> }
 crates/wasm/src/proof.rs: impl WasmFundParams {
 crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(amount: String, nonce: String, chain_id: String, tongo_address: String, sender_address: String, current_cipher_l_x: String, current_cipher_l_y: String, current_cipher_r_x: String, current_cipher_r_y: String) -> Self

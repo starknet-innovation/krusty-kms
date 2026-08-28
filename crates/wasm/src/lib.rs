@@ -12,6 +12,7 @@ pub mod discovery;
 pub mod encryption;
 pub mod error;
 pub mod hashing;
+pub mod nostr_application_data;
 pub mod proof;
 pub mod signing;
 pub mod strk20;
@@ -21,7 +22,6 @@ pub mod utils;
 
 use wasm_bindgen::prelude::*;
 
-// Re-export main types for convenience
 pub use account::{
     derive_keypair, derive_nostr_keypair, generate_mnemonic, get_nostr_coin_type,
     validate_mnemonic, WasmAccount,

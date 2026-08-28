@@ -69,6 +69,9 @@ chacha20poly1305 = "0.11"
 scrypt = "0.12"
 aes = "0.9"
 ctr = "0.10"
+base64 = "0.22.1"
+chacha20 = "0.10.1"
+hkdf = "0.13.0"
 [workspace.lints.clippy]
 # Keep the shared lint policy deliberately small and high-signal.
 borrow_as_ptr = "deny"
