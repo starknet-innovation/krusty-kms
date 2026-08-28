@@ -29,7 +29,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.10.0"
 edition = "2021"
 rust-version = "1.92"
 authors = ["Krusty KMS Contributors"]
@@ -70,7 +70,7 @@ scrypt = "0.12"
 aes = "0.9"
 ctr = "0.10"
 base64 = "0.22.1"
-chacha20 = "0.10.1"
+chacha20 = "0.10.2"
 hkdf = "0.13.0"
 [workspace.lints.clippy]
 # Keep the shared lint policy deliberately small and high-signal.
