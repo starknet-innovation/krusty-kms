@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-28
+
+### Added
+
+- Add mnemonic-bound NIP-44 and NIP-59 application envelopes to the Rust and
+  WASM APIs, including strict event, recipient, identifier, entropy, and
+  nested-payload validation.
+
 ### Security
 
 - Bound Starknet RPC and multisig coordinator connect/read/request deadlines,
@@ -18,6 +26,7 @@ All notable changes to the published Rust crates are documented here.
 
 ### Changed
 
+- Use the non-yanked `chacha20` 0.10.2 release for NIP-44 encryption.
 - C-ABI `KmsFelt` / `KmsProjectivePoint` decode sites bail with `let ... else`
   rather than a match arm, and the decoders report failure as a typed
   `InvalidInput` widened to `KMS_ERR_INVALID_INPUT` once at the boundary. No
