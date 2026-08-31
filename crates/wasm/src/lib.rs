@@ -13,6 +13,7 @@ pub mod encryption;
 pub mod error;
 pub mod hashing;
 pub mod nostr_application_data;
+pub mod ml_dsa;
 pub mod proof;
 pub mod signing;
 pub mod strk20;

@@ -12,6 +12,7 @@
     "crates/crypto/src/audit.rs::prove_with_validation#1": 203,
     "crates/crypto/src/audit.rs::test_audit_typescript_test_vector#1": 110,
     "crates/crypto/src/audit.rs::verify#1": 118,
+    "crates/crypto/src/ml_dsa/verify.rs::verify_internal#1": 94,
     "crates/crypto/src/range.rs::prove_with_randomness#1": 89,
     "crates/crypto/tests/fund_audit_test_vector.rs::test_fund_with_audit_typescript_vector#1": 217,
     "crates/ffi/src/calldata.rs::kms_encode_fund_calls#1": 99,

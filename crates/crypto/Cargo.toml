@@ -23,12 +23,22 @@ parallel = ["rayon"]
 # Only for cross-language parity vector generation; requires a runtime
 # environment opt-in (see `random::set_deterministic_rng`) before it activates.
 insecure-deterministic-rng = ["dep:sha2"]
+# ML-DSA-65 (FIPS 204) public-key expansion and the felt packing the Cairo
+# account verifier consumes. Off by default: it is the only thing in this crate
+# that needs SHAKE, and consumers that do not verify post-quantum accounts
+# should not carry it.
+ml-dsa = ["dep:sha3"]
 
 [dependencies]
 krusty-kms-common = { version = "0.11.0", path = "../common" }
 starknet-types-core.workspace = true
 crypto-bigint.workspace = true
 sha2 = { workspace = true, optional = true }
+# SHAKE128/256, and deliberately NOT `workspace = true`: the workspace `sha3` is
+# 0.12, whose restructure dropped the XOFs entirely (only fixed-output SHA-3 and
+# Keccak remain), so SHAKE needs the 0.10 line. That line is already in the
+# dependency graph via starknet-rust-core, so this feature adds no new crate.
+sha3 = { version = "0.10.8", optional = true }
 getrandom = "0.4"
 rayon = { workspace = true, optional = true }
 zeroize.workspace = true
@@ -41,10 +51,20 @@ getrandom = { version = "0.4", features = ["wasm_js"] }
 
 [dev-dependencies]
 criterion.workspace = true
+# A second, independent FIPS 204 implementation, used only to sign fresh
+# keypairs in tests so this crate's verifier is checked against something that
+# is not itself. Never a runtime dependency: the wallet never signs ML-DSA.
+fips204 = "0.4.6"
+hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
+
+# Gated so the default `cargo test` (feature off) does not try to build it.
+[[test]]
+name = "ml_dsa_vectors"
+required-features = ["ml-dsa"]
 
 [[bench]]
 name = "provers"

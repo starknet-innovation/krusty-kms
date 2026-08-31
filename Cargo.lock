@@ -990,6 +990,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
+name = "fips204"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9fb5a367b9846933e271a3c2a992930743f82ae5e8cb7faa780715a80fa0b15"
+dependencies = [
+ "rand_core 0.6.4",
+ "sha2 0.10.9",
+ "sha3 0.10.8",
+ "zeroize",
+]
+
+[[package]]
 name = "fixed-hash"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1771,8 +1783,10 @@ version = "0.11.0"
 dependencies = [
  "criterion",
  "crypto-bigint",
+ "fips204",
  "getrandom 0.2.17",
  "getrandom 0.4.3",
+ "hex",
  "krusty-kms-common",
  "num-bigint 0.5.1",
  "num-traits",
@@ -1780,6 +1794,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "sha3 0.10.8",
  "starknet-types-core",
  "subtle",
  "zeroize",
