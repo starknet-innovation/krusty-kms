@@ -1,12 +1,13 @@
-//! Deploy-path support: typed error mapping for account-factory submissions
-//! and OpenZeppelin descriptor validation.
+//! Deploy-path support: typed error mapping for account-factory submissions,
+//! OpenZeppelin descriptor validation, and fee-ceiling admission.
 
 use super::rpc::map_provider_error;
 use crate::{map_kms_error, GatewayResult};
+use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError};
 use krusty_kms_domain::{AccountDescriptor, FeltHex, GatewayError, GatewayErrorCode};
-use starknet_rust::accounts::AccountFactoryError;
-use starknet_rust::core::types::StarknetError;
+use starknet_rust::accounts::{AccountDeploymentV3, AccountFactoryError};
+use starknet_rust::core::types::{FeeEstimate, StarknetError};
 use starknet_rust::providers::ProviderError;
 use starknet_types_core::felt::Felt as CoreFelt;
 
@@ -118,4 +119,36 @@ pub(super) fn validate_open_zeppelin_descriptor(
 
 fn indicates_already_deployed(message: &str) -> bool {
     is_already_deployed_validation_failure(message)
+}
+
+/// Scale `estimate` exactly as `starknet-rs` would, admit it against `ceiling`,
+/// and pin the admitted bounds on `deployment`.
+///
+/// Rejections are non-retryable: the estimate came from the untrusted RPC, so
+/// retrying against the same endpoint cannot make it admissible.
+pub(super) fn bound_deployment<'f, F>(
+    deployment: AccountDeploymentV3<'f, F>,
+    estimate: &FeeEstimate,
+    ceiling: &ResourceBoundsCeiling,
+) -> GatewayResult<AccountDeploymentV3<'f, F>> {
+    let bounds = ceiling
+        .admit_estimate(
+            (estimate.l1_gas_consumed, estimate.l1_gas_price),
+            (estimate.l2_gas_consumed, estimate.l2_gas_price),
+            (estimate.l1_data_gas_consumed, estimate.l1_data_gas_price),
+        )
+        .map_err(|error| {
+            GatewayError::new(
+                GatewayErrorCode::InvalidRequest,
+                false,
+                Some(format!("fee ceiling: {error}")),
+            )
+        })?;
+    Ok(deployment
+        .l1_gas(bounds.l1_gas.max_amount)
+        .l1_gas_price(bounds.l1_gas.max_price_per_unit)
+        .l2_gas(bounds.l2_gas.max_amount)
+        .l2_gas_price(bounds.l2_gas.max_price_per_unit)
+        .l1_data_gas(bounds.l1_data_gas.max_amount)
+        .l1_data_gas_price(bounds.l1_data_gas.max_price_per_unit))
 }
