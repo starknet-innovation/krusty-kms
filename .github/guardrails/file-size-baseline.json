@@ -21,6 +21,10 @@
       "lines": 511
     },
     {
+      "path": "crates/client/src/wallet/utils.rs",
+      "lines": 368
+    },
+    {
       "path": "crates/client/tests/oz_multisig_devnet.rs",
       "lines": 504
     },
