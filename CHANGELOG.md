@@ -64,6 +64,19 @@ All notable changes to the published Rust crates are documented here.
   (`crates/kms/tests/discovery_test`). `ArgentAccount::with_class_hash` now
   selects the layout from known class hashes; `ArgentConstructorLayout` and
   `ArgentAccount::with_class_hash_and_layout` make it explicit.
+- Reject `u128` overflow when computing the post-fund audited balance instead
+  of wrapping (L-1).
+
+## [0.10.0] - 2026-08-28
+
+### Added
+
+- Add mnemonic-bound NIP-44 and NIP-59 application envelopes to the Rust and
+  WASM APIs, including strict event, recipient, identifier, entropy, and
+  nested-payload validation.
+
+### Security
+
 - Bound Starknet RPC and multisig coordinator connect/read/request deadlines,
   cap coordinator bodies before JSON parsing, and bound event pagination by
   wall time, pages, events, serialized bytes, and continuation-token size. RPC
