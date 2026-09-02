@@ -54,6 +54,11 @@ krusty uses (RustCrypto 0.11, rand 0.10, syn 3). Reviewed 2026-09-02:
 | getrandom 0.2 | `krusty-kms-wasm` / `mental-poker-wasm` add it with the `js` feature so rand_core 0.6 consumers work in browsers; ring 0.17 and uuid 0.8 also use it | no rand_core 0.6 consumer is left in the wasm graph |
 | syn 2 | every proc-macro crate except async-trait 0.1.92 (already on syn 3) | the proc-macro ecosystem finishes the syn 3 transition |
 
+The lockfile also lists rand 0.9, rand_core 0.9, and getrandom 0.3. They are reached
+only through `proptest` as a dev-dependency of the experimental `mental-poker` crate,
+so `cargo deny check bans` does not report them and no skip is needed; if a production
+crate ever pulls them in, the gate fails and a justified skip (or an upgrade) is required.
+
 When a skip stops matching anything, `cargo deny` warns; delete the entry rather than
 leaving a stale allowance. Prefer `skip` over `skip-tree`: a subtree skip would also
 accept duplicates introduced later underneath it.
