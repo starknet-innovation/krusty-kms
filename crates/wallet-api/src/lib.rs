@@ -29,12 +29,57 @@ pub struct Tx {
     network: NetworkPreset,
 }
 
+/// Smallest polling interval [`Tx::wait`] will use. A zero interval turns the
+/// wait loop into an RPC flood against the provider.
+pub const MIN_WAIT_INTERVAL_SECS: u64 = 1;
+
+/// Smallest timeout [`Tx::wait`] will use; a zero timeout is raised to it.
+pub const MIN_WAIT_TIMEOUT_SECS: u64 = 1;
+
+/// Largest timeout [`Tx::wait`] will honour (24 hours). Bounds the deadline
+/// arithmetic so a caller-supplied `u64::MAX` cannot overflow the clock.
+pub const MAX_WAIT_TIMEOUT_SECS: u64 = 24 * 60 * 60;
+
 /// Options for polling a transaction receipt.
+///
+/// The fields stay public for compatibility; [`Tx::wait`] applies
+/// [`MIN_WAIT_INTERVAL_SECS`] and [`MAX_WAIT_TIMEOUT_SECS`] to whatever it
+/// receives, and [`WaitOptions::new`] rejects out-of-range values up front.
 pub struct WaitOptions {
     /// Polling interval in seconds.
     pub interval_secs: u64,
     /// Maximum wait time in seconds.
     pub timeout_secs: u64,
+}
+
+impl WaitOptions {
+    /// Build options that are already inside the bounds `wait` enforces.
+    ///
+    /// # Errors
+    /// Returns `KmsError::TransactionError` if `interval_secs` is below
+    /// [`MIN_WAIT_INTERVAL_SECS`] or above `timeout_secs`, or if `timeout_secs`
+    /// is outside [`MIN_WAIT_TIMEOUT_SECS`]..=[`MAX_WAIT_TIMEOUT_SECS`].
+    pub fn new(interval_secs: u64, timeout_secs: u64) -> Result<Self> {
+        if interval_secs < MIN_WAIT_INTERVAL_SECS {
+            return Err(KmsError::TransactionError(format!(
+                "wait interval_secs must be at least {MIN_WAIT_INTERVAL_SECS}"
+            )));
+        }
+        if !(MIN_WAIT_TIMEOUT_SECS..=MAX_WAIT_TIMEOUT_SECS).contains(&timeout_secs) {
+            return Err(KmsError::TransactionError(format!(
+                "wait timeout_secs must be between {MIN_WAIT_TIMEOUT_SECS} and {MAX_WAIT_TIMEOUT_SECS}"
+            )));
+        }
+        if interval_secs > timeout_secs {
+            return Err(KmsError::TransactionError(
+                "wait interval_secs must not exceed timeout_secs".to_string(),
+            ));
+        }
+        Ok(Self {
+            interval_secs,
+            timeout_secs,
+        })
+    }
 }
 
 impl Default for WaitOptions {
@@ -44,6 +89,21 @@ impl Default for WaitOptions {
             timeout_secs: 120,
         }
     }
+}
+
+/// `(interval_secs, timeout_secs)` actually used by [`Tx::wait`]: the timeout
+/// is clamped to its bounds, and the interval is raised to the floor and capped by the timeout,
+/// so options assembled field-by-field can neither busy-poll, overflow the
+/// deadline, nor sleep past it.
+fn effective_wait_bounds(options: &WaitOptions) -> (u64, u64) {
+    let timeout_secs = options
+        .timeout_secs
+        .clamp(MIN_WAIT_TIMEOUT_SECS, MAX_WAIT_TIMEOUT_SECS);
+    let interval_secs = options
+        .interval_secs
+        .max(MIN_WAIT_INTERVAL_SECS)
+        .min(timeout_secs.max(MIN_WAIT_INTERVAL_SECS));
+    (interval_secs, timeout_secs)
 }
 
 impl Tx {
@@ -82,23 +142,29 @@ impl Tx {
     /// - `KmsError::TransactionReverted` if execution reverts
     /// - `KmsError::RpcError` if the provider cannot determine transaction state
     pub async fn wait(&self, options: Option<WaitOptions>) -> Result<TransactionReceipt> {
-        let opts = options.unwrap_or_default();
-        let deadline =
-            tokio::time::Instant::now() + tokio::time::Duration::from_secs(opts.timeout_secs);
-        let interval = tokio::time::Duration::from_secs(opts.interval_secs);
+        let (interval_secs, timeout_secs) = effective_wait_bounds(&options.unwrap_or_default());
+        let deadline = tokio::time::Instant::now()
+            .checked_add(tokio::time::Duration::from_secs(timeout_secs))
+            .ok_or_else(|| {
+                KmsError::Timeout(format!(
+                    "wait deadline of {timeout_secs}s overflows the clock"
+                ))
+            })?;
+        let interval = tokio::time::Duration::from_secs(interval_secs);
 
         loop {
             if tokio::time::Instant::now() >= deadline {
                 return Err(KmsError::Timeout(format!(
-                    "Transaction {} not accepted within {}s",
-                    self.hash_hex(),
-                    opts.timeout_secs
+                    "Transaction {} not accepted within {timeout_secs}s",
+                    self.hash_hex()
                 )));
             }
 
             match self.observe_receipt().await? {
                 ReceiptObservation::Pending | ReceiptObservation::AcceptedWithoutReceipt => {
-                    tokio::time::sleep(interval).await
+                    // Never sleep past the deadline, whatever the interval.
+                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                    tokio::time::sleep(interval.min(remaining)).await
                 }
                 ReceiptObservation::Accepted(receipt) => return Ok(receipt),
                 ReceiptObservation::Reverted { reason } => {
@@ -264,40 +330,4 @@ fn is_transaction_hash_not_found(error: &ProviderError) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{classify_transaction_status, is_transaction_hash_not_found, ReceiptObservation};
-    use starknet_rust::core::types::{ExecutionResult, StarknetError, TransactionStatus};
-    use starknet_rust::providers::ProviderError;
-
-    #[test]
-    fn accepted_status_without_receipt_is_not_reported_as_complete_receipt() {
-        assert_eq!(
-            classify_transaction_status(TransactionStatus::AcceptedOnL2(
-                ExecutionResult::Succeeded,
-            )),
-            ReceiptObservation::AcceptedWithoutReceipt
-        );
-    }
-
-    #[test]
-    fn reverted_status_is_terminal() {
-        assert_eq!(
-            classify_transaction_status(TransactionStatus::PreConfirmed(
-                ExecutionResult::Reverted {
-                    reason: "constructor failed".to_string(),
-                },
-            )),
-            ReceiptObservation::Reverted {
-                reason: "constructor failed".to_string(),
-            }
-        );
-    }
-
-    #[test]
-    fn tx_hash_not_found_is_the_only_pending_lookup_error() {
-        assert!(is_transaction_hash_not_found(
-            &ProviderError::StarknetError(StarknetError::TransactionHashNotFound,)
-        ));
-        assert!(!is_transaction_hash_not_found(&ProviderError::RateLimited));
-    }
-}
+mod tests;

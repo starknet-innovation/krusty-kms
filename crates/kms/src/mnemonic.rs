@@ -3,6 +3,18 @@
 use bip39::Mnemonic;
 use krusty_kms_common::{KmsError, Result};
 use rand_core::TryRng;
+use zeroize::Zeroizing;
+
+/// Parse a phrase into a mnemonic that is wiped on drop.
+///
+/// `Zeroizing<Mnemonic>` needs `Mnemonic: Zeroize`, which only holds with the
+/// `bip39/zeroize` feature, so this also pins that feature at compile time.
+fn parse_mnemonic(phrase: &str) -> Result<Zeroizing<Mnemonic>> {
+    phrase
+        .parse::<Mnemonic>()
+        .map(Zeroizing::new)
+        .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))
+}
 
 /// Generate a new BIP-39 mnemonic phrase.
 ///
@@ -37,12 +49,15 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
         }
     };
 
-    let mut entropy = vec![0u8; entropy_size];
+    // Entropy and the parsed word indices are the root secret; both are
+    // wiped on drop. Only the returned phrase outlives this function.
+    let mut entropy = Zeroizing::new(vec![0u8; entropy_size]);
     rand::rngs::SysRng
-        .try_fill_bytes(&mut entropy)
+        .try_fill_bytes(entropy.as_mut_slice())
         .expect("OS entropy source unavailable");
 
     let mnemonic = Mnemonic::from_entropy(&entropy)
+        .map(Zeroizing::new)
         .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;
 
     Ok(mnemonic.to_string())
@@ -58,11 +73,7 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
 ///
 /// # Cyclomatic Complexity: 1
 pub fn validate_mnemonic(phrase: &str) -> Result<()> {
-    // Use from_str via parse
-    phrase
-        .parse::<Mnemonic>()
-        .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;
-    Ok(())
+    parse_mnemonic(phrase).map(drop)
 }
 
 /// Convert mnemonic to seed bytes.
@@ -73,11 +84,7 @@ pub fn validate_mnemonic(phrase: &str) -> Result<()> {
 ///
 /// # Cyclomatic Complexity: 1
 pub fn mnemonic_to_seed(mnemonic: &str, passphrase: &str) -> Result<[u8; 64]> {
-    let mnemonic_parsed: Mnemonic = mnemonic
-        .parse()
-        .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;
-
-    Ok(mnemonic_parsed.to_seed(passphrase))
+    Ok(parse_mnemonic(mnemonic)?.to_seed(passphrase))
 }
 
 #[cfg(test)]

@@ -9,6 +9,14 @@ use starknet_types_core::felt::Felt;
 /// Cairo string 'fund'.
 const FUND_CAIRO_STRING: Felt = Felt::from_hex_unchecked("0x66756e64");
 
+/// Balance after funding. A `u128` wrap here would prove a wrapped balance to
+/// the auditor, so it is rejected like every other amount overflow.
+fn funded_balance(balance: u128, amount: u128) -> Result<u128> {
+    balance
+        .checked_add(amount)
+        .ok_or_else(|| KmsError::InvalidAmount("funded balance overflow".to_string()))
+}
+
 /// Execute a fund operation.
 ///
 /// Generates a proof that the user knows the private key for their account.
@@ -19,7 +27,7 @@ const FUND_CAIRO_STRING: Felt = Felt::from_hex_unchecked("0x66756e64");
 /// # Errors
 ///
 /// Returns [`KmsError`] if:
-/// - Amount is zero (`InvalidAmount`)
+/// - Amount is zero, or the funded balance overflows `u128` (`InvalidAmount`)
 /// - Public key point is at infinity (`PointAtInfinity`)
 /// - Proof generation fails (`ProofGenerationError`)
 /// - Point conversion fails during audit proof generation
@@ -62,7 +70,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
         // CRITICAL: The Cairo contract adds the fund amount to balance BEFORE verifying audit
         // So we must prove the balance AFTER funding, not before!
         // See Tongo.cairo:fund() - it calls _add_balance() before _handle_audit_balance()
-        let new_balance = account.balance() + params.amount;
+        let new_balance = funded_balance(account.balance(), params.amount)?;
 
         // Compute the new cipher balance after funding
         // The contract adds: cipher = CipherBalanceTrait::new(to, amount, 'fund')

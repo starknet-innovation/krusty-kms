@@ -41,6 +41,11 @@ Treat changes in these areas with extra scrutiny:
 
 - Never log or `Display` raw secret key material.
 - Prefer `SecretFelt` / `zeroize` for secret scalars.
+- Use checked arithmetic for amounts, balances, and range bounds. The root
+  `Cargo.toml` additionally keeps `overflow-checks` on in release builds of
+  `krusty-kms-common`, `krusty-kms-crypto`, and `krusty-kms-sdk`; that profile
+  override applies to builds driven from this workspace only, so downstream
+  consumers' own profiles govern their builds.
 - Production crates declare `#![forbid(unsafe_code)]` (or a narrow
   `deny`/`allow` exception for `SecretFelt` / the C ABI crate). Expanding those
   exceptions requires a `docs/design/*.md` note for baseline/surface changes —

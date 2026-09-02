@@ -1,7 +1,7 @@
 use super::super::{fund, FundParams};
 use super::support::{create_test_account, encrypt_balance_for_account, TEST_MNEMONIC};
 use crate::TongoAccount;
-use krusty_kms_common::ElGamalCiphertext;
+use krusty_kms_common::{ElGamalCiphertext, KmsError};
 use krusty_kms_crypto::StarkCurve;
 use starknet_types_core::felt::Felt;
 
@@ -90,4 +90,31 @@ fn test_fund_with_auditor() {
     assert_eq!(proof.amount, 100);
     // With auditor, audit should be present
     assert!(proof.audit.is_some());
+}
+
+/// A balance near `u128::MAX` plus the fund amount must be rejected instead of
+/// wrapping into a small audited balance (L-1).
+#[test]
+fn test_fund_rejects_funded_balance_overflow() {
+    let contract_address = Felt::from(123456u64);
+    let mut account =
+        TongoAccount::from_mnemonic(TEST_MNEMONIC, 0, 0, contract_address, None).unwrap();
+    account.set_balance(u128::MAX - 50);
+    let current_balance = encrypt_balance_for_account(&account, 0, Felt::from(12345u64));
+
+    let params = FundParams {
+        amount: 100,
+        nonce: Felt::from(1u64),
+        chain_id: Felt::from_hex("0x534e5f5345504f4c4941").unwrap(),
+        tongo_address: contract_address,
+        sender_address: Felt::from(0xCAFEu64),
+        // The audited balance is the only path that adds to the balance.
+        auditor_pub_key: Some(StarkCurve::mul_generator(&Felt::from(9999u64))),
+        current_balance,
+    };
+
+    let err = fund(&account, params)
+        .err()
+        .expect("fund must reject a wrapping balance");
+    assert!(matches!(err, KmsError::InvalidAmount(_)), "{err:?}");
 }

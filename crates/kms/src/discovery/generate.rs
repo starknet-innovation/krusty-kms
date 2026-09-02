@@ -1,12 +1,13 @@
 //! Candidate and keypair generation from a mnemonic. Performs no network I/O.
 
 use super::types::{CandidateAccount, DerivationType, DerivedKeypair, WalletType};
+use super::MAX_DISCOVERY_INDEX;
 use crate::account::calculate_contract_address;
 use crate::account_class::{AccountClass, ArgentAccount, BraavosAccount, SaltPolicy};
 use crate::derivation::{derive_argent_legacy_private_key, derive_private_key_with_coin_type};
 use crate::mnemonic::validate_mnemonic;
 use crate::stark_signing::stark_public_key;
-use krusty_kms_common::Result;
+use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::felt::Felt;
 
 // ---------------------------------------------------------------------------
@@ -55,6 +56,17 @@ fn felt_hex(f: &Felt) -> String {
     format!("{:#x}", f)
 }
 
+/// Entry-point validation shared by every discovery scan: the index bound is
+/// checked before the mnemonic so an oversized request does no secret work.
+pub(super) fn validate_discovery_inputs(mnemonic: &str, max_index: u32) -> Result<()> {
+    if max_index > MAX_DISCOVERY_INDEX {
+        return Err(KmsError::InvalidDerivationPath(format!(
+            "max_index {max_index} exceeds the discovery limit of {MAX_DISCOVERY_INDEX}"
+        )));
+    }
+    validate_mnemonic(mnemonic)
+}
+
 /// Derive all unique keypairs for a mnemonic without computing addresses.
 ///
 /// Returns one keypair per derivation scheme per index:
@@ -67,9 +79,12 @@ fn felt_hex(f: &Felt) -> String {
 ///
 /// This is much cheaper than `generate_candidates` since it skips address computation.
 pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<DerivedKeypair>> {
-    validate_mnemonic(mnemonic)?;
+    validate_discovery_inputs(mnemonic, max_index)?;
 
-    let mut keypairs = Vec::with_capacity((max_index * 2) as usize);
+    // Two keypairs per index. The bound above keeps this in range; the checked
+    // multiply makes "never panic on a caller-supplied size" hold locally.
+    let capacity = (max_index as usize).checked_mul(2).unwrap_or(0);
+    let mut keypairs = Vec::with_capacity(capacity);
 
     for index in 0..max_index {
         // Direct derivation (Braavos / new Argent / OZ all share this key)
@@ -114,7 +129,7 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
 /// Does NOT hit the network. Returns all mathematically possible addresses.
 /// Use with an RPC provider to filter to actually deployed accounts.
 pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<CandidateAccount>> {
-    validate_mnemonic(mnemonic)?;
+    validate_discovery_inputs(mnemonic, max_index)?;
 
     let mut candidates = Vec::new();
 
