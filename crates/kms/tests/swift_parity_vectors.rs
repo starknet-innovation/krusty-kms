@@ -190,8 +190,8 @@ fn test_starknet_spending_key_derivation() {
 
     println!("✓ Starknet spending-key derivation at {path}");
 
-    assert_eq!(
-        keypair.private_key, expected_felt,
+    assert!(
+        keypair.private_key == expected_felt,
         "Starknet key should match Swift/TypeScript test vector"
     );
 }
@@ -215,8 +215,8 @@ fn test_tongo_spending_key_derivation() {
 
     println!("✓ Tongo spending-key derivation at {path}");
 
-    assert_eq!(
-        keypair.private_key, expected_felt,
+    assert!(
+        keypair.private_key == expected_felt,
         "Tongo key should match Swift/TypeScript test vector"
     );
 }
