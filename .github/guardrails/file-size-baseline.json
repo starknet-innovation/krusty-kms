@@ -30,7 +30,7 @@
     },
     {
       "path": "crates/client/tests/tongo_sepolia_integration.rs",
-      "lines": 1225
+      "lines": 1201
     },
     {
       "path": "crates/common/src/serialization.rs",
