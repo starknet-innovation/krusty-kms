@@ -1,5 +1,13 @@
 # Shared Test Vectors
 
+> **Do not fund, reuse, or import anything in this directory.**
+>
+> These vectors contain **publicly known test mnemonics and private keys**.
+> They exist only to make derivation, signing, and proof tests deterministic
+> across language ports. Anyone can read them, so any account they control is
+> already compromised: never send funds to an address derived from them and
+> never load them into a wallet.
+
 These checked-in files define the compatibility contract for the krusty-kms crates.
 
 Core vectors:
