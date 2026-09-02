@@ -149,9 +149,12 @@ fn is_host_port(host_port: &str) -> bool {
             None => (is_host_name(host_port), None),
         },
     };
-    host_ok
-        && port
-            .is_none_or(|p| !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit()))
+    host_ok && port.is_none_or(is_port)
+}
+
+/// Decimal port that fits a `u16`: no sign, no empty string, no value above 65535.
+fn is_port(port: &str) -> bool {
+    !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) && port.parse::<u16>().is_ok()
 }
 
 fn is_host_name(host: &str) -> bool {
