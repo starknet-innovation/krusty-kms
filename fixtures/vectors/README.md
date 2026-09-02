@@ -1,6 +1,7 @@
 # Shared Test Vectors
 
-> **Do not fund, reuse, or import anything in this directory.**
+> **Do not fund, reuse, or import anything in this directory, in
+> `crates/sdk/tests/fixtures/`, or in the root `prover-vectors.json`.**
 >
 > These vectors contain **publicly known test mnemonics and private keys**.
 > They exist only to make derivation, signing, and proof tests deterministic
@@ -19,7 +20,9 @@ Core vectors:
 - `nostr_signing_vectors.json` - deterministic Nostr BIP-340 signing
 
 SDK proof vectors:
-- `../../prover-vectors.json` - checked-in Tongo proof-generation vectors
+- `../../prover-vectors.json` - generated Tongo proof-generation vectors (also
+  contains test private keys; the replayed copy lives in
+  `crates/sdk/tests/fixtures/`, see its README)
 
 Cross-language parity support:
 - `../../cross-compat-vectors.json` - Rust proof outputs consumed by external
