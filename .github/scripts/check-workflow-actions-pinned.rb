@@ -75,7 +75,30 @@ def validate_image(file, key_node, value_node)
   false
 end
 
-def inspect_node(file, node, state)
+# `jobs.<job>` — where a job-level `container` may appear.
+def job_level?(path)
+  path.length == 2 && path[0] == "jobs"
+end
+
+# `jobs.<job>.container` or `jobs.<job>.services.<name>` — where an `image`
+# key names a container image.
+def image_context?(path)
+  return false unless path[0] == "jobs"
+
+  (path.length == 3 && path[2] == "container") ||
+    (path.length == 4 && path[2] == "services")
+end
+
+# `jobs.<job>.services` — where a scalar value is the short `name: image` form.
+def services_map?(path)
+  path.length == 3 && path[0] == "jobs" && path[2] == "services"
+end
+
+# Walk the document with the mapping-key path from the root, so only real
+# action references and job/service containers are validated. Action inputs
+# under `with:` may legitimately carry keys named `image`, `container`, or
+# `uses` as plain data.
+def inspect_node(file, node, state, path = [])
   if node.is_a?(Psych::Nodes::Alias)
     annotation(file, node, "YAML aliases are forbidden in workflows")
     state[:valid] = false
@@ -84,26 +107,10 @@ def inspect_node(file, node, state)
 
   if node.is_a?(Psych::Nodes::Mapping)
     node.children.each_slice(2) do |key_node, value_node|
-      if key_node.is_a?(Psych::Nodes::Scalar)
-        case key_node.value
-        when "uses"
-          state[:uses] += 1
-          state[:valid] = false unless validate_reference(file, key_node, value_node)
-        when "container"
-          if value_node.is_a?(Psych::Nodes::Scalar)
-            state[:images] += 1
-            state[:valid] = false unless validate_image(file, key_node, value_node)
-          elsif !value_node.is_a?(Psych::Nodes::Mapping)
-            annotation(file, key_node, "workflow container must name a digest-pinned image")
-            state[:valid] = false
-          end
-        when "image"
-          state[:images] += 1
-          state[:valid] = false unless validate_image(file, key_node, value_node)
-        end
-      end
-      inspect_node(file, key_node, state)
-      inspect_node(file, value_node, state)
+      key = key_node.is_a?(Psych::Nodes::Scalar) ? key_node.value : nil
+      inspect_mapping_entry(file, key, key_node, value_node, state, path) if key
+      inspect_node(file, key_node, state, path)
+      inspect_node(file, value_node, state, key ? path + [key] : path)
     end
     return
   end
@@ -113,7 +120,37 @@ def inspect_node(file, node, state)
   children = node.children
   return unless children
 
-  children.each { |child| inspect_node(file, child, state) }
+  children.each { |child| inspect_node(file, child, state, path) }
+end
+
+def inspect_mapping_entry(file, key, key_node, value_node, state, path)
+  case key
+  when "uses"
+    return if path.include?("with")
+
+    state[:uses] += 1
+    state[:valid] = false unless validate_reference(file, key_node, value_node)
+  when "container"
+    return unless job_level?(path)
+
+    if value_node.is_a?(Psych::Nodes::Scalar)
+      state[:images] += 1
+      state[:valid] = false unless validate_image(file, key_node, value_node)
+    elsif !value_node.is_a?(Psych::Nodes::Mapping)
+      annotation(file, key_node, "workflow container must name a digest-pinned image")
+      state[:valid] = false
+    end
+  when "image"
+    return unless image_context?(path)
+
+    state[:images] += 1
+    state[:valid] = false unless validate_image(file, key_node, value_node)
+  else
+    return unless services_map?(path) && value_node.is_a?(Psych::Nodes::Scalar)
+
+    state[:images] += 1
+    state[:valid] = false unless validate_image(file, key_node, value_node)
+  end
 end
 
 def default_workflows

@@ -40,6 +40,21 @@ printf '%s\n' \
   >"$fixture_dir/valid.yml"
 "$checker" "$fixture_dir/valid.yml" >/dev/null
 
+# Action inputs may carry keys named image/container/uses as plain data; only
+# real action references and job/service containers are validated.
+printf '%s\n' \
+  'jobs:' \
+  '  build:' \
+  '    runs-on: ubuntu-latest' \
+  '    steps:' \
+  "      - uses: docker/build-push-action@${full_sha}" \
+  '        with:' \
+  '          image: alpine:3.20' \
+  '          container: registry.example.com/app:latest' \
+  '          uses: not-an-action' \
+  >"$fixture_dir/inputs.yml"
+"$checker" "$fixture_dir/inputs.yml" >/dev/null
+
 printf '%s\n' 'steps:' '  - uses: actions/checkout@v7' >"$fixture_dir/mutable.yml"
 expect_failure "mutable GitHub action" "$checker" "$fixture_dir/mutable.yml"
 
