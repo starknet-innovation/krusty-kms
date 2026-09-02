@@ -11,7 +11,7 @@ use super::types::{
 };
 use super::StarknetRsFelt;
 use crate::abi;
-use crate::wallet::utils::core_felt_to_rs;
+use crate::wallet::utils::{core_felt_to_rs, rpc_error};
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
 use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
@@ -244,7 +244,7 @@ impl Multisig {
             .provider
             .block_hash_and_number()
             .await
-            .map_err(|error| KmsError::RpcError(error.to_string()))?;
+            .map_err(rpc_error)?;
         let block_id = BlockId::Hash(head.block_hash);
 
         let actor = signed.claimed_actor();
@@ -316,7 +316,7 @@ impl Multisig {
                 block_id,
             )
             .await
-            .map_err(|error| KmsError::RpcError(error.to_string()))
+            .map_err(rpc_error)
     }
 
     pub(super) fn call_to_multisig(
