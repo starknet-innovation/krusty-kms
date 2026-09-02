@@ -12,7 +12,7 @@ use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::Tx;
 pub use krusty_kms_wallet_api::WalletExecutor;
-use starknet_rust::accounts::{ExecutionEncoding, SingleOwnerAccount};
+use starknet_rust::accounts::{AccountError, ExecutionEncoding, SingleOwnerAccount};
 use starknet_rust::core::types::Call;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::signers::{LocalWallet, SigningKey};
@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
-use self::utils::{check_deployed, core_felt_to_rs};
+use self::utils::{check_deployed, core_felt_to_rs, provider_error_message};
 
 /// A Starknet wallet that can sign and submit transactions.
 pub struct Wallet {
@@ -35,6 +35,19 @@ pub struct Wallet {
 
 /// Cache TTL for the "not deployed" state (3 seconds).
 const DEPLOYED_CACHE_TTL_SECS: u64 = 3;
+
+/// Describe an account-layer failure without echoing the RPC endpoint.
+///
+/// `AccountError::Provider` forwards `ProviderError`'s `Display`, which for
+/// transport failures includes the full request URL (API key and all); route
+/// it through the client's redacting classifier. The remaining variants
+/// (signing, class-hash calculation, fee overflow) carry no endpoint data.
+fn account_error_message<S: std::error::Error>(error: &AccountError<S>) -> String {
+    match error {
+        AccountError::Provider(provider) => provider_error_message(provider),
+        other => other.to_string(),
+    }
+}
 
 impl Wallet {
     /// Create a wallet from a `SigningKey`.
@@ -189,13 +202,13 @@ impl Wallet {
             let estimate = execution
                 .estimate_fee()
                 .await
-                .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
+                .map_err(|e| KmsError::FeeEstimationFailed(account_error_message(&e)))?;
             execution = fee::bound_execution(execution, &estimate, ceiling)?;
         }
         let result = execution
             .send()
             .await
-            .map_err(|e| KmsError::TransactionError(e.to_string()))?;
+            .map_err(|e| KmsError::TransactionError(account_error_message(&e)))?;
 
         Ok(Tx::new(
             result.transaction_hash,
@@ -215,7 +228,7 @@ impl Wallet {
             .execute_v3(calls)
             .estimate_fee()
             .await
-            .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
+            .map_err(|e| KmsError::FeeEstimationFailed(account_error_message(&e)))?;
 
         Ok(estimate)
     }
