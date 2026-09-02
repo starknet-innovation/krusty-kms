@@ -55,6 +55,26 @@ printf '%s\n' \
   >"$fixture_dir/inputs.yml"
 "$checker" "$fixture_dir/inputs.yml" >/dev/null
 
+# A job named `with` is not an inputs block: its actions are still checked.
+printf '%s\n' \
+  'jobs:' \
+  '  with:' \
+  '    runs-on: ubuntu-latest' \
+  '    steps:' \
+  '      - uses: actions/checkout@v7' \
+  >"$fixture_dir/job-named-with.yml"
+expect_failure "mutable action in a job named with" "$checker" "$fixture_dir/job-named-with.yml"
+
+# Reusable-workflow inputs under jobs.<job>.with are data, not references.
+printf '%s\n' \
+  'jobs:' \
+  '  call:' \
+  "    uses: org/repo/.github/workflows/reusable.yml@${full_sha}" \
+  '    with:' \
+  '      uses: not-an-action' \
+  >"$fixture_dir/reusable-inputs.yml"
+"$checker" "$fixture_dir/reusable-inputs.yml" >/dev/null
+
 printf '%s\n' 'steps:' '  - uses: actions/checkout@v7' >"$fixture_dir/mutable.yml"
 expect_failure "mutable GitHub action" "$checker" "$fixture_dir/mutable.yml"
 

@@ -89,6 +89,16 @@ def image_context?(path)
     (path.length == 4 && path[2] == "services")
 end
 
+# A `with:` block that holds action or reusable-workflow inputs: a step's
+# `with` (`... steps[].with`) or a job's `with` (`jobs.<job>.with`). Keys inside
+# it are data, not references. Only these positions are exempt, so a job or
+# step that merely *contains* a key spelled `with` elsewhere is still checked.
+def action_inputs?(path)
+  return false unless path.last == "with"
+
+  path[-2] == "steps" || (path.length == 3 && path[0] == "jobs")
+end
+
 # `jobs.<job>.services` — where a scalar value is the short `name: image` form.
 def services_map?(path)
   path.length == 3 && path[0] == "jobs" && path[2] == "services"
@@ -126,7 +136,7 @@ end
 def inspect_mapping_entry(file, key, key_node, value_node, state, path)
   case key
   when "uses"
-    return if path.include?("with")
+    return if action_inputs?(path)
 
     state[:uses] += 1
     state[:valid] = false unless validate_reference(file, key_node, value_node)
