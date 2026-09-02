@@ -24,12 +24,14 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   the environment through the read-only `GITHUB_TOKEN` and fail before minting
   a token if either control is missing. Configuration details and the exact
   checks are in [`crates-release.md`](crates-release.md#repository-protection).
-- A `Protect release tags` ruleset should block creation, update, deletion, and
-  non-fast-forward pushes of `v*` tags for everyone except the maintainers
-  team; the payload is in the same section. Verified 2026-09-02 (read-only
-  `gh api`): only the `SNF - default branch baseline` branch ruleset exists,
-  and the `crates-io` environment has reviewers but no deployment policy, so
-  both are pending administrator actions.
+- Two tag rulesets should protect `v*` tags: a **creation** ruleset that only the
+  maintainers team may bypass (so only maintainers can start a release), and a
+  separate **immutability** ruleset (update, deletion, non-fast-forward) with no
+  bypass actors at all, so no push token can repoint or delete a published tag.
+  Both payloads are in the same section of `crates-release.md`. Verified
+  2026-09-02 (read-only `gh api`): only the `SNF - default branch baseline`
+  branch ruleset exists, and the `crates-io` environment has reviewers but no
+  deployment policy, so all three are pending administrator actions.
 - Every `uses:` in every workflow is pinned to a commit SHA and checked by
   `.github/scripts/check-workflow-actions-pinned.sh`; release tooling
   (`wasm-pack`, `cargo-audit`, `cargo-deny`) is built from crates.io with
