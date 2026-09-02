@@ -1,0 +1,20 @@
+# Code owners for release and supply-chain surfaces.
+#
+# Changes to these paths alter what gets built, published, or trusted: CI
+# workflows and guardrail scripts, dependency manifests and the lockfile,
+# license/advisory policy, release playbooks, git hooks, and the security
+# policy. They need a designated reviewer rather than any available approver.
+# Maintainers can extend the owner list; ownership here does not replace the
+# branch-protection rules configured in the repository settings.
+
+/.github/                     @adrienlacombe
+/.githooks/                   @adrienlacombe
+/tools/                       @adrienlacombe
+/Cargo.toml                   @adrienlacombe
+/Cargo.lock                   @adrienlacombe
+/crates/*/Cargo.toml          @adrienlacombe
+/crates/controller/Cargo.toml @adrienlacombe
+/deny.toml                    @adrienlacombe
+/docs/crates-release.md       @adrienlacombe
+/docs/supply-chain.md         @adrienlacombe
+/SECURITY.md                  @adrienlacombe
