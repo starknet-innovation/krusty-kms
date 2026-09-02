@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-02
+
 ### Added
 
 - Add `ArgentAccount::try_with_class_hash`, which rejects a class hash with no
