@@ -1,12 +1,13 @@
 //! Operation retention and class-hash allowlist policies.
 
 use super::{derivation_request, gateway_with_retention, nostr_sign_request, TestClock};
-use crate::account_class::enforce_class_hash_allowlist;
+use crate::account_class::{enforce_class_hash_allowlist, resolve_account_class};
 use crate::{DeployExecution, OperationRetentionError, OperationRetentionPolicy};
 use krusty_kms::{AccountClass, ArgentAccount, OpenZeppelinAccount};
 use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
-    AccountClassKind, GatewayErrorCode, OperationLookupResult, OperationState, OperationStatus,
+    AccountClassKind, AccountClassSpec, FeltHex, GatewayErrorCode, OperationLookupResult,
+    OperationState, OperationStatus,
 };
 use starknet_types_core::felt::Felt;
 
@@ -144,4 +145,24 @@ fn class_hash_allowlist_accepts_known_argent_versions() {
             "expected known Argent hash {hash:#x} to be allowed"
         );
     }
+}
+
+#[test]
+fn argent_unlisted_class_hash_is_rejected_even_with_override() {
+    // The allowlist override cannot supply the constructor layout, and
+    // guessing it derives an undeployable address, so an unrecognised Argent
+    // class must still be refused.
+    let resolved = resolve_account_class(
+        &AccountClassSpec {
+            kind: AccountClassKind::Argent,
+            class_hash: Some(FeltHex::parse("0xdeadbeef").unwrap()),
+            source_label: None,
+            allow_unlisted_class_hash: true,
+        },
+        ChainId::Sepolia,
+    );
+    let Err(err) = resolved else {
+        panic!("unknown Argent class hash must be rejected");
+    };
+    assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
 }

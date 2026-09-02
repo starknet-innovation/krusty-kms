@@ -62,8 +62,12 @@ fn felt_hex(f: &Felt) -> String {
 /// - **ArgentLegacy**: double derivation via ETH key — the key used by old Argent
 ///
 /// These public keys can be used to query external APIs (e.g., Argent's smart
-/// account discovery endpoint) to find accounts whose addresses aren't locally
-/// derivable because they used a server-provided salt.
+/// account discovery endpoint) to find Argent smart accounts, whose deployment
+/// salt is assigned server-side and so cannot be reconstructed locally.
+/// Standard Argent accounts salt with the public key and *are* derived here; an
+/// earlier mismatch against a real on-chain account was misattributed to this
+/// salt, when the cause was the constructor calldata (see
+/// `docs/design/2026-09-02-argent-constructor-layout.md`).
 ///
 /// This is much cheaper than `generate_candidates` since it skips address computation.
 pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<DerivedKeypair>> {
@@ -170,7 +174,7 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         });
 
         // Argent — v0.4.0
-        let argent_addr = ArgentAccount::with_class_hash(argent_v040_hash)
+        let argent_addr = ArgentAccount::try_with_class_hash(argent_v040_hash)?
             .calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
         candidates.push(CandidateAccount {
             wallet_type: WalletType::Argent,
@@ -222,7 +226,7 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
 
         // Cairo 1 class hashes via legacy derivation
         for (hash, version) in legacy_cairo1_hashes {
-            let addr = ArgentAccount::with_class_hash(*hash)
+            let addr = ArgentAccount::try_with_class_hash(*hash)?
                 .calculate_address(&legacy_pubk, SaltPolicy::PublicKey)?;
             candidates.push(CandidateAccount {
                 wallet_type: WalletType::ArgentLegacy,

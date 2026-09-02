@@ -49,7 +49,8 @@ pub(crate) fn resolve_account_class(
                         chain_id,
                         spec.allow_unlisted_class_hash,
                     )?;
-                    ArgentAccount::with_class_hash(class_hash.to_felt())
+                    ArgentAccount::try_with_class_hash(class_hash.to_felt())
+                        .map_err(map_kms_error)?
                 }
                 None => ArgentAccount::new(),
             }))
