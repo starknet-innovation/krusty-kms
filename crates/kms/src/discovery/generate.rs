@@ -119,6 +119,33 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
 ///
 /// Does NOT hit the network. Returns all mathematically possible addresses.
 /// Use with an RPC provider to filter to actually deployed accounts.
+/// Argent Cairo 1 classes reachable by legacy double derivation, with the
+/// constructor layout each one deserialises.
+///
+/// The layout is paired with the class hash here rather than looked up at the
+/// call site: adding a class to this table forces the author to state its
+/// layout, so candidate generation stays infallible instead of failing every
+/// mnemonic on an unrecognised hash.
+fn argent_cairo1_classes() -> Vec<(Felt, &'static str, ArgentConstructorLayout)> {
+    vec![
+        (
+            Felt::from_hex(ARGENT_V040).unwrap(),
+            "v0.4.0",
+            ArgentConstructorLayout::SignerWithOptionalGuardian,
+        ),
+        (
+            Felt::from_hex(ARGENT_V031).unwrap(),
+            "v0.3.1",
+            ArgentConstructorLayout::OwnerGuardianFelts,
+        ),
+        (
+            Felt::from_hex(ARGENT_V030).unwrap(),
+            "v0.3.0",
+            ArgentConstructorLayout::OwnerGuardianFelts,
+        ),
+    ]
+}
+
 pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<CandidateAccount>> {
     validate_mnemonic(mnemonic)?;
 
@@ -127,8 +154,6 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     // Parse class hashes once.
     let braavos_hash = Felt::from_hex(BRAAVOS_BASE).unwrap();
     let argent_v040_hash = Felt::from_hex(ARGENT_V040).unwrap();
-    let argent_v031_hash = Felt::from_hex(ARGENT_V031).unwrap();
-    let argent_v030_hash = Felt::from_hex(ARGENT_V030).unwrap();
     let proxy_hash = Felt::from_hex(ARGENT_PROXY).unwrap();
     let impl_v024 = Felt::from_hex(ARGENT_IMPL_V024).unwrap();
     let impl_v023 = Felt::from_hex(ARGENT_IMPL_V023).unwrap();
@@ -137,27 +162,7 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     let oz_hash = Felt::from_hex(OZ_V300).unwrap();
     let initialize_selector = Felt::from_hex(INITIALIZE_SELECTOR).unwrap();
 
-    // Cairo 1 legacy class hashes with labels and their constructor layout.
-    // Pairing the layout here keeps candidate generation infallible: adding a
-    // class hash to this table forces the author to state its layout, instead
-    // of failing the whole recovery at runtime.
-    let legacy_cairo1_hashes: &[(Felt, &str, ArgentConstructorLayout)] = &[
-        (
-            argent_v040_hash,
-            "v0.4.0",
-            ArgentConstructorLayout::SignerWithOptionalGuardian,
-        ),
-        (
-            argent_v031_hash,
-            "v0.3.1",
-            ArgentConstructorLayout::OwnerGuardianFelts,
-        ),
-        (
-            argent_v030_hash,
-            "v0.3.0",
-            ArgentConstructorLayout::OwnerGuardianFelts,
-        ),
-    ];
+    let legacy_cairo1_hashes = argent_cairo1_classes();
 
     // Cairo 0 proxy implementation hashes with labels.
     let cairo0_impls: &[(Felt, &str)] = &[
@@ -245,7 +250,7 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
 
         // Cairo 1 class hashes via legacy derivation
-        for (hash, version, layout) in legacy_cairo1_hashes {
+        for (hash, version, layout) in &legacy_cairo1_hashes {
             let addr = ArgentAccount::with_class_hash_and_layout(*hash, *layout)
                 .calculate_address(&legacy_pubk, SaltPolicy::PublicKey)?;
             candidates.push(CandidateAccount {
