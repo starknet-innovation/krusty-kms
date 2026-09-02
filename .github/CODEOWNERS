@@ -12,8 +12,9 @@
 /tools/                       @adrienlacombe
 /Cargo.toml                   @adrienlacombe
 /Cargo.lock                   @adrienlacombe
-/crates/*/Cargo.toml          @adrienlacombe
-/crates/controller/Cargo.toml @adrienlacombe
+/crates/**/Cargo.toml         @adrienlacombe
+/.cargo/                      @adrienlacombe
+/crates/controller/.cargo/    @adrienlacombe
 /deny.toml                    @adrienlacombe
 /docs/crates-release.md       @adrienlacombe
 /docs/supply-chain.md         @adrienlacombe
