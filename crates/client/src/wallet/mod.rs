@@ -1,11 +1,13 @@
 //! Wallet: owns a provider + account, can sign and execute transactions.
 
 pub mod deploy;
+mod fee;
 pub mod utils;
 
 use krusty_kms::{AccountClass, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
+use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::Tx;
@@ -28,6 +30,7 @@ pub struct Wallet {
     chain_id: ChainId,
     network: NetworkPreset,
     deployed_cache: RwLock<Option<(bool, Instant)>>,
+    fee_ceiling: Option<ResourceBoundsCeiling>,
 }
 
 /// Cache TTL for the "not deployed" state (3 seconds).
@@ -72,6 +75,7 @@ impl Wallet {
             chain_id,
             network,
             deployed_cache: RwLock::new(None),
+            fee_ceiling: None,
         })
     }
 
@@ -103,7 +107,20 @@ impl Wallet {
             chain_id,
             network,
             deployed_cache: RwLock::new(None),
+            fee_ceiling: None,
         }
+    }
+
+    /// Bound the resource bounds [`Wallet::execute`] may sign.
+    ///
+    /// The RPC estimate is admitted against `ceiling` and the admitted bounds are
+    /// pinned on the transaction; estimates above it fail with
+    /// [`KmsError::FeeEstimationFailed`] naming the offending dimension. Without
+    /// a ceiling (the default) bounds stay RPC-estimated and unbounded.
+    #[must_use]
+    pub fn with_fee_ceiling(mut self, ceiling: ResourceBoundsCeiling) -> Self {
+        self.fee_ceiling = Some(ceiling);
+        self
     }
 
     /// Convenience: create from a private key Felt.
@@ -164,12 +181,18 @@ impl Wallet {
         Ok(deployed)
     }
 
-    /// Execute a list of calls via `execute_v3`.
+    /// Execute a list of calls via `execute_v3`, honouring [`Wallet::with_fee_ceiling`].
     pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
         use starknet_rust::accounts::Account;
-        let result = self
-            .account
-            .execute_v3(calls)
+        let mut execution = self.account.execute_v3(calls);
+        if let Some(ceiling) = &self.fee_ceiling {
+            let estimate = execution
+                .estimate_fee()
+                .await
+                .map_err(|e| KmsError::FeeEstimationFailed(e.to_string()))?;
+            execution = fee::bound_execution(execution, &estimate, ceiling)?;
+        }
+        let result = execution
             .send()
             .await
             .map_err(|e| KmsError::TransactionError(e.to_string()))?;

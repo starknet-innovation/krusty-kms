@@ -29,6 +29,7 @@ pub use events::{
     BalanceDeclaredEvent, EventMetadata, FundEvent, OutsideFundEvent, RagequitEvent, RolloverEvent,
     TongoEvent, TransferDeclaredEvent, TransferEvent, WithdrawEvent,
 };
+pub use krusty_kms_common::fee::{MaxBound, ResourceBoundsCeiling};
 pub use krusty_kms_common::{KmsError, Result};
 pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
 #[cfg(feature = "nats")]
@@ -53,5 +54,7 @@ pub use types::{
     decrypt_cipher_balance_with_limit as decrypt_cipher_balance, erc20_to_tongo, tongo_to_erc20,
     AccountState, CipherBalance, DecryptedAccountState, DEFAULT_DECRYPT_SEARCH_LIMIT,
 };
-pub use wallet::deploy::{deploy_oz_account, estimate_deploy_fee, DeployResult};
+pub use wallet::deploy::{
+    deploy_oz_account, deploy_oz_account_with_fee_ceiling, estimate_deploy_fee, DeployResult,
+};
 pub use wallet::Wallet;

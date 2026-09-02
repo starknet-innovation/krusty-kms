@@ -7,6 +7,7 @@
 use krusty_kms::{OpenZeppelinAccount, SaltPolicy};
 use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
+use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use starknet_rust::accounts::AccountFactory;
@@ -16,6 +17,7 @@ use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust::signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
+use super::fee;
 use super::utils::{check_deployed, core_felt_to_rs, map_deploy_factory_error};
 use crate::tx::Tx;
 
@@ -37,7 +39,8 @@ pub struct DeployResult {
 /// 3. Checks whether the account is already deployed on-chain.
 /// 4. If not, submits a `DEPLOY_ACCOUNT` v3 transaction.
 ///
-/// Provider errors are mapped to typed [`KmsError`] variants.
+/// Provider errors are mapped to typed [`KmsError`] variants. Resource bounds
+/// are RPC-estimated and unbounded; see [`deploy_oz_account_with_fee_ceiling`].
 pub async fn deploy_oz_account(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,
@@ -45,6 +48,34 @@ pub async fn deploy_oz_account(
     salt_policy: SaltPolicy,
     chain_id: ChainId,
     network: NetworkPreset,
+) -> Result<DeployResult> {
+    deploy_oz_account_with_fee_ceiling(
+        provider,
+        signing_key,
+        account_class,
+        salt_policy,
+        chain_id,
+        network,
+        None,
+    )
+    .await
+}
+
+/// [`deploy_oz_account`] with the deploy transaction's resource bounds admitted
+/// against `fee_ceiling` before signing.
+///
+/// The RPC estimate is scaled exactly as `starknet-rs` would, rejected with
+/// [`KmsError::FeeEstimationFailed`] if any dimension exceeds the ceiling, and
+/// otherwise pinned on the signed transaction. `None` keeps the unbounded,
+/// RPC-estimated behaviour of [`deploy_oz_account`].
+pub async fn deploy_oz_account_with_fee_ceiling(
+    provider: Arc<JsonRpcClient<HttpTransport>>,
+    signing_key: &SigningKey,
+    account_class: &OpenZeppelinAccount,
+    salt_policy: SaltPolicy,
+    chain_id: ChainId,
+    network: NetworkPreset,
+    fee_ceiling: Option<&ResourceBoundsCeiling>,
 ) -> Result<DeployResult> {
     let verifying_key = signing_key.verifying_key();
     let public_key_rs = verifying_key.scalar();
@@ -75,11 +106,15 @@ pub async fn deploy_oz_account(
             .await
             .map_err(|e| KmsError::CryptoError(e.to_string()))?;
 
-    let result = factory
-        .deploy_v3(salt_rs)
-        .send()
-        .await
-        .map_err(map_deploy_factory_error)?;
+    let mut deployment = factory.deploy_v3(salt_rs);
+    if let Some(ceiling) = fee_ceiling {
+        let estimate = deployment
+            .estimate_fee()
+            .await
+            .map_err(map_deploy_factory_error)?;
+        deployment = fee::bound_deployment(deployment, &estimate, ceiling)?;
+    }
+    let result = deployment.send().await.map_err(map_deploy_factory_error)?;
 
     let tx = Tx::new(result.transaction_hash, provider, network);
 
