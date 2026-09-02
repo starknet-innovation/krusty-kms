@@ -72,19 +72,26 @@ gh api repos/starknet-innovation/krusty-kms/environments/crates-io/deployment-br
 ### Release-tag rulesets
 
 Release tags are immutable by convention; tag rulesets make that a server-side
-guarantee. Two rulesets are needed because a bypass actor is exempt from *every*
-rule in its ruleset: if the maintainers who may create tags were also bypass actors
-on the immutability rules, a compromised maintainer token could still repoint or
-delete a published `v*` tag.
+guarantee. Two rulesets exist (created 2026-09-02, ids 22105094 and 22105099):
 
-1. **Creation** — only the maintainers team may push a `v*` tag.
-2. **Immutability** — nobody, maintainers and administrators included, may update,
-   delete, or force-move an existing `v*` tag. This ruleset has no bypass actors.
+1. **Release tags: creation** — only bypass actors may push a `v*` tag.
+2. **Release tags: immutability** — nobody may update, delete, or force-move an
+   existing `v*` tag except bypass actors.
 
-Create both once (administrator, `repo` scope):
+Both use the repository **Admin** role as the sole bypass actor (the rulesets API
+accepts `Team`, `RepositoryRole`, `OrganizationAdmin`, and `Integration` actors, not
+individual users, and this repository has no team with access). Keeping the
+two rulesets separate matters when the bypass sets diverge: if a maintainers
+team is later given the creation bypass, do **not** add it to the immutability
+ruleset, otherwise a compromised maintainer write token could repoint a published
+tag. An Admin bypass on the immutability ruleset does not widen what admins can
+already do (they can edit or disable the ruleset in settings, which is audited),
+but it does mean a compromised **admin** token can move a tag; drop the bypass
+actor from that ruleset if the release flow never needs it.
+
+To recreate them (administrator, `repo` scope):
 
 ```bash
-maintainers_team_id="$(gh api orgs/starknet-innovation/teams/<maintainers-team-slug> --jq .id)"
 gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
   --input - <<EOF
 {
@@ -92,7 +99,7 @@ gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
   "target": "tag",
   "enforcement": "active",
   "bypass_actors": [
-    { "actor_id": ${maintainers_team_id}, "actor_type": "Team", "bypass_mode": "always" }
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
   ],
   "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
   "rules": [ { "type": "creation" } ]
@@ -104,7 +111,9 @@ gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
   "name": "Release tags: immutability",
   "target": "tag",
   "enforcement": "active",
-  "bypass_actors": [],
+  "bypass_actors": [
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ],
   "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
   "rules": [
     { "type": "update" },
@@ -115,16 +124,13 @@ gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
 EOF
 ```
 
-Replace `<maintainers-team-slug>` with the org team that is allowed to cut releases.
-The rulesets API accepts only `Team`, `RepositoryRole`, `OrganizationAdmin`, and
-`Integration` bypass actors (not individual users); if no team exists yet, use
-`{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }` (the
-Admin role) and tighten it to a team later. Keep the immutability ruleset's
-`bypass_actors` empty: repository administrators can still edit or disable the ruleset
-itself through the settings UI, which is auditable, but no push token can move a tag.
-Review the result with `gh api repos/starknet-innovation/krusty-kms/rulesets` and keep
-both rulesets `active`; never switch one to `evaluate` to get a release through — fix
-the tag flow instead.
+`actor_id` 5 is the Admin repository role; to hand tag creation to a team instead,
+replace that entry in the **creation** ruleset with
+`{ "actor_id": <team id>, "actor_type": "Team", "bypass_mode": "always" }`
+(`gh api orgs/starknet-innovation/teams/<slug> --jq .id`). Review the live state with
+`gh api repos/starknet-innovation/krusty-kms/rulesets` and keep both rulesets
+`active`; never switch one to `evaluate` to get a release through — fix the tag flow
+instead.
 
 ## Prepare a release
 
