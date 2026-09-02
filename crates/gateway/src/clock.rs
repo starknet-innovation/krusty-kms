@@ -24,9 +24,12 @@ pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now_ms(&self) -> u64 {
+        // Sample both clocks while holding the lock: readings are then ordered
+        // exactly like the lock acquisitions, so a caller that sampled earlier
+        // but locked later cannot publish an older reading than its predecessor.
+        let mut anchor = ANCHOR.lock().unwrap_or_else(PoisonError::into_inner);
         let wall_ms = saturating_unix_time_ms(SystemTime::now());
         let now = Instant::now();
-        let mut anchor = ANCHOR.lock().unwrap_or_else(PoisonError::into_inner);
         advance(&mut anchor, wall_ms, now)
     }
 }
