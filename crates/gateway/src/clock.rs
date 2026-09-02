@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -13,18 +14,20 @@ pub trait Clock: Send + Sync {
 
 /// System clock implementation for production gateway usage.
 ///
-/// The wall clock is read once, on first use, and the value then advances with
-/// the monotonic [`Instant`] clock. It therefore tracks Unix time closely but
-/// cannot move backwards when the wall clock is stepped (NTP correction,
-/// manual change); after such a step it differs from the wall clock by exactly
-/// the size of the step, which is the price of keeping cache ages honest.
-#[derive(Debug, Default, Clone, Copy)]
+/// Each reading is the maximum of three sources: the wall clock, a wall-clock
+/// anchor advanced by the monotonic [`Instant`] clock, and the previous
+/// reading. The anchor keeps time moving through backwards wall-clock steps
+/// (NTP corrections, manual changes); the wall clock keeps it moving through
+/// host suspension, where `Instant` may stand still; the previous reading
+/// makes the sequence non-decreasing by construction.
 pub struct SystemClock;
 
 impl Clock for SystemClock {
     fn now_ms(&self) -> u64 {
         let anchor = ANCHOR.get_or_init(Anchor::capture);
-        anchored_now_ms(anchor.epoch_ms, anchor.started.elapsed())
+        let anchored = anchored_now_ms(anchor.epoch_ms, anchor.started.elapsed());
+        let wall = saturating_unix_time_ms(SystemTime::now());
+        monotone_reading(&LAST_READING, anchored.max(wall))
     }
 }
 
@@ -46,6 +49,15 @@ impl Anchor {
 /// Shared by every `SystemClock`: the type is a `Copy` unit struct for API
 /// stability, so the anchor lives here and all instances report one timeline.
 static ANCHOR: OnceLock<Anchor> = OnceLock::new();
+
+/// Last value returned by any `SystemClock`; readings never fall below it.
+static LAST_READING: AtomicU64 = AtomicU64::new(0);
+
+/// Publish `candidate` as the newest reading unless an earlier reading was
+/// already later, and return whichever is larger.
+fn monotone_reading(last: &AtomicU64, candidate: u64) -> u64 {
+    last.fetch_max(candidate, Ordering::AcqRel).max(candidate)
+}
 
 fn anchored_now_ms(epoch_ms: u64, elapsed: Duration) -> u64 {
     epoch_ms.saturating_add(saturating_duration_ms(elapsed))
@@ -70,8 +82,10 @@ fn saturating_duration_ms(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        anchored_now_ms, saturating_duration_ms, saturating_unix_time_ms, Clock, SystemClock,
+        anchored_now_ms, monotone_reading, saturating_duration_ms, saturating_unix_time_ms, Clock,
+        SystemClock,
     };
+    use std::sync::atomic::AtomicU64;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -117,5 +131,24 @@ mod tests {
         let later = anchored_now_ms(1_000, Duration::from_millis(6));
         assert!(earlier <= later);
         assert_eq!(anchored_now_ms(u64::MAX, Duration::from_secs(1)), u64::MAX);
+    }
+
+    /// Codex review: a forward wall-clock jump (e.g. resume from suspend, where
+    /// `Instant` stood still) must be followed, and a backwards one ignored.
+    #[test]
+    fn readings_follow_forward_jumps_and_never_go_backwards() {
+        let last = AtomicU64::new(0);
+        assert_eq!(monotone_reading(&last, 1_000), 1_000);
+        assert_eq!(
+            monotone_reading(&last, 5_000),
+            5_000,
+            "forward jump followed"
+        );
+        assert_eq!(
+            monotone_reading(&last, 2_000),
+            5_000,
+            "backwards step ignored"
+        );
+        assert_eq!(monotone_reading(&last, 5_001), 5_001);
     }
 }
