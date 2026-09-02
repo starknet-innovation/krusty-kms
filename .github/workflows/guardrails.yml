@@ -16,9 +16,7 @@ on:
       - ".github/guardrails/**"
       - ".github/scripts/**"
       - "tools/check.sh"
-      - ".github/workflows/publish.yml"
-      - ".github/workflows/publish-npm.yml"
-      - ".github/workflows/guardrails.yml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "crates/**"
@@ -33,9 +31,7 @@ on:
       - ".github/guardrails/**"
       - ".github/scripts/**"
       - "tools/check.sh"
-      - ".github/workflows/publish.yml"
-      - ".github/workflows/publish-npm.yml"
-      - ".github/workflows/guardrails.yml"
+      - ".github/workflows/**"
 
 concurrency:
   group: guardrails-${{ github.workflow }}-${{ github.ref }}
@@ -100,10 +96,10 @@ jobs:
       - name: Secret hygiene
         run: bash .github/scripts/check-secret-hygiene.sh
 
-      - name: Release action pinning
+      - name: Workflow action pinning
         run: |
-          bash .github/scripts/check-publish-actions-pinned.sh
-          bash .github/scripts/test-check-publish-actions-pinned.sh
+          bash .github/scripts/check-workflow-actions-pinned.sh
+          bash .github/scripts/test-check-workflow-actions-pinned.sh
           bash .github/scripts/test-publish-npm.sh
 
       - name: FFI surface freeze

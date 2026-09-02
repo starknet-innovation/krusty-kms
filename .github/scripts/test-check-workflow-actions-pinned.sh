@@ -2,7 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-checker="$repo_root/.github/scripts/check-publish-actions-pinned.sh"
+checker="$repo_root/.github/scripts/check-workflow-actions-pinned.sh"
+checker_rb="$repo_root/.github/scripts/check-workflow-actions-pinned.rb"
 fixture_dir="$(mktemp -d)"
 trap 'rm -rf "$fixture_dir"' EXIT
 
@@ -13,6 +14,11 @@ expect_failure() {
     echo "self-test failed: $description unexpectedly passed" >&2
     exit 1
   fi
+}
+
+# Run the checker with its default scope from a fixture repository root.
+check_repo() {
+  (cd "$1" && ruby "$checker_rb")
 }
 
 full_sha="0123456789abcdef0123456789abcdef01234567"
@@ -68,6 +74,23 @@ expect_failure "YAML aliases" "$checker" "$fixture_dir/alias.yml"
 
 expect_failure "unreadable workflow" "$checker" "$fixture_dir/missing.yml"
 
+# The default scope must cover every workflow, not only the publishing ones:
+# a tag-pinned action in an ordinary CI workflow has to fail the repo check.
+repo_workflows="$fixture_dir/repo/.github/workflows"
+mkdir -p "$repo_workflows"
+printf '%s\n' 'jobs:' '  publish:' '    steps:' "      - uses: actions/checkout@${full_sha}" \
+  >"$repo_workflows/publish.yml"
+printf '%s\n' 'jobs:' '  test:' '    steps:' '      - uses: actions/checkout@v7' \
+  >"$repo_workflows/rust.yml"
+expect_failure "mutable action in a non-publishing workflow" check_repo "$fixture_dir/repo"
+
+printf '%s\n' 'jobs:' '  test:' '    steps:' "      - uses: actions/checkout@${full_sha}" \
+  >"$repo_workflows/rust.yml"
+check_repo "$fixture_dir/repo" >/dev/null
+
+mkdir -p "$fixture_dir/empty/.github/workflows"
+expect_failure "repository without workflows" check_repo "$fixture_dir/empty"
+
 (cd "$fixture_dir" && "$checker" >/dev/null)
 
-echo "Publishing action pinning self-tests passed."
+echo "Workflow action pinning self-tests passed."
