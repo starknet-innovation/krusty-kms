@@ -2,6 +2,14 @@
 # crate is workspace-excluded and publish = false). These cannot be updated
 # until upstream cartridge-gg/controller-rs upgrades its dependency stack.
 # Scoped to this crate's audits so the workspace-root audit stays strict.
+#
+# Run the audit from this directory so cargo-audit picks up this file:
+#   cd crates/controller && cargo generate-lockfile && cargo audit --deny warnings
+# As of 2026-09-02 the lockfile cannot be generated: `account_sdk` at the
+# pinned rev (v0.10.1, also upstream `main`) requires
+# `starknet-types-core = "=0.2.0"` while `krusty-kms-common` requires `^0.2.4`,
+# so this list could not be re-verified against a resolved graph. Re-check it
+# (and drop entries that no longer match) as soon as the crate resolves again.
 
 [advisories]
 ignore = [

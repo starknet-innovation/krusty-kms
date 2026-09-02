@@ -52,3 +52,30 @@ copy, which removed `starknet-rust-crypto` 0.9.0, `starknet-rust-curve` 0.6.0 an
   scoped to that crate. The workspace-root `.cargo/audit.toml` ignore list is
   intentionally empty — keep it that way unless an advisory affects the root
   `Cargo.lock` and genuinely cannot be fixed.
+- The crate is its own workspace root (`[workspace]` in its manifest), so it
+  resolves into `crates/controller/Cargo.lock`, never into the production
+  lockfile. Audit it from its own directory so cargo-audit reads that file:
+
+  ```bash
+  cd crates/controller
+  cargo generate-lockfile   # network: fetches the pinned account_sdk rev
+  cargo audit --deny warnings
+  cargo test --locked --features sdk
+  ```
+
+- **Status 2026-09-02 (audit finding M-9): the crate does not resolve.**
+  `account_sdk` at the pinned rev `4ec2e4fc` (tag v0.10.1, which is also the
+  tip of upstream `main`) requires `starknet-types-core = "=0.2.0"`, while
+  `krusty-kms-common` has required `^0.2.4` since the 0.6.0 workspace bump.
+  Cargo resolves optional dependencies into the lockfile, so even the default
+  feature set fails to generate `Cargo.lock`; no lockfile, audit, or CI job can
+  exist until one of these happens:
+  - upstream `cartridge-gg/controller-rs` relaxes the `starknet-types-core`
+    pin — re-verify the new rev's owners and dependency stack before bumping
+    `rev`, and record the tag it corresponds to; or
+  - the adapter stops depending on the `krusty-kms-common` /
+    `krusty-kms-wallet-api` path crates and carries the small `Address`,
+    `ChainId`, and `Tx` surface it uses.
+
+  Until then the ignore list in `crates/controller/.cargo/audit.toml` cannot be
+  re-verified and should be treated as stale.
