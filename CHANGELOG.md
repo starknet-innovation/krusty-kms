@@ -75,6 +75,10 @@ All notable changes to the published Rust crates are documented here.
   indices) with checked capacity arithmetic; larger `max_index` values return
   `InvalidDerivationPath` instead of running unbounded PBKDF2 work or
   overflowing (L-8).
+- Bound `Tx::wait` polling: intervals below `MIN_WAIT_INTERVAL_SECS` are raised
+  to it, timeouts above `MAX_WAIT_TIMEOUT_SECS` are capped, and the deadline
+  uses checked arithmetic so `u64::MAX` no longer panics. `WaitOptions::new`
+  validates the same bounds (L-9).
 
 ## [0.10.0] - 2026-08-28
 
