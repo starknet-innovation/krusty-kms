@@ -53,6 +53,9 @@ fn redact_url_rejects_credential_shaped_scheme_or_host() {
         "https://user:SECRET@/path",
         "https://ho st/path",
         "https://[::1/path",
+        "https://[deadbeef]/rpc",
+        "https://[SECRET]:443/rpc",
+        "https://[::1]x/path",
         "https://host:notaport/path",
         "://host",
     ] {
@@ -69,6 +72,10 @@ fn redact_url_keeps_valid_authorities() {
         "http://[::1]:8545"
     );
     assert_eq!(redact_url("http://[::1]/v0_9/KEY"), "http://[::1]");
+    assert_eq!(
+        redact_url("https://[2001:db8::1]:443/v0_9/KEY"),
+        "https://[2001:db8::1]:443"
+    );
     assert_eq!(
         redact_url("https://rpc.example.com/v0_9/KEY?k=v"),
         "https://rpc.example.com"

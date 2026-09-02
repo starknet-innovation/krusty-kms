@@ -126,7 +126,7 @@ fn is_url_scheme(scheme: &str) -> bool {
 }
 
 /// `host[:port]` where host is a DNS name / IPv4 literal or a bracketed IPv6
-/// literal and the optional port is numeric. Rejects anything else, such as
+/// literal that parses as an address, and the optional port is numeric. Rejects anything else, such as
 /// `user:secret` left over from a malformed userinfo.
 fn is_host_port(host_port: &str) -> bool {
     let (host_ok, port) = match host_port.strip_prefix('[') {
@@ -134,10 +134,9 @@ fn is_host_port(host_port: &str) -> bool {
             let Some((ipv6, after)) = rest.split_once(']') else {
                 return false;
             };
-            let ipv6_ok = !ipv6.is_empty()
-                && ipv6
-                    .chars()
-                    .all(|c| c.is_ascii_hexdigit() || matches!(c, ':' | '.'));
+            // Parse, do not pattern-match: `[deadbeef]` is hex-shaped but not an
+            // address and must not be echoed.
+            let ipv6_ok = ipv6.parse::<std::net::Ipv6Addr>().is_ok();
             let port = match after.strip_prefix(':') {
                 Some(port) => Some(port),
                 None if after.is_empty() => None,
