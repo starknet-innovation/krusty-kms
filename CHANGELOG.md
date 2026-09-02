@@ -65,7 +65,10 @@ All notable changes to the published Rust crates are documented here.
   selects the layout from known class hashes; `ArgentConstructorLayout` and
   `ArgentAccount::with_class_hash_and_layout` make it explicit.
 - Reject `u128` overflow when computing the post-fund audited balance instead
-  of wrapping (L-1).
+  of wrapping, and keep `overflow-checks` on in release builds of
+  `krusty-kms-common`, `krusty-kms-crypto`, and `krusty-kms-sdk`. The profile
+  override applies to builds driven from this workspace; downstream consumers'
+  own profiles govern their builds (L-1).
 
 ## [0.10.0] - 2026-08-28
 

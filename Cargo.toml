@@ -77,3 +77,16 @@ hkdf = "0.13.0"
 borrow_as_ptr = "deny"
 dbg_macro = "deny"
 todo = "deny"
+
+# Release builds keep integer overflow checks on for the crates where a silent
+# wrap corrupts an amount, a range bound, or a proof transcript. Profile
+# overrides only govern builds driven from this workspace (including the C ABI
+# and WASM artifacts); downstream consumers' own profiles govern their builds.
+[profile.release.package.krusty-kms-common]
+overflow-checks = true
+
+[profile.release.package.krusty-kms-crypto]
+overflow-checks = true
+
+[profile.release.package.krusty-kms-sdk]
+overflow-checks = true
