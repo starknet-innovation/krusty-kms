@@ -7,8 +7,12 @@ All notable changes to the published Rust crates are documented here.
 ### Added
 
 - Add `ArgentAccount::try_with_class_hash`, which rejects a class hash with no
-  known constructor layout instead of guessing one. `ArgentAccount::new`,
-  `with_class_hash_and_layout` and `layout_for_class_hash` are unchanged.
+  known constructor layout instead of guessing one, and
+  `ArgentAccount::known_classes`, the single table of known Argent classes
+  (class hash, version label, constructor layout) that `known_class_hashes` and
+  `layout_for_class_hash` now derive from. `ArgentAccount::new`,
+  `with_class_hash_and_layout` and `layout_for_class_hash` keep their
+  signatures.
 - Add the `argent_address` example (`MNEMONIC=... cargo run -p krusty-kms
   --example argent_address`), which prints the derived Argent address for every
   known class version and both key schemes, for comparison against a real

@@ -19,12 +19,6 @@ const BRAAVOS_BASE: &str = "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4
 /// Argent Cairo 1 v0.4.0 class hash.
 const ARGENT_V040: &str = ArgentAccount::CLASS_HASH;
 
-/// Argent Cairo 1 v0.3.1 class hash.
-const ARGENT_V031: &str = ArgentAccount::CLASS_HASH_V031;
-
-/// Argent Cairo 1 v0.3.0 class hash.
-const ARGENT_V030: &str = ArgentAccount::CLASS_HASH_V030;
-
 /// Argent Cairo 0 proxy class hash.
 const ARGENT_PROXY: &str = "0x025ec026985a3bf9d0cc1fe17326b245dfdc3ff89b8fde106542a3ea56c5a918";
 
@@ -103,18 +97,6 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
     Ok(keypairs)
 }
 
-/// Argent Cairo 1 class hashes reachable by legacy double derivation, labelled.
-///
-/// The constructor layout is not restated here; it comes from
-/// [`ArgentAccount::layout_for_class_hash`], the canonical map.
-fn argent_cairo1_classes() -> Vec<(Felt, &'static str)> {
-    vec![
-        (Felt::from_hex(ARGENT_V040).unwrap(), "v0.4.0"),
-        (Felt::from_hex(ARGENT_V031).unwrap(), "v0.3.1"),
-        (Felt::from_hex(ARGENT_V030).unwrap(), "v0.3.0"),
-    ]
-}
-
 /// Generate all candidate account addresses for a mnemonic.
 ///
 /// Iterates through derivation indices `0..max_index` and generates candidate
@@ -145,7 +127,8 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     let oz_hash = Felt::from_hex(OZ_V300).unwrap();
     let initialize_selector = Felt::from_hex(INITIALIZE_SELECTOR).unwrap();
 
-    let legacy_cairo1_hashes = argent_cairo1_classes();
+    // Class hash, label and layout come from the canonical Argent table.
+    let legacy_cairo1_classes = ArgentAccount::known_classes();
 
     // Cairo 0 proxy implementation hashes with labels.
     let cairo0_impls: &[(Felt, &str)] = &[
@@ -231,13 +214,8 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
 
         // Cairo 1 class hashes via legacy derivation
-        for (hash, version) in &legacy_cairo1_hashes {
-            // expect(): this table lists only classes the canonical map knows,
-            // and the discovery tests generate candidates, so an unpaired row
-            // fails in CI rather than deriving an unusable address.
-            let layout = ArgentAccount::layout_for_class_hash(hash)
-                .expect("discovery table lists only known Argent classes");
-            let addr = ArgentAccount::with_class_hash_and_layout(*hash, layout)
+        for (hash, version, layout) in &legacy_cairo1_classes {
+            let addr = ArgentAccount::with_class_hash_and_layout(*hash, *layout)
                 .calculate_address(&legacy_pubk, SaltPolicy::PublicKey)?;
             candidates.push(CandidateAccount {
                 wallet_type: WalletType::ArgentLegacy,

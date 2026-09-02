@@ -166,3 +166,22 @@ fn argent_unlisted_class_hash_is_rejected_even_with_override() {
     };
     assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
 }
+
+#[test]
+fn class_hash_allowlist_does_not_offer_the_override_for_argent() {
+    // The override cannot supply an Argent constructor layout, so the rejection
+    // message must not point callers at a flag that will not help them.
+    let err = enforce_class_hash_allowlist(
+        Felt::from_hex("0xdeadbeef").unwrap(),
+        AccountClassKind::Argent,
+        ChainId::Sepolia,
+        false,
+    )
+    .expect_err("unknown Argent hash must be rejected");
+    assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+    let message = err.message.as_deref().unwrap_or("");
+    assert!(
+        !message.contains("allow_unlisted_class_hash"),
+        "Argent rejection must not advertise the override: {message}"
+    );
+}

@@ -62,29 +62,48 @@ impl ArgentAccount {
     pub const CLASS_HASH_V030: &str =
         "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
 
+    /// Known Argent Cairo 1 classes: class hash, version label, and the
+    /// constructor layout that class deserialises.
+    ///
+    /// The single table every other accessor derives from, newest first. A new
+    /// Argent class is added here, with its layout, and nothing else needs to
+    /// know: [`Self::known_class_hashes`] and [`Self::layout_for_class_hash`]
+    /// read it, and callers that need the labels (account discovery) consume it
+    /// directly rather than restating the mapping.
+    pub fn known_classes() -> Vec<(Felt, &'static str, ArgentConstructorLayout)> {
+        vec![
+            (
+                static_class_hash(Self::CLASS_HASH),
+                "v0.4.0",
+                ArgentConstructorLayout::SignerWithOptionalGuardian,
+            ),
+            (
+                static_class_hash(Self::CLASS_HASH_V031),
+                "v0.3.1",
+                ArgentConstructorLayout::OwnerGuardianFelts,
+            ),
+            (
+                static_class_hash(Self::CLASS_HASH_V030),
+                "v0.3.0",
+                ArgentConstructorLayout::OwnerGuardianFelts,
+            ),
+        ]
+    }
+
     /// Class hashes accepted for Argent Cairo 1 deployments.
     pub fn known_class_hashes() -> Vec<Felt> {
-        [
-            Self::CLASS_HASH,
-            Self::CLASS_HASH_V031,
-            Self::CLASS_HASH_V030,
-        ]
-        .into_iter()
-        .map(static_class_hash)
-        .collect()
+        Self::known_classes()
+            .into_iter()
+            .map(|(class_hash, _, _)| class_hash)
+            .collect()
     }
 
     /// Constructor layout of a known Argent class hash, if recognised.
     pub fn layout_for_class_hash(class_hash: &Felt) -> Option<ArgentConstructorLayout> {
-        if *class_hash == static_class_hash(Self::CLASS_HASH) {
-            Some(ArgentConstructorLayout::SignerWithOptionalGuardian)
-        } else if *class_hash == static_class_hash(Self::CLASS_HASH_V031)
-            || *class_hash == static_class_hash(Self::CLASS_HASH_V030)
-        {
-            Some(ArgentConstructorLayout::OwnerGuardianFelts)
-        } else {
-            None
-        }
+        Self::known_classes()
+            .into_iter()
+            .find(|(known, _, _)| known == class_hash)
+            .map(|(_, _, layout)| layout)
     }
 
     /// Latest supported Argent class (v0.4.0).
