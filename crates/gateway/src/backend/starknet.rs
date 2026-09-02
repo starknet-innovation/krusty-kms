@@ -4,12 +4,14 @@ use super::deploy::{map_deploy_submission_error, validate_open_zeppelin_descript
 use super::interface::{DeployExecution, GatewayBackend};
 use super::rpc::{
     balance_of_camel_selector, balance_of_selector, call_erc20_balance_with_selector_fallback,
-    core_felt_to_rs, is_contract_not_found, provider_transport_error, rs_felt_to_biguint,
+    core_felt_to_rs, is_contract_not_found, map_provider_error, rs_felt_to_biguint,
     rs_felt_to_core, to_block_id,
 };
 use super::wait::wait_for_acceptance;
+use super::StarknetRsFelt;
 use crate::{map_kms_error, GatewayResult};
 use async_trait::async_trait;
+use krusty_kms::stark_public_key;
 use krusty_kms_common::{ChainId, KmsError, NetworkPreset, SecretFelt};
 use krusty_kms_domain::{
     AccountDescriptor, BlockSelector, DeployMode, FeltHex, GatewayError, GatewayErrorCode,
@@ -41,6 +43,38 @@ impl StarknetGatewayBackend {
     pub fn network(&self) -> &NetworkPreset {
         &self.network
     }
+
+    /// Submit the `DEPLOY_ACCOUNT` transaction and return only its hash.
+    ///
+    /// Invariant: starknet-rs `SigningKey` copies the secret scalar into a
+    /// plain `Felt` that is neither zeroized on drop nor redacted in `Debug`.
+    /// The key, the `LocalWallet`, and the account factory built on it must
+    /// not outlive this function, so every copy is dropped before the caller
+    /// starts an acceptance wait (which may run for minutes).
+    async fn submit_open_zeppelin_deploy(
+        &self,
+        private_key: &SecretFelt,
+        account: &AccountDescriptor,
+    ) -> GatewayResult<StarknetRsFelt> {
+        let signer = LocalWallet::from(SigningKey::from_secret_scalar(core_felt_to_rs(
+            *private_key.expose_secret(),
+        )));
+        let factory = OpenZeppelinAccountFactory::new(
+            core_felt_to_rs(account.class_hash.to_felt()),
+            core_felt_to_rs(account.provenance.chain_id.as_felt()),
+            signer,
+            self.provider.clone(),
+        )
+        .await
+        .map_err(|error| map_kms_error(KmsError::CryptoError(error.to_string())))?;
+
+        let submission = factory
+            .deploy_v3(core_felt_to_rs(account.salt.to_felt()))
+            .send()
+            .await
+            .map_err(map_deploy_submission_error)?;
+        Ok(submission.transaction_hash)
+    }
 }
 
 #[async_trait]
@@ -62,7 +96,7 @@ impl GatewayBackend for StarknetGatewayBackend {
         {
             Ok(_) => Ok(true),
             Err(error) if is_contract_not_found(&error) => Ok(false),
-            Err(error) => Err(provider_transport_error(error.to_string())),
+            Err(error) => Err(map_provider_error(error)),
         }
     }
 
@@ -84,9 +118,11 @@ impl GatewayBackend for StarknetGatewayBackend {
             ));
         }
 
-        let signing_key =
-            SigningKey::from_secret_scalar(core_felt_to_rs(*private_key.expose_secret()));
-        validate_open_zeppelin_descriptor(account, &signing_key)?;
+        // Descriptor validation stays on the kms-native path so the secret is
+        // read in place rather than copied into a starknet-rs `SigningKey`.
+        let derived_public_key =
+            stark_public_key(private_key.expose_secret()).map_err(map_kms_error)?;
+        validate_open_zeppelin_descriptor(account, derived_public_key)?;
 
         if self
             .check_deployed(&account.address, &BlockSelector::Latest)
@@ -95,29 +131,19 @@ impl GatewayBackend for StarknetGatewayBackend {
             return Ok(DeployExecution::AlreadyDeployed);
         }
 
-        let signer = LocalWallet::from(signing_key);
-        let factory = OpenZeppelinAccountFactory::new(
-            core_felt_to_rs(account.class_hash.to_felt()),
-            core_felt_to_rs(chain_id.as_felt()),
-            signer,
-            self.provider.clone(),
-        )
-        .await
-        .map_err(|error| map_kms_error(KmsError::CryptoError(error.to_string())))?;
+        // The signer lives only inside `submit_open_zeppelin_deploy`; by the
+        // time we wait for acceptance no starknet-rs copy of the key remains.
+        let submitted_hash = self
+            .submit_open_zeppelin_deploy(private_key, account)
+            .await?;
 
-        let submission = factory
-            .deploy_v3(core_felt_to_rs(account.salt.to_felt()))
-            .send()
-            .await
-            .map_err(map_deploy_submission_error)?;
-
-        let tx_hash = FeltHex::from_felt(rs_felt_to_core(submission.transaction_hash));
+        let tx_hash = FeltHex::from_felt(rs_felt_to_core(submitted_hash));
         match mode {
             DeployMode::SubmitOnly => Ok(DeployExecution::Submitted { tx_hash }),
             DeployMode::WaitForAcceptance(wait) => {
                 wait_for_acceptance(
                     &self.provider,
-                    submission.transaction_hash,
+                    submitted_hash,
                     wait.poll_interval_ms,
                     wait.timeout_ms,
                 )
@@ -133,7 +159,7 @@ impl GatewayBackend for StarknetGatewayBackend {
             .provider
             .get_nonce(to_block_id(block), core_felt_to_rs(address.to_felt()))
             .await
-            .map_err(|error| provider_transport_error(error.to_string()))?;
+            .map_err(map_provider_error)?;
         Ok(FeltHex::from_felt(rs_felt_to_core(nonce)))
     }
 
@@ -187,7 +213,7 @@ impl GatewayBackend for StarknetGatewayBackend {
                 .provider
                 .block_hash_and_number()
                 .await
-                .map_err(|error| provider_transport_error(error.to_string()))?;
+                .map_err(map_provider_error)?;
             return Ok(SnapshotBlockMetadata {
                 selector: block.clone(),
                 block_hash: Some(FeltHex::from_felt(rs_felt_to_core(block_ref.block_hash))),
@@ -199,7 +225,7 @@ impl GatewayBackend for StarknetGatewayBackend {
             .provider
             .get_block_with_tx_hashes(to_block_id(block))
             .await
-            .map_err(|error| provider_transport_error(error.to_string()))?;
+            .map_err(map_provider_error)?;
 
         let (block_hash, block_number) = match block_info {
             MaybePreConfirmedBlockWithTxHashes::Block(block) => (

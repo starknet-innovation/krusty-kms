@@ -134,6 +134,15 @@ fn gateway_with_retention(
     deploy_execution: DeployExecution,
     retention: OperationRetentionPolicy,
 ) -> Gateway<FakeBackend, FixedSecretResolver, TestClock> {
+    gateway_with_private_key(clock, deploy_execution, retention, Felt::from(123u64))
+}
+
+fn gateway_with_private_key(
+    clock: TestClock,
+    deploy_execution: DeployExecution,
+    retention: OperationRetentionPolicy,
+    private_key: Felt,
+) -> Gateway<FakeBackend, FixedSecretResolver, TestClock> {
     Gateway::with_clock_and_retention(
         FakeBackend {
             chain_id: ChainId::Sepolia,
@@ -152,7 +161,7 @@ fn gateway_with_retention(
             block_reads: AtomicUsize::new(0),
         },
         FixedSecretResolver {
-            private_key: SecretFelt::new(Felt::from(123u64)),
+            private_key: SecretFelt::new(private_key),
             nostr_private_key: [
                 0x1d, 0xce, 0x8d, 0x2e, 0xc6, 0x18, 0x4c, 0xca, 0x94, 0x33, 0xf8, 0xf7, 0xb2, 0x70,
                 0x2d, 0x90, 0x14, 0x93, 0x66, 0x27, 0xce, 0x0f, 0x50, 0x92, 0x6f, 0x47, 0x1e, 0x52,

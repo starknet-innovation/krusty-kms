@@ -1,5 +1,6 @@
 //! Starknet RPC provider utilities.
 
+use krusty_kms_common::error::redact_url;
 use krusty_kms_common::Result;
 use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
@@ -120,9 +121,12 @@ fn pin_localhost(
         Some(url::Host::Ipv6(v6)) if ip_is_cleartext_loopback(IpAddr::V6(v6)) => Ok(None),
         Some(url::Host::Domain(domain)) if domain.eq_ignore_ascii_case("localhost") => {
             // `http` always has a known default; fail closed rather than invent a port.
+            // Error text carries only `scheme://host[:port]`: the path and
+            // query of an RPC URL usually hold the provider API key.
             let port = url.port_or_known_default().ok_or_else(|| {
                 krusty_kms_common::KmsError::RpcError(format!(
-                    "plain http:// RPC URL is missing a port, got {url}"
+                    "plain http:// RPC URL is missing a port, got {}",
+                    redact_url(url.as_str())
                 ))
             })?;
             let addrs = resolve(domain, port)?;
@@ -130,10 +134,12 @@ fn pin_localhost(
             Ok(Some((domain.to_string(), addrs)))
         }
         Some(_) => Err(krusty_kms_common::KmsError::RpcError(format!(
-            "plain http:// RPC endpoints are only allowed for loopback hosts, got {url}"
+            "plain http:// RPC endpoints are only allowed for loopback hosts, got {}",
+            redact_url(url.as_str())
         ))),
         None => Err(krusty_kms_common::KmsError::RpcError(format!(
-            "plain http:// RPC endpoint is missing a host, got {url}"
+            "plain http:// RPC endpoint is missing a host, got {}",
+            redact_url(url.as_str())
         ))),
     }
 }
@@ -229,6 +235,18 @@ mod tests {
         assert!(create_provider("http://[::1]:5050").is_ok());
         assert!(create_provider("http://[::ffff:127.0.0.1]:5050").is_ok());
         assert!(create_provider("http://[::ffff:169.254.169.254]:5050").is_err());
+    }
+
+    /// Rejection messages name only `scheme://host[:port]` (M-2): the path
+    /// and query of an RPC URL usually carry the provider API key.
+    #[test]
+    fn cleartext_rejection_message_redacts_path_and_query() {
+        let error = create_provider("http://10.0.0.1:5050/v0_9/SECRET_TOKEN?apikey=SECRET_TOKEN")
+            .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("http://10.0.0.1:5050"), "{message}");
+        assert!(!message.contains("SECRET_TOKEN"), "{message}");
+        assert!(!message.contains("v0_9"), "{message}");
     }
 
     #[test]
