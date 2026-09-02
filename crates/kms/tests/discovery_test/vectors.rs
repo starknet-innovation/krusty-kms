@@ -18,14 +18,15 @@ pub const ARGENT_PRIVATE_KEY: &str =
 pub const ARGENT_PUBLIC_KEY: &str =
     "0x048495fca9753cb0f4035eb4d2e2c1a22cc6d36fe4b73e17d9d6848333ff03a9";
 
-/// On-chain account address. This is a **smart** account (server-provided salt).
+/// On-chain account address of the standard Argent account for this key:
+/// deployed with `salt = public key`, deployer `0`, calldata `[0, public_key, 1]`.
 ///
 /// Class hash: Argent v0.4.0 (`0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f`)
 /// Contract version: 0.4.0 (get_version returns `{ major: 0, minor: 4, patch: 0 }`)
 pub const ARGENT_ACCOUNT_ADDRESS: &str =
     "0x06bB92aC7bd2ba6922e497F8B9CCF4357559e3f3896396D5834D8A0B1ce1fC0E";
 
-/// Argent v0.4.0 (Cairo 1) class hash — used for both standard and smart accounts.
+/// Argent v0.4.0 (Cairo 1) class hash.
 pub const ARGENT_V040_CLASS_HASH: &str =
     "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f";
 

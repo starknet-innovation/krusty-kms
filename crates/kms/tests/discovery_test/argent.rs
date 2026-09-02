@@ -4,7 +4,8 @@ use crate::vectors::{
     ARGENT_ACCOUNT_ADDRESS, ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, ARGENT_V040_CLASS_HASH, MNEMONIC,
 };
 use krusty_kms::{
-    derive_private_key_with_coin_type, stark_public_key, AccountClass, ArgentAccount, SaltPolicy,
+    calculate_contract_address, derive_private_key_with_coin_type, stark_public_key, AccountClass,
+    ArgentAccount, ArgentConstructorLayout, SaltPolicy,
 };
 use starknet_types_core::felt::Felt;
 
@@ -53,54 +54,76 @@ fn argent_direct_derivation_does_not_match() {
 
 // -- Address derivation -------------------------------------------------------
 
-/// Verify that standard (non-smart) Argent v0.4.0 addresses ARE derivable
-/// from the mnemonic alone.
+/// Verify that standard Argent v0.4.0 addresses are derivable from the public
+/// key alone and reproduce a real on-chain account.
 ///
-/// Standard accounts use `salt = publicKey`, making the address deterministic.
-/// The constructor calldata is `[0, publicKey, 0]`:
+/// Standard accounts deploy with `salt = publicKey`, deployer `0`, and the
+/// constructor calldata `[0, publicKey, 1]`:
 /// - `0` = `Signer::Starknet` enum variant index
 /// - `publicKey` = the Stark public key (felt252)
-/// - `0` = `Option::None` for the guardian (no guardian)
+/// - `1` = `Option::None` for the guardian (Cairo serialises `None` as tag `1`)
 ///
-/// This calldata format comes from the Argent contract's Cairo constructor:
+/// From the Argent contract's Cairo constructor (v0.4.0):
 /// ```cairo
 /// fn constructor(ref self: ContractState, owner: Signer, guardian: Option<Signer>)
 /// ```
-/// Where `Signer::Starknet(StarknetSigner { pubkey })` serializes as `[0, pubkey]`.
+/// where `Signer::Starknet(StarknetSigner { pubkey })` serialises as `[0, pubkey]`.
 #[test]
-fn argent_standard_account_address_is_derivable() {
+fn argent_standard_account_address_matches_on_chain_vector() {
     let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
     let class_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
+    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
 
     let argent = ArgentAccount::with_class_hash(class_hash);
-    let standard_addr = argent
-        .calculate_address(&pubk, SaltPolicy::PublicKey)
-        .unwrap();
-
-    // The address is deterministic and non-zero
-    assert_ne!(standard_addr, Felt::ZERO);
-    let standard_addr_again = argent
+    assert_eq!(
+        argent.constructor_layout(),
+        ArgentConstructorLayout::SignerWithOptionalGuardian
+    );
+    let addr = argent
         .calculate_address(&pubk, SaltPolicy::PublicKey)
         .unwrap();
     assert_eq!(
-        standard_addr, standard_addr_again,
-        "Address must be deterministic"
+        addr, expected,
+        "salt = publicKey with calldata [0, pk, 1] must reproduce the deployed Argent v0.4.0 account"
     );
-
-    // The test data account is a "smart" account with a server-provided salt,
-    // so it won't match the standard salt=publicKey formula.
-    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
-    assert_ne!(
-        standard_addr, expected,
-        "Test account is a 'smart' account — its salt was provided by Argent's server, \
-         not derived from the public key. Standard accounts DO match."
+    // The same address falls out of the default (v0.4.0) preset.
+    assert_eq!(
+        ArgentAccount::new()
+            .calculate_address(&pubk, SaltPolicy::PublicKey)
+            .unwrap(),
+        expected
     );
 }
 
-/// End-to-end: mnemonic → Argent legacy keys → standard account address.
-///
-/// This is the full pipeline a wallet would use to discover standard Argent
-/// accounts from a mnemonic, using krusty-kms APIs.
+/// Regression: encoding the absent guardian as `0` (the `Option::Some` tag with
+/// no payload) produced an address that no Argent class can ever deploy to.
+#[test]
+fn argent_guardian_some_tag_regression_does_not_match() {
+    let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
+    let class_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
+    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
+
+    let broken_calldata = [Felt::ZERO, pubk, Felt::ZERO];
+    let broken =
+        calculate_contract_address(&pubk, &class_hash, &broken_calldata, &Felt::ZERO).unwrap();
+    assert_ne!(
+        broken, expected,
+        "[0, pk, 0] is not a valid Argent v0.4.0 constructor payload"
+    );
+}
+
+/// A zero salt is not the standard Argent deployment and must not match.
+#[test]
+fn argent_zero_salt_does_not_match_standard_account() {
+    let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
+    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
+    let argent = ArgentAccount::with_class_hash(Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap());
+    let addr = argent.calculate_address(&pubk, SaltPolicy::Zero).unwrap();
+    assert_ne!(addr, expected);
+}
+
+/// End-to-end: mnemonic → Argent legacy keys → standard account address that
+/// exists on chain.
 #[test]
 fn argent_standard_discovery_end_to_end() {
     // Step 1: Derive keys using Argent's double derivation
@@ -114,36 +137,27 @@ fn argent_standard_discovery_end_to_end() {
         .calculate_address(&pubk, SaltPolicy::PublicKey)
         .unwrap();
 
-    // Step 3: This address can be checked on-chain for existence
-    assert_ne!(
-        addr,
-        Felt::ZERO,
-        "Derived a valid Argent address from mnemonic"
-    );
+    // Step 3: It is the deployed account recorded in the vectors.
+    assert_eq!(addr, Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap());
 }
 
-/// Argent "smart" accounts receive their deployment salt from a server-side API,
-/// not from the mnemonic or public key. These addresses cannot be derived locally.
+/// Argent v0.3.x classes take `(owner: felt252, guardian: felt252)`; the
+/// preset selects that layout from the class hash.
 #[test]
-fn argent_smart_account_salt_is_not_derivable() {
+fn argent_v03_class_hashes_select_felt_layout() {
     let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
-    let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
-    let class_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
-
-    // salt = publicKey (the standard formula) does NOT produce the right address
-    let argent = ArgentAccount::with_class_hash(class_hash);
-    let addr_with_pk_salt = argent
-        .calculate_address(&pubk, SaltPolicy::PublicKey)
-        .unwrap();
-    assert_ne!(
-        addr_with_pk_salt, expected,
-        "Smart account salt != publicKey — it was assigned by Argent's server"
-    );
-
-    // salt = 0 also doesn't match
-    let addr_with_zero_salt = argent.calculate_address(&pubk, SaltPolicy::Zero).unwrap();
-    assert_ne!(
-        addr_with_zero_salt, expected,
-        "Smart account salt != 0 either"
-    );
+    for hash in [
+        ArgentAccount::CLASS_HASH_V030,
+        ArgentAccount::CLASS_HASH_V031,
+    ] {
+        let argent = ArgentAccount::with_class_hash(Felt::from_hex(hash).unwrap());
+        assert_eq!(
+            argent.constructor_layout(),
+            ArgentConstructorLayout::OwnerGuardianFelts
+        );
+        assert_eq!(
+            argent.build_constructor_calldata(&pubk),
+            vec![pubk, Felt::ZERO]
+        );
+    }
 }
