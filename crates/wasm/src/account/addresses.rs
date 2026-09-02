@@ -50,7 +50,9 @@ pub fn derive_oz_account_address(
 /// # Arguments
 /// * `public_key` - The Stark public key (hex string)
 /// * `class_hash` - Optional custom class hash (hex string). Defaults to the
-///   standard Argent v0.4.0 class hash.
+///   standard Argent v0.4.0 class hash. A class hash that is not a recognised
+///   Argent class is rejected: its constructor layout is unknown, so any
+///   address derived for it could be undeployable.
 ///
 /// # Returns
 /// The derived account contract address as hex string
@@ -63,7 +65,8 @@ pub fn derive_argent_account_address(
     let account = match class_hash {
         Some(ref hash) => {
             let ch = parse_felt(hash)?;
-            krusty_kms::ArgentAccount::with_class_hash(ch)
+            krusty_kms::ArgentAccount::try_with_class_hash(ch)
+                .map_err(|e| JsValue::from_str(&format!("Failed to derive Argent address: {e}")))?
         }
         None => krusty_kms::ArgentAccount::new(),
     };

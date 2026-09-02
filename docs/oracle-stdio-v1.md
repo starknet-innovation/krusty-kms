@@ -80,6 +80,12 @@ When deriving/deploying with an explicit `account_class.class_hash`, the hash mu
 be on the known OZ/Argent/Braavos allowlist unless
 `allow_unlisted_class_hash: true` is set.
 
+Argent is an exception: the override does not apply. Argent constructor calldata
+depends on the class version, so an unrecognised Argent class hash is rejected
+with `InvalidClassHash` even when `allow_unlisted_class_hash: true` — there is
+no known layout to derive the address with. Only the known Argent classes are
+accepted.
+
 ## Request Shape
 
 ```json

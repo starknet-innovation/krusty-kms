@@ -2,6 +2,7 @@
 
 use super::AccountClass;
 use krusty_kms_common::serialization::serialize_cairo_none;
+use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::felt::Felt;
 
 /// Constructor calldata layout of an Argent account class.
@@ -61,29 +62,48 @@ impl ArgentAccount {
     pub const CLASS_HASH_V030: &str =
         "0x01a736d6ed154502257f02b1ccdf4d9d1089f80811cd6acad48e6b6a9d1f2003";
 
+    /// Known Argent Cairo 1 classes: class hash, version label, and the
+    /// constructor layout that class deserialises.
+    ///
+    /// The single table every other accessor derives from, newest first. A new
+    /// Argent class is added here, with its layout, and nothing else needs to
+    /// know: [`Self::known_class_hashes`] and [`Self::layout_for_class_hash`]
+    /// read it, and callers that need the labels (account discovery) consume it
+    /// directly rather than restating the mapping.
+    pub fn known_classes() -> Vec<(Felt, &'static str, ArgentConstructorLayout)> {
+        vec![
+            (
+                static_class_hash(Self::CLASS_HASH),
+                "v0.4.0",
+                ArgentConstructorLayout::SignerWithOptionalGuardian,
+            ),
+            (
+                static_class_hash(Self::CLASS_HASH_V031),
+                "v0.3.1",
+                ArgentConstructorLayout::OwnerGuardianFelts,
+            ),
+            (
+                static_class_hash(Self::CLASS_HASH_V030),
+                "v0.3.0",
+                ArgentConstructorLayout::OwnerGuardianFelts,
+            ),
+        ]
+    }
+
     /// Class hashes accepted for Argent Cairo 1 deployments.
     pub fn known_class_hashes() -> Vec<Felt> {
-        [
-            Self::CLASS_HASH,
-            Self::CLASS_HASH_V031,
-            Self::CLASS_HASH_V030,
-        ]
-        .into_iter()
-        .map(static_class_hash)
-        .collect()
+        Self::known_classes()
+            .into_iter()
+            .map(|(class_hash, _, _)| class_hash)
+            .collect()
     }
 
     /// Constructor layout of a known Argent class hash, if recognised.
     pub fn layout_for_class_hash(class_hash: &Felt) -> Option<ArgentConstructorLayout> {
-        if *class_hash == static_class_hash(Self::CLASS_HASH) {
-            Some(ArgentConstructorLayout::SignerWithOptionalGuardian)
-        } else if *class_hash == static_class_hash(Self::CLASS_HASH_V031)
-            || *class_hash == static_class_hash(Self::CLASS_HASH_V030)
-        {
-            Some(ArgentConstructorLayout::OwnerGuardianFelts)
-        } else {
-            None
-        }
+        Self::known_classes()
+            .into_iter()
+            .find(|(known, _, _)| known == class_hash)
+            .map(|(_, _, layout)| layout)
     }
 
     /// Latest supported Argent class (v0.4.0).
@@ -97,12 +117,37 @@ impl ArgentAccount {
     /// Create with a custom class hash.
     ///
     /// Known Argent class hashes select their constructor layout automatically.
-    /// An unknown class hash assumes the current (v0.4.0) layout; use
-    /// [`Self::with_class_hash_and_layout`] to state it explicitly.
+    /// An unknown class hash assumes the current (v0.4.0) layout, which yields
+    /// an undeployable address if that class takes a different constructor
+    /// (unverifiable from the hash alone);
+    /// prefer [`Self::try_with_class_hash`], or state the layout explicitly
+    /// with [`Self::with_class_hash_and_layout`].
+    #[deprecated(
+        note = "unknown class hashes silently assume the v0.4.0 layout; use try_with_class_hash"
+    )]
     pub fn with_class_hash(class_hash: Felt) -> Self {
         let layout = Self::layout_for_class_hash(&class_hash)
             .unwrap_or(ArgentConstructorLayout::SignerWithOptionalGuardian);
         Self::with_class_hash_and_layout(class_hash, layout)
+    }
+
+    /// Create with a class hash whose constructor layout is known.
+    ///
+    /// Returns [`KmsError::InvalidClassHash`] for a class hash that is not a
+    /// recognised Argent class. Argent has already changed its constructor
+    /// once (v0.3.x to v0.4.0), so the layout of an unrecognised class is
+    /// unverified: it may match v0.4.0, or it may reject the guessed calldata
+    /// and leave an address that can never be deployed. Callers that accept a
+    /// class hash from outside cannot tell which, so they must reject it. Use
+    /// [`Self::with_class_hash_and_layout`] to opt into a specific layout for
+    /// a class this crate does not know.
+    pub fn try_with_class_hash(class_hash: Felt) -> Result<Self> {
+        let layout = Self::layout_for_class_hash(&class_hash).ok_or_else(|| {
+            KmsError::InvalidClassHash(format!(
+                "unknown Argent class hash {class_hash:#x}: no known constructor layout"
+            ))
+        })?;
+        Ok(Self::with_class_hash_and_layout(class_hash, layout))
     }
 
     /// Create with an explicit class hash and constructor layout.
@@ -161,7 +206,7 @@ mod tests {
             ArgentAccount::CLASS_HASH_V030,
             ArgentAccount::CLASS_HASH_V031,
         ] {
-            let argent = ArgentAccount::with_class_hash(Felt::from_hex(hash).unwrap());
+            let argent = ArgentAccount::try_with_class_hash(Felt::from_hex(hash).unwrap()).unwrap();
             assert_eq!(
                 argent.constructor_layout(),
                 ArgentConstructorLayout::OwnerGuardianFelts
@@ -171,14 +216,52 @@ mod tests {
     }
 
     #[test]
-    fn test_argent_unknown_class_hash_defaults_to_latest_layout() {
+    fn test_argent_unknown_class_hash_is_rejected() {
         let custom = Felt::from(0xabcdu64);
         assert_eq!(ArgentAccount::layout_for_class_hash(&custom), None);
-        let argent = ArgentAccount::with_class_hash(custom);
+        match ArgentAccount::try_with_class_hash(custom) {
+            Err(KmsError::InvalidClassHash(msg)) => assert!(msg.contains("abcd"), "{msg}"),
+            Err(other) => panic!("expected InvalidClassHash, got {other}"),
+            Ok(_) => panic!("unknown class hash must be rejected"),
+        }
+    }
+
+    #[test]
+    fn test_argent_try_with_class_hash_accepts_known_classes() {
+        for (hash, expected) in [
+            (
+                ArgentAccount::CLASS_HASH,
+                ArgentConstructorLayout::SignerWithOptionalGuardian,
+            ),
+            (
+                ArgentAccount::CLASS_HASH_V031,
+                ArgentConstructorLayout::OwnerGuardianFelts,
+            ),
+            (
+                ArgentAccount::CLASS_HASH_V030,
+                ArgentConstructorLayout::OwnerGuardianFelts,
+            ),
+        ] {
+            let argent = ArgentAccount::try_with_class_hash(Felt::from_hex(hash).unwrap()).unwrap();
+            assert_eq!(argent.constructor_layout(), expected);
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn test_argent_deprecated_with_class_hash_still_guesses_latest_layout() {
+        // Pins the documented behaviour of the deprecated constructor: it
+        // still assumes v0.4.0 for an unknown class. Remove with the function.
+        let argent = ArgentAccount::with_class_hash(Felt::from(0xabcdu64));
         assert_eq!(
             argent.constructor_layout(),
             ArgentConstructorLayout::SignerWithOptionalGuardian
         );
+    }
+
+    #[test]
+    fn test_argent_explicit_layout_overrides_for_unknown_class() {
+        let custom = Felt::from(0xabcdu64);
         let explicit = ArgentAccount::with_class_hash_and_layout(
             custom,
             ArgentConstructorLayout::OwnerGuardianFelts,

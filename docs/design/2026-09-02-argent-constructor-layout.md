@@ -21,11 +21,12 @@ attributed it to a "server-provided salt".
   owns the calldata shape. The guardian `None` tag is produced by the shared
   `serialize_cairo_none()`, so the Argent path and the Tongo serialiser agree
   by construction.
-- `ArgentAccount::with_class_hash` selects the layout from the known
-  v0.3.0 / v0.3.1 / v0.4.0 class hashes; an unknown class hash keeps the
-  latest (v0.4.0) layout. `with_class_hash_and_layout` and
-  `constructor_layout()` make the choice explicit; `layout_for_class_hash`
-  lets callers validate.
+- The layout is selected from the known v0.3.0 / v0.3.1 / v0.4.0 class
+  hashes. An unrecognised class hash is **rejected** unless the caller states
+  the layout: `try_with_class_hash` (fallible) or `with_class_hash_and_layout`
+  (explicit). `layout_for_class_hash` is the canonical map and lets callers
+  validate. `with_class_hash` kept the latest-layout guess and is deprecated —
+  the amendment at the end of this note records why that was reversed.
 - The Argent preset moves to `crates/kms/src/account_class/argent.rs`. The
   file-size baseline for `account_class.rs` ratchets down (585 → 520 lines);
   no baseline grows.
@@ -48,12 +49,40 @@ attributed it to a "server-provided salt".
 
 - One struct per Argent version: more public surface, and callers already
   select by class hash.
-- Rejecting unknown class hashes in `with_class_hash`: would break existing
-  callers; the latest-layout default plus an explicit override keeps the API
-  additive and patch-compatible.
+- Rejecting unknown class hashes in `with_class_hash` itself: would break
+  existing callers. Superseded (see the amendment below): the rejection lives
+  in a new fallible constructor instead, so the API stays additive.
 
 ## Release note
 
 Workspace 0.10.0 is unpublished; the fix lands in that release. Users of the
 published crates (0.7.0 and below) must not fund Argent addresses derived by
 those versions and must re-derive them.
+
+## Amendment — unknown class hashes are rejected
+
+The original decision kept the latest (v0.4.0) layout for an unrecognised
+class hash. That is unsafe for the same reason this note exists: Argent has
+changed its constructor once already, so an unrecognised class may accept the
+v0.4.0 calldata or may reject it, and the class hash alone does not say which.
+Where it rejects, the derived address is undeployable and funds sent there are
+stranded. The objection is to deriving on an unverified guess, not to the
+guess always being wrong.
+
+`ArgentAccount::try_with_class_hash` now returns
+`KmsError::InvalidClassHash` for a class hash outside `layout_for_class_hash`.
+The two surfaces that accept a caller-supplied class hash use it: the WASM
+`deriveArgentAccountAddress` export and gateway/oracle Argent resolution. The
+gateway rejects even under `allow_unlisted_class_hash=true`, because waiving
+the allowlist cannot supply a constructor layout.
+
+`with_class_hash` keeps the guessing behaviour and is deprecated rather than
+removed, so the API stays additive; `with_class_hash_and_layout` is the
+supported way to derive for a class this crate does not know. Discovery pairs
+each static class hash with its layout and uses that constructor, so
+candidate generation stays infallible.
+
+Known ceiling: the gateway/oracle and WASM surfaces cannot state a layout —
+`AccountClassSpec` carries no layout field — so a genuinely new Argent class
+needs a krusty release to become derivable there. Adding a layout to the spec
+is the upgrade path if that becomes urgent.

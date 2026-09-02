@@ -20,12 +20,6 @@ const BRAAVOS_BASE: &str = "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4
 /// Argent Cairo 1 v0.4.0 class hash.
 const ARGENT_V040: &str = ArgentAccount::CLASS_HASH;
 
-/// Argent Cairo 1 v0.3.1 class hash.
-const ARGENT_V031: &str = ArgentAccount::CLASS_HASH_V031;
-
-/// Argent Cairo 1 v0.3.0 class hash.
-const ARGENT_V030: &str = ArgentAccount::CLASS_HASH_V030;
-
 /// Argent Cairo 0 proxy class hash.
 const ARGENT_PROXY: &str = "0x025ec026985a3bf9d0cc1fe17326b245dfdc3ff89b8fde106542a3ea56c5a918";
 
@@ -74,8 +68,12 @@ pub(super) fn validate_discovery_inputs(mnemonic: &str, max_index: u32) -> Resul
 /// - **ArgentLegacy**: double derivation via ETH key — the key used by old Argent
 ///
 /// These public keys can be used to query external APIs (e.g., Argent's smart
-/// account discovery endpoint) to find accounts whose addresses aren't locally
-/// derivable because they used a server-provided salt.
+/// account discovery endpoint) to find Argent smart accounts, whose deployment
+/// salt is assigned server-side and so cannot be reconstructed locally.
+/// Standard Argent accounts salt with the public key and *are* derived here; an
+/// earlier mismatch against a real on-chain account was misattributed to this
+/// salt, when the cause was the constructor calldata (see
+/// `docs/design/2026-09-02-argent-constructor-layout.md`).
 ///
 /// This is much cheaper than `generate_candidates` since it skips address computation.
 pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<DerivedKeypair>> {
@@ -136,8 +134,6 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     // Parse class hashes once.
     let braavos_hash = Felt::from_hex(BRAAVOS_BASE).unwrap();
     let argent_v040_hash = Felt::from_hex(ARGENT_V040).unwrap();
-    let argent_v031_hash = Felt::from_hex(ARGENT_V031).unwrap();
-    let argent_v030_hash = Felt::from_hex(ARGENT_V030).unwrap();
     let proxy_hash = Felt::from_hex(ARGENT_PROXY).unwrap();
     let impl_v024 = Felt::from_hex(ARGENT_IMPL_V024).unwrap();
     let impl_v023 = Felt::from_hex(ARGENT_IMPL_V023).unwrap();
@@ -146,12 +142,8 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     let oz_hash = Felt::from_hex(OZ_V300).unwrap();
     let initialize_selector = Felt::from_hex(INITIALIZE_SELECTOR).unwrap();
 
-    // Cairo 1 legacy class hashes with labels.
-    let legacy_cairo1_hashes: &[(Felt, &str)] = &[
-        (argent_v040_hash, "v0.4.0"),
-        (argent_v031_hash, "v0.3.1"),
-        (argent_v030_hash, "v0.3.0"),
-    ];
+    // Class hash, label and layout come from the canonical Argent table.
+    let legacy_cairo1_classes = ArgentAccount::known_classes();
 
     // Cairo 0 proxy implementation hashes with labels.
     let cairo0_impls: &[(Felt, &str)] = &[
@@ -185,8 +177,9 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         });
 
         // Argent — v0.4.0
-        let argent_addr = ArgentAccount::with_class_hash(argent_v040_hash)
-            .calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
+        // ArgentAccount::new() *is* the v0.4.0 preset; don't restate its layout.
+        let argent_addr =
+            ArgentAccount::new().calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
         candidates.push(CandidateAccount {
             wallet_type: WalletType::Argent,
             class_hash: felt_hex(&argent_v040_hash),
@@ -236,8 +229,8 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
 
         // Cairo 1 class hashes via legacy derivation
-        for (hash, version) in legacy_cairo1_hashes {
-            let addr = ArgentAccount::with_class_hash(*hash)
+        for (hash, version, layout) in &legacy_cairo1_classes {
+            let addr = ArgentAccount::with_class_hash_and_layout(*hash, *layout)
                 .calculate_address(&legacy_pubk, SaltPolicy::PublicKey)?;
             candidates.push(CandidateAccount {
                 wallet_type: WalletType::ArgentLegacy,

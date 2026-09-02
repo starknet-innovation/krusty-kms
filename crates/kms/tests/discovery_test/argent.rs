@@ -74,7 +74,7 @@ fn argent_standard_account_address_matches_on_chain_vector() {
     let class_hash = Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap();
     let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
 
-    let argent = ArgentAccount::with_class_hash(class_hash);
+    let argent = ArgentAccount::try_with_class_hash(class_hash).unwrap();
     assert_eq!(
         argent.constructor_layout(),
         ArgentConstructorLayout::SignerWithOptionalGuardian
@@ -117,7 +117,9 @@ fn argent_guardian_some_tag_regression_does_not_match() {
 fn argent_zero_salt_does_not_match_standard_account() {
     let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
     let expected = Felt::from_hex(ARGENT_ACCOUNT_ADDRESS).unwrap();
-    let argent = ArgentAccount::with_class_hash(Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap());
+    let argent =
+        ArgentAccount::try_with_class_hash(Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap())
+            .unwrap();
     let addr = argent.calculate_address(&pubk, SaltPolicy::Zero).unwrap();
     assert_ne!(addr, expected);
 }
@@ -132,7 +134,9 @@ fn argent_standard_discovery_end_to_end() {
     assert_eq!(pubk, Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap());
 
     // Step 2: Compute the standard account address
-    let argent = ArgentAccount::with_class_hash(Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap());
+    let argent =
+        ArgentAccount::try_with_class_hash(Felt::from_hex(ARGENT_V040_CLASS_HASH).unwrap())
+            .unwrap();
     let addr = argent
         .calculate_address(&pubk, SaltPolicy::PublicKey)
         .unwrap();
@@ -150,7 +154,7 @@ fn argent_v03_class_hashes_select_felt_layout() {
         ArgentAccount::CLASS_HASH_V030,
         ArgentAccount::CLASS_HASH_V031,
     ] {
-        let argent = ArgentAccount::with_class_hash(Felt::from_hex(hash).unwrap());
+        let argent = ArgentAccount::try_with_class_hash(Felt::from_hex(hash).unwrap()).unwrap();
         assert_eq!(
             argent.constructor_layout(),
             ArgentConstructorLayout::OwnerGuardianFelts

@@ -255,6 +255,28 @@ fn test_derive_argent_account_address() {
 }
 
 #[wasm_bindgen_test]
+fn test_derive_argent_account_address_rejects_unknown_class_hash() {
+    let pk = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
+    // A known Argent class hash is accepted and derives the same address as
+    // the default, which is that class.
+    let known = "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f";
+    assert_eq!(
+        derive_argent_account_address(pk, Some(known.to_string())).unwrap(),
+        derive_argent_account_address(pk, None).unwrap()
+    );
+
+    // An unrecognised class hash has no known constructor layout, so the
+    // export must fail rather than derive an address from a guess.
+    let err = derive_argent_account_address(pk, Some("0xabcd".to_string()))
+        .expect_err("unknown Argent class hash must be rejected");
+    let message = js_error_message(err);
+    assert!(
+        message.contains("unknown Argent class hash"),
+        "unexpected error: {message}"
+    );
+}
+
+#[wasm_bindgen_test]
 fn test_derive_braavos_account_address() {
     let pk = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
     let addr = derive_braavos_account_address(pk, None).unwrap();
