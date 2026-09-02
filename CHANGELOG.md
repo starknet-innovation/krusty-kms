@@ -14,6 +14,24 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
+  (a plain, non-zeroizing `Felt` copy of the private key) across the deploy
+  acceptance wait. Public-key derivation and descriptor validation use the
+  kms-native `stark_public_key` path; the signer and account factory are
+  confined to the transaction submission and dropped before any polling
+  begins. Zero or out-of-range private keys now return an error instead of
+  panicking inside the curve arithmetic.
+- Provider transport failures no longer echo the RPC endpoint URL. starknet-rs
+  forwards `reqwest::Error`'s `Display`, which includes the full request URL
+  (path and query commonly carry the provider API key), into
+  `ProviderError::Other`; the gateway stored that text in the operation log
+  and returned it to oracle callers, and the client surfaced it in
+  `KmsError::RpcError`. Transport errors now map to a fixed
+  `provider transport error: <kind>` (`timeout`, `connect`, `status <code>`,
+  `decode`, `json-rpc code <n>`, `other`); typed Starknet JSON-RPC errors keep
+  their message. Cleartext-URL rejection messages in `create_provider` show
+  only `scheme://host[:port]`. Adds `krusty_kms_common::error::redact_url` and
+  `REDACTED_URL_PLACEHOLDER` for the same purpose in downstream code.
 - `cargo-deny` now rejects duplicate dependency versions. Every remaining
   duplicate is an individually justified `skip` in `deny.toml` naming the
   third-party path that forces it (see `docs/supply-chain.md`), so a new
