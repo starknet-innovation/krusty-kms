@@ -1,11 +1,11 @@
 //! Resource budgets for untrusted Starknet event pagination.
 
 use super::{StarknetRsFelt, TongoEventReader};
+use crate::wallet::utils::rpc_error;
 use krusty_kms_common::{KmsError, Result};
 use starknet_rust::core::types::{AddressFilter, BlockId, BlockTag, EmittedEvent, EventFilter};
-use starknet_rust::providers::Provider;
+use starknet_rust::providers::{Provider, ProviderError};
 use std::collections::HashSet;
-use std::fmt::Display;
 use std::future::Future;
 use std::io::{self, Write};
 use std::time::Duration;
@@ -106,10 +106,11 @@ fn serialized_size(events: &[EmittedEvent]) -> Result<usize> {
     Ok(counter.0)
 }
 
-async fn await_event_page<T, E, F>(deadline: Instant, future: F) -> Result<T>
+/// Await one provider page under the aggregate deadline. Provider failures go
+/// through the redacting classifier so the endpoint URL never reaches the error.
+async fn await_event_page<T, F>(deadline: Instant, future: F) -> Result<T>
 where
-    E: Display,
-    F: Future<Output = std::result::Result<T, E>>,
+    F: Future<Output = std::result::Result<T, ProviderError>>,
 {
     let remaining = deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
@@ -126,7 +127,7 @@ where
                 EVENT_QUERY_TIMEOUT.as_millis()
             ))
         })?
-        .map_err(|error| KmsError::RpcError(error.to_string()))
+        .map_err(rpc_error)
 }
 
 impl TongoEventReader {
@@ -223,7 +224,7 @@ mod tests {
         let deadline = Instant::now() + Duration::from_millis(20);
         let result = await_event_page(deadline, async {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            Ok::<(), &str>(())
+            Ok::<(), ProviderError>(())
         })
         .await;
 
@@ -240,6 +241,47 @@ mod tests {
             transaction_hash: StarknetRsFelt::ONE,
             transaction_index: 0,
             event_index: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::await_event_page;
+    use krusty_kms_common::KmsError;
+    use starknet_rust::providers::{ProviderError, ProviderImplError};
+    use tokio::time::{Duration, Instant};
+
+    #[derive(Debug)]
+    struct LeakyTransportError;
+
+    impl std::fmt::Display for LeakyTransportError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("error sending request for url (https://rpc.example.com/v0_9/SECRET_TOKEN)")
+        }
+    }
+
+    impl std::error::Error for LeakyTransportError {}
+
+    impl ProviderImplError for LeakyTransportError {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[tokio::test]
+    async fn page_errors_do_not_echo_the_endpoint() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let leaky: std::result::Result<(), ProviderError> =
+            Err(ProviderError::Other(Box::new(LeakyTransportError)));
+        let error = await_event_page(deadline, async { leaky })
+            .await
+            .unwrap_err();
+        match error {
+            KmsError::RpcError(message) => {
+                assert_eq!(message, "provider transport error: other");
+            }
+            other => panic!("unexpected error: {other:?}"),
         }
     }
 }

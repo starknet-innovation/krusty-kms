@@ -36,6 +36,8 @@ All notable changes to the published Rust crates are documented here.
   before signing and the admitted bounds are pinned on the transaction, so an
   inflated estimate from an untrusted RPC can no longer widen the signed fee
   authorisation. Estimates above the ceiling are rejected, never clamped.
+- Multisig contract reads and Tongo event pagination route provider failures
+  through the same redacting classifier as the wallet paths.
 
 ## [0.10.0] - 2026-09-02
 
