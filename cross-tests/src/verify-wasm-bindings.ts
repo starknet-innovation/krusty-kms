@@ -237,7 +237,8 @@ function main() {
     const argentAddr = hash.calculateContractAddressFromHash(
       pubKey, // salt = publicKey
       ref.contract_address.argent_account.class_hash,
-      ["0x0", pubKey, "0x0"],
+      // [Signer::Starknet tag, owner, Option::None tag]
+      ["0x0", pubKey, "0x1"],
       ref.contract_address.argent_account.deployer
     );
     pinAndAssert(
