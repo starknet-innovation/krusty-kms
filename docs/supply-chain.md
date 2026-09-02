@@ -28,10 +28,12 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   maintainers team may bypass (so only maintainers can start a release), and a
   separate **immutability** ruleset (update, deletion, non-fast-forward) with no
   bypass actors at all, so no push token can repoint or delete a published tag.
-  Both payloads are in the same section of `crates-release.md`. Verified
-  2026-09-02 (read-only `gh api`): only the `SNF - default branch baseline`
-  branch ruleset exists, and the `crates-io` environment has reviewers but no
-  deployment policy, so all three are pending administrator actions.
+  Both payloads are in the same section of `crates-release.md`. Status
+  2026-09-02: the `crates-io` environment is configured (three required
+  reviewers, prevent self-review on, administrator bypass off, one `v*` tag
+  deployment policy) and passes the publish workflow's check; only the
+  `SNF - default branch baseline` branch ruleset exists, so the two tag
+  rulesets are still pending administrator action.
 - Every `uses:` in every workflow is pinned to a commit SHA and checked by
   `.github/scripts/check-workflow-actions-pinned.sh`; release tooling
   (`wasm-pack`, `cargo-audit`, `cargo-deny`) is built from crates.io with
