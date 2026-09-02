@@ -32,8 +32,10 @@ All notable changes to the published Rust crates are documented here.
   gateway even when `allow_unlisted_class_hash=true`: the override can waive the
   allowlist but cannot supply a constructor layout. Callers deriving for a class
   this crate does not know must state the layout with
-  `ArgentAccount::with_class_hash_and_layout`. `ArgentAccount::with_class_hash`
-  keeps its old guessing behaviour and is deprecated.
+  `ArgentAccount::with_class_hash_and_layout`; the gateway/oracle and WASM
+  surfaces have no layout field, so a genuinely new Argent class needs a krusty
+  release to become derivable there. `ArgentAccount::with_class_hash` keeps its
+  old guessing behaviour and is deprecated.
 - Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
   (a plain, non-zeroizing `Felt` copy of the private key) across the deploy
   acceptance wait. Public-key derivation and descriptor validation use the

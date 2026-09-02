@@ -26,10 +26,14 @@ use starknet_types_core::felt::Felt;
 fn main() -> Result<(), String> {
     let mnemonic = std::env::var("MNEMONIC")
         .map_err(|_| "set MNEMONIC=\"word word ...\" in the environment".to_string())?;
-    let indexes: u32 = std::env::var("INDEXES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(1);
+    // A silently-ignored INDEXES would show only index 0 and invite exactly the
+    // "my mnemonic doesn't derive this address" misdiagnosis this example is for.
+    let indexes: u32 = match std::env::var("INDEXES") {
+        Ok(v) => v
+            .parse()
+            .map_err(|e| format!("INDEXES={v:?} is not a positive integer: {e}"))?,
+        Err(_) => 1,
+    };
 
     // Standard Argent accounts salt with the public key, so the address is a
     // pure function of the mnemonic and the class hash. Argent smart accounts

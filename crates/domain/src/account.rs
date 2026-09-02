@@ -75,7 +75,9 @@ pub struct AccountClassSpec {
     /// Dangerous opt-in: allow a class hash that is not on the known allowlist.
     ///
     /// Defaults to `false`. When false, gateway/oracle derive/deploy reject
-    /// arbitrary explicit class hashes.
+    /// arbitrary explicit class hashes. Argent is exempt: its constructor
+    /// calldata depends on the class version, so an unrecognised Argent class
+    /// is rejected whatever this flag says.
     #[serde(default)]
     pub allow_unlisted_class_hash: bool,
 }

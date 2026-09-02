@@ -48,12 +48,38 @@ attributed it to a "server-provided salt".
 
 - One struct per Argent version: more public surface, and callers already
   select by class hash.
-- Rejecting unknown class hashes in `with_class_hash`: would break existing
-  callers; the latest-layout default plus an explicit override keeps the API
-  additive and patch-compatible.
+- Rejecting unknown class hashes in `with_class_hash` itself: would break
+  existing callers. Superseded (see the amendment below): the rejection lives
+  in a new fallible constructor instead, so the API stays additive.
 
 ## Release note
 
 Workspace 0.10.0 is unpublished; the fix lands in that release. Users of the
 published crates (0.7.0 and below) must not fund Argent addresses derived by
 those versions and must re-derive them.
+
+## Amendment — unknown class hashes are rejected
+
+The original decision kept the latest (v0.4.0) layout for an unrecognised
+class hash. That is unsafe for the same reason this note exists: Argent has
+changed its constructor once already, so a guessed layout derives an address
+whose constructor cannot deserialise its calldata — undeployable, and funds
+sent there are stranded.
+
+`ArgentAccount::try_with_class_hash` now returns
+`KmsError::InvalidClassHash` for a class hash outside `layout_for_class_hash`.
+The two surfaces that accept a caller-supplied class hash use it: the WASM
+`deriveArgentAccountAddress` export and gateway/oracle Argent resolution. The
+gateway rejects even under `allow_unlisted_class_hash=true`, because waiving
+the allowlist cannot supply a constructor layout.
+
+`with_class_hash` keeps the guessing behaviour and is deprecated rather than
+removed, so the API stays additive; `with_class_hash_and_layout` is the
+supported way to derive for a class this crate does not know. Discovery pairs
+each static class hash with its layout and uses that constructor, so
+candidate generation stays infallible.
+
+Known ceiling: the gateway/oracle and WASM surfaces cannot state a layout —
+`AccountClassSpec` carries no layout field — so a genuinely new Argent class
+needs a krusty release to become derivable there. Adding a layout to the spec
+is the upgrade path if that becomes urgent.

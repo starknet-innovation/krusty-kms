@@ -2,7 +2,9 @@
 
 use super::types::{CandidateAccount, DerivationType, DerivedKeypair, WalletType};
 use crate::account::calculate_contract_address;
-use crate::account_class::{AccountClass, ArgentAccount, BraavosAccount, SaltPolicy};
+use crate::account_class::{
+    AccountClass, ArgentAccount, ArgentConstructorLayout, BraavosAccount, SaltPolicy,
+};
 use crate::derivation::{derive_argent_legacy_private_key, derive_private_key_with_coin_type};
 use crate::mnemonic::validate_mnemonic;
 use crate::stark_signing::stark_public_key;
@@ -135,11 +137,26 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     let oz_hash = Felt::from_hex(OZ_V300).unwrap();
     let initialize_selector = Felt::from_hex(INITIALIZE_SELECTOR).unwrap();
 
-    // Cairo 1 legacy class hashes with labels.
-    let legacy_cairo1_hashes: &[(Felt, &str)] = &[
-        (argent_v040_hash, "v0.4.0"),
-        (argent_v031_hash, "v0.3.1"),
-        (argent_v030_hash, "v0.3.0"),
+    // Cairo 1 legacy class hashes with labels and their constructor layout.
+    // Pairing the layout here keeps candidate generation infallible: adding a
+    // class hash to this table forces the author to state its layout, instead
+    // of failing the whole recovery at runtime.
+    let legacy_cairo1_hashes: &[(Felt, &str, ArgentConstructorLayout)] = &[
+        (
+            argent_v040_hash,
+            "v0.4.0",
+            ArgentConstructorLayout::SignerWithOptionalGuardian,
+        ),
+        (
+            argent_v031_hash,
+            "v0.3.1",
+            ArgentConstructorLayout::OwnerGuardianFelts,
+        ),
+        (
+            argent_v030_hash,
+            "v0.3.0",
+            ArgentConstructorLayout::OwnerGuardianFelts,
+        ),
     ];
 
     // Cairo 0 proxy implementation hashes with labels.
@@ -174,8 +191,11 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         });
 
         // Argent — v0.4.0
-        let argent_addr = ArgentAccount::try_with_class_hash(argent_v040_hash)?
-            .calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
+        let argent_addr = ArgentAccount::with_class_hash_and_layout(
+            argent_v040_hash,
+            ArgentConstructorLayout::SignerWithOptionalGuardian,
+        )
+        .calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
         candidates.push(CandidateAccount {
             wallet_type: WalletType::Argent,
             class_hash: felt_hex(&argent_v040_hash),
@@ -225,8 +245,8 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
 
         // Cairo 1 class hashes via legacy derivation
-        for (hash, version) in legacy_cairo1_hashes {
-            let addr = ArgentAccount::try_with_class_hash(*hash)?
+        for (hash, version, layout) in legacy_cairo1_hashes {
+            let addr = ArgentAccount::with_class_hash_and_layout(*hash, *layout)
                 .calculate_address(&legacy_pubk, SaltPolicy::PublicKey)?;
             candidates.push(CandidateAccount {
                 wallet_type: WalletType::ArgentLegacy,

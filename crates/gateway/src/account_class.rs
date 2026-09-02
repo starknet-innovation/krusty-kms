@@ -127,12 +127,17 @@ pub(crate) fn enforce_class_hash_allowlist(
         return Ok(());
     }
 
+    // Argent resolution needs a known constructor layout, so the override
+    // cannot unblock an unlisted Argent class; do not advertise it there.
+    let override_hint = match kind {
+        AccountClassKind::Argent => "",
+        _ => "; set allow_unlisted_class_hash=true to override",
+    };
     Err(GatewayError::new(
         GatewayErrorCode::InvalidClassHash,
         false,
         Some(format!(
-            "class_hash {class_hash:#x} is not on the known {:?} allowlist; set allow_unlisted_class_hash=true to override",
-            kind
+            "class_hash {class_hash:#x} is not on the known {kind:?} allowlist{override_hint}"
         )),
     ))
 }

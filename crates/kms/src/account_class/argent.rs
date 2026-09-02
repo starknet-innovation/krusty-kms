@@ -227,6 +227,18 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
+    fn test_argent_deprecated_with_class_hash_still_guesses_latest_layout() {
+        // Pins the documented behaviour of the deprecated constructor: it
+        // still assumes v0.4.0 for an unknown class. Remove with the function.
+        let argent = ArgentAccount::with_class_hash(Felt::from(0xabcdu64));
+        assert_eq!(
+            argent.constructor_layout(),
+            ArgentConstructorLayout::SignerWithOptionalGuardian
+        );
+    }
+
+    #[test]
     fn test_argent_explicit_layout_overrides_for_unknown_class() {
         let custom = Felt::from(0xabcdu64);
         let explicit = ArgentAccount::with_class_hash_and_layout(
