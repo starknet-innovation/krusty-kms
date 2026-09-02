@@ -93,6 +93,13 @@ All notable changes to the published Rust crates are documented here.
   `starknet-rust-crypto`, `starknet-rust-curve`, and `crypto-bigint` 0.5 builds
   leave the lockfile.
 
+### Security
+
+- `cargo-deny` now rejects duplicate dependency versions. Every remaining
+  duplicate is an individually justified `skip` in `deny.toml` naming the
+  third-party path that forces it (see `docs/supply-chain.md`), so a new
+  second copy of a crypto or parsing crate fails CI instead of warning.
+
 ## [0.10.0] - 2026-08-28
 
 ### Added

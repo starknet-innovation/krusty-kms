@@ -16,6 +16,31 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   stack, distinct from the upstream `starknet` crate. Provenance is considered
   verified; re-check owners when bumping major versions.
 
+## Duplicate dependency versions (`cargo deny check bans`)
+
+`deny.toml` sets `multiple-versions = "deny"`: a new duplicate crate version fails CI
+unless it is listed under `[bans].skip` together with the transitive path that forces
+it. Every current entry is a third-party stack that has not moved to the generation
+krusty uses (RustCrypto 0.11, rand 0.10, syn 3). Reviewed 2026-09-02:
+
+| Old generation | Forced by | Drops when |
+| --- | --- | --- |
+| aes 0.8, cipher 0.4, crypto-common 0.1, inout 0.1, ctr 0.9, scrypt 0.10, salsa20 0.10, pbkdf2 0.11, thiserror 1 | `starknet-rust-signers 0.19.1 → eth-keystore 0.5.0` (Ethereum keystore loading; krusty never calls it) | starknet-rust bumps eth-keystore |
+| hmac 0.12, sha2 0.10, digest 0.10, block-buffer 0.10, cpufeatures 0.2, rfc6979 0.4 | `starknet-rust-crypto 0.19.1` (also eth-keystore, lambdaworks-crypto, ed25519-dalek) | starknet-rust-crypto moves to RustCrypto 0.11 |
+| num-bigint 0.4, sha3 0.10, keccak 0.1, rand 0.8, rand_core 0.6 | `starknet-types-core 0.2.4 → lambdaworks-math / lambdaworks-crypto 0.13` (also starknet-rust-core, eth-keystore, nkeys) | lambdaworks and starknet-rust move to num-bigint 0.5 / rand 0.10 |
+| pkcs8 0.10, spki 0.7, der 0.7, const-oid 0.9, signature 2 | `async-nats 0.50 → nkeys 0.4 → signatory 0.27 / ed25519-dalek 2` (only behind `krusty-kms-client/nats`) | nkeys moves to pkcs8 0.11 / signature 3 |
+| getrandom 0.2 | `krusty-kms-wasm` / `mental-poker-wasm` add it with the `js` feature so rand_core 0.6 consumers work in browsers; ring 0.17 and uuid 0.8 also use it | no rand_core 0.6 consumer is left in the wasm graph |
+| syn 2 | every proc-macro crate except async-trait 0.1.92 (already on syn 3) | the proc-macro ecosystem finishes the syn 3 transition |
+
+When a skip stops matching anything, `cargo deny` warns; delete the entry rather than
+leaving a stale allowance. Prefer `skip` over `skip-tree`: a subtree skip would also
+accept duplicates introduced later underneath it.
+
+Resolved 2026-09-02: `krusty-kms` now signs with `starknet-rust-crypto` 0.19.1 (the
+version the `starknet-rust` 0.19.1 stack already links) instead of a second 0.9.0
+copy, which removed `starknet-rust-crypto` 0.9.0, `starknet-rust-curve` 0.6.0 and
+`crypto-bigint` 0.5.5 from the lockfile.
+
 ## `account_sdk` (Cartridge Controller, git-only)
 
 - Used only by `crates/controller`, which is **workspace-excluded** and
