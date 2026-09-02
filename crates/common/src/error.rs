@@ -89,3 +89,31 @@ pub enum KmsError {
     #[error("Controller error: {0}")]
     ControllerError(String),
 }
+
+/// Placeholder returned by [`redact_url`] when the input has no `scheme://host`.
+pub const REDACTED_URL_PLACEHOLDER: &str = "<redacted-url>";
+
+/// Reduce a URL to `scheme://host[:port]` for error messages and logs.
+///
+/// RPC endpoint URLs routinely carry the provider API key in the path or
+/// query, and `userinfo` may carry credentials. Everything after the
+/// authority is dropped, as is the userinfo. Inputs without a recognisable
+/// `scheme://host` prefix yield [`REDACTED_URL_PLACEHOLDER`] rather than the
+/// original text, so an unparseable value can never leak through.
+#[must_use]
+pub fn redact_url(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return REDACTED_URL_PLACEHOLDER.to_string();
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host_port = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_userinfo, host)| host);
+    if scheme.is_empty() || host_port.is_empty() {
+        return REDACTED_URL_PLACEHOLDER.to_string();
+    }
+    format!("{scheme}://{host_port}")
+}
+
+#[cfg(test)]
+mod tests;
