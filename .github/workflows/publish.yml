@@ -44,6 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:
+      # actions: read is required by the environment / deployment-policy API
+      # calls in the protection check below.
+      actions: read
       contents: read
       id-token: write
     env:
@@ -80,6 +83,12 @@ jobs:
           );
           if (!reviewerRule?.reviewers?.length) {
             throw new Error("the crates-io environment must have at least one required reviewer");
+          }
+          if (reviewerRule.prevent_self_review !== true) {
+            throw new Error("the crates-io environment must enable prevent self-review so the tag pusher cannot approve their own release");
+          }
+          if (environment.can_admins_bypass !== false) {
+            throw new Error("the crates-io environment must not allow administrators to bypass its protection rules");
           }
           const branchPolicy = environment.deployment_branch_policy;
           if (!branchPolicy?.custom_branch_policies || branchPolicy.protected_branches) {
