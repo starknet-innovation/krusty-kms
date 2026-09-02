@@ -69,6 +69,8 @@ All notable changes to the published Rust crates are documented here.
   `krusty-kms-common`, `krusty-kms-crypto`, and `krusty-kms-sdk`. The profile
   override applies to builds driven from this workspace; downstream consumers'
   own profiles govern their builds (L-1).
+- Enable the `bip39/zeroize` feature and wipe parsed mnemonics, generation
+  entropy, and the C-ABI phrase copy on drop (L-12).
 
 ## [0.10.0] - 2026-08-28
 

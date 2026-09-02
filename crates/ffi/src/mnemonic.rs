@@ -46,6 +46,9 @@ pub unsafe extern "C" fn kms_generate_mnemonic_from_entropy(
         let data = slice::from_raw_parts(entropy, entropy_len);
         match bip39::Mnemonic::from_entropy(data) {
             Ok(m) => {
+                // The parsed word indices and the phrase are both secret key
+                // material: zeroize every Rust-side copy on drop.
+                let m = Zeroizing::new(m);
                 let s = Zeroizing::new(m.to_string());
                 write_string_output(&s, out, out_len, out_written)
             }
