@@ -6,6 +6,14 @@ All notable changes to the published Rust crates are documented here.
 
 ### Added
 
+- Add `ArgentAccount::try_with_class_hash`, which rejects a class hash with no
+  known constructor layout instead of guessing one. `ArgentAccount::new`,
+  `with_class_hash_and_layout` and `layout_for_class_hash` are unchanged.
+- Add the `argent_address` example (`MNEMONIC=... cargo run -p krusty-kms
+  --example argent_address`), which prints the derived Argent address for every
+  known class version and both key schemes, for comparison against a real
+  wallet.
+
 - Add `krusty_kms_common::fee::ResourceBoundsCeiling`, a validated per-dimension
   ceiling on V3 resource bounds, together with `Wallet::with_fee_ceiling`,
   `deploy_oz_account_with_fee_ceiling`, and
@@ -14,6 +22,18 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- An Argent class hash that this crate does not recognise is no longer assumed
+  to use the v0.4.0 constructor layout. Argent changed its constructor once
+  already (v0.3.x to v0.4.0), so guessing derives an address whose constructor
+  cannot deserialise its calldata — permanently undeployable, and funds sent to
+  it are stranded (see the 0.10.0 Argent calldata fix). The WASM
+  `deriveArgentAccountAddress` and the gateway/oracle Argent paths now return an
+  invalid-class-hash error for an unrecognised class hash. This applies to the
+  gateway even when `allow_unlisted_class_hash=true`: the override can waive the
+  allowlist but cannot supply a constructor layout. Callers deriving for a class
+  this crate does not know must state the layout with
+  `ArgentAccount::with_class_hash_and_layout`. `ArgentAccount::with_class_hash`
+  keeps its old guessing behaviour and is deprecated.
 - Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
   (a plain, non-zeroizing `Felt` copy of the private key) across the deploy
   acceptance wait. Public-key derivation and descriptor validation use the

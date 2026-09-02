@@ -175,7 +175,7 @@ pub fn generate_account_addresses(
 /// // Use public keys to query Argent's smart account API
 /// for (const kp of keypairs) {
 ///   const smartAccounts = await argentApi.findAccountsByPublicKey(kp.publicKey);
-///   // smartAccounts contains addresses with server-provided salts
+///   // smartAccounts contains accounts whose salt was assigned server-side
 /// }
 /// ```
 #[wasm_bindgen(js_name = "deriveDiscoveryKeypairs")]
