@@ -57,6 +57,9 @@ fn redact_url_rejects_credential_shaped_scheme_or_host() {
         "https://[SECRET]:443/rpc",
         "https://[::1]x/path",
         "https://host:notaport/path",
+        "https://host:98765/rpc",
+        "https://host:+443/rpc",
+        "https://host:/rpc",
         "://host",
     ] {
         let out = redact_url(leaky);
@@ -72,6 +75,7 @@ fn redact_url_keeps_valid_authorities() {
         "http://[::1]:8545"
     );
     assert_eq!(redact_url("http://[::1]/v0_9/KEY"), "http://[::1]");
+    assert_eq!(redact_url("https://host:65535/x"), "https://host:65535");
     assert_eq!(
         redact_url("https://[2001:db8::1]:443/v0_9/KEY"),
         "https://[2001:db8::1]:443"
