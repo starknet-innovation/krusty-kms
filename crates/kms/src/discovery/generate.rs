@@ -2,9 +2,7 @@
 
 use super::types::{CandidateAccount, DerivationType, DerivedKeypair, WalletType};
 use crate::account::calculate_contract_address;
-use crate::account_class::{
-    AccountClass, ArgentAccount, ArgentConstructorLayout, BraavosAccount, SaltPolicy,
-};
+use crate::account_class::{AccountClass, ArgentAccount, BraavosAccount, SaltPolicy};
 use crate::derivation::{derive_argent_legacy_private_key, derive_private_key_with_coin_type};
 use crate::mnemonic::validate_mnemonic;
 use crate::stark_signing::stark_public_key;
@@ -105,6 +103,18 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
     Ok(keypairs)
 }
 
+/// Argent Cairo 1 class hashes reachable by legacy double derivation, labelled.
+///
+/// The constructor layout is not restated here; it comes from
+/// [`ArgentAccount::layout_for_class_hash`], the canonical map.
+fn argent_cairo1_classes() -> Vec<(Felt, &'static str)> {
+    vec![
+        (Felt::from_hex(ARGENT_V040).unwrap(), "v0.4.0"),
+        (Felt::from_hex(ARGENT_V031).unwrap(), "v0.3.1"),
+        (Felt::from_hex(ARGENT_V030).unwrap(), "v0.3.0"),
+    ]
+}
+
 /// Generate all candidate account addresses for a mnemonic.
 ///
 /// Iterates through derivation indices `0..max_index` and generates candidate
@@ -119,33 +129,6 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
 ///
 /// Does NOT hit the network. Returns all mathematically possible addresses.
 /// Use with an RPC provider to filter to actually deployed accounts.
-/// Argent Cairo 1 classes reachable by legacy double derivation, with the
-/// constructor layout each one deserialises.
-///
-/// The layout is paired with the class hash here rather than looked up at the
-/// call site: adding a class to this table forces the author to state its
-/// layout, so candidate generation stays infallible instead of failing every
-/// mnemonic on an unrecognised hash.
-fn argent_cairo1_classes() -> Vec<(Felt, &'static str, ArgentConstructorLayout)> {
-    vec![
-        (
-            Felt::from_hex(ARGENT_V040).unwrap(),
-            "v0.4.0",
-            ArgentConstructorLayout::SignerWithOptionalGuardian,
-        ),
-        (
-            Felt::from_hex(ARGENT_V031).unwrap(),
-            "v0.3.1",
-            ArgentConstructorLayout::OwnerGuardianFelts,
-        ),
-        (
-            Felt::from_hex(ARGENT_V030).unwrap(),
-            "v0.3.0",
-            ArgentConstructorLayout::OwnerGuardianFelts,
-        ),
-    ]
-}
-
 pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<CandidateAccount>> {
     validate_mnemonic(mnemonic)?;
 
@@ -196,11 +179,9 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         });
 
         // Argent — v0.4.0
-        let argent_addr = ArgentAccount::with_class_hash_and_layout(
-            argent_v040_hash,
-            ArgentConstructorLayout::SignerWithOptionalGuardian,
-        )
-        .calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
+        // ArgentAccount::new() *is* the v0.4.0 preset; don't restate its layout.
+        let argent_addr =
+            ArgentAccount::new().calculate_address(&direct_pubk, SaltPolicy::PublicKey)?;
         candidates.push(CandidateAccount {
             wallet_type: WalletType::Argent,
             class_hash: felt_hex(&argent_v040_hash),
@@ -250,8 +231,13 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
 
         // Cairo 1 class hashes via legacy derivation
-        for (hash, version, layout) in &legacy_cairo1_hashes {
-            let addr = ArgentAccount::with_class_hash_and_layout(*hash, *layout)
+        for (hash, version) in &legacy_cairo1_hashes {
+            // expect(): this table lists only classes the canonical map knows,
+            // and the discovery tests generate candidates, so an unpaired row
+            // fails in CI rather than deriving an unusable address.
+            let layout = ArgentAccount::layout_for_class_hash(hash)
+                .expect("discovery table lists only known Argent classes");
+            let addr = ArgentAccount::with_class_hash_and_layout(*hash, layout)
                 .calculate_address(&legacy_pubk, SaltPolicy::PublicKey)?;
             candidates.push(CandidateAccount {
                 wallet_type: WalletType::ArgentLegacy,

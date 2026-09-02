@@ -21,11 +21,12 @@ attributed it to a "server-provided salt".
   owns the calldata shape. The guardian `None` tag is produced by the shared
   `serialize_cairo_none()`, so the Argent path and the Tongo serialiser agree
   by construction.
-- `ArgentAccount::with_class_hash` selects the layout from the known
-  v0.3.0 / v0.3.1 / v0.4.0 class hashes; an unknown class hash keeps the
-  latest (v0.4.0) layout. `with_class_hash_and_layout` and
-  `constructor_layout()` make the choice explicit; `layout_for_class_hash`
-  lets callers validate.
+- The layout is selected from the known v0.3.0 / v0.3.1 / v0.4.0 class
+  hashes. An unrecognised class hash is **rejected** unless the caller states
+  the layout: `try_with_class_hash` (fallible) or `with_class_hash_and_layout`
+  (explicit). `layout_for_class_hash` is the canonical map and lets callers
+  validate. `with_class_hash` kept the latest-layout guess and is deprecated —
+  the amendment at the end of this note records why that was reversed.
 - The Argent preset moves to `crates/kms/src/account_class/argent.rs`. The
   file-size baseline for `account_class.rs` ratchets down (585 → 520 lines);
   no baseline grows.
@@ -62,9 +63,11 @@ those versions and must re-derive them.
 
 The original decision kept the latest (v0.4.0) layout for an unrecognised
 class hash. That is unsafe for the same reason this note exists: Argent has
-changed its constructor once already, so a guessed layout derives an address
-whose constructor cannot deserialise its calldata — undeployable, and funds
-sent there are stranded.
+changed its constructor once already, so an unrecognised class may accept the
+v0.4.0 calldata or may reject it, and the class hash alone does not say which.
+Where it rejects, the derived address is undeployable and funds sent there are
+stranded. The objection is to deriving on an unverified guess, not to the
+guess always being wrong.
 
 `ArgentAccount::try_with_class_hash` now returns
 `KmsError::InvalidClassHash` for a class hash outside `layout_for_class_hash`.

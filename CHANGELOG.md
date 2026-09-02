@@ -24,9 +24,11 @@ All notable changes to the published Rust crates are documented here.
 
 - An Argent class hash that this crate does not recognise is no longer assumed
   to use the v0.4.0 constructor layout. Argent changed its constructor once
-  already (v0.3.x to v0.4.0), so guessing derives an address whose constructor
-  cannot deserialise its calldata — permanently undeployable, and funds sent to
-  it are stranded (see the 0.10.0 Argent calldata fix). The WASM
+  already (v0.3.x to v0.4.0), so an unrecognised class may or may not accept
+  that calldata — and the class hash alone cannot say which. Where it does not,
+  the constructor cannot deserialise its calldata: the address is permanently
+  undeployable and funds sent to it are stranded (see the 0.10.0 Argent
+  calldata fix). Deriving on an unverified guess is what is refused. The WASM
   `deriveArgentAccountAddress` and the gateway/oracle Argent paths now return an
   invalid-class-hash error for an unrecognised class hash. This applies to the
   gateway even when `allow_unlisted_class_hash=true`: the override can waive the

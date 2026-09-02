@@ -99,7 +99,8 @@ impl ArgentAccount {
     ///
     /// Known Argent class hashes select their constructor layout automatically.
     /// An unknown class hash assumes the current (v0.4.0) layout, which yields
-    /// an undeployable address if that class takes a different constructor;
+    /// an undeployable address if that class takes a different constructor
+    /// (unverifiable from the hash alone);
     /// prefer [`Self::try_with_class_hash`], or state the layout explicitly
     /// with [`Self::with_class_hash_and_layout`].
     #[deprecated(
@@ -115,9 +116,10 @@ impl ArgentAccount {
     ///
     /// Returns [`KmsError::InvalidClassHash`] for a class hash that is not a
     /// recognised Argent class. Argent has already changed its constructor
-    /// once (v0.3.x to v0.4.0); guessing the layout for an unrecognised class
-    /// derives an address that can never be deployed, so callers that accept a
-    /// class hash from outside must reject it instead. Use
+    /// once (v0.3.x to v0.4.0), so the layout of an unrecognised class is
+    /// unverified: it may match v0.4.0, or it may reject the guessed calldata
+    /// and leave an address that can never be deployed. Callers that accept a
+    /// class hash from outside cannot tell which, so they must reject it. Use
     /// [`Self::with_class_hash_and_layout`] to opt into a specific layout for
     /// a class this crate does not know.
     pub fn try_with_class_hash(class_hash: Felt) -> Result<Self> {

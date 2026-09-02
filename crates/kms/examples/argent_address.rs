@@ -29,9 +29,10 @@ fn main() -> Result<(), String> {
     // A silently-ignored INDEXES would show only index 0 and invite exactly the
     // "my mnemonic doesn't derive this address" misdiagnosis this example is for.
     let indexes: u32 = match std::env::var("INDEXES") {
-        Ok(v) => v
-            .parse()
-            .map_err(|e| format!("INDEXES={v:?} is not a positive integer: {e}"))?,
+        Ok(v) => match v.parse() {
+            Ok(0) | Err(_) => return Err(format!("INDEXES={v:?} is not a positive integer")),
+            Ok(n) => n,
+        },
         Err(_) => 1,
     };
 
