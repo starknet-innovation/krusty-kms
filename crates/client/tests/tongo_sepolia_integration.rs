@@ -79,10 +79,6 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         .map_err(|e| format!("Failed to convert public key: {:?}", e))?
         .x();
 
-    println!(
-        "   ✓ Account Private Key: {}",
-        account_keypair.private_key.expose_secret_hex().as_str()
-    );
     println!("   ✓ Account Public Key:  {:#x}", account_public_key);
 
     // -------------------------------------------------------------------------
@@ -109,20 +105,12 @@ async fn test_full_tongo_sepolia_flow() -> Result<(), Box<dyn std::error::Error>
         derive_keypair_with_coin_type(TEST_MNEMONIC, 1, 0, TONGO_COIN_TYPE, None)?;
 
     println!(
-        "   ✓ Tongo Account 0 Private Key: {}",
-        tongo_keypair_0.private_key.expose_secret_hex().as_str()
-    );
-    println!(
         "   ✓ Tongo Account 0 Public Key:  {:#x}",
         tongo_keypair_0
             .public_key
             .to_affine()
             .map_err(|e| format!("{:?}", e))?
             .x()
-    );
-    println!(
-        "   ✓ Tongo Account 1 Private Key: {}",
-        tongo_keypair_1.private_key.expose_secret_hex().as_str()
     );
     println!(
         "   ✓ Tongo Account 1 Public Key:  {:#x}",
@@ -1158,11 +1146,7 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
     let tongo_key_0 = derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None)?;
     let tongo_key_1 = derive_keypair_with_coin_type(TEST_MNEMONIC, 1, 0, TONGO_COIN_TYPE, None)?;
 
-    println!("Starknet Account Key (coin type 9004, index 0):");
-    println!(
-        "  Private: {}",
-        starknet_key.private_key.expose_secret_hex().as_str()
-    );
+    println!("Starknet Account Public Key (coin type 9004, index 0):");
     println!(
         "  Public:  {:#x}",
         starknet_key
@@ -1172,11 +1156,7 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
             .x()
     );
 
-    println!("\nTongo Key 0 (coin type 5454, index 0):");
-    println!(
-        "  Private: {}",
-        tongo_key_0.private_key.expose_secret_hex().as_str()
-    );
+    println!("\nTongo Public Key 0 (coin type 5454, index 0):");
     println!(
         "  Public:  {:#x}",
         tongo_key_0
@@ -1186,11 +1166,7 @@ async fn test_key_derivation_matches_typescript() -> Result<(), Box<dyn std::err
             .x()
     );
 
-    println!("\nTongo Key 1 (coin type 5454, index 1):");
-    println!(
-        "  Private: {}",
-        tongo_key_1.private_key.expose_secret_hex().as_str()
-    );
+    println!("\nTongo Public Key 1 (coin type 5454, index 1):");
     println!(
         "  Public:  {:#x}",
         tongo_key_1

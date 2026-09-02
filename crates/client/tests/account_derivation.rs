@@ -26,10 +26,6 @@ fn test_derive_tongo_keypair() {
     let affine = keypair.public_key.to_affine().unwrap();
     assert_ne!(affine.x(), Felt::ZERO);
 
-    println!(
-        "Tongo Private Key: {}",
-        keypair.private_key.expose_secret_hex().as_str()
-    );
     println!("Tongo Public Key (x): {:#x}", affine.x());
 }
 

@@ -29,11 +29,6 @@ fn test_private_key_derivation() {
 
     // Private key is guaranteed to be valid by the grind_key function
     // which ensures it's less than the curve order
-
-    println!("\n=> Private Key Derivation:");
-    println!("   Mnemonic: {}", TEST_MNEMONIC);
-    println!("   Path: m/44'/5454'/0'/0/0");
-    println!("   Private Key: {:#x}", private_key);
 }
 
 #[test]
@@ -49,13 +44,6 @@ fn test_keypair_derivation() {
 
     // Public key should be derived correctly (we can't easily verify the exact point,
     // but we can verify it's not at infinity)
-
-    println!("\n=> Key Pair Derivation:");
-    println!(
-        "   Private Key: {}",
-        keypair.private_key.expose_secret_hex().as_str()
-    );
-    println!("   Public Key:  {:?}", keypair.public_key);
 }
 
 #[test]
@@ -73,17 +61,6 @@ fn test_deterministic_key_derivation() {
         keypair1.public_key, keypair2.public_key,
         "Same parameters should produce same public key"
     );
-
-    println!("\n=> Deterministic Derivation Test:");
-    println!(
-        "   First derivation:  {}",
-        keypair1.private_key.expose_secret_hex().as_str()
-    );
-    println!(
-        "   Second derivation: {}",
-        keypair2.private_key.expose_secret_hex().as_str()
-    );
-    println!("   ✓ Keys match (deterministic)");
 }
 
 #[test]
@@ -102,18 +79,6 @@ fn test_different_account_indices_produce_different_keys() {
     assert_ne!(
         keypair0.public_key, keypair1.public_key,
         "Different account indices should produce different public keys"
-    );
-
-    println!("\n=> Tongo Keys for Different Accounts:");
-    println!("   Account 0 (path m/44'/5454'/0'/0/0):");
-    println!(
-        "     Private: {}",
-        keypair0.private_key.expose_secret_hex().as_str()
-    );
-    println!("   Account 1 (path m/44'/5454'/1'/0/0):");
-    println!(
-        "     Private: {}",
-        keypair1.private_key.expose_secret_hex().as_str()
     );
 }
 
@@ -134,18 +99,6 @@ fn test_different_address_indices_produce_different_keys() {
         keypair0.public_key, keypair1.public_key,
         "Different address indices should produce different public keys"
     );
-
-    println!("\n=> Tongo Keys for Different Address Indices:");
-    println!("   Address 0 (path m/44'/5454'/0'/0/0):");
-    println!(
-        "     Private: {}",
-        keypair0.private_key.expose_secret_hex().as_str()
-    );
-    println!("   Address 1 (path m/44'/5454'/0'/0/1):");
-    println!(
-        "     Private: {}",
-        keypair1.private_key.expose_secret_hex().as_str()
-    );
 }
 
 #[test]
@@ -164,16 +117,6 @@ fn test_passphrase_affects_derivation() {
     assert_ne!(
         keypair_no_pass.public_key, keypair_with_pass.public_key,
         "Different passphrases should produce different public keys"
-    );
-
-    println!("\n=> Passphrase Effect on Derivation:");
-    println!(
-        "   Without passphrase: {}",
-        keypair_no_pass.private_key.expose_secret_hex().as_str()
-    );
-    println!(
-        "   With passphrase:    {}",
-        keypair_with_pass.private_key.expose_secret_hex().as_str()
     );
 }
 
@@ -194,12 +137,6 @@ fn test_bip44_path_verification() {
     assert_ne!(account0_addr0, Felt::ZERO);
     assert_ne!(account0_addr1, Felt::ZERO);
     assert_ne!(account1_addr0, Felt::ZERO);
-
-    println!("\n=> BIP-44 Path Verification:");
-    println!("   Path template: m/44'/5454'/account'/0/address");
-    println!("   m/44'/5454'/0'/0/0: {:#x}", account0_addr0);
-    println!("   m/44'/5454'/0'/0/1: {:#x}", account0_addr1);
-    println!("   m/44'/5454'/1'/0/0: {:#x}", account1_addr0);
 }
 
 #[test]
@@ -264,33 +201,9 @@ fn test_cross_reference_with_known_vectors() {
     let account1 = derive_keypair(TEST_MNEMONIC, 0, 1, None).unwrap();
     let addr1 = derive_keypair(TEST_MNEMONIC, 1, 0, None).unwrap();
 
-    println!("\n=> Cross-Reference Test (for TypeScript comparison):");
-    println!("   Mnemonic: {}", TEST_MNEMONIC);
-    println!("   Coin Type: {} (Tongo)", TONGO_COIN_TYPE);
-    println!();
-    println!("   m/44'/5454'/0'/0/0:");
-    println!(
-        "     Private: {}",
-        account0.private_key.expose_secret_hex().as_str()
-    );
-    println!("     Public:  {:?}", account0.public_key);
-    println!();
-    println!("   m/44'/5454'/1'/0/0:");
-    println!(
-        "     Private: {}",
-        account1.private_key.expose_secret_hex().as_str()
-    );
-    println!("     Public:  {:?}", account1.public_key);
-    println!();
-    println!("   m/44'/5454'/0'/0/1:");
-    println!(
-        "     Private: {}",
-        addr1.private_key.expose_secret_hex().as_str()
-    );
-    println!("     Public:  {:?}", addr1.public_key);
-
-    // The actual values can be compared with TypeScript output
-    // when running the TypeScript tests with Tongo coin type
+    assert_ne!(account0.private_key, account1.private_key);
+    assert_ne!(account0.private_key, addr1.private_key);
+    assert_ne!(account1.private_key, addr1.private_key);
 }
 
 // Note: Removed test_address_space_coverage due to grinding edge cases

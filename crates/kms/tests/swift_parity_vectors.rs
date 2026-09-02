@@ -78,10 +78,7 @@ fn test_bip44_starknet_coin9004() {
     );
     assert!(public_hex.len() > 2, "Public key should have hex digits");
 
-    println!("✓ BIP-44 Starknet (coin 9004) derivation:");
-    println!("  Path: {}", path);
-    println!("  Private Key: {}", private_hex.as_str());
-    println!("  Public Key:  {}", public_hex);
+    println!("✓ BIP-44 Starknet (coin 9004) derivation at {path}: {public_hex}");
 }
 
 /// Test that derived key creates a valid signer.
@@ -113,12 +110,7 @@ fn test_derived_key_creates_valid_signer() {
 
     assert_ne!(public_key_x, Felt::ZERO, "Public key should not be zero");
 
-    println!("✓ Derived key creates valid signer:");
-    println!(
-        "  Private Key: {}",
-        keypair.private_key.expose_secret_hex().as_str()
-    );
-    println!("  Public Key:  {:#x}", public_key_x);
+    println!("✓ Derived key creates valid signer with public key {public_key_x:#x}");
 }
 
 /// Test Starknet key derivation with multiple account indices.
@@ -176,9 +168,7 @@ fn test_tongo_derivation_coin5454() {
         .x();
     assert_ne!(public_key_x, Felt::ZERO, "Public key should not be zero");
 
-    println!("✓ Tongo (coin 5454) derivation:");
-    println!("  Private Key: {}", private_hex.as_str());
-    println!("  Public Key:  {:#x}", public_key_x);
+    println!("✓ Tongo (coin 5454) derivation with public key {public_key_x:#x}");
 }
 
 /// Test Starknet spending key derivation (coin type 9004).
@@ -198,12 +188,7 @@ fn test_starknet_spending_key_derivation() {
     let expected = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
     let expected_felt = Felt::from_hex(expected).expect("Should parse expected value");
 
-    let derived_hex = keypair.private_key.expose_secret_hex();
-
-    println!("✓ Starknet Spending Key Derivation (coin 9004):");
-    println!("  Path:     {}", path);
-    println!("  Expected: {}", expected);
-    println!("  Derived:  {}", derived_hex.as_str());
+    println!("✓ Starknet spending-key derivation at {path}");
 
     assert_eq!(
         keypair.private_key, expected_felt,
@@ -228,12 +213,7 @@ fn test_tongo_spending_key_derivation() {
     let expected = "0x181c51e06caf24a03c8757ad3af64660fc71e32f9ee0187ca153bd32867c04e";
     let expected_felt = Felt::from_hex(expected).expect("Should parse expected value");
 
-    let derived_hex = keypair.private_key.expose_secret_hex();
-
-    println!("✓ Tongo Spending Key Derivation (coin 5454):");
-    println!("  Path:     {}", path);
-    println!("  Expected: {}", expected);
-    println!("  Derived:  {}", derived_hex.as_str());
+    println!("✓ Tongo spending-key derivation at {path}");
 
     assert_eq!(
         keypair.private_key, expected_felt,
@@ -253,16 +233,6 @@ fn test_different_coin_types_produce_different_keys() {
 
     let tongo_key =
         derive_keypair_with_coin_type(mnemonic, 0, 0, 5454, None).expect("Should derive Tongo key");
-
-    println!("✓ Different coin types produce different keys:");
-    println!(
-        "  Starknet (9004): {}",
-        starknet_key.private_key.expose_secret_hex().as_str()
-    );
-    println!(
-        "  Tongo (5454):    {}",
-        tongo_key.private_key.expose_secret_hex().as_str()
-    );
 
     assert_ne!(
         starknet_key.private_key, tongo_key.private_key,

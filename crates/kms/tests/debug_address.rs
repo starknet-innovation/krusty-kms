@@ -6,7 +6,9 @@ use starknet_types_core::hash::{Pedersen, StarkHash};
 fn debug_account_address_calculation() {
     // Test vector from Swift
     let mnemonic = "habit hope tip crystal because grunt nation idea electric witness alert like";
-    let expected_private = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
+    let expected_private =
+        Felt::from_hex("0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df")
+            .expect("Should parse expected private key");
     let expected_public = "0x426212993d56613e1886a4cbc5b58810570023581c2aab0b423277776b79d2e";
     let expected_address = "0x6df2d05138d501f6aafe03c1d95b9ff824e2d96821934cd3d8148801865fefe";
 
@@ -20,13 +22,10 @@ fn debug_account_address_calculation() {
         .expect("Should convert to affine")
         .x();
 
+    assert_eq!(keypair.private_key, expected_private);
+
     println!("\n=== Account Address Calculation Debug ===\n");
     println!("Step 1: Keys");
-    println!("  Private (expected): {}", expected_private);
-    println!(
-        "  Private (derived):  {}",
-        keypair.private_key.expose_secret_hex().as_str()
-    );
     println!("  Public (expected):  {}", expected_public);
     println!("  Public (derived):   {:#x}", public_key_x);
     println!();
