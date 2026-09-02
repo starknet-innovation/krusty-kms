@@ -1,4 +1,5 @@
 use super::*;
+use krusty_kms_common::KmsError;
 use std::collections::HashSet;
 
 const TEST_MNEMONIC: &str =
@@ -67,6 +68,44 @@ fn test_candidate_default_serialize_omits_private_key() {
 fn test_invalid_mnemonic_returns_error() {
     let result = generate_candidates("invalid mnemonic that is not valid at all", 1);
     assert!(result.is_err(), "expected error for invalid mnemonic");
+}
+
+/// `max_index` is caller-controlled at the WASM/FFI boundary: values above the
+/// cap must fail before any derivation work, and `u32::MAX` must not panic in
+/// the capacity arithmetic it used to overflow (L-8).
+#[test]
+fn test_max_index_above_cap_is_rejected_without_panicking() {
+    for max_index in [MAX_DISCOVERY_INDEX + 1, u32::MAX] {
+        assert!(
+            matches!(
+                generate_candidates(TEST_MNEMONIC, max_index),
+                Err(KmsError::InvalidDerivationPath(_))
+            ),
+            "generate_candidates accepted max_index={max_index}"
+        );
+        assert!(
+            matches!(
+                derive_discovery_keypairs(TEST_MNEMONIC, max_index),
+                Err(KmsError::InvalidDerivationPath(_))
+            ),
+            "derive_discovery_keypairs accepted max_index={max_index}"
+        );
+    }
+}
+
+/// The cap itself is inclusive, and the bound is checked ahead of the mnemonic
+/// so an oversized request never parses the phrase.
+#[test]
+fn test_max_index_bound_is_inclusive_and_checked_first() {
+    assert!(generate::validate_discovery_inputs(TEST_MNEMONIC, MAX_DISCOVERY_INDEX).is_ok());
+    assert!(matches!(
+        generate::validate_discovery_inputs("not a mnemonic", MAX_DISCOVERY_INDEX + 1),
+        Err(KmsError::InvalidDerivationPath(_))
+    ));
+    assert!(matches!(
+        generate::validate_discovery_inputs("not a mnemonic", 1),
+        Err(KmsError::InvalidMnemonic(_))
+    ));
 }
 
 #[test]

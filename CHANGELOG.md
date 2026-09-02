@@ -71,6 +71,10 @@ All notable changes to the published Rust crates are documented here.
   own profiles govern their builds (L-1).
 - Enable the `bip39/zeroize` feature and wipe parsed mnemonics, generation
   entropy, and the C-ABI phrase copy on drop (L-12).
+- Cap discovery scans at `krusty_kms::discovery::MAX_DISCOVERY_INDEX` (1024
+  indices) with checked capacity arithmetic; larger `max_index` values return
+  `InvalidDerivationPath` instead of running unbounded PBKDF2 work or
+  overflowing (L-8).
 
 ## [0.10.0] - 2026-08-28
 
