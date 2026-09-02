@@ -54,8 +54,8 @@ impl WaitOptions {
     ///
     /// # Errors
     /// Returns `KmsError::TransactionError` if `interval_secs` is below
-    /// [`MIN_WAIT_INTERVAL_SECS`] or `timeout_secs` is zero or above
-    /// [`MAX_WAIT_TIMEOUT_SECS`].
+    /// [`MIN_WAIT_INTERVAL_SECS`] or above `timeout_secs`, or if `timeout_secs`
+    /// is zero or above [`MAX_WAIT_TIMEOUT_SECS`].
     pub fn new(interval_secs: u64, timeout_secs: u64) -> Result<Self> {
         if interval_secs < MIN_WAIT_INTERVAL_SECS {
             return Err(KmsError::TransactionError(format!(
@@ -66,6 +66,11 @@ impl WaitOptions {
             return Err(KmsError::TransactionError(format!(
                 "wait timeout_secs must be between 1 and {MAX_WAIT_TIMEOUT_SECS}"
             )));
+        }
+        if interval_secs > timeout_secs {
+            return Err(KmsError::TransactionError(
+                "wait interval_secs must not exceed timeout_secs".to_string(),
+            ));
         }
         Ok(Self {
             interval_secs,
@@ -83,14 +88,17 @@ impl Default for WaitOptions {
     }
 }
 
-/// `(interval_secs, timeout_secs)` actually used by [`Tx::wait`]: the interval
-/// is raised to the floor and the timeout capped, so options assembled
-/// field-by-field can neither busy-poll nor overflow the deadline.
+/// `(interval_secs, timeout_secs)` actually used by [`Tx::wait`]: the timeout
+/// is capped, and the interval is raised to the floor and capped by the timeout,
+/// so options assembled field-by-field can neither busy-poll, overflow the
+/// deadline, nor sleep past it.
 fn effective_wait_bounds(options: &WaitOptions) -> (u64, u64) {
-    (
-        options.interval_secs.max(MIN_WAIT_INTERVAL_SECS),
-        options.timeout_secs.min(MAX_WAIT_TIMEOUT_SECS),
-    )
+    let timeout_secs = options.timeout_secs.min(MAX_WAIT_TIMEOUT_SECS);
+    let interval_secs = options
+        .interval_secs
+        .max(MIN_WAIT_INTERVAL_SECS)
+        .min(timeout_secs.max(MIN_WAIT_INTERVAL_SECS));
+    (interval_secs, timeout_secs)
 }
 
 impl Tx {
@@ -149,7 +157,9 @@ impl Tx {
 
             match self.observe_receipt().await? {
                 ReceiptObservation::Pending | ReceiptObservation::AcceptedWithoutReceipt => {
-                    tokio::time::sleep(interval).await
+                    // Never sleep past the deadline, whatever the interval.
+                    let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                    tokio::time::sleep(interval.min(remaining)).await
                 }
                 ReceiptObservation::Accepted(receipt) => return Ok(receipt),
                 ReceiptObservation::Reverted { reason } => {

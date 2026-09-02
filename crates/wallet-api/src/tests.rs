@@ -71,3 +71,24 @@ fn tx_hash_not_found_is_the_only_pending_lookup_error() {
     ));
     assert!(!is_transaction_hash_not_found(&ProviderError::RateLimited));
 }
+
+/// Codex review: an interval longer than the timeout must not sleep past the
+/// deadline, and `new` must reject it up front.
+#[test]
+fn interval_is_capped_by_the_timeout() {
+    let options = WaitOptions {
+        interval_secs: 86_400,
+        timeout_secs: 1,
+    };
+    assert_eq!(effective_wait_bounds(&options), (1, 1));
+    let huge = WaitOptions {
+        interval_secs: u64::MAX,
+        timeout_secs: u64::MAX,
+    };
+    assert_eq!(
+        effective_wait_bounds(&huge),
+        (MAX_WAIT_TIMEOUT_SECS, MAX_WAIT_TIMEOUT_SECS)
+    );
+    assert!(WaitOptions::new(2, 1).is_err());
+    assert!(WaitOptions::new(1, 1).is_ok());
+}
