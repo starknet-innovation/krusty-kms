@@ -14,30 +14,24 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
-- Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
-  (a plain, non-zeroizing `Felt` copy of the private key) across the deploy
-  acceptance wait. Public-key derivation and descriptor validation use the
-  kms-native `stark_public_key` path; the signer and account factory are
-  confined to the transaction submission and dropped before any polling
-  begins. Zero or out-of-range private keys now return an error instead of
-  panicking inside the curve arithmetic.
-- Provider transport failures no longer echo the RPC endpoint URL. starknet-rs
-  forwards `reqwest::Error`'s `Display`, which includes the full request URL
-  (path and query commonly carry the provider API key), into
-  `ProviderError::Other`; the gateway stored that text in the operation log
-  and returned it to oracle callers, and the client surfaced it in
-  `KmsError::RpcError`. Transport errors now map to a fixed
-  `provider transport error: <kind>` (`timeout`, `connect`, `status <code>`,
-  `decode`, `json-rpc code <n>`, `other`); typed Starknet JSON-RPC errors keep
-  their message. Cleartext-URL rejection messages in `create_provider` show
-  only `scheme://host[:port]`. Adds `krusty_kms_common::error::redact_url` and
-  `REDACTED_URL_PLACEHOLDER` for the same purpose in downstream code.
-- When a fee ceiling is supplied, RPC fee estimates are admitted against it
-  before signing and the admitted bounds are pinned on the transaction, so an
-  inflated estimate from an untrusted RPC can no longer widen the signed fee
-  authorisation. Estimates above the ceiling are rejected, never clamped.
-- Multisig contract reads and Tongo event pagination route provider failures
-  through the same redacting classifier as the wallet paths.
+- Reject `u128` overflow when computing the post-fund audited balance instead
+  of wrapping, and keep `overflow-checks` on in release builds of
+  `krusty-kms-common`, `krusty-kms-crypto`, and `krusty-kms-sdk`. The profile
+  override applies to builds driven from this workspace; downstream consumers'
+  own profiles govern their builds (L-1).
+- Enable the `bip39/zeroize` feature and wipe parsed mnemonics, generation
+  entropy, and the C-ABI phrase copy on drop (L-12).
+- Cap discovery scans at `krusty_kms::discovery::MAX_DISCOVERY_INDEX` (1024
+  indices) with checked capacity arithmetic; larger `max_index` values return
+  `InvalidDerivationPath` instead of running unbounded PBKDF2 work or
+  overflowing (L-8).
+- Bound `Tx::wait` polling: intervals below `MIN_WAIT_INTERVAL_SECS` are raised
+  to it, timeouts above `MAX_WAIT_TIMEOUT_SECS` are capped, and the deadline
+  uses checked arithmetic so `u64::MAX` no longer panics. `WaitOptions::new`
+  validates the same bounds (L-9).
+- Anchor the gateway `SystemClock` to the monotonic clock after one wall-clock
+  read, so a backwards wall-clock step can no longer revive expired
+  snapshot-cache entries or tracked operations (L-7).
 
 ## [0.10.0] - 2026-09-02
 
@@ -64,35 +58,6 @@ All notable changes to the published Rust crates are documented here.
   (`crates/kms/tests/discovery_test`). `ArgentAccount::with_class_hash` now
   selects the layout from known class hashes; `ArgentConstructorLayout` and
   `ArgentAccount::with_class_hash_and_layout` make it explicit.
-- Reject `u128` overflow when computing the post-fund audited balance instead
-  of wrapping, and keep `overflow-checks` on in release builds of
-  `krusty-kms-common`, `krusty-kms-crypto`, and `krusty-kms-sdk`. The profile
-  override applies to builds driven from this workspace; downstream consumers'
-  own profiles govern their builds (L-1).
-- Enable the `bip39/zeroize` feature and wipe parsed mnemonics, generation
-  entropy, and the C-ABI phrase copy on drop (L-12).
-- Cap discovery scans at `krusty_kms::discovery::MAX_DISCOVERY_INDEX` (1024
-  indices) with checked capacity arithmetic; larger `max_index` values return
-  `InvalidDerivationPath` instead of running unbounded PBKDF2 work or
-  overflowing (L-8).
-- Bound `Tx::wait` polling: intervals below `MIN_WAIT_INTERVAL_SECS` are raised
-  to it, timeouts above `MAX_WAIT_TIMEOUT_SECS` are capped, and the deadline
-  uses checked arithmetic so `u64::MAX` no longer panics. `WaitOptions::new`
-  validates the same bounds (L-9).
-- Anchor the gateway `SystemClock` to the monotonic clock after one wall-clock
-  read, so a backwards wall-clock step can no longer revive expired
-  snapshot-cache entries or tracked operations (L-7).
-
-## [0.10.0] - 2026-08-28
-
-### Added
-
-- Add mnemonic-bound NIP-44 and NIP-59 application envelopes to the Rust and
-  WASM APIs, including strict event, recipient, identifier, entropy, and
-  nested-payload validation.
-
-### Security
-
 - Bound Starknet RPC and multisig coordinator connect/read/request deadlines,
   cap coordinator bodies before JSON parsing, and bound event pagination by
   wall time, pages, events, serialized bytes, and continuation-token size. RPC
