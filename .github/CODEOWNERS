@@ -5,27 +5,28 @@
 # npm, Scarb, Swift, Gradle, pub),
 # license/advisory policy, release playbooks, git hooks, and the security
 # policy. They need a designated reviewer rather than any available approver.
-# Maintainers can extend the owner list; ownership here does not replace the
+# Owners: the repository admins. Extend the list as the team grows; ownership
+# here does not replace the
 # branch-protection rules configured in the repository settings.
 
-/.github/                     @adrienlacombe
-/.githooks/                   @adrienlacombe
-/tools/                       @adrienlacombe
-/Cargo.toml                   @adrienlacombe
-/Cargo.lock                   @adrienlacombe
-/crates/**/Cargo.toml         @adrienlacombe
-/.cargo/                      @adrienlacombe
-/crates/controller/.cargo/    @adrienlacombe
-/cross-tests/package.json     @adrienlacombe
-/cross-tests/package-lock.json @adrienlacombe
-/contracts/**/Scarb.toml      @adrienlacombe
-/contracts/**/Scarb.lock      @adrienlacombe
-/packages/kms-c/package.json  @adrienlacombe
-/packages/kms-swift/Package.swift @adrienlacombe
-/packages/kms-jvm/build.gradle.kts @adrienlacombe
-/packages/kms-jvm/settings.gradle.kts @adrienlacombe
-/packages/kms-dart/pubspec.yaml @adrienlacombe
-/deny.toml                    @adrienlacombe
-/docs/crates-release.md       @adrienlacombe
-/docs/supply-chain.md         @adrienlacombe
-/SECURITY.md                  @adrienlacombe
+/.github/                              @adrienlacombe @teddyjfpender
+/.githooks/                            @adrienlacombe @teddyjfpender
+/tools/                                @adrienlacombe @teddyjfpender
+/Cargo.toml                            @adrienlacombe @teddyjfpender
+/Cargo.lock                            @adrienlacombe @teddyjfpender
+/crates/**/Cargo.toml                  @adrienlacombe @teddyjfpender
+/.cargo/                               @adrienlacombe @teddyjfpender
+/crates/controller/.cargo/             @adrienlacombe @teddyjfpender
+/cross-tests/package.json              @adrienlacombe @teddyjfpender
+/cross-tests/package-lock.json         @adrienlacombe @teddyjfpender
+/contracts/**/Scarb.toml               @adrienlacombe @teddyjfpender
+/contracts/**/Scarb.lock               @adrienlacombe @teddyjfpender
+/packages/kms-c/package.json           @adrienlacombe @teddyjfpender
+/packages/kms-swift/Package.swift      @adrienlacombe @teddyjfpender
+/packages/kms-jvm/build.gradle.kts     @adrienlacombe @teddyjfpender
+/packages/kms-jvm/settings.gradle.kts  @adrienlacombe @teddyjfpender
+/packages/kms-dart/pubspec.yaml        @adrienlacombe @teddyjfpender
+/deny.toml                             @adrienlacombe @teddyjfpender
+/docs/crates-release.md                @adrienlacombe @teddyjfpender
+/docs/supply-chain.md                  @adrienlacombe @teddyjfpender
+/SECURITY.md                           @adrienlacombe @teddyjfpender
