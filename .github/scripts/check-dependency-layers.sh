@@ -48,6 +48,13 @@ ALLOWED = {
         "krusty-kms-common",
         "krusty-kms-sdk",
     },
+    # The mobile ABI is deliberately narrower than "ffi": no sdk, and nothing
+    # that could pull private-key derivation or software signing into a phone
+    # binary. See docs/design/2026-09-01-mobile-c-abi.md.
+    "ffi-mobile": {
+        "krusty-kms",
+        "krusty-kms-crypto",
+    },
     # Excluded from the workspace, but still in-tree — keep it on the policy list.
     "controller": {"krusty-kms-common", "krusty-kms-wallet-api"},
     "experimental/gaming-experimental/mental-poker": {

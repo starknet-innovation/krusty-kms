@@ -43,6 +43,8 @@ print(f"updated {path} ({len(rows)} files, soft_limit={soft})")
 # FFI snapshot only (digest is derived at check time).
 hdr = root / "packages/kms-c/include/kms.h"
 shutil.copy(hdr, root / ".github/guardrails/ffi-kms.h.snapshot")
+mobile_hdr = root / "crates/ffi-mobile/include/kms_mobile.h"
+shutil.copy(mobile_hdr, root / ".github/guardrails/ffi-kms_mobile.h.snapshot")
 digest = hashlib.sha256(hdr.read_bytes()).hexdigest()
 print(f"updated FFI snapshot ({digest})")
 

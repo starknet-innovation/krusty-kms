@@ -129,7 +129,8 @@ for f in "${changed[@]}"; do
       ;;
     .github/guardrails/file-size-baseline.json|\
     .github/guardrails/wasm-exports.txt|\
-    .github/guardrails/ffi-kms.h.snapshot)
+    .github/guardrails/ffi-kms.h.snapshot|\
+    .github/guardrails/ffi-kms_mobile.h.snapshot)
       needs_note=1
       needs_design_file=1
       reasons+=("guardrail baseline/surface changed: $f")

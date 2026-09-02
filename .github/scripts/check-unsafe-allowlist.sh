@@ -49,8 +49,9 @@ allowed = {
     "crates/common/src/secret_felt.rs",
     # Entire FFI crate is the raw-pointer boundary.
 }
-for path in (root / "crates/ffi/src").rglob("*.rs"):
-    allowed.add(str(path.relative_to(root)))
+for ffi_src in ("crates/ffi/src", "crates/ffi-mobile/src"):
+    for path in (root / ffi_src).rglob("*.rs"):
+        allowed.add(str(path.relative_to(root)))
 
 comment_line = re.compile(r"//.*?$", re.M)
 block_comment = re.compile(r"/\*.*?\*/", re.S)

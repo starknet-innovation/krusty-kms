@@ -1830,6 +1830,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "krusty-kms-mobile-cabi"
+version = "0.11.0"
+dependencies = [
+ "hex",
+ "krusty-kms",
+ "krusty-kms-crypto",
+ "starknet-types-core",
+]
+
+[[package]]
 name = "krusty-kms-oracle"
 version = "0.11.0"
 dependencies = [

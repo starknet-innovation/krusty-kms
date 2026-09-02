@@ -22,6 +22,23 @@ if ! cmp -s "$header" "$snapshot"; then
   failed=1
 fi
 
+# The mobile ABI is a separate header on purpose (see
+# docs/design/2026-09-01-mobile-c-abi.md) and has no packages/ mirrors, so it is
+# frozen on its own rather than compared against the canonical one.
+mobile_header="$root/crates/ffi-mobile/include/kms_mobile.h"
+mobile_snapshot="$root/.github/guardrails/ffi-kms_mobile.h.snapshot"
+if [[ ! -f "$mobile_header" ]]; then
+  echo "::error::missing $mobile_header"
+  failed=1
+elif [[ ! -f "$mobile_snapshot" ]]; then
+  echo "::error::missing mobile FFI surface snapshot at $mobile_snapshot"
+  failed=1
+elif ! cmp -s "$mobile_header" "$mobile_snapshot"; then
+  echo "::error::crates/ffi-mobile/include/kms_mobile.h differs from .github/guardrails/ffi-kms_mobile.h.snapshot"
+  diff -u "$mobile_snapshot" "$mobile_header" | head -n 80 || true
+  failed=1
+fi
+
 jvm_header="$root/packages/kms-jvm/src/main/c/kms.h"
 if [[ -f "$jvm_header" ]] && ! cmp -s "$header" "$jvm_header"; then
   echo "::error::$jvm_header differs from packages/kms-c/include/kms.h"

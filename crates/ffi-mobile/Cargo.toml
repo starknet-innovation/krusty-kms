@@ -1,0 +1,36 @@
+[package]
+name = "krusty-kms-mobile-cabi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Minimal C ABI for iOS and Android post-quantum signers: public material only"
+publish = false
+
+[lib]
+name = "kms_mobile"
+# staticlib for iOS (cinterop links a .a into the app binary), cdylib for
+# Android (System.loadLibrary wants a .so). The canonical `crates/ffi` is
+# cdylib-only, which is why it cannot serve iOS.
+# rlib as well so integration tests can link the crate; a staticlib/cdylib-only
+# crate cannot be imported by anything, including its own tests/ directory.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+# `ml-dsa` carries the FIPS 204 key expansion this surface exists for; it is off
+# by default in the crypto crate.
+krusty-kms-crypto = { version = "0.11.0", path = "../crypto", default-features = false, features = ["ml-dsa"] }
+krusty-kms = { version = "0.11.0", path = "../kms", default-features = false }
+starknet-types-core = { workspace = true }
+
+[dev-dependencies]
+# Only the parity vector needs it.
+hex = { workspace = true }
+
+[lints.clippy]
+# This crate is itself the raw-pointer boundary, so `&raw` conversions do not
+# improve readability at the ABI call sites.
+borrow_as_ptr = "allow"
+dbg_macro = "deny"
+todo = "deny"

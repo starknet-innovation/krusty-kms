@@ -15,6 +15,7 @@ members = [
     "crates/experimental/gaming-experimental/mental-poker-wasm",
     "crates/experimental/gaming-experimental/qb-game",
     "crates/ffi",
+    "crates/ffi-mobile",
 ]
 exclude = ["crates/controller"]
 default-members = [
