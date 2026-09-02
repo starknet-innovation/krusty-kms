@@ -68,29 +68,44 @@ gh api repos/starknet-innovation/krusty-kms/environments/crates-io/deployment-br
   --jq '.branch_policies[] | {name, type}'
 ```
 
-### Release-tag ruleset
+### Release-tag rulesets
 
-Release tags are immutable by convention; a tag ruleset makes that a server-side
-guarantee. It blocks creating, moving, or deleting `v*` tags for everyone except the
-bypass actors, so only maintainers can start a release and nobody can repoint a
-published tag at different code. Create it once (administrator, `repo` scope):
+Release tags are immutable by convention; tag rulesets make that a server-side
+guarantee. Two rulesets are needed because a bypass actor is exempt from *every*
+rule in its ruleset: if the maintainers who may create tags were also bypass actors
+on the immutability rules, a compromised maintainer token could still repoint or
+delete a published `v*` tag.
+
+1. **Creation** — only the maintainers team may push a `v*` tag.
+2. **Immutability** — nobody, maintainers and administrators included, may update,
+   delete, or force-move an existing `v*` tag. This ruleset has no bypass actors.
+
+Create both once (administrator, `repo` scope):
 
 ```bash
 maintainers_team_id="$(gh api orgs/starknet-innovation/teams/<maintainers-team-slug> --jq .id)"
 gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
   --input - <<EOF
 {
-  "name": "Protect release tags",
+  "name": "Release tags: creation",
   "target": "tag",
   "enforcement": "active",
   "bypass_actors": [
     { "actor_id": ${maintainers_team_id}, "actor_type": "Team", "bypass_mode": "always" }
   ],
-  "conditions": {
-    "ref_name": { "include": ["refs/tags/v*"], "exclude": [] }
-  },
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "rules": [ { "type": "creation" } ]
+}
+EOF
+gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
+  --input - <<EOF
+{
+  "name": "Release tags: immutability",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
   "rules": [
-    { "type": "creation" },
     { "type": "update" },
     { "type": "deletion" },
     { "type": "non_fast_forward" }
@@ -101,12 +116,12 @@ EOF
 
 Replace `<maintainers-team-slug>` with the org team that is allowed to cut releases;
 to grant individual accounts instead, use `"actor_type": "User"` entries with their
-numeric ids (`gh api users/<login> --jq .id`). The `creation` rule is what restricts
-who can push a `v*` tag; `update`, `deletion`, and `non_fast_forward` make an existing
-tag immutable even for a compromised write-scoped token. Review the result with
-`gh api repos/starknet-innovation/krusty-kms/rulesets` and keep the ruleset
-`active`; never switch it to `evaluate` to get a release through — fix the tag flow
-instead.
+numeric ids (`gh api users/<login> --jq .id`). Keep the immutability ruleset's
+`bypass_actors` empty: repository administrators can still edit or disable the ruleset
+itself through the settings UI, which is auditable, but no push token can move a tag.
+Review the result with `gh api repos/starknet-innovation/krusty-kms/rulesets` and keep
+both rulesets `active`; never switch one to `evaluate` to get a release through — fix
+the tag flow instead.
 
 ## Prepare a release
 
