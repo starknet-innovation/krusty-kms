@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use starknet_rust::core::types::{BlockId, BlockTag, StarknetError};
 use starknet_rust::providers::{Provider, ProviderError};
 
-use crate::wallet::utils::{core_felt_to_rs, rs_felt_to_core, CoreFelt};
+use crate::wallet::utils::{core_felt_to_rs, rpc_error, rs_felt_to_core, CoreFelt};
 
 /// An account that was found deployed on-chain.
 ///
@@ -199,7 +199,7 @@ pub async fn discover_accounts(
                 // Not deployed — skip this candidate.
             }
             Err(error) => {
-                return Err(KmsError::RpcError(error.to_string()));
+                return Err(rpc_error(error));
             }
         }
     }
@@ -230,7 +230,7 @@ pub async fn check_account_deployed(rpc_url: &str, address: &str) -> Result<Opti
             Ok(Some(hex))
         }
         Err(ref error) if is_contract_not_found(error) => Ok(None),
-        Err(error) => Err(KmsError::RpcError(error.to_string())),
+        Err(error) => Err(rpc_error(error)),
     }
 }
 

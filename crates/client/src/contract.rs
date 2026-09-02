@@ -99,7 +99,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         // Parse response: AccountState { balance: CipherBalance, pending: CipherBalance, nonce: felt252 }
         // CipherBalance is { L: StarkPoint, R: StarkPoint }
@@ -175,7 +175,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         if result.is_empty() {
             return Err(krusty_kms_common::KmsError::DeserializationError(
@@ -204,7 +204,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         if result.is_empty() {
             return Err(krusty_kms_common::KmsError::DeserializationError(
@@ -231,7 +231,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         if result.is_empty() {
             return Err(krusty_kms_common::KmsError::DeserializationError(
@@ -279,7 +279,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         Self::parse_cipher_balance(&result)
     }
@@ -302,7 +302,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         Self::parse_cipher_balance(&result)
     }
@@ -325,7 +325,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         if result.is_empty() {
             return Err(krusty_kms_common::KmsError::DeserializationError(
@@ -366,7 +366,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         if result.is_empty() {
             return Err(krusty_kms_common::KmsError::DeserializationError(
@@ -391,7 +391,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         if result.is_empty() {
             return Err(krusty_kms_common::KmsError::DeserializationError(
@@ -420,7 +420,7 @@ impl TongoContract {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| krusty_kms_common::KmsError::RpcError(e.to_string()))?;
+            .map_err(crate::wallet::utils::rpc_error)?;
 
         // Response is CairoOption<StarkPoint>
         // Some: [0, x, y]

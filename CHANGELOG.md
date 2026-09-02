@@ -36,6 +36,17 @@ All notable changes to the published Rust crates are documented here.
   confined to the transaction submission and dropped before any polling
   begins. Zero or out-of-range private keys now return an error instead of
   panicking inside the curve arithmetic.
+- Provider transport failures no longer echo the RPC endpoint URL. starknet-rs
+  forwards `reqwest::Error`'s `Display`, which includes the full request URL
+  (path and query commonly carry the provider API key), into
+  `ProviderError::Other`; the gateway stored that text in the operation log
+  and returned it to oracle callers, and the client surfaced it in
+  `KmsError::RpcError`. Transport errors now map to a fixed
+  `provider transport error: <kind>` (`timeout`, `connect`, `status <code>`,
+  `decode`, `json-rpc code <n>`, `other`); typed Starknet JSON-RPC errors keep
+  their message. Cleartext-URL rejection messages in `create_provider` show
+  only `scheme://host[:port]`. Adds `krusty_kms_common::error::redact_url` and
+  `REDACTED_URL_PLACEHOLDER` for the same purpose in downstream code.
 
 ## [0.10.0] - 2026-08-28
 

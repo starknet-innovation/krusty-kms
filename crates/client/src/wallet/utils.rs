@@ -4,8 +4,10 @@ use krusty_kms_common::{is_already_deployed_validation_failure, KmsError, Result
 use starknet_rust::accounts::AccountFactoryError;
 use starknet_rust::core::types::StarknetError;
 use starknet_rust::core::types::{BlockId, BlockTag};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust::providers::jsonrpc::{
+    HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError,
+};
+use starknet_rust::providers::{Provider, ProviderError, ProviderImplError};
 use std::sync::Arc;
 
 /// Type alias for starknet-rs Felt.
@@ -60,7 +62,62 @@ async fn check_deployed_with_provider<P: DeploymentProvider>(
     match provider.get_class_hash_at(address).await {
         Ok(_) => Ok(true),
         Err(error) if is_contract_not_found(&error) => Ok(false),
-        Err(error) => Err(KmsError::RpcError(error.to_string())),
+        Err(error) => Err(rpc_error(error)),
+    }
+}
+
+/// Map a provider failure to [`KmsError::RpcError`] without the endpoint URL
+/// (see [`provider_error_message`]).
+pub(crate) fn rpc_error(error: ProviderError) -> KmsError {
+    KmsError::RpcError(provider_error_message(&error))
+}
+
+/// Describe a provider failure without the endpoint URL.
+///
+/// Typed JSON-RPC failures keep their upstream message. Transport failures
+/// are reduced to a fixed kind: `reqwest::Error`'s `Display` embeds the full
+/// request URL, whose path or query usually carries the provider API key.
+pub(crate) fn provider_error_message(error: &ProviderError) -> String {
+    match error {
+        ProviderError::Other(inner) => format!(
+            "provider transport error: {}",
+            transport_error_kind(inner.as_ref())
+        ),
+        typed => typed.to_string(),
+    }
+}
+
+fn transport_error_kind(error: &dyn ProviderImplError) -> String {
+    let Some(error) = error
+        .as_any()
+        .downcast_ref::<JsonRpcClientError<HttpTransportError>>()
+    else {
+        return "other".to_string();
+    };
+    match error {
+        JsonRpcClientError::JsonError(_)
+        | JsonRpcClientError::TransportError(HttpTransportError::Json(_)) => "decode".to_string(),
+        JsonRpcClientError::JsonRpcError(rpc) => format!("json-rpc code {}", rpc.code),
+        JsonRpcClientError::TransportError(HttpTransportError::Reqwest(http)) => {
+            http_error_kind(http)
+        }
+        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_)) => {
+            "other".to_string()
+        }
+    }
+}
+
+fn http_error_kind(error: &reqwest::Error) -> String {
+    if error.is_timeout() {
+        "timeout".to_string()
+    } else if error.is_connect() {
+        "connect".to_string()
+    } else if let Some(status) = error.status() {
+        format!("status {}", status.as_u16())
+    } else if error.is_decode() {
+        "decode".to_string()
+    } else {
+        "other".to_string()
     }
 }
 
@@ -79,7 +136,7 @@ pub(crate) fn map_deploy_factory_error<S: std::fmt::Display>(
 fn map_deploy_provider_error(error: ProviderError) -> KmsError {
     match error {
         ProviderError::StarknetError(error) => map_deploy_starknet_error(error),
-        other => KmsError::RpcError(other.to_string()),
+        other => rpc_error(other),
     }
 }
 
@@ -235,5 +292,77 @@ mod tests {
             )),
         ));
         assert!(matches!(error, KmsError::AlreadyDeployed(_)));
+    }
+
+    /// Stand-in for a transport error whose `Display` leaks the request URL,
+    /// the way `reqwest::Error` does.
+    #[derive(Debug)]
+    struct LeakyTransportError;
+
+    impl std::fmt::Display for LeakyTransportError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("error sending request for url (https://rpc.example.com/v0_9/SECRET_TOKEN)")
+        }
+    }
+
+    impl std::error::Error for LeakyTransportError {}
+
+    impl ProviderImplError for LeakyTransportError {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn transport_errors_are_classified_without_the_endpoint_url() {
+        let leaky = || ProviderError::Other(Box::new(LeakyTransportError));
+        assert!(leaky().to_string().contains("SECRET_TOKEN"));
+        let redacted = "provider transport error: other".to_string();
+        assert!(matches!(rpc_error(leaky()), KmsError::RpcError(m) if m == redacted));
+        let deploy = map_deploy_factory_error(AccountFactoryError::<&str>::Provider(leaky()));
+        assert!(matches!(deploy, KmsError::RpcError(m) if m == redacted));
+
+        let rpc = starknet_rust::providers::jsonrpc::JsonRpcError {
+            code: -32000,
+            message: "invalid api key SECRET_TOKEN".to_string(),
+            data: None,
+        };
+        let rpc: ProviderError = JsonRpcClientError::<HttpTransportError>::JsonRpcError(rpc).into();
+        assert_eq!(
+            provider_error_message(&rpc),
+            "provider transport error: json-rpc code -32000"
+        );
+        let json = serde_json::from_str::<u8>("not json").unwrap_err();
+        let decode: ProviderError =
+            JsonRpcClientError::<HttpTransportError>::JsonError(json).into();
+        assert_eq!(
+            provider_error_message(&decode),
+            "provider transport error: decode"
+        );
+        let typed = ProviderError::StarknetError(StarknetError::ContractNotFound);
+        assert_eq!(
+            provider_error_message(&typed),
+            StarknetError::ContractNotFound.to_string()
+        );
+    }
+
+    /// A real `reqwest::Error` from a refused loopback connection: the upstream
+    /// `Display` names the URL (including the fake key in the path); ours must
+    /// reduce it to the `connect` kind.
+    #[tokio::test]
+    async fn refused_connection_is_reported_as_connect_without_the_url() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let url = format!("http://127.0.0.1:{port}/v0_9/SECRET_TOKEN");
+        let provider = crate::provider::create_provider(&url).unwrap();
+        let error = provider.chain_id().await.unwrap_err();
+        assert!(error.to_string().contains("SECRET_TOKEN"));
+
+        let message = provider_error_message(&error);
+        assert_eq!(message, "provider transport error: connect");
+        assert!(!message.contains("SECRET_TOKEN"));
+        assert!(!message.contains(&port.to_string()));
     }
 }
