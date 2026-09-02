@@ -75,10 +75,26 @@ printf '%s\n' \
   >"$fixture_dir/reusable-inputs.yml"
 "$checker" "$fixture_dir/reusable-inputs.yml" >/dev/null
 
-printf '%s\n' 'steps:' '  - uses: actions/checkout@v7' >"$fixture_dir/mutable.yml"
+# `uses` keys outside the two action-reference positions are data.
+printf '%s\n' \
+  'env:' \
+  '  uses: top-level-data' \
+  'jobs:' \
+  '  build:' \
+  '    runs-on: ubuntu-latest' \
+  '    env:' \
+  '      uses: plain-data' \
+  '    steps:' \
+  "      - uses: actions/checkout@${full_sha}" \
+  '        env:' \
+  '          uses: step-data' \
+  >"$fixture_dir/env-data.yml"
+"$checker" "$fixture_dir/env-data.yml" >/dev/null
+
+printf '%s\n' 'jobs:' '  test:' '    steps:' '      - uses: actions/checkout@v7' >"$fixture_dir/mutable.yml"
 expect_failure "mutable GitHub action" "$checker" "$fixture_dir/mutable.yml"
 
-printf '%s\n' 'steps:' '  - uses: docker://alpine:latest' >"$fixture_dir/docker-tag.yml"
+printf '%s\n' 'jobs:' '  test:' '    steps:' '      - uses: docker://alpine:latest' >"$fixture_dir/docker-tag.yml"
 expect_failure "mutable Docker action" "$checker" "$fixture_dir/docker-tag.yml"
 
 printf '%s\n' 'jobs:' '  publish:' '    container: alpine:latest' >"$fixture_dir/container.yml"
@@ -93,17 +109,19 @@ printf '%s\n' \
   >"$fixture_dir/service.yml"
 expect_failure "mutable service container" "$checker" "$fixture_dir/service.yml"
 
-printf '%s\n' 'steps:' "  - uses: './local-action'" >"$fixture_dir/local.yml"
+printf '%s\n' 'jobs:' '  test:' '    steps:' "      - uses: './local-action'" >"$fixture_dir/local.yml"
 expect_failure "repository-local action" "$checker" "$fixture_dir/local.yml"
 
-printf '%s\n' 'steps:' '  - ? uses' '    : actions/checkout@v7' >"$fixture_dir/explicit-key.yml"
+printf '%s\n' 'jobs:' '  test:' '    steps:' '      - ? uses' '        : actions/checkout@v7' >"$fixture_dir/explicit-key.yml"
 expect_failure "mutable action under an explicit YAML key" "$checker" "$fixture_dir/explicit-key.yml"
 
 printf '%s\n' \
   'pinned: &pinned' \
   "  uses: actions/checkout@${full_sha}" \
-  'steps:' \
-  '  - *pinned' \
+  'jobs:' \
+  '  test:' \
+  '    steps:' \
+  '      - *pinned' \
   >"$fixture_dir/alias.yml"
 expect_failure "YAML aliases" "$checker" "$fixture_dir/alias.yml"
 

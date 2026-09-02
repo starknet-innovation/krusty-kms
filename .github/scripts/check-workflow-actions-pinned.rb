@@ -89,14 +89,13 @@ def image_context?(path)
     (path.length == 4 && path[2] == "services")
 end
 
-# A `with:` block that holds action or reusable-workflow inputs: a step's
-# `with` (`... steps[].with`) or a job's `with` (`jobs.<job>.with`). Keys inside
-# it are data, not references. Only these positions are exempt, so a job or
-# step that merely *contains* a key spelled `with` elsewhere is still checked.
-def action_inputs?(path)
-  return false unless path.last == "with"
+# `jobs.<job>.uses` (a reusable-workflow call) or `jobs.<job>.steps[].uses` (a
+# step). A `uses` key anywhere else — action inputs under `with:`, `env:` data,
+# and so on — is plain data and is not validated.
+def action_reference_context?(path)
+  return false unless path[0] == "jobs"
 
-  path[-2] == "steps" || (path.length == 3 && path[0] == "jobs")
+  path.length == 2 || (path.length == 3 && path[2] == "steps")
 end
 
 # `jobs.<job>.services` — where a scalar value is the short `name: image` form.
@@ -105,9 +104,9 @@ def services_map?(path)
 end
 
 # Walk the document with the mapping-key path from the root, so only real
-# action references and job/service containers are validated. Action inputs
-# under `with:` may legitimately carry keys named `image`, `container`, or
-# `uses` as plain data.
+# action references (`jobs.<job>.uses`, `jobs.<job>.steps[].uses`) and
+# job/service containers are validated. Other mappings (`with:`, `env:`, ...)
+# may legitimately carry keys named `image`, `container`, or `uses` as data.
 def inspect_node(file, node, state, path = [])
   if node.is_a?(Psych::Nodes::Alias)
     annotation(file, node, "YAML aliases are forbidden in workflows")
@@ -136,7 +135,7 @@ end
 def inspect_mapping_entry(file, key, key_node, value_node, state, path)
   case key
   when "uses"
-    return if action_inputs?(path)
+    return unless action_reference_context?(path)
 
     state[:uses] += 1
     state[:valid] = false unless validate_reference(file, key_node, value_node)
