@@ -66,7 +66,9 @@ jobs:
         env:
           NATS_URL: nats://127.0.0.1:4222
         run: |
-          docker run -d --name nats --rm -p 4222:4222 nats:2.10
+          # Digest of the nats:2.10 multi-arch index (Docker Hub, 2026-09-02).
+          docker run -d --name nats --rm -p 4222:4222 \
+            nats:2.10@sha256:5498ba57b9471840be3d15b033a4eec554d1c02fa6c2cc0ca2d888637f6c6e2f
           trap 'docker stop nats' EXIT
           cargo test -p krusty-kms-client --features nats --test nats_multisig_coordinator -- --ignored --nocapture
 

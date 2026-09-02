@@ -94,15 +94,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # Branch names reach the shell through `env`, never through `${{ }}`
+      # interpolation inside `run:`, so a crafted ref cannot inject commands.
       - name: Require a release version to start from crates.io
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff -U0 origin/${{ github.base_ref }}...HEAD -- Cargo.toml \
+          if git diff -U0 "origin/${BASE_REF}...HEAD" -- Cargo.toml \
             | grep -Eq '^\+[[:space:]]*version[[:space:]]*='; then
-            bash .github/scripts/check-release-version-base.sh "origin/${{ github.base_ref }}"
+            bash .github/scripts/check-release-version-base.sh "origin/${BASE_REF}"
           fi
       - name: Require a changelog entry for version bumps
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff -U0 origin/${{ github.base_ref }}...HEAD -- Cargo.toml \
+          if git diff -U0 "origin/${BASE_REF}...HEAD" -- Cargo.toml \
             | grep -Eq '^\+[[:space:]]*version[[:space:]]*='; then
             bash .github/scripts/verify-release-changelog.sh
           fi
