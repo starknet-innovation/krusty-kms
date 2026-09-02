@@ -70,8 +70,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - run: cargo install cargo-audit --locked
-      - run: cargo audit
+      - run: cargo install cargo-audit --version 0.22.1 --locked
+      - run: cargo audit --deny warnings
 
   wasm:
     runs-on: ubuntu-latest
@@ -82,9 +82,9 @@ jobs:
         with:
           node-version: 20
       - run: rustup target add wasm32-unknown-unknown
-      - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
-        with:
-          version: v0.15.0
+      # Build wasm-pack from its crates.io release rather than downloading a
+      # prebuilt binary: the version and its lockfile are both content-addressed.
+      - run: cargo install wasm-pack --version 0.15.0 --locked
       - run: bash tools/check.sh wasm
 
   version-bump:

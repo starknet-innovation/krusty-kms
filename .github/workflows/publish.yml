@@ -34,8 +34,10 @@ jobs:
       # command CI proves on every commit rather than a variant of it.
       - run: cargo test --workspace --locked --exclude krusty-kms-wasm
       - run: cargo test -p krusty-kms-client --locked --features nats
-      - run: cargo install cargo-audit --locked
-      - run: cargo audit
+      - run: cargo install cargo-audit --version 0.22.1 --locked
+      - run: cargo audit --deny warnings
+      - run: cargo install cargo-deny --version 0.19.8 --locked
+      - run: cargo deny check
 
   publish:
     needs: verify

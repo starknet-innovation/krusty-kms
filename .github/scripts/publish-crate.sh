@@ -23,7 +23,9 @@ if is_published; then
 fi
 
 publish_log="$(mktemp)"
-if ! cargo publish -p "${crate}" 2>&1 | tee "${publish_log}"; then
+# --locked: publish exactly the dependency graph CI verified; refuse to
+# re-resolve against a registry that may have moved since the tag.
+if ! cargo publish --locked -p "${crate}" 2>&1 | tee "${publish_log}"; then
   if grep -qi "already exists on crates.io index" "${publish_log}"; then
     echo "${crate}@${version} already published, skipping"
     exit 0

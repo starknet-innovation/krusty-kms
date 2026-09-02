@@ -52,9 +52,13 @@ parses the workflow YAML structure rather than matching source text, so quoted,
 flow-style, and explicit mapping keys cannot bypass it. Repository-local actions and
 YAML aliases are prohibited in all workflows; this keeps nested action dependencies
 from escaping the immutable-reference check. Job containers and service images must
-also use immutable SHA-256 digests. The
-`wasm-pack-action` installer and the `wasm-pack` binary version are pinned separately,
-so a mutable tool download cannot change the package handed to the OIDC job.
+also use immutable SHA-256 digests.
+
+Release tooling is built from crates.io with `cargo install --version <exact> --locked`
+rather than downloaded as prebuilt binaries: `wasm-pack` 0.15.0 produces the npm
+package, and `cargo-audit` 0.22.1 (`--deny warnings`) plus `cargo-deny` 0.19.8 gate
+both publishing workflows before any token is minted. `cargo publish --locked` then
+ships exactly the dependency graph those checks verified.
 
 ## Baselines
 
