@@ -22,7 +22,7 @@ fn debug_account_address_calculation() {
         .expect("Should convert to affine")
         .x();
 
-    assert_eq!(keypair.private_key, expected_private);
+    assert!(keypair.private_key == expected_private);
 
     println!("\n=== Account Address Calculation Debug ===\n");
     println!("Step 1: Keys");
