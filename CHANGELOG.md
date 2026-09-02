@@ -14,26 +14,6 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
-- Fix Argent account constructor calldata. The v0.4.0 layout now encodes the
-  absent guardian as the Cairo `Option::None` tag (`[0, owner, 1]`), and the
-  v0.3.0 / v0.3.1 class hashes use their `(owner, guardian)` felt layout
-  (`[owner, 0]`). Previously every Argent address computed by `krusty-kms`
-  (`ArgentAccount`), the gateway, account discovery, and the WASM
-  `deriveArgentAccountAddress` export used `[0, owner, 0]`, which no Argent
-  class can deserialise, so nothing could ever be deployed at those addresses.
-  **Do not fund Argent addresses derived with any earlier krusty-kms release
-  (0.7.0 and below on crates.io)**; re-derive them with this release before
-  use. Funds already sent to such an address cannot be recovered through
-  account deployment. The fix is verified
-  against a deployed Argent v0.4.0 account
-  (`crates/kms/tests/discovery_test`). `ArgentAccount::with_class_hash` now
-  selects the layout from known class hashes; `ArgentConstructorLayout` and
-  `ArgentAccount::with_class_hash_and_layout` make it explicit.
-
-- When a fee ceiling is supplied, RPC fee estimates are admitted against it
-  before signing and the admitted bounds are pinned on the transaction, so an
-  inflated estimate from an untrusted RPC can no longer widen the signed fee
-  authorisation. Estimates above the ceiling are rejected, never clamped.
 - Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
   (a plain, non-zeroizing `Felt` copy of the private key) across the deploy
   acceptance wait. Public-key derivation and descriptor validation use the
@@ -52,6 +32,10 @@ All notable changes to the published Rust crates are documented here.
   their message. Cleartext-URL rejection messages in `create_provider` show
   only `scheme://host[:port]`. Adds `krusty_kms_common::error::redact_url` and
   `REDACTED_URL_PLACEHOLDER` for the same purpose in downstream code.
+- When a fee ceiling is supplied, RPC fee estimates are admitted against it
+  before signing and the admitted bounds are pinned on the transaction, so an
+  inflated estimate from an untrusted RPC can no longer widen the signed fee
+  authorisation. Estimates above the ceiling are rejected, never clamped.
 
 ## [0.10.0] - 2026-09-02
 
