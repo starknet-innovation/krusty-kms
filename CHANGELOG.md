@@ -13,9 +13,10 @@ All notable changes to the published Rust crates are documented here.
   (`ArgentAccount`), the gateway, account discovery, and the WASM
   `deriveArgentAccountAddress` export used `[0, owner, 0]`, which no Argent
   class can deserialise, so nothing could ever be deployed at those addresses.
-  **Do not fund Argent addresses derived with krusty-kms 0.10.0 or earlier**;
-  re-derive them with this release before use. Funds already sent to such an
-  address cannot be recovered through account deployment. The fix is verified
+  **Do not fund Argent addresses derived with any earlier krusty-kms release
+  (0.7.0 and below on crates.io)**; re-derive them with this release before
+  use. Funds already sent to such an address cannot be recovered through
+  account deployment. The fix is verified
   against a deployed Argent v0.4.0 account
   (`crates/kms/tests/discovery_test`). `ArgentAccount::with_class_hash` now
   selects the layout from known class hashes; `ArgentConstructorLayout` and
