@@ -97,9 +97,11 @@ pub const REDACTED_URL_PLACEHOLDER: &str = "<redacted-url>";
 ///
 /// RPC endpoint URLs routinely carry the provider API key in the path or
 /// query, and `userinfo` may carry credentials. Everything after the
-/// authority is dropped, as is the userinfo. Inputs without a recognisable
-/// `scheme://host` prefix yield [`REDACTED_URL_PLACEHOLDER`] rather than the
-/// original text, so an unparseable value can never leak through.
+/// authority is dropped, as is the userinfo. The scheme and `host[:port]`
+/// are validated as URL components; anything that does not parse as a
+/// plain scheme, host name / IP literal and numeric port yields
+/// [`REDACTED_URL_PLACEHOLDER`] rather than the original text, so an
+/// unparseable or credential-shaped value can never leak through.
 #[must_use]
 pub fn redact_url(url: &str) -> String {
     let Some((scheme, rest)) = url.split_once("://") else {
@@ -109,10 +111,55 @@ pub fn redact_url(url: &str) -> String {
     let host_port = authority
         .rsplit_once('@')
         .map_or(authority, |(_userinfo, host)| host);
-    if scheme.is_empty() || host_port.is_empty() {
-        return REDACTED_URL_PLACEHOLDER.to_string();
+    if is_url_scheme(scheme) && is_host_port(host_port) {
+        format!("{scheme}://{host_port}")
+    } else {
+        REDACTED_URL_PLACEHOLDER.to_string()
     }
-    format!("{scheme}://{host_port}")
+}
+
+/// RFC 3986 scheme: `ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )`.
+fn is_url_scheme(scheme: &str) -> bool {
+    let mut chars = scheme.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+}
+
+/// `host[:port]` where host is a DNS name / IPv4 literal or a bracketed IPv6
+/// literal and the optional port is numeric. Rejects anything else, such as
+/// `user:secret` left over from a malformed userinfo.
+fn is_host_port(host_port: &str) -> bool {
+    let (host_ok, port) = match host_port.strip_prefix('[') {
+        Some(rest) => {
+            let Some((ipv6, after)) = rest.split_once(']') else {
+                return false;
+            };
+            let ipv6_ok = !ipv6.is_empty()
+                && ipv6
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit() || matches!(c, ':' | '.'));
+            let port = match after.strip_prefix(':') {
+                Some(port) => Some(port),
+                None if after.is_empty() => None,
+                None => return false,
+            };
+            (ipv6_ok, port)
+        }
+        None => match host_port.rsplit_once(':') {
+            Some((host, port)) => (is_host_name(host), Some(port)),
+            None => (is_host_name(host_port), None),
+        },
+    };
+    host_ok
+        && port
+            .is_none_or(|p| !p.is_empty() && p.len() <= 5 && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
+fn is_host_name(host: &str) -> bool {
+    !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.'))
 }
 
 #[cfg(test)]

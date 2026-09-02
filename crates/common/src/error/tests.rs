@@ -42,3 +42,40 @@ fn redact_url_never_echoes_unparseable_input() {
         );
     }
 }
+
+/// Codex review: malformed inputs that still contain `://` must not echo
+/// credential-shaped text as if it were a scheme or host.
+#[test]
+fn redact_url_rejects_credential_shaped_scheme_or_host() {
+    for leaky in [
+        "apikey=SECRET://host/path",
+        "https://user:SECRET/path",
+        "https://user:SECRET@/path",
+        "https://ho st/path",
+        "https://[::1/path",
+        "https://host:notaport/path",
+        "://host",
+    ] {
+        let out = redact_url(leaky);
+        assert_eq!(out, REDACTED_URL_PLACEHOLDER, "{leaky}");
+        assert!(!out.contains("SECRET"), "{leaky}");
+    }
+}
+
+#[test]
+fn redact_url_keeps_valid_authorities() {
+    assert_eq!(
+        redact_url("http://[::1]:8545/v0_9/KEY"),
+        "http://[::1]:8545"
+    );
+    assert_eq!(redact_url("http://[::1]/v0_9/KEY"), "http://[::1]");
+    assert_eq!(
+        redact_url("https://rpc.example.com/v0_9/KEY?k=v"),
+        "https://rpc.example.com"
+    );
+    assert_eq!(
+        redact_url("https://10.0.0.1:5050/x"),
+        "https://10.0.0.1:5050"
+    );
+    assert_eq!(redact_url("svc+tls://a-b.c/x"), "svc+tls://a-b.c");
+}
