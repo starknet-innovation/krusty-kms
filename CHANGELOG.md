@@ -38,6 +38,26 @@ All notable changes to the published Rust crates are documented here.
   authorisation. Estimates above the ceiling are rejected, never clamped.
 - Multisig contract reads and Tongo event pagination route provider failures
   through the same redacting classifier as the wallet paths.
+- Reject `u128` overflow when computing the post-fund audited balance instead
+  of wrapping, and keep `overflow-checks` on in release builds of
+  `krusty-kms-common`, `krusty-kms-crypto`, and `krusty-kms-sdk`. The profile
+  override applies to builds driven from this workspace; downstream consumers'
+  own profiles govern their builds (L-1).
+- Enable the `bip39/zeroize` feature and wipe parsed mnemonics, generation
+  entropy, and the C-ABI phrase copy on drop (L-12).
+- Cap discovery scans at `krusty_kms::discovery::MAX_DISCOVERY_INDEX` (1024
+  indices) with checked capacity arithmetic; larger `max_index` values return
+  `InvalidDerivationPath` instead of running unbounded PBKDF2 work or
+  overflowing (L-8).
+- Bound `Tx::wait` polling: intervals below `MIN_WAIT_INTERVAL_SECS` are raised
+  to it, timeouts above `MAX_WAIT_TIMEOUT_SECS` are capped, and the deadline
+  uses checked arithmetic so `u64::MAX` no longer panics. `WaitOptions::new`
+  validates the same bounds (L-9).
+- Make the gateway `SystemClock` non-decreasing: readings advance along a
+  monotonic timeline that re-anchors to the wall clock only when the wall clock
+  is ahead (forward step, resume from suspend) and ignores backwards steps, so
+  clock corrections can neither revive expired snapshot-cache entries and
+  tracked operations nor freeze their ageing (L-7).
 - `cargo-deny` now rejects duplicate dependency versions. Every remaining
   duplicate is an individually justified `skip` in `deny.toml` naming the
   third-party path that forces it (see `docs/supply-chain.md`), so a new
