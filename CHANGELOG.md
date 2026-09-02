@@ -29,9 +29,11 @@ All notable changes to the published Rust crates are documented here.
   to it, timeouts above `MAX_WAIT_TIMEOUT_SECS` are capped, and the deadline
   uses checked arithmetic so `u64::MAX` no longer panics. `WaitOptions::new`
   validates the same bounds (L-9).
-- Anchor the gateway `SystemClock` to the monotonic clock after one wall-clock
-  read, so a backwards wall-clock step can no longer revive expired
-  snapshot-cache entries or tracked operations (L-7).
+- Make the gateway `SystemClock` non-decreasing: readings advance along a
+  monotonic timeline that re-anchors to the wall clock only when the wall clock
+  is ahead (forward step, resume from suspend) and ignores backwards steps, so
+  clock corrections can neither revive expired snapshot-cache entries and
+  tracked operations nor freeze their ageing (L-7).
 
 ## [0.10.0] - 2026-09-02
 
