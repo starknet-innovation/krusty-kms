@@ -37,6 +37,30 @@ let class_hash = OpenZeppelinAccount::latest(ChainId::Sepolia)?.class_hash();
 let account_address = derive_oz_account_address(&public_key_x, &class_hash, None)?;
 ```
 
+## Fee Ceilings
+
+RPC fee estimates are untrusted input. A `ResourceBoundsCeiling` bounds what a
+wallet may sign: the estimate is admitted against it before signing and the
+admitted bounds are pinned on the transaction, so an inflated estimate is
+rejected instead of authorised.
+
+```rust
+use krusty_kms_client::{MaxBound, ResourceBoundsCeiling};
+
+// Illustrative values; amounts are gas units, prices are fri per unit.
+let ceiling = ResourceBoundsCeiling::new(
+    MaxBound { max_amount: 1_000, max_price_per_unit: 200_000_000_000 },
+    MaxBound { max_amount: 5_000_000, max_price_per_unit: 200_000_000_000 },
+    MaxBound { max_amount: 2_000, max_price_per_unit: 200_000_000_000 },
+)?;
+let wallet = wallet.with_fee_ceiling(ceiling);
+```
+
+`deploy_oz_account_with_fee_ceiling` applies the same policy to account
+deployment. Without a ceiling, bounds stay RPC-estimated and unbounded (the
+previous behaviour). See
+[`docs/design/2026-09-01-local-fee-ceilings.md`](../../docs/design/2026-09-01-local-fee-ceilings.md).
+
 ## Testing
 
 Run the account derivation tests:

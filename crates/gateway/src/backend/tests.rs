@@ -5,6 +5,8 @@ use super::rpc::{
     is_contract_not_found, is_entrypoint_not_found, map_provider_error, provider_error_message,
     provider_transport_error,
 };
+mod fee_ceiling;
+
 use super::wait::{
     classify_execution, classify_transaction_status, is_transaction_hash_not_found,
     TransactionObservation,

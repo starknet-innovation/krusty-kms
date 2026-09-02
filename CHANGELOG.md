@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add `krusty_kms_common::fee::ResourceBoundsCeiling`, a validated per-dimension
+  ceiling on V3 resource bounds, together with `Wallet::with_fee_ceiling`,
+  `deploy_oz_account_with_fee_ceiling`, and
+  `StarknetGatewayBackend::with_deploy_fee_ceiling` to apply it. Existing APIs
+  are unchanged and stay RPC-estimated when no ceiling is supplied.
+
 ### Security
 
 - Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
@@ -24,6 +32,10 @@ All notable changes to the published Rust crates are documented here.
   their message. Cleartext-URL rejection messages in `create_provider` show
   only `scheme://host[:port]`. Adds `krusty_kms_common::error::redact_url` and
   `REDACTED_URL_PLACEHOLDER` for the same purpose in downstream code.
+- When a fee ceiling is supplied, RPC fee estimates are admitted against it
+  before signing and the admitted bounds are pinned on the transaction, so an
+  inflated estimate from an untrusted RPC can no longer widen the signed fee
+  authorisation. Estimates above the ceiling are rejected, never clamped.
 
 ## [0.10.0] - 2026-09-02
 

@@ -17,6 +17,10 @@ Optional hardening:
   `sign` / `deploy_account` requests.
 - `secret` values must be opaque IDs (hex-looking private keys and mnemonic-like
   phrases are rejected).
+- Hosts can cap the fees `deploy_account` may sign by constructing the gateway
+  backend with `StarknetGatewayBackend::with_deploy_fee_ceiling`; estimates
+  above the ceiling fail with `InvalidRequest`. A per-request `fee_ceiling`
+  field is a planned follow-up.
 
 ## Transport Contract
 

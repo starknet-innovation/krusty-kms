@@ -1,6 +1,8 @@
 //! Default Starknet JSON-RPC implementation of [`GatewayBackend`].
 
-use super::deploy::{map_deploy_submission_error, validate_open_zeppelin_descriptor};
+use super::deploy::{
+    bound_deployment, map_deploy_submission_error, validate_open_zeppelin_descriptor,
+};
 use super::interface::{DeployExecution, GatewayBackend};
 use super::rpc::{
     balance_of_camel_selector, balance_of_selector, call_erc20_balance_with_selector_fallback,
@@ -12,6 +14,7 @@ use super::StarknetRsFelt;
 use crate::{map_kms_error, GatewayResult};
 use async_trait::async_trait;
 use krusty_kms::stark_public_key;
+use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::{ChainId, KmsError, NetworkPreset, SecretFelt};
 use krusty_kms_domain::{
     AccountDescriptor, BlockSelector, DeployMode, FeltHex, GatewayError, GatewayErrorCode,
@@ -29,11 +32,28 @@ use std::sync::Arc;
 pub struct StarknetGatewayBackend {
     provider: Arc<JsonRpcClient<HttpTransport>>,
     network: NetworkPreset,
+    deploy_fee_ceiling: Option<ResourceBoundsCeiling>,
 }
 
 impl StarknetGatewayBackend {
     pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, network: NetworkPreset) -> Self {
-        Self { provider, network }
+        Self {
+            provider,
+            network,
+            deploy_fee_ceiling: None,
+        }
+    }
+
+    /// Bound the resource bounds this backend may sign for account deployments.
+    ///
+    /// Deploy estimates are admitted against `ceiling` and the admitted bounds
+    /// pinned on the transaction; estimates above it fail with a non-retryable
+    /// `InvalidRequest` naming the dimension. Without a ceiling (the default)
+    /// deploy bounds stay RPC-estimated and unbounded.
+    #[must_use]
+    pub fn with_deploy_fee_ceiling(mut self, ceiling: ResourceBoundsCeiling) -> Self {
+        self.deploy_fee_ceiling = Some(ceiling);
+        self
     }
 
     pub fn provider(&self) -> &Arc<JsonRpcClient<HttpTransport>> {
@@ -68,8 +88,15 @@ impl StarknetGatewayBackend {
         .await
         .map_err(|error| map_kms_error(KmsError::CryptoError(error.to_string())))?;
 
-        let submission = factory
-            .deploy_v3(core_felt_to_rs(account.salt.to_felt()))
+        let mut deployment = factory.deploy_v3(core_felt_to_rs(account.salt.to_felt()));
+        if let Some(ceiling) = &self.deploy_fee_ceiling {
+            let estimate = deployment
+                .estimate_fee()
+                .await
+                .map_err(map_deploy_submission_error)?;
+            deployment = bound_deployment(deployment, &estimate, ceiling)?;
+        }
+        let submission = deployment
             .send()
             .await
             .map_err(map_deploy_submission_error)?;
