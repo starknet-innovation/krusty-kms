@@ -51,8 +51,9 @@ requesting a crates.io token if it is missing.
 
 The `publish` job runs in the `crates-io` environment and requires:
 
-- at least one **required reviewer** (enable *prevent self-review* so the tag pusher
-  cannot approve their own release, and disable *administrator bypass*);
+- at least one **required reviewer**, with *prevent self-review* enabled so the tag
+  pusher cannot approve their own release, and *allow administrators to bypass*
+  disabled — the workflow checks all three;
 - **deployment branches and tags** set to *Selected branches and tags* with exactly
   one rule: a **tag** pattern `v*`. Releases are tag-triggered, so a branch-only rule
   such as `main` would block every run; the workflow separately proves the tag is
@@ -114,9 +115,11 @@ gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
 EOF
 ```
 
-Replace `<maintainers-team-slug>` with the org team that is allowed to cut releases;
-to grant individual accounts instead, use `"actor_type": "User"` entries with their
-numeric ids (`gh api users/<login> --jq .id`). Keep the immutability ruleset's
+Replace `<maintainers-team-slug>` with the org team that is allowed to cut releases.
+The rulesets API accepts only `Team`, `RepositoryRole`, `OrganizationAdmin`, and
+`Integration` bypass actors (not individual users); if no team exists yet, use
+`{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }` (the
+Admin role) and tighten it to a team later. Keep the immutability ruleset's
 `bypass_actors` empty: repository administrators can still edit or disable the ruleset
 itself through the settings UI, which is auditable, but no push token can move a tag.
 Review the result with `gh api repos/starknet-innovation/krusty-kms/rulesets` and keep
