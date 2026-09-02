@@ -43,8 +43,8 @@ categories = ["cryptography"]
 starknet-types-core = { version = "0.2.4", features = ["hash"] }
 starknet-rust = "=0.19.1"
 starknet-rust-core = "=0.19.1"
-starknet-crypto = { package = "starknet-rust-crypto", version = "=0.9.0" }
-bip39 = { version = "2.2.0", features = ["zeroize"] }
+starknet-crypto = { package = "starknet-rust-crypto", version = "=0.19.1" }
+bip39 = "2.2.0"
 hmac = "0.13.0"
 sha2 = "0.11.0"
 sha3 = "0.12.0"

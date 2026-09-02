@@ -626,17 +626,6 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "crypto-bigint"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
-dependencies = [
- "generic-array",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "crypto-bigint"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a52aa3fcda4e6302a9f48734f234d35d4721b96f8fe07d073f07ce9df4f0271"
@@ -893,7 +882,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d65aa39b3a5c1c9c1b745c9a019234bb7a21b77abcb4f4d266d706e2d577d65"
 dependencies = [
  "base16ct",
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "crypto-common 0.2.2",
  "digest 0.11.3",
  "ff",
@@ -1716,7 +1705,7 @@ dependencies = [
  "sha2 0.11.0",
  "sha3 0.12.0",
  "starknet-rust-core",
- "starknet-rust-crypto 0.9.0",
+ "starknet-rust-crypto",
  "starknet-types-core",
  "subtle",
  "zeroize",
@@ -1781,7 +1770,7 @@ name = "krusty-kms-crypto"
 version = "0.10.0"
 dependencies = [
  "criterion",
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "getrandom 0.2.17",
  "getrandom 0.4.3",
  "krusty-kms-common",
@@ -2357,7 +2346,7 @@ version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c555a6e4eb7d4e158fcb028c835c3b8642206ddc279b5c6b202ef9a8bdb592f4"
 dependencies = [
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "crypto-common 0.2.2",
  "ff",
  "rand_core 0.10.1",
@@ -2745,7 +2734,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4a459cddafb3fe76b31fd8f1108007566c40301feb64dc7b54656eb7388172b"
 dependencies = [
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "hmac 0.13.0",
 ]
 
@@ -3359,7 +3348,7 @@ dependencies = [
  "async-trait",
  "auto_impl",
  "starknet-rust-core",
- "starknet-rust-crypto 0.19.1",
+ "starknet-rust-crypto",
  "starknet-rust-providers",
  "starknet-rust-signers",
  "thiserror 2.0.20",
@@ -3384,7 +3373,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2fcb6482913654fe96c16ec230e06207ae96a176a24b88b89b1c3441d371a395"
 dependencies = [
  "base64",
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "flate2",
  "foldhash",
  "hex",
@@ -3397,7 +3386,7 @@ dependencies = [
  "serde_with",
  "sha3 0.10.8",
  "starknet-rust-core-derive",
- "starknet-rust-crypto 0.19.1",
+ "starknet-rust-crypto",
  "starknet-types-core",
 ]
 
@@ -3414,33 +3403,12 @@ dependencies = [
 
 [[package]]
 name = "starknet-rust-crypto"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96f4c2c74d8eca6f5f084b44bbe43f20b9923b4f26b1586f0ced57a79ef7edb4"
-dependencies = [
- "blake2",
- "crypto-bigint 0.5.5",
- "digest 0.10.7",
- "hex",
- "hmac 0.12.1",
- "num-bigint 0.4.8",
- "num-integer",
- "num-traits",
- "rfc6979 0.4.0",
- "sha2 0.10.9",
- "starknet-rust-curve 0.6.0",
- "starknet-types-core",
- "zeroize",
-]
-
-[[package]]
-name = "starknet-rust-crypto"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27f7bb6bffb7c02b4c85deebe55e9817159bfb8e76e1182701ee38231c0f018e"
 dependencies = [
  "blake2",
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "digest 0.10.7",
  "hex",
  "hmac 0.12.1",
@@ -3449,18 +3417,9 @@ dependencies = [
  "num-traits",
  "rfc6979 0.4.0",
  "sha2 0.10.9",
- "starknet-rust-curve 0.19.1",
+ "starknet-rust-curve",
  "starknet-types-core",
  "zeroize",
-]
-
-[[package]]
-name = "starknet-rust-curve"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1977caca63a4e6439968abe0c9d8c0d2074df7641f1153e8a551f8200470d8da"
-dependencies = [
- "starknet-types-core",
 ]
 
 [[package]]
@@ -3511,13 +3470,13 @@ checksum = "6719b268803c79b0ec9024d2bc9fcc4de1b95c06bcbcafa64644f4725d96ccda"
 dependencies = [
  "async-trait",
  "auto_impl",
- "crypto-bigint 0.7.5",
+ "crypto-bigint",
  "eth-keystore",
  "getrandom 0.2.17",
  "rand 0.8.6",
  "starknet-rust-core",
- "starknet-rust-crypto 0.19.1",
- "starknet-rust-curve 0.19.1",
+ "starknet-rust-crypto",
+ "starknet-rust-curve",
  "thiserror 2.0.20",
  "zeroize",
 ]

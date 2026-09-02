@@ -84,6 +84,25 @@ All notable changes to the published Rust crates are documented here.
   (`crates/kms/tests/discovery_test`). `ArgentAccount::with_class_hash` now
   selects the layout from known class hashes; `ArgentConstructorLayout` and
   `ArgentAccount::with_class_hash_and_layout` make it explicit.
+
+### Changed
+
+- Sign and verify Stark ECDSA with `starknet-rust-crypto` 0.19.1, the version the
+  `starknet-rust` 0.19.1 stack already links, instead of a second 0.9.0 copy. The
+  public API and the signing test vectors are unchanged; the duplicate
+  `starknet-rust-crypto`, `starknet-rust-curve`, and `crypto-bigint` 0.5 builds
+  leave the lockfile.
+
+## [0.10.0] - 2026-08-28
+
+### Added
+
+- Add mnemonic-bound NIP-44 and NIP-59 application envelopes to the Rust and
+  WASM APIs, including strict event, recipient, identifier, entropy, and
+  nested-payload validation.
+
+### Security
+
 - Bound Starknet RPC and multisig coordinator connect/read/request deadlines,
   cap coordinator bodies before JSON parsing, and bound event pagination by
   wall time, pages, events, serialized bytes, and continuation-token size. RPC
