@@ -220,7 +220,7 @@ fn test_cross_reference_with_known_vectors() {
         assert_eq!(
             public_key_x,
             Felt::from_hex(expected_public_key).unwrap(),
-            "Tongo public key for index={index}, account_index={account_index} must match the TypeScript vector"
+            "Tongo public key must match the TypeScript vector"
         );
     }
 }
