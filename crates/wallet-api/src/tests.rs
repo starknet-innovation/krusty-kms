@@ -1,6 +1,7 @@
 use super::{
     classify_transaction_status, effective_wait_bounds, is_transaction_hash_not_found,
     ReceiptObservation, WaitOptions, MAX_WAIT_TIMEOUT_SECS, MIN_WAIT_INTERVAL_SECS,
+    MIN_WAIT_TIMEOUT_SECS,
 };
 use starknet_rust::core::types::{ExecutionResult, StarknetError, TransactionStatus};
 use starknet_rust::providers::ProviderError;
@@ -91,4 +92,24 @@ fn interval_is_capped_by_the_timeout() {
     );
     assert!(WaitOptions::new(2, 1).is_err());
     assert!(WaitOptions::new(1, 1).is_ok());
+}
+
+/// Copilot review: field-built options with a zero timeout must resolve to
+/// the same lower bound `WaitOptions::new` enforces.
+#[test]
+fn zero_timeout_is_raised_to_the_floor() {
+    let options = WaitOptions {
+        interval_secs: 1,
+        timeout_secs: 0,
+    };
+    assert_eq!(
+        effective_wait_bounds(&options),
+        (MIN_WAIT_INTERVAL_SECS, MIN_WAIT_TIMEOUT_SECS)
+    );
+    assert!(WaitOptions::new(1, 0).is_err());
+    let floor = WaitOptions::new(MIN_WAIT_INTERVAL_SECS, MIN_WAIT_TIMEOUT_SECS).unwrap();
+    assert_eq!(
+        effective_wait_bounds(&floor),
+        (floor.interval_secs, floor.timeout_secs)
+    );
 }

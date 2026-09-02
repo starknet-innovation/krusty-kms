@@ -33,6 +33,9 @@ pub struct Tx {
 /// wait loop into an RPC flood against the provider.
 pub const MIN_WAIT_INTERVAL_SECS: u64 = 1;
 
+/// Smallest timeout [`Tx::wait`] will use; a zero timeout is raised to it.
+pub const MIN_WAIT_TIMEOUT_SECS: u64 = 1;
+
 /// Largest timeout [`Tx::wait`] will honour (24 hours). Bounds the deadline
 /// arithmetic so a caller-supplied `u64::MAX` cannot overflow the clock.
 pub const MAX_WAIT_TIMEOUT_SECS: u64 = 24 * 60 * 60;
@@ -55,16 +58,16 @@ impl WaitOptions {
     /// # Errors
     /// Returns `KmsError::TransactionError` if `interval_secs` is below
     /// [`MIN_WAIT_INTERVAL_SECS`] or above `timeout_secs`, or if `timeout_secs`
-    /// is zero or above [`MAX_WAIT_TIMEOUT_SECS`].
+    /// is outside [`MIN_WAIT_TIMEOUT_SECS`]..=[`MAX_WAIT_TIMEOUT_SECS`].
     pub fn new(interval_secs: u64, timeout_secs: u64) -> Result<Self> {
         if interval_secs < MIN_WAIT_INTERVAL_SECS {
             return Err(KmsError::TransactionError(format!(
                 "wait interval_secs must be at least {MIN_WAIT_INTERVAL_SECS}"
             )));
         }
-        if timeout_secs == 0 || timeout_secs > MAX_WAIT_TIMEOUT_SECS {
+        if !(MIN_WAIT_TIMEOUT_SECS..=MAX_WAIT_TIMEOUT_SECS).contains(&timeout_secs) {
             return Err(KmsError::TransactionError(format!(
-                "wait timeout_secs must be between 1 and {MAX_WAIT_TIMEOUT_SECS}"
+                "wait timeout_secs must be between {MIN_WAIT_TIMEOUT_SECS} and {MAX_WAIT_TIMEOUT_SECS}"
             )));
         }
         if interval_secs > timeout_secs {
@@ -89,11 +92,13 @@ impl Default for WaitOptions {
 }
 
 /// `(interval_secs, timeout_secs)` actually used by [`Tx::wait`]: the timeout
-/// is capped, and the interval is raised to the floor and capped by the timeout,
+/// is clamped to its bounds, and the interval is raised to the floor and capped by the timeout,
 /// so options assembled field-by-field can neither busy-poll, overflow the
 /// deadline, nor sleep past it.
 fn effective_wait_bounds(options: &WaitOptions) -> (u64, u64) {
-    let timeout_secs = options.timeout_secs.min(MAX_WAIT_TIMEOUT_SECS);
+    let timeout_secs = options
+        .timeout_secs
+        .clamp(MIN_WAIT_TIMEOUT_SECS, MAX_WAIT_TIMEOUT_SECS);
     let interval_secs = options
         .interval_secs
         .max(MIN_WAIT_INTERVAL_SECS)
