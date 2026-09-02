@@ -41,6 +41,97 @@ configured for this repository, the `publish.yml` workflow, and the `crates-io`
 environment. If the configuration does not match, stop and correct it in crates.io;
 do not fall back to an API token.
 
+## Repository protection
+
+Two GitHub-side controls back the workflow's own checks. Both are configured by a
+repository administrator; the workflow verifies the first at runtime and fails before
+requesting a crates.io token if it is missing.
+
+### `crates-io` environment
+
+The `publish` job runs in the `crates-io` environment and requires:
+
+- at least one **required reviewer**, with *prevent self-review* enabled so the tag
+  pusher cannot approve their own release, and *allow administrators to bypass*
+  disabled — the workflow checks all three;
+- **deployment branches and tags** set to *Selected branches and tags* with exactly
+  one rule: a **tag** pattern `v*`. Releases are tag-triggered, so a branch-only rule
+  such as `main` would block every run; the workflow separately proves the tag is
+  reachable from `main` and matches the workspace version.
+
+The environment check in `publish.yml` reads the environment through the read-only
+`GITHUB_TOKEN` and fails unless both conditions hold. Configure or verify them with:
+
+```bash
+gh api repos/starknet-innovation/krusty-kms/environments/crates-io \
+  --jq '{reviewers: [.protection_rules[] | select(.type=="required_reviewers") | .reviewers[].reviewer.login], policy: .deployment_branch_policy}'
+gh api repos/starknet-innovation/krusty-kms/environments/crates-io/deployment-branch-policies \
+  --jq '.branch_policies[] | {name, type}'
+```
+
+### Release-tag rulesets
+
+Release tags are immutable by convention; tag rulesets make that a server-side
+guarantee. Two rulesets exist (created 2026-09-02, ids 22105094 and 22105099):
+
+1. **Release tags: creation** — only bypass actors may push a `v*` tag.
+2. **Release tags: immutability** — nobody may update, delete, or force-move an
+   existing `v*` tag except bypass actors.
+
+Both use the repository **Admin** role as the sole bypass actor (the rulesets API
+accepts `Team`, `RepositoryRole`, `OrganizationAdmin`, and `Integration` actors, not
+individual users, and this repository has no team with access). Keeping the
+two rulesets separate matters when the bypass sets diverge: if a maintainers
+team is later given the creation bypass, do **not** add it to the immutability
+ruleset, otherwise a compromised maintainer write token could repoint a published
+tag. An Admin bypass on the immutability ruleset does not widen what admins can
+already do (they can edit or disable the ruleset in settings, which is audited),
+but it does mean a compromised **admin** token can move a tag; drop the bypass
+actor from that ruleset if the release flow never needs it.
+
+To recreate them (administrator, `repo` scope):
+
+```bash
+gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
+  --input - <<EOF
+{
+  "name": "Release tags: creation",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ],
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "rules": [ { "type": "creation" } ]
+}
+EOF
+gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
+  --input - <<EOF
+{
+  "name": "Release tags: immutability",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [
+    { "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }
+  ],
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "rules": [
+    { "type": "update" },
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ]
+}
+EOF
+```
+
+`actor_id` 5 is the Admin repository role; to hand tag creation to a team instead,
+replace that entry in the **creation** ruleset with
+`{ "actor_id": <team id>, "actor_type": "Team", "bypass_mode": "always" }`
+(`gh api orgs/starknet-innovation/teams/<slug> --jq .id`). Review the live state with
+`gh api repos/starknet-innovation/krusty-kms/rulesets` and keep both rulesets
+`active`; never switch one to `evaluate` to get a release through — fix the tag flow
+instead.
+
 ## Prepare a release
 
 1. Begin from current `main`, whose workspace version must match the latest published

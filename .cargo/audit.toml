@@ -5,7 +5,12 @@
 # `krusty-kms-controller` crate (git-only `account_sdk` dependency stack) live
 # in `crates/controller/.cargo/audit.toml` — carrying them here would silently
 # mask the same advisories if a production dependency ever regressed onto an
-# affected version.
+# affected version. The controller is audited from its own lockfile, run from
+# its own directory, never through this file.
+#
+# CI runs `cargo audit --deny warnings` against the root Cargo.lock in rust.yml
+# and again in both publishing workflows, so unmaintained/unsound advisories
+# fail the build too rather than scrolling past as warnings.
 
 [advisories]
 ignore = []

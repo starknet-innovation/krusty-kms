@@ -21,6 +21,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: clippy, rustfmt
@@ -32,14 +34,19 @@ jobs:
       # command CI proves on every commit rather than a variant of it.
       - run: cargo test --workspace --locked --exclude krusty-kms-wasm
       - run: cargo test -p krusty-kms-client --locked --features nats
-      - run: cargo install cargo-audit --locked
-      - run: cargo audit
+      - run: cargo install cargo-audit --version 0.22.1 --locked
+      - run: cargo audit --deny warnings
+      - run: cargo install cargo-deny --version 0.19.8 --locked
+      - run: cargo deny check
 
   publish:
     needs: verify
     runs-on: ubuntu-latest
     environment: crates-io
     permissions:
+      # actions: read is required by the environment / deployment-policy API
+      # calls in the protection check below.
+      actions: read
       contents: read
       id-token: write
     env:
@@ -49,7 +56,54 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      # The environment is the only thing standing between a pushed tag and a
+      # crates.io token, so refuse to continue unless its protection rules are
+      # actually configured (mirrors the npm publish job). Releases are
+      # tag-triggered, so the deployment policy must admit exactly the `v*`
+      # tag pattern; the branch check below then ties the tag to main.
+      - name: Require a protected crates-io environment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          environment_json="${RUNNER_TEMP}/crates-io-environment.json"
+          branch_policies_json="${RUNNER_TEMP}/crates-io-branch-policies.json"
+          gh api "repos/${GITHUB_REPOSITORY}/environments/crates-io" > "${environment_json}"
+          gh api \
+            "repos/${GITHUB_REPOSITORY}/environments/crates-io/deployment-branch-policies?per_page=100" \
+            > "${branch_policies_json}"
+          node - "${environment_json}" "${branch_policies_json}" <<'NODE'
+          const fs = require("node:fs");
+          const environment = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const policies = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+          const reviewerRule = environment.protection_rules?.find(
+            (rule) => rule.type === "required_reviewers",
+          );
+          if (!reviewerRule?.reviewers?.length) {
+            throw new Error("the crates-io environment must have at least one required reviewer");
+          }
+          if (reviewerRule.prevent_self_review !== true) {
+            throw new Error("the crates-io environment must enable prevent self-review so the tag pusher cannot approve their own release");
+          }
+          if (environment.can_admins_bypass !== false) {
+            throw new Error("the crates-io environment must not allow administrators to bypass its protection rules");
+          }
+          const branchPolicy = environment.deployment_branch_policy;
+          if (!branchPolicy?.custom_branch_policies || branchPolicy.protected_branches) {
+            throw new Error("the crates-io environment must use a custom v*-tag-only deployment policy");
+          }
+          const branchPolicies = policies.branch_policies ?? [];
+          if (
+            policies.total_count !== 1 ||
+            branchPolicies.length !== 1 ||
+            branchPolicies[0].name !== "v*" ||
+            branchPolicies[0].type !== "tag"
+          ) {
+            throw new Error("the crates-io environment must allow exactly the v* tag pattern");
+          }
+          NODE
       - name: Verify release commit is reachable from main
         shell: bash
         run: |

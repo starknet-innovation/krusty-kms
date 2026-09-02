@@ -6,6 +6,7 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - ".cargo/audit.toml"
       - "CHANGELOG.md"
       - "tools/check.sh"
       - ".github/scripts/check-release-version-base.sh"
@@ -16,6 +17,7 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - ".cargo/audit.toml"
       - "CHANGELOG.md"
       - "tools/check.sh"
       - ".github/scripts/check-release-version-base.sh"
@@ -29,7 +31,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: rustfmt, clippy
@@ -41,7 +43,7 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           toolchain: 1.92.0
@@ -53,7 +55,7 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Package publishable workspace crates
         run: >
@@ -68,41 +70,47 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - run: cargo install cargo-audit --locked
-      - run: cargo audit
+      - run: cargo install cargo-audit --version 0.22.1 --locked
+      - run: cargo audit --deny warnings
 
   wasm:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 20
       - run: rustup target add wasm32-unknown-unknown
-      - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
-        with:
-          version: v0.15.0
+      # Build wasm-pack from its crates.io release rather than downloading a
+      # prebuilt binary: the version and its lockfile are both content-addressed.
+      - run: cargo install wasm-pack --version 0.15.0 --locked
       - run: bash tools/check.sh wasm
 
   version-bump:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # Branch names reach the shell through `env`, never through `${{ }}`
+      # interpolation inside `run:`, so a crafted ref cannot inject commands.
       - name: Require a release version to start from crates.io
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff -U0 origin/${{ github.base_ref }}...HEAD -- Cargo.toml \
+          if git diff -U0 "origin/${BASE_REF}...HEAD" -- Cargo.toml \
             | grep -Eq '^\+[[:space:]]*version[[:space:]]*='; then
-            bash .github/scripts/check-release-version-base.sh "origin/${{ github.base_ref }}"
+            bash .github/scripts/check-release-version-base.sh "origin/${BASE_REF}"
           fi
       - name: Require a changelog entry for version bumps
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff -U0 origin/${{ github.base_ref }}...HEAD -- Cargo.toml \
+          if git diff -U0 "origin/${BASE_REF}...HEAD" -- Cargo.toml \
             | grep -Eq '^\+[[:space:]]*version[[:space:]]*='; then
             bash .github/scripts/verify-release-changelog.sh
           fi

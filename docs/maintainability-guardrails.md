@@ -15,7 +15,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
 | `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny`/`allow(unsafe_code)`; stray `unsafe` |
 | Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / missing Debug redaction |
-| Release action pinning | `.github/scripts/check-publish-actions-pinned.sh` | Mutable refs, local actions, aliases, or invalid YAML in trusted publishing workflows |
+| Workflow action pinning | `.github/scripts/check-workflow-actions-pinned.sh` | Mutable refs, local actions, aliases, digest-less images, or invalid YAML in any workflow |
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |
 | WASM export freeze | `.github/scripts/check-wasm-exports.sh` | `wasm_bindgen` surface drift |
 | Design note | `.github/scripts/check-design-note.sh` | Public API / dep / surface changes without design note |
@@ -45,13 +45,20 @@ passes only an inspected `.tgz` artifact to the privileged job, rejects any `scr
 key in its package metadata, and invokes both `npm pack` and `npm publish` with
 `--ignore-scripts`.
 
-The release-action checker parses the workflow YAML structure rather than matching
-source text, so quoted, flow-style, and explicit mapping keys cannot bypass it.
-Repository-local actions and YAML aliases are prohibited in publishing workflows;
-this keeps nested action dependencies from escaping the immutable-reference check.
-Job containers and service images must also use immutable SHA-256 digests. The
-`wasm-pack-action` installer and the `wasm-pack` binary version are pinned separately,
-so a mutable tool download cannot change the package handed to the OIDC job.
+The workflow-action checker covers every file under `.github/workflows/`, not only
+the publishing workflows: a mutable tag in an ordinary CI job runs with the
+repository token and can poison caches or artifacts that later jobs consume. It
+parses the workflow YAML structure rather than matching source text, so quoted,
+flow-style, and explicit mapping keys cannot bypass it. Repository-local actions and
+YAML aliases are prohibited in all workflows; this keeps nested action dependencies
+from escaping the immutable-reference check. Job containers and service images must
+also use immutable SHA-256 digests.
+
+Release tooling is built from crates.io with `cargo install --version <exact> --locked`
+rather than downloaded as prebuilt binaries: `wasm-pack` 0.15.0 produces the npm
+package, and `cargo-audit` 0.22.1 (`--deny warnings`) plus `cargo-deny` 0.19.8 gate
+both publishing workflows before any token is minted. `cargo publish --locked` then
+ships exactly the dependency graph those checks verified.
 
 ## Baselines
 

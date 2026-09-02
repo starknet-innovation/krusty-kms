@@ -58,6 +58,18 @@ All notable changes to the published Rust crates are documented here.
   is ahead (forward step, resume from suspend) and ignores backwards steps, so
   clock corrections can neither revive expired snapshot-cache entries and
   tracked operations nor freeze their ageing (L-7).
+- `cargo-deny` now rejects duplicate dependency versions. Every remaining
+  duplicate is an individually justified `skip` in `deny.toml` naming the
+  third-party path that forces it (see `docs/supply-chain.md`), so a new
+  second copy of a crypto or parsing crate fails CI instead of warning.
+
+### Changed
+
+- Sign and verify Stark ECDSA with `starknet-rust-crypto` 0.19.1, the version the
+  `starknet-rust` 0.19.1 stack already links, instead of a second 0.9.0 copy. The
+  public API and the signing test vectors are unchanged; the duplicate
+  `starknet-rust-crypto`, `starknet-rust-curve`, and `crypto-bigint` 0.5 builds
+  leave the lockfile.
 
 ## [0.10.0] - 2026-09-02
 
