@@ -1,7 +1,8 @@
 # Code owners for release and supply-chain surfaces.
 #
 # Changes to these paths alter what gets built, published, or trusted: CI
-# workflows and guardrail scripts, dependency manifests and the lockfile,
+# workflows and guardrail scripts, dependency manifests and lockfiles (Cargo,
+# npm, Scarb, Swift, Gradle, pub),
 # license/advisory policy, release playbooks, git hooks, and the security
 # policy. They need a designated reviewer rather than any available approver.
 # Maintainers can extend the owner list; ownership here does not replace the
@@ -15,6 +16,15 @@
 /crates/**/Cargo.toml         @adrienlacombe
 /.cargo/                      @adrienlacombe
 /crates/controller/.cargo/    @adrienlacombe
+/cross-tests/package.json     @adrienlacombe
+/cross-tests/package-lock.json @adrienlacombe
+/contracts/**/Scarb.toml      @adrienlacombe
+/contracts/**/Scarb.lock      @adrienlacombe
+/packages/kms-c/package.json  @adrienlacombe
+/packages/kms-swift/Package.swift @adrienlacombe
+/packages/kms-jvm/build.gradle.kts @adrienlacombe
+/packages/kms-jvm/settings.gradle.kts @adrienlacombe
+/packages/kms-dart/pubspec.yaml @adrienlacombe
 /deny.toml                    @adrienlacombe
 /docs/crates-release.md       @adrienlacombe
 /docs/supply-chain.md         @adrienlacombe
