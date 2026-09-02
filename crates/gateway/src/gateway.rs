@@ -8,6 +8,7 @@ use crate::errors::{map_domain_error, map_kms_error};
 use crate::operations::OperationStore;
 use crate::snapshot::SnapshotCache;
 use crate::types::{GatewayResult, OperationRetentionPolicy, SecretResolver};
+use krusty_kms::stark_public_key;
 use krusty_kms_common::{ChainId, SecretFelt};
 use krusty_kms_domain::{
     AccountDescriptor, CachePolicy, DeployMode, DerivationRequest, FeltHex, GatewayError,
@@ -311,11 +312,10 @@ where
     }
 }
 
+/// Derive on the kms-native path: the scalar is read in place and never
+/// copied into a starknet-rs `SigningKey`, whose inner `Felt` is not zeroized.
 fn derive_public_key(private_key: &SecretFelt) -> GatewayResult<Felt> {
-    let signing_key = starknet_rust::signers::SigningKey::from_secret_scalar(rs_felt_from_core(
-        *private_key.expose_secret(),
-    ));
-    Ok(core_felt_from_rs(signing_key.verifying_key().scalar()))
+    stark_public_key(private_key.expose_secret()).map_err(map_kms_error)
 }
 
 fn operation_prefix(kind: OperationKind) -> &'static str {
@@ -326,12 +326,4 @@ fn operation_prefix(kind: OperationKind) -> &'static str {
         OperationKind::Sign => "sign",
         OperationKind::QueryAccountSnapshot => "snapshot",
     }
-}
-
-fn rs_felt_from_core(felt: Felt) -> starknet_rust::core::types::Felt {
-    starknet_rust::core::types::Felt::from_bytes_be(&felt.to_bytes_be())
-}
-
-fn core_felt_from_rs(felt: starknet_rust::core::types::Felt) -> Felt {
-    Felt::from_bytes_be(&felt.to_bytes_be())
 }

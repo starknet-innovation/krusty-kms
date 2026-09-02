@@ -29,6 +29,24 @@ All notable changes to the published Rust crates are documented here.
   (`crates/kms/tests/discovery_test`). `ArgentAccount::with_class_hash` now
   selects the layout from known class hashes; `ArgentConstructorLayout` and
   `ArgentAccount::with_class_hash_and_layout` make it explicit.
+- Gateway deploy and derive flows no longer hold a starknet-rs `SigningKey`
+  (a plain, non-zeroizing `Felt` copy of the private key) across the deploy
+  acceptance wait. Public-key derivation and descriptor validation use the
+  kms-native `stark_public_key` path; the signer and account factory are
+  confined to the transaction submission and dropped before any polling
+  begins. Zero or out-of-range private keys now return an error instead of
+  panicking inside the curve arithmetic.
+
+## [0.10.0] - 2026-08-28
+
+### Added
+
+- Add mnemonic-bound NIP-44 and NIP-59 application envelopes to the Rust and
+  WASM APIs, including strict event, recipient, identifier, entropy, and
+  nested-payload validation.
+
+### Security
+
 - Bound Starknet RPC and multisig coordinator connect/read/request deadlines,
   cap coordinator bodies before JSON parsing, and bound event pagination by
   wall time, pages, events, serialized bytes, and continuation-token size. RPC

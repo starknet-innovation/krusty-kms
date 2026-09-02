@@ -1,16 +1,17 @@
 //! End-to-end gateway flow tests: derive, deploy, sign, and snapshot caching.
 
 use super::{
-    derivation_request, gateway, nostr_sign_request, raw_nostr_sign_request, snapshot_request,
-    stark_sign_request, TestClock,
+    derivation_request, gateway, gateway_with_private_key, nostr_sign_request,
+    raw_nostr_sign_request, snapshot_request, stark_sign_request, TestClock,
 };
 use crate::snapshot_cache::MAX_SNAPSHOT_TTL_MS;
-use crate::DeployExecution;
+use crate::{DeployExecution, OperationRetentionPolicy};
 use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
     CachePolicy, CacheStatus, DeployAccountRequest, DeployMode, FeltHex, GatewayErrorCode,
     OperationKind, OperationLookupResult, OperationState, QueryMode, SignResult,
 };
+use starknet_types_core::felt::Felt;
 use std::sync::atomic::Ordering;
 
 #[tokio::test]
@@ -25,6 +26,41 @@ async fn derive_account_returns_descriptor_and_final_status() {
     assert_eq!(response.value.provenance.chain_id, ChainId::Sepolia);
     assert!(response.value.address.as_str().starts_with("0x"));
     assert_eq!(response.value.constructor_calldata.len(), 1);
+}
+
+/// The kms-native derivation must agree with the starknet-rs `SigningKey`
+/// path it replaced (M-1), otherwise derived addresses would change.
+#[tokio::test]
+async fn derive_account_public_key_matches_starknet_rs_derivation() {
+    let gateway = gateway(TestClock::default(), DeployExecution::AlreadyDeployed);
+
+    let response = gateway.derive_account(derivation_request()).await.unwrap();
+
+    let expected = starknet_rust::signers::SigningKey::from_secret_scalar(
+        starknet_rust::core::types::Felt::from(123u64),
+    )
+    .verifying_key()
+    .scalar();
+    assert_eq!(
+        response.value.public_key.to_felt().to_bytes_be(),
+        expected.to_bytes_be()
+    );
+}
+
+#[tokio::test]
+async fn derive_account_rejects_out_of_range_private_key() {
+    let gateway = gateway_with_private_key(
+        TestClock::default(),
+        DeployExecution::AlreadyDeployed,
+        OperationRetentionPolicy::default(),
+        Felt::ZERO,
+    );
+
+    let error = gateway
+        .derive_account(derivation_request())
+        .await
+        .unwrap_err();
+    assert!(!error.retryable);
 }
 
 #[tokio::test]
