@@ -1,6 +1,7 @@
 //! Transaction acceptance polling: bounded waiting and receipt/status
 //! classification.
 
+use super::rpc::provider_error_message;
 use super::StarknetRsFelt;
 use krusty_kms_common::KmsError;
 use starknet_rust::core::types::{
@@ -103,7 +104,9 @@ async fn observe_transaction(
                     Ok(TransactionObservation::Pending)
                 } else {
                     Err(KmsError::RpcError(format!(
-                        "failed to query transaction {tx_hash:#x}: receipt error: {receipt_error}; status error: {status_error}"
+                        "failed to query transaction {tx_hash:#x}: receipt error: {}; status error: {}",
+                        provider_error_message(&receipt_error),
+                        provider_error_message(&status_error)
                     )))
                 }
             }

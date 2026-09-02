@@ -1,7 +1,7 @@
 //! Deploy-path support: typed error mapping for account-factory submissions
 //! and OpenZeppelin descriptor validation.
 
-use super::rpc::provider_transport_error;
+use super::rpc::map_provider_error;
 use crate::{map_kms_error, GatewayResult};
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError};
 use krusty_kms_domain::{AccountDescriptor, FeltHex, GatewayError, GatewayErrorCode};
@@ -29,8 +29,7 @@ pub(super) fn map_deploy_submission_error<S: std::fmt::Display>(
 pub(super) fn map_deploy_provider_error(error: ProviderError) -> GatewayError {
     match error {
         ProviderError::StarknetError(error) => map_deploy_starknet_error(error),
-        ProviderError::RateLimited => provider_transport_error("Request rate limited".to_string()),
-        other => provider_transport_error(other.to_string()),
+        other => map_provider_error(other),
     }
 }
 

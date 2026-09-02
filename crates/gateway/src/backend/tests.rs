@@ -1,7 +1,10 @@
 use super::deploy::{
     map_deploy_provider_error, map_deploy_starknet_error, validate_open_zeppelin_descriptor,
 };
-use super::rpc::{is_contract_not_found, is_entrypoint_not_found, provider_transport_error};
+use super::rpc::{
+    is_contract_not_found, is_entrypoint_not_found, map_provider_error, provider_error_message,
+    provider_transport_error,
+};
 use super::wait::{
     classify_execution, classify_transaction_status, is_transaction_hash_not_found,
     TransactionObservation,
@@ -13,8 +16,94 @@ use krusty_kms_domain::{
 use starknet_rust::core::types::{
     ExecutionResult, StarknetError, TransactionFinalityStatus, TransactionStatus,
 };
-use starknet_rust::providers::ProviderError;
+use starknet_rust::providers::jsonrpc::{HttpTransportError, JsonRpcClientError, JsonRpcError};
+use starknet_rust::providers::{ProviderError, ProviderImplError};
 use starknet_types_core::felt::Felt;
+
+/// Stand-in for a transport error whose `Display` leaks the request URL, the
+/// way `reqwest::Error` does (`... for url (https://host/path?key=...)`).
+#[derive(Debug)]
+struct LeakyTransportError(&'static str);
+
+impl std::fmt::Display for LeakyTransportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.0)
+    }
+}
+
+impl std::error::Error for LeakyTransportError {}
+
+impl ProviderImplError for LeakyTransportError {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+const LEAKY_MESSAGE: &str =
+    "error sending request for url (https://user:pw@rpc.example.com/v0_9/SECRET_TOKEN?apikey=SECRET_TOKEN)";
+
+#[test]
+fn transport_errors_are_classified_without_the_endpoint_url() {
+    let error = ProviderError::Other(Box::new(LeakyTransportError(LEAKY_MESSAGE)));
+    assert!(
+        error.to_string().contains("SECRET_TOKEN"),
+        "precondition: the upstream Display is what leaks"
+    );
+
+    let mapped = map_provider_error(error);
+    assert_eq!(mapped.code, GatewayErrorCode::ProviderTransport);
+    assert!(mapped.retryable);
+    let message = mapped.message.expect("transport errors carry a message");
+    assert_eq!(message, "provider transport error: other");
+    for leaked in ["SECRET_TOKEN", "rpc.example.com", "user", "pw", "v0_9"] {
+        assert!(!message.contains(leaked), "leaked {leaked:?}");
+    }
+}
+
+#[test]
+fn json_rpc_transport_errors_keep_only_the_numeric_code() {
+    let error: ProviderError =
+        JsonRpcClientError::<HttpTransportError>::JsonRpcError(JsonRpcError {
+            code: -32000,
+            message: "invalid api key SECRET_TOKEN".to_string(),
+            data: None,
+        })
+        .into();
+
+    let message = provider_error_message(&error);
+    assert_eq!(message, "provider transport error: json-rpc code -32000");
+    assert!(!message.contains("SECRET_TOKEN"));
+}
+
+#[test]
+fn typed_provider_errors_keep_their_upstream_message() {
+    assert_eq!(
+        provider_error_message(&ProviderError::StarknetError(
+            StarknetError::ContractNotFound
+        )),
+        StarknetError::ContractNotFound.to_string()
+    );
+    assert_eq!(
+        provider_error_message(&ProviderError::RateLimited),
+        "Request rate limited"
+    );
+    let deploy = map_deploy_provider_error(ProviderError::RateLimited);
+    assert_eq!(deploy.code, GatewayErrorCode::ProviderTransport);
+    assert_eq!(deploy.message.as_deref(), Some("Request rate limited"));
+}
+
+#[test]
+fn deploy_transport_errors_are_redacted_too() {
+    let mapped = map_deploy_provider_error(ProviderError::Other(Box::new(LeakyTransportError(
+        LEAKY_MESSAGE,
+    ))));
+    assert_eq!(mapped.code, GatewayErrorCode::ProviderTransport);
+    assert!(mapped.retryable);
+    assert_eq!(
+        mapped.message.as_deref(),
+        Some("provider transport error: other")
+    );
+}
 
 fn open_zeppelin_descriptor(public_key: Felt) -> AccountDescriptor {
     AccountDescriptor {

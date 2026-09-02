@@ -4,7 +4,7 @@ use super::deploy::{map_deploy_submission_error, validate_open_zeppelin_descript
 use super::interface::{DeployExecution, GatewayBackend};
 use super::rpc::{
     balance_of_camel_selector, balance_of_selector, call_erc20_balance_with_selector_fallback,
-    core_felt_to_rs, is_contract_not_found, provider_transport_error, rs_felt_to_biguint,
+    core_felt_to_rs, is_contract_not_found, map_provider_error, rs_felt_to_biguint,
     rs_felt_to_core, to_block_id,
 };
 use super::wait::wait_for_acceptance;
@@ -96,7 +96,7 @@ impl GatewayBackend for StarknetGatewayBackend {
         {
             Ok(_) => Ok(true),
             Err(error) if is_contract_not_found(&error) => Ok(false),
-            Err(error) => Err(provider_transport_error(error.to_string())),
+            Err(error) => Err(map_provider_error(error)),
         }
     }
 
@@ -159,7 +159,7 @@ impl GatewayBackend for StarknetGatewayBackend {
             .provider
             .get_nonce(to_block_id(block), core_felt_to_rs(address.to_felt()))
             .await
-            .map_err(|error| provider_transport_error(error.to_string()))?;
+            .map_err(map_provider_error)?;
         Ok(FeltHex::from_felt(rs_felt_to_core(nonce)))
     }
 
@@ -213,7 +213,7 @@ impl GatewayBackend for StarknetGatewayBackend {
                 .provider
                 .block_hash_and_number()
                 .await
-                .map_err(|error| provider_transport_error(error.to_string()))?;
+                .map_err(map_provider_error)?;
             return Ok(SnapshotBlockMetadata {
                 selector: block.clone(),
                 block_hash: Some(FeltHex::from_felt(rs_felt_to_core(block_ref.block_hash))),
@@ -225,7 +225,7 @@ impl GatewayBackend for StarknetGatewayBackend {
             .provider
             .get_block_with_tx_hashes(to_block_id(block))
             .await
-            .map_err(|error| provider_transport_error(error.to_string()))?;
+            .map_err(map_provider_error)?;
 
         let (block_hash, block_number) = match block_info {
             MaybePreConfirmedBlockWithTxHashes::Block(block) => (
