@@ -32,6 +32,10 @@ All notable changes to the published Rust crates are documented here.
   their message. Cleartext-URL rejection messages in `create_provider` show
   only `scheme://host[:port]`. Adds `krusty_kms_common::error::redact_url` and
   `REDACTED_URL_PLACEHOLDER` for the same purpose in downstream code.
+- When a fee ceiling is supplied, RPC fee estimates are admitted against it
+  before signing and the admitted bounds are pinned on the transaction, so an
+  inflated estimate from an untrusted RPC can no longer widen the signed fee
+  authorisation. Estimates above the ceiling are rejected, never clamped.
 - `cargo-deny` now rejects duplicate dependency versions. Every remaining
   duplicate is an individually justified `skip` in `deny.toml` naming the
   third-party path that forces it (see `docs/supply-chain.md`), so a new
