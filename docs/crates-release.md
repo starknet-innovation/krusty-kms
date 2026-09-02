@@ -41,6 +41,73 @@ configured for this repository, the `publish.yml` workflow, and the `crates-io`
 environment. If the configuration does not match, stop and correct it in crates.io;
 do not fall back to an API token.
 
+## Repository protection
+
+Two GitHub-side controls back the workflow's own checks. Both are configured by a
+repository administrator; the workflow verifies the first at runtime and fails before
+requesting a crates.io token if it is missing.
+
+### `crates-io` environment
+
+The `publish` job runs in the `crates-io` environment and requires:
+
+- at least one **required reviewer** (enable *prevent self-review* so the tag pusher
+  cannot approve their own release, and disable *administrator bypass*);
+- **deployment branches and tags** set to *Selected branches and tags* with exactly
+  one rule: a **tag** pattern `v*`. Releases are tag-triggered, so a branch-only rule
+  such as `main` would block every run; the workflow separately proves the tag is
+  reachable from `main` and matches the workspace version.
+
+The environment check in `publish.yml` reads the environment through the read-only
+`GITHUB_TOKEN` and fails unless both conditions hold. Configure or verify them with:
+
+```bash
+gh api repos/starknet-innovation/krusty-kms/environments/crates-io \
+  --jq '{reviewers: [.protection_rules[] | select(.type=="required_reviewers") | .reviewers[].reviewer.login], policy: .deployment_branch_policy}'
+gh api repos/starknet-innovation/krusty-kms/environments/crates-io/deployment-branch-policies \
+  --jq '.branch_policies[] | {name, type}'
+```
+
+### Release-tag ruleset
+
+Release tags are immutable by convention; a tag ruleset makes that a server-side
+guarantee. It blocks creating, moving, or deleting `v*` tags for everyone except the
+bypass actors, so only maintainers can start a release and nobody can repoint a
+published tag at different code. Create it once (administrator, `repo` scope):
+
+```bash
+maintainers_team_id="$(gh api orgs/starknet-innovation/teams/<maintainers-team-slug> --jq .id)"
+gh api -X POST repos/starknet-innovation/krusty-kms/rulesets \
+  --input - <<EOF
+{
+  "name": "Protect release tags",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [
+    { "actor_id": ${maintainers_team_id}, "actor_type": "Team", "bypass_mode": "always" }
+  ],
+  "conditions": {
+    "ref_name": { "include": ["refs/tags/v*"], "exclude": [] }
+  },
+  "rules": [
+    { "type": "creation" },
+    { "type": "update" },
+    { "type": "deletion" },
+    { "type": "non_fast_forward" }
+  ]
+}
+EOF
+```
+
+Replace `<maintainers-team-slug>` with the org team that is allowed to cut releases;
+to grant individual accounts instead, use `"actor_type": "User"` entries with their
+numeric ids (`gh api users/<login> --jq .id`). The `creation` rule is what restricts
+who can push a `v*` tag; `update`, `deletion`, and `non_fast_forward` make an existing
+tag immutable even for a compromised write-scoped token. Review the result with
+`gh api repos/starknet-innovation/krusty-kms/rulesets` and keep the ruleset
+`active`; never switch it to `evaluate` to get a release through — fix the tag flow
+instead.
+
 ## Prepare a release
 
 1. Begin from current `main`, whose workspace version must match the latest published

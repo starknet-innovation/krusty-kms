@@ -16,6 +16,26 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   stack, distinct from the upstream `starknet` crate. Provenance is considered
   verified; re-check owners when bumping major versions.
 
+## Release path protections (GitHub)
+
+- `crates-io` and `npm` are protected environments: required reviewers plus a
+  custom deployment policy (`v*` **tags** for crates.io, because releases are
+  tag-triggered; the `main` **branch** for npm). Both publish workflows read
+  the environment through the read-only `GITHUB_TOKEN` and fail before minting
+  a token if either control is missing. Configuration details and the exact
+  checks are in [`crates-release.md`](crates-release.md#repository-protection).
+- A `Protect release tags` ruleset should block creation, update, deletion, and
+  non-fast-forward pushes of `v*` tags for everyone except the maintainers
+  team; the payload is in the same section. Verified 2026-09-02 (read-only
+  `gh api`): only the `SNF - default branch baseline` branch ruleset exists,
+  and the `crates-io` environment has reviewers but no deployment policy, so
+  both are pending administrator actions.
+- Every `uses:` in every workflow is pinned to a commit SHA and checked by
+  `.github/scripts/check-workflow-actions-pinned.sh`; release tooling
+  (`wasm-pack`, `cargo-audit`, `cargo-deny`) is built from crates.io with
+  `cargo install --version <exact> --locked`; and `cargo publish --locked`
+  ships the dependency graph CI verified.
+
 ## Duplicate dependency versions (`cargo deny check bans`)
 
 `deny.toml` sets `multiple-versions = "deny"`: a new duplicate crate version fails CI
