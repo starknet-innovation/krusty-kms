@@ -20,6 +20,7 @@ pub trait Clock: Send + Sync {
 /// (NTP corrections, manual changes); the wall clock keeps it moving through
 /// host suspension, where `Instant` may stand still; the previous reading
 /// makes the sequence non-decreasing by construction.
+#[derive(Debug, Default, Clone, Copy)]
 pub struct SystemClock;
 
 impl Clock for SystemClock {
