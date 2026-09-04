@@ -28,7 +28,7 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   **immutability** (update, deletion, non-fast-forward), both `active` on
   `refs/tags/v*` with the repository Admin role as the only bypass actor. The
   `crates-io` environment is configured (three required reviewers, prevent
-  self-review on, administrator bypass off, one `v*` tag deployment policy) and
+  self-review on, administrator bypass on, one `v*` tag deployment policy) and
   passes the publish workflow's check. Details and payloads are in
   `crates-release.md`.
 - Every `uses:` in every workflow is pinned to a commit SHA and checked by
