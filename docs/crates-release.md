@@ -13,8 +13,10 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
   through it, and revokes the token when the job ends.
 - The workflow runs only when a `v*` tag is pushed. The tag must be named
   `v<workspace-version>` and must point to a commit reachable from `main`.
-- The protected GitHub `crates-io` environment requires approval from its configured
-  reviewer before the workflow can obtain a publishing token.
+- The protected GitHub `crates-io` environment requires approval from one of its
+  configured reviewers before the workflow can obtain a publishing token. Repository
+  administrators may explicitly bypass that review for an urgent or maintainer-led
+  release.
 - Every release needs a dated `CHANGELOG.md` entry named `## [<workspace-version>] -
   YYYY-MM-DD` with at least one release-note bullet. CI checks it on a version-bump PR
   and the publishing workflow checks it again before authentication.
@@ -52,8 +54,9 @@ requesting a crates.io token if it is missing.
 The `publish` job runs in the `crates-io` environment and requires:
 
 - at least one **required reviewer**, with *prevent self-review* enabled so the tag
-  pusher cannot approve their own release, and *allow administrators to bypass*
-  disabled — the workflow checks all three;
+  pusher cannot approve their own release through the normal review path, and *allow
+  administrators to bypass* enabled so an administrator can explicitly start the
+  waiting publish job without a second reviewer — the workflow checks all three;
 - **deployment branches and tags** set to *Selected branches and tags* with exactly
   one rule: a **tag** pattern `v*`. Releases are tag-triggered, so a branch-only rule
   such as `main` would block every run; the workflow separately proves the tag is
@@ -64,7 +67,7 @@ The environment check in `publish.yml` reads the environment through the read-on
 
 ```bash
 gh api repos/starknet-innovation/krusty-kms/environments/crates-io \
-  --jq '{reviewers: [.protection_rules[] | select(.type=="required_reviewers") | .reviewers[].reviewer.login], policy: .deployment_branch_policy}'
+  --jq '{can_admins_bypass, reviewer_rule: ([.protection_rules[] | select(.type=="required_reviewers") | {prevent_self_review, reviewers: [.reviewers[].reviewer.login]}][0]), policy: .deployment_branch_policy}'
 gh api repos/starknet-innovation/krusty-kms/environments/crates-io/deployment-branch-policies \
   --jq '.branch_policies[] | {name, type}'
 ```
@@ -192,10 +195,12 @@ git push origin "v${version}"
 
 Do not pre-create the tag on a release branch. Do not use `--force`.
 
-Open the resulting GitHub Actions run and wait for the designated reviewer to approve
-the `crates-io` deployment. After approval the workflow verifies the tag and packages,
-authenticates with OIDC, publishes the crates in dependency order, waits for each to
-appear on crates.io, and revokes the token.
+Open the resulting GitHub Actions run and wait for a designated reviewer to approve
+the `crates-io` deployment. An administrator may instead use **Start all waiting jobs**
+and record why the review is being bypassed. After approval or an administrator
+bypass, the workflow verifies the tag and packages, authenticates with OIDC, publishes
+the crates in dependency order, waits for each to appear on crates.io, and revokes the
+token.
 
 ## Verify and recover
 
