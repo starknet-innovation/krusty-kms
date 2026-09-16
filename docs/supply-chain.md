@@ -19,10 +19,10 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
 ## Release path protections (GitHub)
 
 - `crates-io` and `npm` are protected environments: required reviewers plus a
-  custom deployment policy (`v*` **tags** for crates.io, because releases are
-  tag-triggered; the `main` **branch** for npm). Both publish workflows read
-  the environment through the read-only `GITHUB_TOKEN` and fail before minting
-  a token if either control is missing. Configuration details and the exact
+  custom deployment policy admitting exactly the `v*` **tag** pattern. Both
+  release paths are tag-triggered. Both publish workflows read the environment
+  through the read-only `GITHUB_TOKEN` and fail before minting a token if
+  either control is missing. Configuration details and the exact
   checks are in [`crates-release.md`](crates-release.md#repository-protection).
 - Two tag rulesets protect `v*` tags (created 2026-09-02): **creation** and
   **immutability** (update, deletion, non-fast-forward), both `active` on
@@ -81,10 +81,15 @@ calldata fixes (#123, #131) folded in by #124. Anyone auditing npm 0.10.0 by
 reading the `v0.10.0` tag would wrongly conclude those fixes shipped in it. They
 did not. They are in npm 0.11.0, which is the current `latest`.
 
-npm publishing triggers on pushes to `main` rather than on tags, so a published
-version is not bound to a single commit by construction the way the
-tag-triggered crates.io release is. Until that changes, treat the provenance
-attestation as authoritative for npm artifacts and the `v*` tag as advisory.
+This happened because npm publishing used to trigger on pushes to `main`, so a
+published version was not bound to a single commit the way the tag-triggered
+crates.io release is. npm now publishes on `v*` tags too, and the workflow
+refuses to publish unless the tag is reachable from `main` and matches the
+version in the package being shipped. Both halves of a release therefore come
+from one commit, and the tag and the artifact agree by construction.
+
+The provenance attestation stays authoritative when the two records disagree,
+because it is the signed one.
 
 ## Duplicate dependency versions (`cargo deny check bans`)
 
