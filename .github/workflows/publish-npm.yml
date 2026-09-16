@@ -1,26 +1,27 @@
 name: Publish WASM package to npm
 
+# Releases are tag-triggered, like crates.io (publish.yml). Publishing on
+# pushes to main meant a published version was not bound to one commit: npm
+# 0.10.0 shipped from 2960c3af while the later `v0.10.0` tag pointed at
+# 5ae1d986, a different tree (issue #137). A `v*` tag now names exactly one
+# commit, and the checks below refuse to publish unless the tag, the workspace
+# version and main all agree. There is deliberately no `workflow_dispatch`:
+# a manual run from a branch would reintroduce the untagged publish path.
 on:
   push:
-    branches: [main]
-    paths:
-      - "crates/common/**"
-      - "crates/crypto/**"
-      - "crates/kms/**"
-      - "crates/sdk/**"
-      - "crates/wasm/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/scripts/publish-npm.sh"
-      - ".github/workflows/publish-npm.yml"
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 permissions:
   contents: read
 
+concurrency:
+  group: npm-publish-${{ github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
-  # Gate npm publishing on tests and the dependency audit: a merge to main
-  # must never ship a wasm package whose Rust sources fail CI checks.
+  # Gate npm publishing on tests and the dependency audit: a tag push must
+  # never ship a wasm package whose Rust sources fail CI checks.
   verify:
     runs-on: ubuntu-latest
     permissions:
@@ -28,7 +29,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Needed by the reachability check below.
+          fetch-depth: 0
           persist-credentials: false
+      - name: Verify release commit is reachable from main
+        shell: bash
+        run: |
+          git fetch origin main
+
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::release tag must point to a commit reachable from main"
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -41,10 +53,11 @@ jobs:
       # execute under wasm-pack (see rust.yml).
       - run: cargo test --workspace --locked --exclude krusty-kms-wasm
       # ...so the wasm package — the artifact this workflow publishes — must be
-      # tested here explicitly. `publish` only gates on this job, and
-      # workflow_dispatch bypasses rust.yml's parallel wasm job entirely, so
-      # without this a wasm-only regression could reach npm untested. Building
-      # and `npm pack --dry-run` in the publish job are not a substitute.
+      # tested here explicitly. `publish` only gates on this job, and this
+      # workflow runs only on tag pushes, so rust.yml's parallel wasm job never
+      # covers the published commit. Without this a wasm-only regression could
+      # reach npm untested; building and `npm pack --dry-run` in the publish
+      # job are not a substitute.
       - run: wasm-pack test --node crates/wasm
       - run: cargo install cargo-audit --version 0.22.1 --locked
       - run: cargo audit --deny warnings
@@ -72,6 +85,46 @@ jobs:
           wasm-pack build --release --target web --scope starknetfoundation
           --out-dir pkg
         working-directory: crates/wasm
+      # wasm-pack generates package.json in an out-dir with no git context, so
+      # npm cannot infer `gitHead` the way it does when publishing from a
+      # working tree. Without this, a published version records no commit in
+      # plain registry metadata: 0.10.0 and 0.11.0 both shipped with
+      # `gitHead: null` (issue #137). The signed provenance attestation still
+      # names the commit, but reading it needs sigstore tooling, so record the
+      # commit here too for anyone running `npm view`.
+      - name: Record source commit in package metadata
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const commit = process.env.SOURCE_COMMIT ?? "";
+          if (!/^[0-9a-f]{40}$/.test(commit)) {
+            throw new Error(`refusing to record a non-commit gitHead: ${commit}`);
+          }
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          packageJson.gitHead = commit;
+          fs.writeFileSync("package.json", `${JSON.stringify(packageJson, null, 2)}\n`);
+          NODE
+        working-directory: crates/wasm/pkg
+      # Tie the artifact to the tag that triggered this run. The version here
+      # is what actually reaches the registry, so compare against it rather
+      # than against `cargo metadata`: they agree, but only this file ships.
+      - name: Verify release tag matches the package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          const expected = `v${packageJson.version}`;
+          if (process.env.RELEASE_TAG !== expected) {
+            throw new Error(
+              `release tag ${process.env.RELEASE_TAG} does not match package version ${expected}`,
+            );
+          }
+          NODE
+        working-directory: crates/wasm/pkg
       - name: Reject npm lifecycle scripts
         run: |
           node <<'NODE'
@@ -79,6 +132,9 @@ jobs:
           const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
           if (Object.hasOwn(packageJson, "scripts")) {
             throw new Error("generated npm package must not contain lifecycle scripts");
+          }
+          if (!/^[0-9a-f]{40}$/.test(packageJson.gitHead ?? "")) {
+            throw new Error("generated npm package must record a gitHead commit");
           }
           NODE
         working-directory: crates/wasm/pkg
@@ -117,6 +173,11 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      # The environment is the only thing standing between a pushed tag and an
+      # npm publish, so refuse to continue unless its protection rules are
+      # actually configured (mirrors the crates-io publish job). Releases are
+      # tag-triggered, so the deployment policy must admit exactly the `v*` tag
+      # pattern; the reachability check in `verify` then ties the tag to main.
       - name: Require a protected npm environment
         env:
           GH_TOKEN: ${{ github.token }}
@@ -140,16 +201,16 @@ jobs:
           }
           const branchPolicy = environment.deployment_branch_policy;
           if (!branchPolicy?.custom_branch_policies || branchPolicy.protected_branches) {
-            throw new Error("the npm environment must use a custom main-only branch policy");
+            throw new Error("the npm environment must use a custom v*-tag-only deployment policy");
           }
           const branchPolicies = policies.branch_policies ?? [];
           if (
             policies.total_count !== 1 ||
             branchPolicies.length !== 1 ||
-            branchPolicies[0].name !== "main" ||
-            (branchPolicies[0].type && branchPolicies[0].type !== "branch")
+            branchPolicies[0].name !== "v*" ||
+            branchPolicies[0].type !== "tag"
           ) {
-            throw new Error("the npm environment must allow exactly the main branch");
+            throw new Error("the npm environment must allow exactly the v* tag pattern");
           }
           NODE
       - name: Download verified npm package
