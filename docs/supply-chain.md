@@ -37,6 +37,55 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   `cargo install --version <exact> --locked`; and `cargo publish --locked`
   ships the dependency graph CI verified.
 
+## Mapping a published npm package to its commit
+
+`@starknetfoundation/krusty-kms-wasm` is the signing and derivation boundary for
+released wallets, so "which source produced this tarball" has to be answerable by
+anyone, not only by maintainers (issue #137).
+
+Two records exist, and they are not equally trustworthy:
+
+- **Signed provenance — authoritative.** `publish-npm.sh` publishes with
+  `--provenance`, so npm stores a signed SLSA v1 attestation naming the
+  repository, the workflow and the exact commit. It is signed through sigstore
+  and cannot be edited afterwards. `npm audit signatures` verifies an installed
+  copy; to read the commit directly:
+
+  ```sh
+  curl -s 'https://registry.npmjs.org/-/npm/v1/attestations/@starknetfoundation%2fkrusty-kms-wasm@0.11.0' \
+    | jq -r '.attestations[] | select(.predicateType | test("slsa")) | .bundle.dsseEnvelope.payload' \
+    | base64 -d \
+    | jq -r '.predicate.buildDefinition.resolvedDependencies[0].digest.gitCommit'
+  ```
+
+- **`gitHead` in registry metadata — convenience only.** Recorded by the build
+  job from `github.sha`, readable with
+  `npm view @starknetfoundation/krusty-kms-wasm@<version> gitHead`. It is
+  unsigned metadata, so it is a lookup aid; trust the attestation if the two ever
+  disagree. wasm-pack builds into an out-dir with no git context, so npm cannot
+  infer this by itself and the build job writes it explicitly. Versions 0.10.0
+  and 0.11.0 were published before that step existed and record no `gitHead`;
+  their commits are in the table below.
+
+### Published versions and their commits
+
+| npm version | Published | Commit (from provenance) | Tag | Tag commit |
+| --- | --- | --- | --- | --- |
+| 0.10.0 | 2026-08-28 | `2960c3af` | `v0.10.0` | `5ae1d986` — **does not match** |
+| 0.11.0 | 2026-09-02 | `4dca96fc` | `v0.11.0` | `4dca96fc` — matches |
+
+**The `v0.10.0` tag does not describe the published 0.10.0 package.** npm 0.10.0
+was built from `2960c3af` on 2026-08-28. The tag was created later, on
+2026-09-02, at `5ae1d986`, which additionally carries the Argent constructor
+calldata fixes (#123, #131) folded in by #124. Anyone auditing npm 0.10.0 by
+reading the `v0.10.0` tag would wrongly conclude those fixes shipped in it. They
+did not. They are in npm 0.11.0, which is the current `latest`.
+
+npm publishing triggers on pushes to `main` rather than on tags, so a published
+version is not bound to a single commit by construction the way the
+tag-triggered crates.io release is. Until that changes, treat the provenance
+attestation as authoritative for npm artifacts and the `v*` tag as advisory.
+
 ## Duplicate dependency versions (`cargo deny check bans`)
 
 `deny.toml` sets `multiple-versions = "deny"`: a new duplicate crate version fails CI

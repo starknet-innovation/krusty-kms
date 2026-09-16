@@ -72,6 +72,28 @@ jobs:
           wasm-pack build --release --target web --scope starknetfoundation
           --out-dir pkg
         working-directory: crates/wasm
+      # wasm-pack generates package.json in an out-dir with no git context, so
+      # npm cannot infer `gitHead` the way it does when publishing from a
+      # working tree. Without this, a published version records no commit in
+      # plain registry metadata: 0.10.0 and 0.11.0 both shipped with
+      # `gitHead: null` (issue #137). The signed provenance attestation still
+      # names the commit, but reading it needs sigstore tooling, so record the
+      # commit here too for anyone running `npm view`.
+      - name: Record source commit in package metadata
+        env:
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const commit = process.env.SOURCE_COMMIT ?? "";
+          if (!/^[0-9a-f]{40}$/.test(commit)) {
+            throw new Error(`refusing to record a non-commit gitHead: ${commit}`);
+          }
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          packageJson.gitHead = commit;
+          fs.writeFileSync("package.json", `${JSON.stringify(packageJson, null, 2)}\n`);
+          NODE
+        working-directory: crates/wasm/pkg
       - name: Reject npm lifecycle scripts
         run: |
           node <<'NODE'
@@ -79,6 +101,9 @@ jobs:
           const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
           if (Object.hasOwn(packageJson, "scripts")) {
             throw new Error("generated npm package must not contain lifecycle scripts");
+          }
+          if (!/^[0-9a-f]{40}$/.test(packageJson.gitHead ?? "")) {
+            throw new Error("generated npm package must record a gitHead commit");
           }
           NODE
         working-directory: crates/wasm/pkg
