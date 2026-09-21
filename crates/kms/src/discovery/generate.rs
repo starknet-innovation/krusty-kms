@@ -5,7 +5,7 @@ use super::MAX_DISCOVERY_INDEX;
 use crate::account::calculate_contract_address;
 use crate::account_class::{
     deployment_classes, AccountClass, AccountFamily, ArgentAccount, ArgentCairo0,
-    ArgentConstructorLayout, BraavosAccount, KnownAccountClass, SaltPolicy,
+    ArgentConstructorLayout, BraavosAccount, KnownAccountClass, OpenZeppelinAccount, SaltPolicy,
 };
 use crate::derivation::{derive_argent_legacy_private_key, derive_private_key_with_coin_type};
 use crate::mnemonic::validate_mnemonic;
@@ -191,12 +191,15 @@ fn push_oz_candidates(
     key: &DerivedKey<'_>,
 ) -> Result<()> {
     for class in &classes.open_zeppelin {
-        let pk = *key.public_key;
-        for (salt, label) in [
-            (pk, format!("v{} salt-pubkey", class.version)),
-            (Felt::ZERO, format!("v{}", class.version)),
+        let account = OpenZeppelinAccount::from_class_hash(class.class_hash);
+        for (salt_policy, label) in [
+            (
+                SaltPolicy::PublicKey,
+                format!("v{} salt-pubkey", class.version),
+            ),
+            (SaltPolicy::Zero, format!("v{}", class.version)),
         ] {
-            let address = calculate_contract_address(&salt, &class.class_hash, &[pk], &Felt::ZERO)?;
+            let address = account.calculate_address(key.public_key, salt_policy)?;
             out.push(key.candidate(
                 WalletType::OpenZeppelin,
                 &class.class_hash,

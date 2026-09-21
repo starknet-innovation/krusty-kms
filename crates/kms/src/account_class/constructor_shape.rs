@@ -14,6 +14,13 @@ use serde::{Serialize, Serializer};
 /// to every class. [`Self::seed_calldata`] is the shape a seed reproduces on
 /// its own; [`Self::guardian_calldata`] is the shape once a guardian is known.
 /// Serialises as an object: `{ shape, fromSeed, withGuardian, inputsOutsideSeed }`.
+///
+/// Templates name their inputs. `owner` (also `public_key`) is the
+/// seed-derived key, and `guardian` is the per-account guardian, listed in
+/// [`Self::inputs_outside_seed`] because a phrase cannot supply it.
+/// `implementation` is the class a proxy delegates to: its values are the
+/// registry's proxy targets for that family ([`crate::proxy_target_classes`]),
+/// which is why a proxy deployment is still reproducible from a seed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConstructorShape {
     /// `[public_key]`: OpenZeppelin `AccountUpgradeable` and the Braavos base account.
@@ -38,7 +45,9 @@ impl ConstructorShape {
     }
 
     /// Calldata for a seed-derived owner and no guardian, as a template. This
-    /// is the shape [`crate::generate_candidates`] derives from.
+    /// is the shape [`crate::generate_candidates`] derives from. An
+    /// `implementation` placeholder takes its values from
+    /// [`crate::proxy_target_classes`] for the same family.
     pub fn seed_calldata(self) -> &'static str {
         match self {
             Self::PublicKey => "[public_key]",

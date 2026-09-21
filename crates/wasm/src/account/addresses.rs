@@ -62,9 +62,9 @@ fn argent_account(class_hash: Option<String>) -> Result<ArgentAccount, JsValue> 
 ///
 /// This is the only Argent deployment a seed phrase reproduces on its own. An
 /// account deployed with a guardian has a different address that discovery
-/// cannot enumerate; once its address is known, read the guardian and use
-/// `deriveArgentAccountAddressWithGuardian` to verify it, or feed its
-/// `DEPLOY_ACCOUNT` fields to `inspectAccountDeployment`.
+/// cannot enumerate; once its address is known, feed its `DEPLOY_ACCOUNT`
+/// fields to `inspectAccountDeployment`, or take the guardian from that
+/// calldata and use `deriveArgentAccountAddressWithGuardian`.
 ///
 /// # Arguments
 /// * `public_key` - The Stark public key (hex string)
@@ -95,14 +95,16 @@ pub fn derive_argent_account_address(
 /// v0.3.x and `[0, public_key, 0, 0, guardian]` for v0.4.0 and v0.5.0. The
 /// guardian is per-account and not derived from the seed, so this cannot find
 /// accounts from a phrase. It verifies an account whose address is already
-/// known: read its guardian (from the `DEPLOY_ACCOUNT` calldata, or the
-/// account's `get_guardian`) and compare the result with the address.
+/// known: take the guardian from that account's `DEPLOY_ACCOUNT` calldata and
+/// compare the result with the address. Only the deploy-time guardian fixes
+/// the address; an account's current guardian (`get_guardian`) can have been
+/// changed or removed since and reproduces nothing.
 ///
 /// # Arguments
 /// * `public_key` - The owner's Stark public key (hex string)
-/// * `guardian_public_key` - The guardian's Stark public key (hex string).
-///   `"0x0"` means no guardian, as the account's `get_guardian` reports it,
-///   and gives the same address as `deriveArgentAccountAddress`
+/// * `guardian_public_key` - The guardian's Stark public key at deployment
+///   (hex string). `"0x0"` means no guardian and gives the same address as
+///   `deriveArgentAccountAddress`
 /// * `class_hash` - Optional class hash, as for `deriveArgentAccountAddress`
 ///
 /// # Returns

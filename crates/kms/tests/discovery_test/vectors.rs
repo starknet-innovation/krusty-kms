@@ -1,5 +1,7 @@
 //! Shared test data: fixed mnemonic and expected derivation vectors.
 
+use starknet_types_core::felt::Felt;
+
 /// Test mnemonic used for all derivation tests.
 ///
 /// Both Argent and Braavos wallets were created from this same mnemonic.
@@ -84,3 +86,36 @@ pub const BRAAVOS_V100_DEPLOY_CLASS_HASH: &str =
 /// `starknet_getClassHashAt(address)` today: the v1.0.0 account implementation.
 pub const BRAAVOS_V100_CURRENT_CLASS_HASH: &str =
     "0x816dd0297efc55dc1e7559020a3a825e81ef734b558f03c83325d4da7e6253";
+
+// -- Deployment-inspection fixtures -------------------------------------------
+//
+// Salts and keys live here rather than inline in the tests: a literal felt
+// reaching a `salt` parameter is what CodeQL's
+// `rust/hard-coded-cryptographic-value` reports, the same reason the FFI tests
+// derive their fixtures (`crates/ffi/src/address.rs`).
+
+/// Owner key for the synthetic inspection cases.
+pub fn inspection_owner_key() -> Felt {
+    Felt::from(0x1234_5678u64)
+}
+
+/// A guardian key for the synthetic inspection cases.
+pub fn inspection_guardian_key() -> Felt {
+    Felt::from(0xdeadu64)
+}
+
+/// A salt that is neither the owner key nor zero: an account whose address is
+/// not a function of the seed.
+pub fn foreign_salt() -> Felt {
+    Felt::from(7u64)
+}
+
+/// The salt an Argent smart account gets from Argent's backend.
+pub fn server_assigned_salt() -> Felt {
+    Felt::from(99u64)
+}
+
+/// The zero salt: the legacy OpenZeppelin deployment variant.
+pub fn zero_salt() -> Felt {
+    Felt::ZERO
+}

@@ -12,14 +12,19 @@ use wasm_bindgen::prelude::*;
 /// - `deployment`: the class an account is deployed with. It fixes the
 ///   address, so it is the class to **derive from** when looking for an
 ///   account from a seed.
-/// - `implementation`: the class an account runs after upgrading. It is what
-///   `starknet_getClassHashAt` returns and what to **accept when signing**;
-///   it never fixes an address.
+/// - `implementation`: the class an account's address reports on chain
+///   (`starknet_getClassHashAt`) and what to **accept when signing**; it
+///   never fixes an address.
+/// - `proxy_target`: the class a proxy delegates to, named in the proxy's
+///   constructor calldata. It is code the account runs, but no address ever
+///   reports it, so a signing allowlist must not expect it. These are the
+///   values the Argent Cairo 0 proxy's `implementation` input takes.
 ///
 /// Braavos accounts are deployed with a base class and upgraded to an
 /// implementation class in the same transaction, so every Braavos account
 /// runs a different class than it was deployed with. Argent and OpenZeppelin
-/// classes play both roles.
+/// classes play both roles, including the Argent Cairo 0 proxy: an unupgraded
+/// Cairo 0 account reports the proxy's class hash, not its target's.
 ///
 /// # Returns
 /// JSON string: array of objects with fields:
@@ -27,7 +32,7 @@ use wasm_bindgen::prelude::*;
 /// - `classHash`: hex string
 /// - `version`: vendor release label (e.g. "1.2.0", "0.4.0", "proxy")
 /// - `label`: human-readable name
-/// - `roles`: array of "deployment" | "implementation"
+/// - `roles`: array of "deployment" | "implementation" | "proxy_target"
 /// - `constructor`: the class's calldata convention, or `null` for a class
 ///   that is never deployed with. An object with `shape` ("public_key" |
 ///   "argent_owner_guardian_felts" | "argent_signer_with_optional_guardian" |
@@ -37,6 +42,9 @@ use wasm_bindgen::prelude::*;
 ///   (constructor inputs a phrase cannot supply, e.g. `["guardian"]`). The
 ///   convention varies by version and by guardian presence and cannot be
 ///   inferred from the class hash, which is why it travels with the class.
+///   An `implementation` placeholder takes its values from this registry's
+///   `proxy_target` entries for the same family, so a template can be
+///   rendered from the registry alone.
 /// - `source`: URL of the public listing the entry was checked against
 ///
 /// # Example (JavaScript)
@@ -44,6 +52,8 @@ use wasm_bindgen::prelude::*;
 /// const registry = JSON.parse(getAccountClassRegistry());
 /// const deriveFrom = registry.filter(c => c.family === "braavos" && c.roles.includes("deployment"));
 /// const acceptWhenSigning = registry.filter(c => c.family === "braavos" && c.roles.includes("implementation"));
+/// // Values the Argent Cairo 0 proxy's `implementation` input takes:
+/// const proxyTargets = registry.filter(c => c.family === "argent" && c.roles.includes("proxy_target"));
 /// ```
 #[wasm_bindgen(js_name = "getAccountClassRegistry")]
 pub fn get_account_class_registry() -> Result<String, JsValue> {
@@ -59,7 +69,9 @@ pub fn get_account_class_registry() -> Result<String, JsValue> {
 /// reported as `not_from_seed` with the reason, so a recovery flow can tell
 /// "not discoverable from a phrase" apart from "no such account". Such an
 /// account is still verifiable: check that `address` is the account's and
-/// that `ownerPublicKey` is one of the seed's derived keys.
+/// that `ownerPublicKey` is one of the seed's derived keys. `guardianPublicKey`
+/// is the deploy-time guardian, which is the one that fixes the address; an
+/// account's current guardian can have changed since.
 ///
 /// Pass the class hash from the deploy transaction, not the class the account
 /// runs today: for an upgraded account the current class is an implementation
@@ -84,7 +96,8 @@ pub fn get_account_class_registry() -> Result<String, JsValue> {
 /// - `derivability`: "from_seed" | "not_from_seed" | "unknown_class"
 /// - `reason`: for `not_from_seed`, one of "guardian" | "non_starknet_owner" |
 ///   "salt_not_public_key" | "implementation_class" |
-///   "unexpected_constructor_calldata"; otherwise `null`
+///   "unknown_proxy_implementation" | "unexpected_constructor_calldata";
+///   otherwise `null`
 #[wasm_bindgen(js_name = "inspectAccountDeployment")]
 pub fn inspect_account_deployment(
     class_hash: &str,
@@ -122,6 +135,7 @@ fn reason_label(reason: NotDerivableReason) -> &'static str {
         NotDerivableReason::NonStarknetOwner => "non_starknet_owner",
         NotDerivableReason::SaltNotPublicKey => "salt_not_public_key",
         NotDerivableReason::ImplementationClass => "implementation_class",
+        NotDerivableReason::UnknownProxyImplementation => "unknown_proxy_implementation",
         NotDerivableReason::UnexpectedConstructorCalldata => "unexpected_constructor_calldata",
     }
 }

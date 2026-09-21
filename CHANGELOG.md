@@ -15,8 +15,14 @@ All notable changes to the published Rust crates are documented here.
   vendor listing it was checked against, and its constructor calldata
   convention as an object (`shape`, `fromSeed`, `withGuardian`,
   `inputsOutsideSeed`): the convention varies by class version and by whether
-  a guardian is set, and neither is inferable from the class hash. WASM:
-  `getAccountClassRegistry()`.
+  a guardian is set, and neither is inferable from the class hash. Roles are
+  `Deployment` (fixes the address), `Implementation` (what an account's
+  address reports on chain, to accept when signing) and `ProxyTarget` (a class
+  a proxy delegates to, which no address reports), listed by
+  `deployment_classes`, `implementation_classes` and `proxy_target_classes`.
+  The Argent Cairo 0 proxy is both a deployment and an implementation class,
+  since an unupgraded Cairo 0 account reports the proxy's hash; the classes it
+  delegates to are proxy targets. WASM: `getAccountClassRegistry()`.
 - Add the missing Braavos classes: the v1.0.0 base (deployment) class
   `BraavosAccount::BASE_CLASS_HASH_V100` and the v1.1.0 / v1.2.0 account
   implementations (`ACCOUNT_CLASS_HASH_V110`, `ACCOUNT_CLASS_HASH_V120`), with
@@ -32,7 +38,8 @@ All notable changes to the published Rust crates are documented here.
   `ArgentConstructorLayout::decode`. Given the `DEPLOY_ACCOUNT` fields of an
   account, they state whether a seed can reproduce it (`Derivability::FromSeed`)
   or why not (`Guardian`, `NonStarknetOwner`, `SaltNotPublicKey`,
-  `ImplementationClass`, `UnexpectedConstructorCalldata`). They return the
+  `ImplementationClass`, `UnknownProxyImplementation`,
+  `UnexpectedConstructorCalldata`). They return the
   address those fields fix and the owner and guardian keys they name, so
   recovery flows can tell "not discoverable from a phrase" apart from "no such
   account" and still verify an account by checking both. WASM:
@@ -66,6 +73,18 @@ All notable changes to the published Rust crates are documented here.
   only; `BraavosAccount::LEGACY_CLASS_HASH` is an implementation class and is
   no longer accepted for derive/deploy.
 
+### Fixed
+
+- `ArgentConstructorLayout::decode` validates each `Signer` variant's payload
+  and the trailing guardian option, instead of classifying an owner from its
+  variant tag alone. Truncated or over-long calldata (`[1]`, a half-written
+  `u256`, trailing felts) is now rejected as malformed rather than reported as
+  a non-Starknet owner, which is what the documented contract always claimed.
+- Guidance for verifying a guarded Argent account now points at the account's
+  `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
+  can have been changed or removed since deployment, and only the deploy-time
+  guardian reproduces the address.
+
 ### Security
 
 - The WASM `deriveBraavosAccountAddress` and the gateway/oracle Braavos paths
@@ -98,6 +117,18 @@ All notable changes to the published Rust crates are documented here.
   `deploy_oz_account_with_fee_ceiling`, and
   `StarknetGatewayBackend::with_deploy_fee_ceiling` to apply it. Existing APIs
   are unchanged and stay RPC-estimated when no ceiling is supplied.
+
+### Fixed
+
+- `ArgentConstructorLayout::decode` validates each `Signer` variant's payload
+  and the trailing guardian option, instead of classifying an owner from its
+  variant tag alone. Truncated or over-long calldata (`[1]`, a half-written
+  `u256`, trailing felts) is now rejected as malformed rather than reported as
+  a non-Starknet owner, which is what the documented contract always claimed.
+- Guidance for verifying a guarded Argent account now points at the account's
+  `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
+  can have been changed or removed since deployment, and only the deploy-time
+  guardian reproduces the address.
 
 ### Security
 
@@ -182,6 +213,18 @@ All notable changes to the published Rust crates are documented here.
   WASM APIs, including strict event, recipient, identifier, entropy, and
   nested-payload validation.
 
+### Fixed
+
+- `ArgentConstructorLayout::decode` validates each `Signer` variant's payload
+  and the trailing guardian option, instead of classifying an owner from its
+  variant tag alone. Truncated or over-long calldata (`[1]`, a half-written
+  `u256`, trailing felts) is now rejected as malformed rather than reported as
+  a non-Starknet owner, which is what the documented contract always claimed.
+- Guidance for verifying a guarded Argent account now points at the account's
+  `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
+  can have been changed or removed since deployment, and only the deploy-time
+  guardian reproduces the address.
+
 ### Security
 
 - Fix Argent account constructor calldata. The v0.4.0 layout now encodes the
@@ -220,6 +263,18 @@ All notable changes to the published Rust crates are documented here.
   returned from a match arm appeared to reach a `salt` argument.
 
 ## [0.7.0] - 2026-08-16
+
+### Fixed
+
+- `ArgentConstructorLayout::decode` validates each `Signer` variant's payload
+  and the trailing guardian option, instead of classifying an owner from its
+  variant tag alone. Truncated or over-long calldata (`[1]`, a half-written
+  `u256`, trailing felts) is now rejected as malformed rather than reported as
+  a non-Starknet owner, which is what the documented contract always claimed.
+- Guidance for verifying a guarded Argent account now points at the account's
+  `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
+  can have been changed or removed since deployment, and only the deploy-time
+  guardian reproduces the address.
 
 ### Security
 
@@ -290,6 +345,18 @@ This release consolidates every change merged after `0.5.4`. The previously prep
 - Keep `starknet-types-core` on a caret requirement (`"0.2.0"`) and rely on
   `Cargo.lock` + locked rustdoc JSON for semver checks (exact pins would break
   downstream resolution).
+
+### Fixed
+
+- `ArgentConstructorLayout::decode` validates each `Signer` variant's payload
+  and the trailing guardian option, instead of classifying an owner from its
+  variant tag alone. Truncated or over-long calldata (`[1]`, a half-written
+  `u256`, trailing felts) is now rejected as malformed rather than reported as
+  a non-Starknet owner, which is what the documented contract always claimed.
+- Guidance for verifying a guarded Argent account now points at the account's
+  `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
+  can have been changed or removed since deployment, and only the deploy-time
+  guardian reproduces the address.
 
 ### Security hardening
 
@@ -418,7 +485,19 @@ backlog from the full-repository audit (#46). Critical/High passes landed in
 - `Amount::to_human` no longer panics for `decimals >= 39`, where
   `10^decimals` overflows `u128`.
 
-#### Security / supply chain
+#### Fixed
+
+- `ArgentConstructorLayout::decode` validates each `Signer` variant's payload
+  and the trailing guardian option, instead of classifying an owner from its
+  variant tag alone. Truncated or over-long calldata (`[1]`, a half-written
+  `u256`, trailing felts) is now rejected as malformed rather than reported as
+  a non-Starknet owner, which is what the documented contract always claimed.
+- Guidance for verifying a guarded Argent account now points at the account's
+  `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
+  can have been changed or removed since deployment, and only the deploy-time
+  guardian reproduces the address.
+
+### Security / supply chain
 
 - The workspace-root `cargo-audit` ignore list is now empty; the ignores
   motivated by the workspace-excluded `krusty-kms-controller` crate moved to

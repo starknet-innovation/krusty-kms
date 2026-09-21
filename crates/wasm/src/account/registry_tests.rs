@@ -1,6 +1,9 @@
 //! Tests for the class registry, deployment inspection and the Braavos
 //! deployment-class checks (issue #146).
 
+use super::test_fixtures::{
+    ARGENT_GUARDIAN_KEY, ARGENT_OWNER_KEY, BRAAVOS_V100_ADDRESS, BRAAVOS_V100_OWNER_KEY,
+};
 use super::*;
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
@@ -22,8 +25,8 @@ fn js_error_message(error: JsValue) -> String {
 /// implementation class and must be refused, not derived from.
 #[wasm_bindgen_test]
 fn test_derive_braavos_account_address_uses_base_classes_only() {
-    let pk = "0x7829fdac0277b7dcd88e2ad2dad78a9eed97c323456a185a74e2d271b0d2163";
-    let expected = "0x23e1391f6130cfd5d20100cf96f55400ad9f2075d8a4373220d1e7ffdb50fa";
+    let pk = BRAAVOS_V100_OWNER_KEY;
+    let expected = BRAAVOS_V100_ADDRESS;
     let base_v100 = krusty_kms::BraavosAccount::BASE_CLASS_HASH_V100;
     assert_eq!(
         derive_braavos_account_address(pk, Some(base_v100.to_string())).unwrap(),
@@ -110,14 +113,26 @@ fn test_get_account_class_registry_labels_roles() {
         .as_str()
         .unwrap()
         .starts_with("https://"));
+
+    // An unupgraded Argent Cairo 0 account reports the proxy class, so the
+    // proxy is what a signing allowlist must accept; the classes behind it
+    // are proxy targets no address reports.
+    let proxy = find(krusty_kms::ArgentCairo0::PROXY_CLASS_HASH);
+    assert_eq!(
+        proxy["roles"],
+        serde_json::json!(["deployment", "implementation"])
+    );
+    let target = find(krusty_kms::ArgentCairo0::IMPL_CLASS_HASH_V024);
+    assert_eq!(target["roles"], serde_json::json!(["proxy_target"]));
+    assert!(target["constructor"].is_null());
 }
 
 /// A guardian blocks discovery, not verification: given the address and the
 /// guardian, the address reproduces from the seed key exactly.
 #[wasm_bindgen_test]
 fn test_derive_argent_account_address_with_guardian() {
-    let pk = "0x78936b8dc426c649fccf3a9a8022b9795bdcd558dfb83956d66a25ae76992df";
-    let guardian = "0x1234abcd";
+    let pk = ARGENT_OWNER_KEY;
+    let guardian = ARGENT_GUARDIAN_KEY;
     let guarded = derive_argent_account_address_with_guardian(pk, guardian, None).unwrap();
     assert_ne!(guarded, derive_argent_account_address(pk, None).unwrap());
     // Same as the raw formula with the Mainnet-observed (0, pk, 0, 0, guardian).
@@ -157,7 +172,7 @@ fn test_derive_argent_account_address_with_guardian() {
 #[wasm_bindgen_test]
 fn test_inspect_account_deployment_distinguishes_derivable_from_not() {
     // Issue #146 fixture: deployed with the v1.0.0 base, runs an implementation.
-    let pk = "0x7829fdac0277b7dcd88e2ad2dad78a9eed97c323456a185a74e2d271b0d2163";
+    let pk = BRAAVOS_V100_OWNER_KEY;
     let base_v100 = krusty_kms::BraavosAccount::BASE_CLASS_HASH_V100;
     let derivable: serde_json::Value = serde_json::from_str(
         &inspect_account_deployment(base_v100, pk, vec![pk.to_string()]).unwrap(),
@@ -165,11 +180,9 @@ fn test_inspect_account_deployment_distinguishes_derivable_from_not() {
     .unwrap();
     assert_eq!(derivable["derivability"], "from_seed");
     // The deploy fields bind to the real Mainnet account (issue #146).
-    assert_eq!(
-        derivable["address"],
-        "0x23e1391f6130cfd5d20100cf96f55400ad9f2075d8a4373220d1e7ffdb50fa"
-    );
+    assert_eq!(derivable["address"], BRAAVOS_V100_ADDRESS);
     assert_eq!(derivable["known"], true);
+    assert!(derivable["guardianPublicKey"].is_null());
     assert_eq!(derivable["class"]["family"], "braavos");
     assert_eq!(
         derivable["ownerPublicKey"],
@@ -188,6 +201,11 @@ fn test_inspect_account_deployment_distinguishes_derivable_from_not() {
     .unwrap();
     assert_eq!(current["derivability"], "not_from_seed");
     assert_eq!(current["reason"], "implementation_class");
+}
+
+#[wasm_bindgen_test]
+fn test_inspect_account_deployment_reports_guardians_and_unknown_targets() {
+    let pk = BRAAVOS_V100_OWNER_KEY;
 
     // Argent v0.4.0 with a Starknet guardian: exists, but not from a seed.
     let guarded: serde_json::Value = serde_json::from_str(
@@ -212,7 +230,6 @@ fn test_inspect_account_deployment_distinguishes_derivable_from_not() {
         format!("{:#x}", Felt::from_hex(pk).unwrap())
     );
     assert_eq!(guarded["guardianPublicKey"], "0x1234");
-    assert!(derivable["guardianPublicKey"].is_null());
 
     let unknown: serde_json::Value = serde_json::from_str(
         &inspect_account_deployment("0xabcd", pk, vec![pk.to_string()]).unwrap(),
@@ -221,4 +238,26 @@ fn test_inspect_account_deployment_distinguishes_derivable_from_not() {
     assert_eq!(unknown["derivability"], "unknown_class");
     assert_eq!(unknown["known"], false);
     assert!(unknown["class"].is_null());
+
+    // A known proxy pointing at an unknown implementation is not an unknown
+    // class: the state stays consistent (`known` true, its own reason).
+    let proxy_calldata = vec![
+        "0xabcd".to_string(),
+        format!("{:#x}", krusty_kms::ArgentCairo0::initialize_selector()),
+        "0x2".to_string(),
+        pk.to_string(),
+        "0x0".to_string(),
+    ];
+    let unknown_target: serde_json::Value = serde_json::from_str(
+        &inspect_account_deployment(
+            krusty_kms::ArgentCairo0::PROXY_CLASS_HASH,
+            pk,
+            proxy_calldata,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(unknown_target["known"], true);
+    assert_eq!(unknown_target["derivability"], "not_from_seed");
+    assert_eq!(unknown_target["reason"], "unknown_proxy_implementation");
 }

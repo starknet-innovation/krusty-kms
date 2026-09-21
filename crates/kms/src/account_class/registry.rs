@@ -7,9 +7,10 @@
 //! - a **deployment** class fixes the contract address. It is the
 //!   `class_hash` of the `DEPLOY_ACCOUNT` transaction and the only class an
 //!   address can be derived from;
-//! - an **implementation** class is what the account runs after upgrading. It
-//!   is what `starknet_getClassHashAt` returns today and what a signer must
-//!   accept, but it never fixes an address.
+//! - an **implementation** class is what the account's address reports on
+//!   chain (`starknet_getClassHashAt`) and what a signer must accept, but it
+//!   never fixes an address. A third role, **proxy target**, is the class a
+//!   proxy delegates to: code the account runs that no address ever reports.
 //!
 //! Braavos separates the two by design: every account deploys with a base
 //! class and upgrades itself to the account implementation inside the same
@@ -43,6 +44,9 @@ pub(crate) const DEPLOYMENT_AND_IMPLEMENTATION: &[ClassRole] =
 pub(crate) const DEPLOYMENT_ONLY: &[ClassRole] = &[ClassRole::Deployment];
 /// Implementation only: the class is upgraded to and never deployed with.
 pub(crate) const IMPLEMENTATION_ONLY: &[ClassRole] = &[ClassRole::Implementation];
+/// Proxy target only: the class runs behind a proxy and is never an account's
+/// own class hash on chain.
+pub(crate) const PROXY_TARGET_ONLY: &[ClassRole] = &[ClassRole::ProxyTarget];
 
 /// Account contract family a class belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -59,8 +63,14 @@ pub enum AccountFamily {
 pub enum ClassRole {
     /// The class an account is deployed with. Fixes the address; derive from it.
     Deployment,
-    /// The class an account runs after upgrading. Accept it when signing.
+    /// The class an account's address reports on chain
+    /// (`starknet_getClassHashAt`). Accept it when signing.
     Implementation,
+    /// The class a proxy delegates to, named in the proxy's constructor
+    /// calldata. It is code the account runs, but it is never the account's
+    /// own class hash, so an allowlist built for signing must not expect it:
+    /// an Argent Cairo 0 account reports its *proxy* class.
+    ProxyTarget,
 }
 
 /// A class hash this crate knows, with the role it plays.
@@ -110,9 +120,17 @@ impl KnownAccountClass {
         self.roles.contains(&ClassRole::Deployment)
     }
 
-    /// Whether accounts run this class after upgrading (accept it when signing).
+    /// Whether an account's address reports this class on chain (accept it
+    /// when signing). False for a proxy target, which no address reports.
     pub fn is_implementation_class(&self) -> bool {
         self.roles.contains(&ClassRole::Implementation)
+    }
+
+    /// Whether this class runs behind a proxy rather than as an account's own
+    /// class. These are the values the proxy's `implementation` constructor
+    /// input takes.
+    pub fn is_proxy_target(&self) -> bool {
+        self.roles.contains(&ClassRole::ProxyTarget)
     }
 }
 
@@ -148,11 +166,22 @@ pub fn deployment_classes(family: AccountFamily) -> Vec<KnownAccountClass> {
         .collect()
 }
 
-/// Classes accounts of `family` run today: accept these when signing.
+/// Classes an account of `family` can report on chain: accept these when
+/// signing. Excludes proxy targets, which no address reports; see
+/// [`proxy_target_classes`].
 pub fn implementation_classes(family: AccountFamily) -> Vec<KnownAccountClass> {
     known_account_classes()
         .into_iter()
         .filter(|class| class.family == family && class.is_implementation_class())
+        .collect()
+}
+
+/// Classes of `family` that run behind a proxy: the values the proxy's
+/// `implementation` constructor input takes.
+pub fn proxy_target_classes(family: AccountFamily) -> Vec<KnownAccountClass> {
+    known_account_classes()
+        .into_iter()
+        .filter(|class| class.family == family && class.is_proxy_target())
         .collect()
 }
 
@@ -194,129 +223,4 @@ fn argent_cairo1_classes() -> Vec<KnownAccountClass> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::account_class::ArgentConstructorLayout;
-    use std::collections::HashSet;
-
-    fn felt(hex: &str) -> Felt {
-        Felt::from_hex(hex).unwrap()
-    }
-
-    #[test]
-    fn every_class_hash_appears_once() {
-        let classes = known_account_classes();
-        let unique: HashSet<Felt> = classes.iter().map(|c| c.class_hash).collect();
-        assert_eq!(
-            unique.len(),
-            classes.len(),
-            "duplicate class hash in registry"
-        );
-    }
-
-    #[test]
-    fn every_entry_has_a_role_and_deployment_entries_have_a_constructor() {
-        for class in known_account_classes() {
-            assert!(!class.roles.is_empty(), "{} has no role", class.label);
-            assert_eq!(
-                class.constructor.is_some(),
-                class.is_deployment_class(),
-                "{}: constructor shape must be present exactly for deployment classes",
-                class.label
-            );
-            assert!(!class.source.is_empty(), "{} has no source", class.label);
-        }
-    }
-
-    #[test]
-    fn braavos_entries_separate_deployment_from_implementation() {
-        let base = lookup_account_class(&felt(BraavosAccount::BASE_CLASS_HASH_V100)).unwrap();
-        assert_eq!(base.family, AccountFamily::Braavos);
-        assert_eq!(base.roles, vec![ClassRole::Deployment]);
-        assert_eq!(base.constructor, Some(ConstructorShape::PublicKey));
-
-        let current = lookup_account_class(&felt(BraavosAccount::ACCOUNT_CLASS_HASH_V120)).unwrap();
-        assert_eq!(current.roles, vec![ClassRole::Implementation]);
-        assert_eq!(current.constructor, None);
-
-        assert_eq!(deployment_classes(AccountFamily::Braavos).len(), 2);
-        assert_eq!(implementation_classes(AccountFamily::Braavos).len(), 3);
-    }
-
-    #[test]
-    fn argent_cairo1_entries_play_both_roles_with_their_layout() {
-        let v040 = lookup_account_class(&felt(ArgentAccount::CLASS_HASH)).unwrap();
-        assert_eq!(v040.family, AccountFamily::Argent);
-        assert_eq!(v040.version, "0.4.0");
-        assert_eq!(v040.roles, DEPLOYMENT_AND_IMPLEMENTATION);
-        assert_eq!(
-            v040.constructor.and_then(ConstructorShape::argent_layout),
-            Some(ArgentConstructorLayout::SignerWithOptionalGuardian)
-        );
-
-        let v030 = lookup_account_class(&felt(ArgentAccount::CLASS_HASH_V030)).unwrap();
-        assert_eq!(
-            v030.constructor.and_then(ConstructorShape::argent_layout),
-            Some(ArgentConstructorLayout::OwnerGuardianFelts)
-        );
-    }
-
-    #[test]
-    fn argent_cairo0_proxy_is_the_only_cairo0_deployment_class() {
-        let proxy = lookup_account_class(&ArgentCairo0::proxy_class_hash()).unwrap();
-        assert_eq!(proxy.roles, vec![ClassRole::Deployment]);
-        assert_eq!(proxy.constructor, Some(ConstructorShape::ArgentCairo0Proxy));
-        for (implementation, _) in ArgentCairo0::known_implementations() {
-            let class = lookup_account_class(&implementation).unwrap();
-            assert_eq!(class.roles, vec![ClassRole::Implementation]);
-        }
-    }
-
-    #[test]
-    fn openzeppelin_manifest_class_is_registered() {
-        let oz: Vec<_> = known_account_classes()
-            .into_iter()
-            .filter(|c| c.family == AccountFamily::OpenZeppelin)
-            .collect();
-        assert!(!oz.is_empty(), "manifest classes must be in the registry");
-        assert!(oz
-            .iter()
-            .all(|c| c.constructor == Some(ConstructorShape::PublicKey)));
-    }
-
-    #[test]
-    fn unknown_class_hash_is_not_found() {
-        assert_eq!(lookup_account_class(&Felt::from(0xabcdu64)), None);
-    }
-
-    #[test]
-    fn json_uses_camel_case_fields_and_snake_case_values() {
-        let base = lookup_account_class(&felt(BraavosAccount::CLASS_HASH)).unwrap();
-        let json = serde_json::to_value(&base).unwrap();
-        assert_eq!(json["family"], "braavos");
-        assert_eq!(json["classHash"], format!("{:#x}", base.class_hash));
-        assert_eq!(json["roles"], serde_json::json!(["deployment"]));
-        assert_eq!(
-            json["constructor"],
-            serde_json::json!({
-                "shape": "public_key",
-                "fromSeed": "[public_key]",
-                "withGuardian": null,
-                "inputsOutsideSeed": [],
-            })
-        );
-        assert!(json.get("class_hash").is_none());
-
-        let v040 = lookup_account_class(&felt(ArgentAccount::CLASS_HASH)).unwrap();
-        let json = serde_json::to_value(&v040).unwrap();
-        assert_eq!(
-            json["constructor"],
-            serde_json::json!({
-                "shape": "argent_signer_with_optional_guardian",
-                "fromSeed": "[0, owner, 1]",
-                "withGuardian": "[0, owner, 0, 0, guardian]",
-                "inputsOutsideSeed": ["guardian"],
-            })
-        );
-    }
-}
+mod tests;

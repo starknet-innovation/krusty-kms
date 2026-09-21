@@ -8,8 +8,10 @@
 //!   the constructor calldata and so of the address, and not derived from the
 //!   seed.
 //! - **Verification** (phrase plus a known address: is this mine?): possible
-//!   for those same accounts. The deploy transaction, or the account itself,
-//!   gives the guardian, and the address reproduces exactly.
+//!   for those same accounts. The guardian in the account's `DEPLOY_ACCOUNT`
+//!   calldata reproduces the address exactly. It must come from that
+//!   transaction: an account's current guardian can have been changed or
+//!   removed since, and a changed one no longer reproduces the address.
 //!
 //! A recovery flow that cannot tell "not discoverable from a phrase" apart
 //! from "no such account" tells users their funds are gone.
@@ -29,8 +31,9 @@ use starknet_types_core::felt::Felt;
 pub enum NotDerivableReason {
     /// The constructor binds a guardian. It is per-account and not derived
     /// from the seed, so discovery cannot enumerate the address; given the
-    /// address, the guardian is readable on chain and
-    /// [`crate::ArgentAccount::calculate_address_with_guardian`] reproduces it.
+    /// deploy calldata's guardian (not the account's current one, which can
+    /// have changed), [`crate::ArgentAccount::calculate_address_with_guardian`]
+    /// reproduces it.
     Guardian,
     /// The owner is not a Starknet-curve signer (Argent v0.4.0+ Secp256k1,
     /// Secp256r1, EIP-191 or WebAuthn owner).
@@ -42,6 +45,11 @@ pub enum NotDerivableReason {
     /// runs, never what fixed its address. Inspect the `DEPLOY_ACCOUNT`
     /// class hash instead of the current one.
     ImplementationClass,
+    /// An Argent Cairo 0 proxy pointing at an implementation this crate does
+    /// not know. The address is a function of the seed key in principle, but
+    /// discovery only tries the known implementations, so it will not find
+    /// this account.
+    UnknownProxyImplementation,
     /// The constructor calldata does not match the class's known layout.
     UnexpectedConstructorCalldata,
 }
@@ -56,7 +64,8 @@ pub enum Derivability {
     /// Discovery cannot enumerate it; verification against a known address
     /// may still succeed (see [`DeploymentInspection::owner_public_key`]).
     NotFromSeed(NotDerivableReason),
-    /// The class hash is not in the registry, so nothing can be said.
+    /// The deployment class hash is not in the registry, so nothing can be
+    /// said. [`DeploymentInspection::class`] is `None` in this case.
     UnknownClass,
 }
 
@@ -251,9 +260,13 @@ fn inspect_argent_cairo0_proxy(
         );
     }
     if !ArgentCairo0::is_known_implementation(implementation) {
-        // Derivable in principle, but discovery only tries the known
-        // implementations, so it would not find this account.
-        return DeploymentInspection::unknown_class(Some(class));
+        // The proxy class *is* known; its target is not. Discovery only tries
+        // the known implementations, so it would not find this account.
+        return DeploymentInspection::not_from_seed(
+            class,
+            Some(*owner),
+            NotDerivableReason::UnknownProxyImplementation,
+        );
     }
     if *guardian != Felt::ZERO {
         return DeploymentInspection::guarded(class, *owner, Some(*guardian));

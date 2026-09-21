@@ -316,7 +316,7 @@ pub use argent_cairo0::ArgentCairo0;
 pub use inspect::{inspect_deployment, DeploymentInspection, Derivability, NotDerivableReason};
 pub use registry::{
     deployment_classes, implementation_classes, known_account_classes, lookup_account_class,
-    AccountFamily, ClassRole, ConstructorShape, KnownAccountClass,
+    proxy_target_classes, AccountFamily, ClassRole, ConstructorShape, KnownAccountClass,
 };
 
 #[cfg(test)]

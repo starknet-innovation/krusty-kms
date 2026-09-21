@@ -1,5 +1,8 @@
 //! `inspect_deployment`: derivability verdicts for concrete deployments.
 
+use crate::vectors::{
+    foreign_salt, inspection_guardian_key, inspection_owner_key, server_assigned_salt, zero_salt,
+};
 use krusty_kms::{
     inspect_deployment, AccountClass, ArgentAccount, ArgentCairo0, BraavosAccount, Derivability,
     NotDerivableReason, OpenZeppelinAccount,
@@ -12,7 +15,7 @@ fn felt(hex: &str) -> Felt {
 }
 
 fn pk() -> Felt {
-    Felt::from(0x1234_5678u64)
+    inspection_owner_key()
 }
 
 #[test]
@@ -41,7 +44,7 @@ fn braavos_implementation_class_is_never_a_deployment() {
 #[test]
 fn braavos_salt_other_than_public_key_is_not_from_seed() {
     let base = felt(BraavosAccount::CLASS_HASH);
-    let inspection = inspect_deployment(&base, &Felt::from(7u64), &[pk()]);
+    let inspection = inspect_deployment(&base, &foreign_salt(), &[pk()]);
     assert_eq!(
         inspection.derivability,
         Derivability::NotFromSeed(NotDerivableReason::SaltNotPublicKey)
@@ -64,11 +67,11 @@ fn openzeppelin_accepts_public_key_or_zero_salt() {
         Derivability::FromSeed
     );
     assert_eq!(
-        inspect_deployment(&oz, &Felt::ZERO, &[pk()]).derivability,
+        inspect_deployment(&oz, &zero_salt(), &[pk()]).derivability,
         Derivability::FromSeed
     );
     assert_eq!(
-        inspect_deployment(&oz, &Felt::from(7u64), &[pk()]).derivability,
+        inspect_deployment(&oz, &foreign_salt(), &[pk()]).derivability,
         Derivability::NotFromSeed(NotDerivableReason::SaltNotPublicKey)
     );
 }
@@ -76,7 +79,7 @@ fn openzeppelin_accepts_public_key_or_zero_salt() {
 #[test]
 fn argent_v040_guardian_and_owner_kind_decide_derivability() {
     let v040 = felt(ArgentAccount::CLASS_HASH);
-    let guardian = Felt::from(0xdeadu64);
+    let guardian = inspection_guardian_key();
 
     let plain = inspect_deployment(&v040, &pk(), &[Felt::ZERO, pk(), Felt::ONE]);
     assert_eq!(plain.derivability, Derivability::FromSeed);
@@ -107,7 +110,11 @@ fn argent_v040_guardian_and_owner_kind_decide_derivability() {
     );
 
     // Server-assigned salt (Argent smart account).
-    let salted = inspect_deployment(&v040, &Felt::from(99u64), &[Felt::ZERO, pk(), Felt::ONE]);
+    let salted = inspect_deployment(
+        &v040,
+        &server_assigned_salt(),
+        &[Felt::ZERO, pk(), Felt::ONE],
+    );
     assert_eq!(
         salted.derivability,
         Derivability::NotFromSeed(NotDerivableReason::SaltNotPublicKey)
@@ -155,10 +162,17 @@ fn argent_cairo0_proxy_follows_implementation_and_guardian() {
     );
     assert_eq!(guarded.guardian_public_key, Some(Felt::from(9u64)));
 
+    // The proxy is known; the class it delegates to is not, so discovery
+    // would not find this account even though its address is a function of
+    // the owner key. That is its own reason, not "unknown class".
     let unknown_impl = ArgentCairo0::constructor_calldata(&Felt::from(0xabcdu64), &pk());
     let unknown = inspect_deployment(&proxy, &pk(), &unknown_impl);
-    assert_eq!(unknown.derivability, Derivability::UnknownClass);
+    assert_eq!(
+        unknown.derivability,
+        Derivability::NotFromSeed(NotDerivableReason::UnknownProxyImplementation)
+    );
     assert!(unknown.class.is_some(), "the proxy itself is recognised");
+    assert_eq!(unknown.owner_public_key, Some(pk()));
 
     assert_eq!(
         inspect_deployment(&proxy, &pk(), &[pk()]).derivability,

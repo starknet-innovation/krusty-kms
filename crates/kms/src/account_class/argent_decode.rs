@@ -70,194 +70,126 @@ fn decode_owner_guardian_felts(calldata: &[Felt]) -> Result<DecodedArgentConstru
 }
 
 fn decode_signer_with_optional_guardian(calldata: &[Felt]) -> Result<DecodedArgentConstructor> {
-    let Some((owner_variant, rest)) = calldata.split_first() else {
-        return Err(malformed("empty"));
+    let (owner_tag, rest) = calldata.split_first().ok_or_else(|| malformed("empty"))?;
+    let (owner, after_owner) = split_signer(owner_tag, rest, "owner")?;
+    let guardian = split_optional_signer(after_owner)?;
+
+    let Signer::Starknet(owner_key) = owner else {
+        // A non-Starknet owner settles derivability on its own; the guardian
+        // is validated above but its key is not reported.
+        return Ok(DecodedArgentConstructor::NonStarknetOwner {
+            variant: owner.variant(),
+        });
     };
-    if *owner_variant != Felt::ZERO {
-        // Non-Starknet owner payloads vary in length, so the guardian cannot
-        // be located; the owner kind alone settles derivability.
-        return match small_u8(owner_variant) {
-            Some(variant @ 1..=4) => Ok(DecodedArgentConstructor::NonStarknetOwner { variant }),
-            _ => Err(malformed("owner tag is not a Signer variant")),
-        };
+    if owner_key == Felt::ZERO {
+        return Err(malformed("owner is zero"));
     }
-    let decoded = match rest {
-        // Signer::Starknet(owner), Option::None
-        [owner, tag] if *tag == Felt::ONE => {
-            DecodedArgentConstructor::StarknetOwnerNoGuardian { owner: *owner }
+    Ok(match guardian {
+        None => DecodedArgentConstructor::StarknetOwnerNoGuardian { owner: owner_key },
+        // StarknetSigner.pubkey is NonZero: the constructor rejects a zero key.
+        Some(Signer::Starknet(key)) if key == Felt::ZERO => {
+            return Err(malformed("guardian key is zero"))
         }
-        // Signer::Starknet(owner), Option::Some(Signer::Starknet(guardian))
-        [owner, tag, variant, guardian] if *tag == Felt::ZERO && *variant == Felt::ZERO => {
-            DecodedArgentConstructor::StarknetOwnerWithGuardian {
-                owner: *owner,
-                guardian: Some(*guardian),
-            }
+        Some(Signer::Starknet(key)) => DecodedArgentConstructor::StarknetOwnerWithGuardian {
+            owner: owner_key,
+            guardian: Some(key),
+        },
+        Some(_) => DecodedArgentConstructor::StarknetOwnerWithGuardian {
+            owner: owner_key,
+            guardian: None,
+        },
+    })
+}
+
+/// A `Signer` as far as this decoder reads it: the Starknet variant carries
+/// its key, the others only their variant index.
+enum Signer {
+    Starknet(Felt),
+    Other(u8),
+}
+
+impl Signer {
+    fn variant(&self) -> u8 {
+        match self {
+            Self::Starknet(_) => 0,
+            Self::Other(variant) => *variant,
         }
-        // Signer::Starknet(owner), Option::Some(<other signer>): the payload
-        // length varies by signer type, so the guardian key is not recovered.
-        [owner, tag, variant, _payload, ..]
-            if *tag == Felt::ZERO && matches!(small_u8(variant), Some(1..=4)) =>
-        {
-            DecodedArgentConstructor::StarknetOwnerWithGuardian {
-                owner: *owner,
-                guardian: None,
-            }
-        }
-        _ => {
-            return Err(malformed(
-                "expected [0, owner, 1] or [0, owner, 0, guardian...]",
-            ))
-        }
-    };
-    match decoded {
-        DecodedArgentConstructor::StarknetOwnerNoGuardian { owner }
-        | DecodedArgentConstructor::StarknetOwnerWithGuardian { owner, .. }
-            if owner == Felt::ZERO =>
-        {
-            Err(malformed("owner is zero"))
-        }
-        // StarknetSigner.pubkey is NonZero: the constructor rejects this.
-        DecodedArgentConstructor::StarknetOwnerWithGuardian {
-            guardian: Some(guardian),
-            ..
-        } if guardian == Felt::ZERO => Err(malformed("guardian key is zero")),
-        other => Ok(other),
     }
 }
 
-/// The felt as a `u8`, if it fits.
-fn small_u8(felt: &Felt) -> Option<u8> {
+/// Split one serialised `Signer` (variant tag already taken) off the front of
+/// `payload`, returning it and the felts that follow.
+///
+/// Payload widths are those of Argent's `Signer` variants: `StarknetSigner`
+/// one felt, `Secp256k1Signer` and `Eip191Signer` one felt each (an
+/// `EthAddress`), `Secp256r1Signer` two (a `u256`), and `WebauthnSigner` a
+/// length-prefixed `origin` followed by two `u256`s.
+fn split_signer<'a>(tag: &Felt, payload: &'a [Felt], what: &str) -> Result<(Signer, &'a [Felt])> {
+    let variant = small_usize(tag)
+        .and_then(|variant| u8::try_from(variant).ok())
+        .ok_or_else(|| malformed(&format!("{what} tag is not a Signer variant")))?;
+    let width = match variant {
+        // Starknet pubkey; Secp256k1 / Eip191 EthAddress.
+        0 | 1 | 3 => 1,
+        // Secp256r1 pubkey: a u256.
+        2 => 2,
+        // Webauthn: origin (Span<u8>, length-prefixed), rp_id_hash, pubkey.
+        4 => {
+            let origin_len = payload
+                .first()
+                .and_then(small_usize)
+                .ok_or_else(|| malformed(&format!("{what} webauthn origin length")))?;
+            origin_len
+                .checked_add(5)
+                .ok_or_else(|| malformed(&format!("{what} webauthn origin length")))?
+        }
+        _ => return Err(malformed(&format!("{what} tag is not a Signer variant"))),
+    };
+    if payload.len() < width {
+        return Err(malformed(&format!("{what} payload is truncated")));
+    }
+    let (payload, rest) = payload.split_at(width);
+    let signer = if variant == 0 {
+        Signer::Starknet(payload[0])
+    } else {
+        Signer::Other(variant)
+    };
+    Ok((signer, rest))
+}
+
+/// Read the trailing `Option<Signer>` guardian, which must consume the rest of
+/// the calldata exactly.
+fn split_optional_signer(calldata: &[Felt]) -> Result<Option<Signer>> {
+    let (tag, rest) = calldata
+        .split_first()
+        .ok_or_else(|| malformed("guardian option is missing"))?;
+    let (guardian, rest) = if *tag == Felt::ONE {
+        (None, rest)
+    } else if *tag == Felt::ZERO {
+        let (tag, payload) = rest
+            .split_first()
+            .ok_or_else(|| malformed("guardian signer is missing"))?;
+        let (signer, rest) = split_signer(tag, payload, "guardian")?;
+        (Some(signer), rest)
+    } else {
+        return Err(malformed("guardian option tag is not 0 or 1"));
+    };
+    if !rest.is_empty() {
+        return Err(malformed("trailing felts after the guardian"));
+    }
+    Ok(guardian)
+}
+
+/// The felt as a `usize`, if it fits.
+fn small_usize(felt: &Felt) -> Option<usize> {
     let bytes = felt.to_bytes_be();
-    bytes[..31].iter().all(|b| *b == 0).then_some(bytes[31])
+    if bytes[..24].iter().any(|byte| *byte != 0) {
+        return None;
+    }
+    let mut tail = [0u8; 8];
+    tail.copy_from_slice(&bytes[24..]);
+    usize::try_from(u64::from_be_bytes(tail)).ok()
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const LAYOUTS: [ArgentConstructorLayout; 2] = [
-        ArgentConstructorLayout::OwnerGuardianFelts,
-        ArgentConstructorLayout::SignerWithOptionalGuardian,
-    ];
-
-    #[test]
-    fn test_decode_round_trips_the_guardian_less_calldata() {
-        let pk = Felt::from(42u64);
-        for layout in LAYOUTS {
-            assert_eq!(
-                layout.decode(&layout.constructor_calldata(&pk)).unwrap(),
-                DecodedArgentConstructor::StarknetOwnerNoGuardian { owner: pk }
-            );
-        }
-    }
-
-    #[test]
-    fn test_decode_round_trips_the_guardian_calldata() {
-        let pk = Felt::from(42u64);
-        let guardian = Felt::from(7u64);
-        for layout in LAYOUTS {
-            let calldata = layout.constructor_calldata_with_guardian(&pk, &guardian);
-            assert_eq!(
-                layout.decode(&calldata).unwrap(),
-                DecodedArgentConstructor::StarknetOwnerWithGuardian {
-                    owner: pk,
-                    guardian: Some(guardian),
-                },
-                "{layout:?}"
-            );
-        }
-        // The v0.4.0+ shape observed on Mainnet: (0, pk, 0, 0, guardian).
-        assert_eq!(
-            ArgentConstructorLayout::SignerWithOptionalGuardian
-                .constructor_calldata_with_guardian(&pk, &guardian),
-            vec![Felt::ZERO, pk, Felt::ZERO, Felt::ZERO, guardian]
-        );
-    }
-
-    /// A zero guardian is "no guardian" on every layout, as `get_guardian`
-    /// reports it. On v0.4.0+ a literal `[0, pk, 0, 0, 0]` is undeployable
-    /// (`NonZero` guardian key), so the builder must never emit it.
-    #[test]
-    fn test_zero_guardian_is_the_guardian_less_calldata() {
-        let pk = Felt::from(42u64);
-        for layout in LAYOUTS {
-            let calldata = layout.constructor_calldata_with_guardian(&pk, &Felt::ZERO);
-            assert_eq!(calldata, layout.constructor_calldata(&pk), "{layout:?}");
-            assert_eq!(
-                layout.decode(&calldata).unwrap(),
-                DecodedArgentConstructor::StarknetOwnerNoGuardian { owner: pk }
-            );
-        }
-    }
-
-    #[test]
-    fn test_decode_reports_foreign_signers() {
-        let pk = Felt::from(42u64);
-        // Signer::Secp256r1 owner: variant 2, u256 payload.
-        assert_eq!(
-            ArgentConstructorLayout::SignerWithOptionalGuardian
-                .decode(&[Felt::TWO, Felt::ONE, Felt::ONE, Felt::ONE])
-                .unwrap(),
-            DecodedArgentConstructor::NonStarknetOwner { variant: 2 }
-        );
-        // Starknet owner, Secp256r1 guardian: the guardian key is not a felt.
-        assert_eq!(
-            ArgentConstructorLayout::SignerWithOptionalGuardian
-                .decode(&[Felt::ZERO, pk, Felt::ZERO, Felt::TWO, Felt::ONE, Felt::ONE])
-                .unwrap(),
-            DecodedArgentConstructor::StarknetOwnerWithGuardian {
-                owner: pk,
-                guardian: None,
-            }
-        );
-    }
-
-    #[test]
-    fn test_decode_rejects_calldata_no_layout_accepts() {
-        let pk = Felt::from(42u64);
-        let cases: [(ArgentConstructorLayout, &[Felt]); 9] = [
-            (ArgentConstructorLayout::OwnerGuardianFelts, &[pk]),
-            (
-                ArgentConstructorLayout::OwnerGuardianFelts,
-                &[Felt::ZERO, Felt::ZERO],
-            ),
-            (ArgentConstructorLayout::SignerWithOptionalGuardian, &[]),
-            // The historical `[0, pk, 0]`: a Some tag with no payload.
-            (
-                ArgentConstructorLayout::SignerWithOptionalGuardian,
-                &[Felt::ZERO, pk, Felt::ZERO],
-            ),
-            (
-                ArgentConstructorLayout::SignerWithOptionalGuardian,
-                &[Felt::ZERO, Felt::ZERO, Felt::ONE],
-            ),
-            // Variant 9 is not a Signer, as owner or as guardian.
-            (
-                ArgentConstructorLayout::SignerWithOptionalGuardian,
-                &[Felt::from(9u64), pk, Felt::ONE],
-            ),
-            (
-                ArgentConstructorLayout::SignerWithOptionalGuardian,
-                &[Felt::ZERO, pk, Felt::ZERO, Felt::from(9u64), Felt::ONE],
-            ),
-            // A Starknet guardian with no key.
-            (
-                ArgentConstructorLayout::SignerWithOptionalGuardian,
-                &[Felt::ZERO, pk, Felt::ZERO, Felt::ZERO],
-            ),
-            // A Starknet guardian whose key is zero: `NonZero` rejects it.
-            (
-                ArgentConstructorLayout::SignerWithOptionalGuardian,
-                &[Felt::ZERO, pk, Felt::ZERO, Felt::ZERO, Felt::ZERO],
-            ),
-        ];
-        for (layout, calldata) in cases {
-            match layout.decode(calldata) {
-                Err(KmsError::DeserializationError(msg)) => {
-                    assert!(msg.contains("Argent constructor calldata"), "{msg}")
-                }
-                other => panic!("{layout:?} {calldata:?}: expected rejection, got {other:?}"),
-            }
-        }
-    }
-}
+mod tests;

@@ -2,16 +2,18 @@
 //! implementation class and initialised with the owner key and a guardian.
 //!
 //! The proxy is the **deployment** class: it fixes the address, with the
-//! implementation class hash as the first constructor argument. The
-//! implementation classes are what those accounts run (until they upgrade to
-//! a Cairo 1 class) and are never deployed with directly.
+//! implementation class hash as the first constructor argument. It is also
+//! the **implementation** class in the registry's sense: an unupgraded Cairo 0
+//! account reports the proxy's class hash on chain, so a signing allowlist
+//! must accept it. The classes the proxy delegates to are **proxy targets**:
+//! code the account runs that `starknet_getClassHashAt` never returns.
 //!
 //! Class hashes and version labels come from Argent X's own account
 //! constants (see [`super::ARGENT_X_CONSTANTS_SOURCE`]).
 
 use super::registry::{
-    AccountFamily, ConstructorShape, KnownAccountClass, ARGENT_X_CONSTANTS_SOURCE, DEPLOYMENT_ONLY,
-    IMPLEMENTATION_ONLY,
+    AccountFamily, ConstructorShape, KnownAccountClass, ARGENT_X_CONSTANTS_SOURCE,
+    DEPLOYMENT_AND_IMPLEMENTATION, PROXY_TARGET_ONLY,
 };
 use starknet_types_core::felt::Felt;
 
@@ -79,7 +81,8 @@ impl ArgentCairo0 {
     /// Proxy constructor calldata with a guardian key (zero for none):
     /// `[implementation, selector("initialize"), 2, public_key, guardian]`.
     /// A non-zero guardian is not derived from the seed; this shape verifies
-    /// a known account rather than enumerating candidates.
+    /// a known account, using the guardian from its `DEPLOY_ACCOUNT` calldata
+    /// rather than the account's current one, which can have changed.
     pub fn constructor_calldata_with_guardian(
         implementation: &Felt,
         public_key: &Felt,
@@ -94,15 +97,16 @@ impl ArgentCairo0 {
         ]
     }
 
-    /// Registry entries: the proxy as deployment class, the implementations
-    /// as implementation classes.
+    /// Registry entries: the proxy as deployment *and* implementation class
+    /// (it is what an unupgraded account reports), the classes it delegates
+    /// to as proxy targets.
     pub fn known_classes() -> Vec<KnownAccountClass> {
         let mut classes = vec![KnownAccountClass::new(
             AccountFamily::Argent,
             Self::proxy_class_hash(),
             "proxy",
             "Argent Cairo 0 proxy",
-            DEPLOYMENT_ONLY,
+            DEPLOYMENT_AND_IMPLEMENTATION,
             Some(ConstructorShape::ArgentCairo0Proxy),
             ARGENT_X_CONSTANTS_SOURCE,
         )];
@@ -114,8 +118,8 @@ impl ArgentCairo0 {
                         AccountFamily::Argent,
                         class_hash,
                         version,
-                        &format!("Argent Cairo 0 account v{version}"),
-                        IMPLEMENTATION_ONLY,
+                        &format!("Argent Cairo 0 account v{version} (behind the proxy)"),
+                        PROXY_TARGET_ONLY,
                         None,
                         ARGENT_X_CONSTANTS_SOURCE,
                     )
@@ -180,9 +184,16 @@ mod tests {
         assert_eq!(
             classes
                 .iter()
-                .filter(|c| c.roles == [ClassRole::Deployment])
+                .filter(|c| c.roles.contains(&ClassRole::Deployment))
                 .count(),
             1
+        );
+        assert_eq!(
+            classes
+                .iter()
+                .filter(|c| c.roles == [ClassRole::ProxyTarget])
+                .count(),
+            4
         );
     }
 }

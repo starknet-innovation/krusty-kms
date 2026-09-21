@@ -52,12 +52,14 @@ impl ArgentConstructorLayout {
     ///
     /// The guardian is per-account and not derived from the seed, so this
     /// shape cannot be enumerated by discovery. It verifies an account whose
-    /// address is already known: read the guardian from the account (or its
-    /// deploy transaction) and compare the reproduced address.
+    /// address is already known: take the guardian from that account's
+    /// `DEPLOY_ACCOUNT` calldata and compare the reproduced address. Only the
+    /// deploy-time guardian fixes the address; an account's current guardian
+    /// can have been changed or removed since, and reproduces nothing.
     ///
-    /// A zero guardian means "no guardian", as `get_guardian` reports it, and
-    /// yields [`Self::constructor_calldata`]. v0.4.0+ guardians are
-    /// `NonZero`, so a literal `[0, owner, 0, 0, 0]` could never deploy.
+    /// A zero guardian means "no guardian" and yields
+    /// [`Self::constructor_calldata`]. v0.4.0+ guardians are `NonZero`, so a
+    /// literal `[0, owner, 0, 0, 0]` could never deploy.
     pub fn constructor_calldata_with_guardian(
         self,
         public_key: &Felt,
@@ -213,8 +215,8 @@ impl ArgentAccount {
     /// calldata per [`ArgentConstructorLayout::constructor_calldata_with_guardian`].
     ///
     /// Discovery cannot produce this address (the guardian is not in the
-    /// seed); use it to verify an account whose address and guardian are
-    /// known. A zero guardian gives the guardian-less address.
+    /// seed); use it to verify an account whose address and deploy-time
+    /// guardian are known. A zero guardian gives the guardian-less address.
     pub fn calculate_address_with_guardian(
         &self,
         public_key: &Felt,

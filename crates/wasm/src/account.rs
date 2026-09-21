@@ -13,6 +13,8 @@ mod wasm_account;
 #[cfg(test)]
 mod registry_tests;
 #[cfg(test)]
+mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 pub use addresses::{

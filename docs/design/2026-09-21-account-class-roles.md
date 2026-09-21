@@ -86,8 +86,20 @@ are gone.
   WASM exposes it as `inspectAccountDeployment`. The derive helpers answer
   "where would this key's account be" (discovery); the inspector and the
   guardian builder answer "is this known account mine" (verification).
-- **Zero guardian.** A zero guardian means no guardian on every layout, as
-  `get_guardian` reports it, and yields the guardian-less calldata. v0.4.0+
+- **Proxy targets are a third role.** An unupgraded Argent Cairo 0 account
+  reports its *proxy* class hash on chain, not the class the proxy delegates
+  to. Labelling those targets `Implementation` would have produced a signing
+  allowlist that rejects valid Cairo 0 accounts while accepting hashes no RPC
+  returns. The proxy is `Deployment` + `Implementation`; its targets are
+  `ProxyTarget`, listed by `proxy_target_classes` and named as the values a
+  template's `implementation` placeholder takes.
+- **Decoding is exact.** `decode` validates every `Signer` variant's payload
+  width (Starknet, Secp256k1 and EIP-191 one felt, Secp256r1 two, WebAuthn a
+  length-prefixed origin plus four) and requires the trailing guardian option
+  to consume the calldata exactly. Anything else is malformed, so the verdict
+  never rests on a tag the constructor would have rejected.
+- **Zero guardian.** A zero guardian means no guardian on every layout and
+  yields the guardian-less calldata. v0.4.0+
   guardian keys are `NonZero`, so a literal `[0, owner, 0, 0, 0]` could never
   deploy; the builder never emits it and the decoder rejects it.
 - **Discovery tables.** All candidate classes come from the registry
@@ -137,6 +149,13 @@ Class hashes and roles, as published by the vendors:
 6. The gateway allowlist refuses a Braavos implementation class with or
    without `allow_unlisted_class_hash`, on its own, not only through class
    resolution.
+7. `implementation_classes(Argent)` contains the Cairo 0 proxy and no proxy
+   target, so a signing allowlist built from it accepts what an unupgraded
+   Cairo 0 account reports.
+8. A proxy pointing at an unknown implementation is
+   `NotFromSeed(UnknownProxyImplementation)` with the proxy still reported,
+   never `UnknownClass`, which is reserved for a class hash absent from the
+   registry.
 
 ## Alternatives considered
 
@@ -154,6 +173,17 @@ Class hashes and roles, as published by the vendors:
   an unknown hash fed there is wrong by construction. Rejected, matching the
   Argent precedent; `calculateContractAddress` remains for explicit derivation.
 
+## Review follow-ups
+
+Automated review on the PR raised four things, all taken:
+the Cairo 0 proxy role above; the decoder's tag-only classification;
+`UnknownClass` being returned with a known proxy attached, which made the WASM
+output say `known: true` alongside `unknown_class`; and guidance that read a
+guardian from the live account rather than the deploy transaction. CodeQL's
+hard-coded-salt alerts are addressed by deriving candidate salts from
+`SaltPolicy` and moving test fixtures into their own modules, as
+`crates/ffi/src/address.rs` already does.
+
 ## Surface and baselines
 
 New WASM exports `getAccountClassRegistry`, `inspectAccountDeployment` and
@@ -163,5 +193,7 @@ hashes. `account_class.rs` ratchets down (520 → 504 lines) as Braavos moves
 to `account_class/braavos.rs`, with the registry, constructor convention,
 inspector, Argent decode and Cairo 0 table each in their own module under the
 soft limit;
-`generate_candidates` leaves the function-size baseline. No baseline grows.
+`generate_candidates` leaves the function-size baseline. No baseline grows,
+and the registry and decoder keep their tests in sibling `tests.rs` files to
+stay under the soft limit.
 FFI is unchanged; a C/Swift/Dart registry surface is a follow-up.
