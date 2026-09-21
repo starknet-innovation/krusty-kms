@@ -270,6 +270,11 @@ fn braavos_v100_deployment_is_derivable_from_seed() {
     let inspection = inspect_deployment(&deploy_class, &pubk, &[pubk]);
     assert_eq!(inspection.derivability, Derivability::FromSeed);
     assert_eq!(inspection.owner_public_key, Some(pubk));
+    // The fields bind to the real Mainnet account.
+    assert_eq!(
+        inspection.address,
+        Felt::from_hex(BRAAVOS_V100_ACCOUNT_ADDRESS).unwrap()
+    );
     assert_eq!(inspection.class.unwrap().version, "1.0.0");
 
     let current = Felt::from_hex(BRAAVOS_V100_CURRENT_CLASS_HASH).unwrap();

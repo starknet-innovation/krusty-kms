@@ -141,6 +141,14 @@ fn test_derive_argent_account_address_with_guardian() {
         derive_argent_account_address_with_guardian(pk, guardian, Some(v031.to_string())).unwrap(),
         calculate_contract_address(pk, v031, vec![pk.into(), guardian.into()], "0x0").unwrap()
     );
+    // A zero guardian is "no guardian" on every class, never the undeployable
+    // literal [0, pk, 0, 0, 0] on v0.4.0+.
+    for class_hash in [None, Some(v031.to_string())] {
+        assert_eq!(
+            derive_argent_account_address_with_guardian(pk, "0x0", class_hash.clone()).unwrap(),
+            derive_argent_account_address(pk, class_hash).unwrap()
+        );
+    }
     let err = derive_argent_account_address_with_guardian(pk, guardian, Some("0xabcd".to_string()))
         .expect_err("unknown Argent class hash must be rejected");
     assert!(js_error_message(err).contains("unknown Argent class hash"));
@@ -156,6 +164,11 @@ fn test_inspect_account_deployment_distinguishes_derivable_from_not() {
     )
     .unwrap();
     assert_eq!(derivable["derivability"], "from_seed");
+    // The deploy fields bind to the real Mainnet account (issue #146).
+    assert_eq!(
+        derivable["address"],
+        "0x23e1391f6130cfd5d20100cf96f55400ad9f2075d8a4373220d1e7ffdb50fa"
+    );
     assert_eq!(derivable["known"], true);
     assert_eq!(derivable["class"]["family"], "braavos");
     assert_eq!(

@@ -58,9 +58,8 @@ pub fn get_account_class_registry() -> Result<String, JsValue> {
 /// Argent guardian, a non-Starknet owner, a server-assigned salt) is
 /// reported as `not_from_seed` with the reason, so a recovery flow can tell
 /// "not discoverable from a phrase" apart from "no such account". Such an
-/// account is still verifiable: `ownerPublicKey` is the key to compare with
-/// the seed's derived keys, and `guardianPublicKey` (with
-/// `deriveArgentAccountAddressWithGuardian`) reproduces the address.
+/// account is still verifiable: check that `address` is the account's and
+/// that `ownerPublicKey` is one of the seed's derived keys.
 ///
 /// Pass the class hash from the deploy transaction, not the class the account
 /// runs today: for an upgraded account the current class is an implementation
@@ -73,6 +72,10 @@ pub fn get_account_class_registry() -> Result<String, JsValue> {
 ///
 /// # Returns
 /// JSON string with fields:
+/// - `address`: the address these fields fix (deployer zero). Compare it with
+///   the account being checked before trusting anything else in the result:
+///   the fields are usually an RPC response, and fields that do not hash to
+///   the account say nothing about it
 /// - `known`: whether the class hash is in the registry
 /// - `class`: the registry entry (see `getAccountClassRegistry`), or `null`
 /// - `ownerPublicKey`: the Stark key the constructor binds as owner, or `null`
@@ -102,6 +105,7 @@ pub fn inspect_account_deployment(
         Derivability::UnknownClass => ("unknown_class", None),
     };
     let json = serde_json::json!({
+        "address": format!("{:#x}", inspection.address),
         "known": inspection.class.is_some(),
         "class": inspection.class,
         "ownerPublicKey": inspection.owner_public_key.map(|key| format!("{key:#x}")),

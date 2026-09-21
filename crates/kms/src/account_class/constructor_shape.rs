@@ -115,39 +115,88 @@ mod tests {
     use crate::account_class::ArgentCairo0;
     use starknet_types_core::felt::Felt;
 
-    /// The published templates and the calldata builders agree on shape: same
-    /// element count, guardian-less template ends in the `None` marker.
+    /// Render a published template into felts, token by token. Any token the
+    /// renderer does not know fails the test, so a template cannot drift into
+    /// a shape the builders do not produce.
+    fn render(template: &str, owner: Felt, guardian: Felt, implementation: Felt) -> Vec<Felt> {
+        let inner = template
+            .strip_prefix('[')
+            .and_then(|t| t.strip_suffix(']'))
+            .unwrap_or_else(|| panic!("template is not bracketed: {template}"));
+        inner
+            .split(", ")
+            .map(|token| match token {
+                "public_key" | "owner" => owner,
+                "guardian" => guardian,
+                "implementation" => implementation,
+                "selector(\"initialize\")" => ArgentCairo0::initialize_selector(),
+                number => Felt::from(
+                    number
+                        .parse::<u64>()
+                        .unwrap_or_else(|_| panic!("unknown template token {number:?}")),
+                ),
+            })
+            .collect()
+    }
+
+    /// Every published template renders to exactly what the matching builder
+    /// emits, element for element.
     #[test]
     fn calldata_templates_match_the_builders() {
         let pk = Felt::from(42u64);
         let guardian = Felt::from(7u64);
-        let felts = |template: &str| template.matches(',').count() + 1;
+        let implementation = Felt::from(3u64);
         for shape in [
             ConstructorShape::ArgentOwnerGuardianFelts,
             ConstructorShape::ArgentSignerWithOptionalGuardian,
         ] {
             let layout = shape.argent_layout().unwrap();
             assert_eq!(
-                felts(shape.seed_calldata()),
-                layout.constructor_calldata(&pk).len(),
+                render(shape.seed_calldata(), pk, guardian, implementation),
+                layout.constructor_calldata(&pk),
                 "{shape:?} seed template"
             );
             assert_eq!(
-                felts(shape.guardian_calldata().unwrap()),
-                layout
-                    .constructor_calldata_with_guardian(&pk, &guardian)
-                    .len(),
+                render(
+                    shape.guardian_calldata().unwrap(),
+                    pk,
+                    guardian,
+                    implementation
+                ),
+                layout.constructor_calldata_with_guardian(&pk, &guardian),
                 "{shape:?} guardian template"
             );
             assert_eq!(shape.inputs_outside_seed(), ["guardian"]);
         }
-        assert_eq!(felts(ConstructorShape::PublicKey.seed_calldata()), 1);
-        assert_eq!(ConstructorShape::PublicKey.guardian_calldata(), None);
-        assert!(ConstructorShape::PublicKey.inputs_outside_seed().is_empty());
-        let proxy_impl = Felt::from(3u64);
+
+        let proxy = ConstructorShape::ArgentCairo0Proxy;
         assert_eq!(
-            felts(ConstructorShape::ArgentCairo0Proxy.seed_calldata()),
-            ArgentCairo0::constructor_calldata(&proxy_impl, &pk).len()
+            render(proxy.seed_calldata(), pk, guardian, implementation),
+            ArgentCairo0::constructor_calldata(&implementation, &pk)
         );
+        assert_eq!(
+            render(
+                proxy.guardian_calldata().unwrap(),
+                pk,
+                guardian,
+                implementation
+            ),
+            ArgentCairo0::constructor_calldata_with_guardian(&implementation, &pk, &guardian)
+        );
+        assert_eq!(proxy.inputs_outside_seed(), ["guardian"]);
+
+        let public_key = ConstructorShape::PublicKey;
+        assert_eq!(
+            render(public_key.seed_calldata(), pk, guardian, implementation),
+            vec![pk]
+        );
+        assert_eq!(public_key.guardian_calldata(), None);
+        assert!(public_key.inputs_outside_seed().is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "unknown template token")]
+    fn render_rejects_unknown_tokens() {
+        render("[owner, guardan]", Felt::ONE, Felt::TWO, Felt::THREE);
     }
 }

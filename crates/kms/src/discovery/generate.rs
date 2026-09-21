@@ -3,15 +3,15 @@
 use super::types::{CandidateAccount, DerivationType, DerivedKeypair, WalletType};
 use super::MAX_DISCOVERY_INDEX;
 use crate::account::calculate_contract_address;
-use crate::account_class::{AccountClass, ArgentAccount, ArgentCairo0, BraavosAccount, SaltPolicy};
+use crate::account_class::{
+    deployment_classes, AccountClass, AccountFamily, ArgentAccount, ArgentCairo0,
+    ArgentConstructorLayout, BraavosAccount, KnownAccountClass, SaltPolicy,
+};
 use crate::derivation::{derive_argent_legacy_private_key, derive_private_key_with_coin_type};
 use crate::mnemonic::validate_mnemonic;
 use crate::stark_signing::stark_public_key;
 use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::felt::Felt;
-
-/// OpenZeppelin v3.0.0 class hash (identical on Mainnet and Sepolia).
-const OZ_V300: &str = "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381";
 
 /// Starknet coin type for BIP-44 derivation (SNIP-44).
 const STARKNET_COIN_TYPE: u32 = 9004;
@@ -113,15 +113,45 @@ impl DerivedKey<'_> {
     }
 }
 
+/// The class tables discovery derives from, resolved once per scan rather
+/// than once per index. Every table comes from the class registry, so a
+/// deployment [`crate::inspect_deployment`] calls derivable from a seed is
+/// one this scan generates.
+struct DiscoveryClasses {
+    braavos: Vec<KnownAccountClass>,
+    open_zeppelin: Vec<KnownAccountClass>,
+    argent: Vec<(Felt, &'static str, ArgentConstructorLayout)>,
+    argent_cairo0: Vec<(Felt, &'static str)>,
+}
+
+impl DiscoveryClasses {
+    fn load() -> Self {
+        // The default preset leads, so the first Argent candidate of every
+        // index is the address earlier releases returned (callers that read
+        // the first address per wallet type keep getting it).
+        let default_argent = ArgentAccount::new().class_hash();
+        let mut argent = ArgentAccount::known_classes();
+        argent.sort_by_key(|(class_hash, _, _)| *class_hash != default_argent);
+        Self {
+            // Current base class first, for the same reason.
+            braavos: deployment_classes(AccountFamily::Braavos),
+            open_zeppelin: deployment_classes(AccountFamily::OpenZeppelin),
+            argent,
+            argent_cairo0: ArgentCairo0::known_implementations(),
+        }
+    }
+}
+
 /// Braavos: one candidate per base (deployment) class. Braavos accounts
 /// upgrade to an implementation class in their deploy transaction, so the
 /// class an account runs today never fixed its address and is not a
 /// candidate; the registry keeps the two apart.
-fn push_braavos_candidates(out: &mut Vec<CandidateAccount>, key: &DerivedKey<'_>) -> Result<()> {
-    for class in BraavosAccount::known_classes()
-        .into_iter()
-        .filter(|class| class.is_deployment_class())
-    {
+fn push_braavos_candidates(
+    out: &mut Vec<CandidateAccount>,
+    classes: &DiscoveryClasses,
+    key: &DerivedKey<'_>,
+) -> Result<()> {
+    for class in &classes.braavos {
         let address = BraavosAccount::with_class_hash(class.class_hash)
             .calculate_address(key.public_key, SaltPolicy::PublicKey)?;
         out.push(key.candidate(
@@ -139,29 +169,41 @@ fn push_braavos_candidates(out: &mut Vec<CandidateAccount>, key: &DerivedKey<'_>
 /// deployed with is not knowable from the seed, so all of them are tried.
 fn push_argent_cairo1_candidates(
     out: &mut Vec<CandidateAccount>,
+    classes: &DiscoveryClasses,
     wallet_type: WalletType,
     key: &DerivedKey<'_>,
 ) -> Result<()> {
-    for (class_hash, version, layout) in ArgentAccount::known_classes() {
-        let address = ArgentAccount::with_class_hash_and_layout(class_hash, layout)
+    for (class_hash, version, layout) in &classes.argent {
+        let address = ArgentAccount::with_class_hash_and_layout(*class_hash, *layout)
             .calculate_address(key.public_key, SaltPolicy::PublicKey)?;
-        out.push(key.candidate(wallet_type, &class_hash, &address, version));
+        out.push(key.candidate(wallet_type, class_hash, &address, version));
     }
     Ok(())
 }
 
-/// OpenZeppelin v3.0.0 under both salt policies. The deploy/gateway flows
-/// default to salt = public key (`SaltPolicy::PublicKey`), so recovery must
-/// cover that variant or it misses accounts this project deployed itself;
-/// salt = 0 is kept for externally-deployed OZ accounts.
-fn push_oz_candidates(out: &mut Vec<CandidateAccount>, key: &DerivedKey<'_>) -> Result<()> {
-    let oz_hash = Felt::from_hex(OZ_V300).expect("static OpenZeppelin class hash");
-    for (salt, version) in [
-        (*key.public_key, "v3.0.0 salt-pubkey"),
-        (Felt::ZERO, "v3.0.0"),
-    ] {
-        let address = calculate_contract_address(&salt, &oz_hash, &[*key.public_key], &Felt::ZERO)?;
-        out.push(key.candidate(WalletType::OpenZeppelin, &oz_hash, &address, version));
+/// OpenZeppelin, every manifest class under both salt policies. The
+/// deploy/gateway flows default to salt = public key (`SaltPolicy::PublicKey`),
+/// so recovery must cover that variant or it misses accounts this project
+/// deployed itself; salt = 0 is kept for externally-deployed OZ accounts.
+fn push_oz_candidates(
+    out: &mut Vec<CandidateAccount>,
+    classes: &DiscoveryClasses,
+    key: &DerivedKey<'_>,
+) -> Result<()> {
+    for class in &classes.open_zeppelin {
+        let pk = *key.public_key;
+        for (salt, label) in [
+            (pk, format!("v{} salt-pubkey", class.version)),
+            (Felt::ZERO, format!("v{}", class.version)),
+        ] {
+            let address = calculate_contract_address(&salt, &class.class_hash, &[pk], &Felt::ZERO)?;
+            out.push(key.candidate(
+                WalletType::OpenZeppelin,
+                &class.class_hash,
+                &address,
+                &label,
+            ));
+        }
     }
     Ok(())
 }
@@ -170,11 +212,12 @@ fn push_oz_candidates(out: &mut Vec<CandidateAccount>, key: &DerivedKey<'_>) -> 
 /// implementation, initialised with the owner key and no guardian.
 fn push_argent_cairo0_candidates(
     out: &mut Vec<CandidateAccount>,
+    classes: &DiscoveryClasses,
     key: &DerivedKey<'_>,
 ) -> Result<()> {
     let proxy = ArgentCairo0::proxy_class_hash();
-    for (implementation, version) in ArgentCairo0::known_implementations() {
-        let calldata = ArgentCairo0::constructor_calldata(&implementation, key.public_key);
+    for (implementation, version) in &classes.argent_cairo0 {
+        let calldata = ArgentCairo0::constructor_calldata(implementation, key.public_key);
         let address = calculate_contract_address(key.public_key, &proxy, &calldata, &Felt::ZERO)?;
         out.push(key.candidate(
             WalletType::ArgentCairo0,
@@ -198,6 +241,10 @@ fn push_argent_cairo0_candidates(
 /// - **OpenZeppelin**: direct derivation, OZ v3.0.0 with both salt policies
 ///   (salt = public key matching this project's deploy flow, and salt = 0)
 ///
+/// Within each wallet type the default class comes first (Argent v0.4.0, the
+/// current Braavos base), so the first candidate per type is the address
+/// earlier releases returned.
+///
 /// Every candidate assumes a guardian-less deployment salted with the public
 /// key. An account deployed with a guardian, a non-Starknet owner or a
 /// server-assigned salt exists on chain but is not among these candidates;
@@ -211,6 +258,7 @@ fn push_argent_cairo0_candidates(
 pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<CandidateAccount>> {
     validate_discovery_inputs(mnemonic, max_index)?;
 
+    let classes = DiscoveryClasses::load();
     let mut candidates = Vec::new();
 
     for index in 0..max_index {
@@ -225,9 +273,9 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
             index,
             path: &direct_path,
         };
-        push_braavos_candidates(&mut candidates, &direct)?;
-        push_argent_cairo1_candidates(&mut candidates, WalletType::Argent, &direct)?;
-        push_oz_candidates(&mut candidates, &direct)?;
+        push_braavos_candidates(&mut candidates, &classes, &direct)?;
+        push_argent_cairo1_candidates(&mut candidates, &classes, WalletType::Argent, &direct)?;
+        push_oz_candidates(&mut candidates, &classes, &direct)?;
 
         // (b) Legacy double derivation — old Argent
         let legacy_pk = derive_argent_legacy_private_key(mnemonic, index, 0)?;
@@ -239,8 +287,13 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
             index,
             path: &legacy_path,
         };
-        push_argent_cairo1_candidates(&mut candidates, WalletType::ArgentLegacy, &legacy)?;
-        push_argent_cairo0_candidates(&mut candidates, &legacy)?;
+        push_argent_cairo1_candidates(
+            &mut candidates,
+            &classes,
+            WalletType::ArgentLegacy,
+            &legacy,
+        )?;
+        push_argent_cairo0_candidates(&mut candidates, &classes, &legacy)?;
     }
 
     Ok(candidates)

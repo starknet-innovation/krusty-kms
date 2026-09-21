@@ -134,17 +134,9 @@ pub(crate) fn enforce_class_hash_allowlist(
     chain_id: ChainId,
     allow_unlisted: bool,
 ) -> GatewayResult<()> {
-    if allow_unlisted {
-        return Ok(());
-    }
-
-    let allowed = known_class_hashes(kind, chain_id);
-    if allowed.contains(&class_hash) {
-        return Ok(());
-    }
-
     // A Braavos implementation class is not "unlisted": it is known, and known
-    // never to fix an address. No override helps; say what does.
+    // never to fix an address. It is refused before the override so the check
+    // holds for every caller; no override helps, so say what does.
     if kind == AccountClassKind::Braavos
         && BraavosAccount::is_implementation_class_hash(&class_hash)
     {
@@ -156,6 +148,15 @@ pub(crate) fn enforce_class_hash_allowlist(
                  addresses are fixed by a base (deployment) class, use one of those"
             )),
         ));
+    }
+
+    if allow_unlisted {
+        return Ok(());
+    }
+
+    let allowed = known_class_hashes(kind, chain_id);
+    if allowed.contains(&class_hash) {
+        return Ok(());
     }
 
     // Argent resolution needs a known constructor layout, so the override

@@ -217,3 +217,46 @@ fn test_argent_direct_candidates_cover_every_known_class() {
         );
     }
 }
+
+/// Discovery grew from one candidate per wallet type to several. Callers that
+/// read the first address per type (the compact WASM view, `find` by wallet
+/// type) must keep getting the address earlier releases returned alone:
+/// the default preset or current base, under the same key scheme.
+#[test]
+fn test_first_candidate_of_each_wallet_type_is_unchanged() {
+    use crate::account_class::{AccountClass, ArgentAccount, BraavosAccount, SaltPolicy};
+    use starknet_types_core::felt::Felt;
+
+    let candidates = generate_candidates(TEST_MNEMONIC, 2).unwrap();
+    for index in 0..2 {
+        let first = |wallet_type: WalletType| {
+            candidates
+                .iter()
+                .find(|c| c.wallet_type == wallet_type && c.derivation_index == index)
+                .unwrap_or_else(|| panic!("no {wallet_type:?} candidate at {index}"))
+        };
+        let expect = |wallet_type: WalletType, account: &dyn AccountClass| {
+            let candidate = first(wallet_type);
+            let pk = Felt::from_hex(&candidate.public_key).unwrap();
+            let expected = account
+                .calculate_address(&pk, SaltPolicy::PublicKey)
+                .unwrap();
+            assert_eq!(
+                candidate.address,
+                format!("{expected:#x}"),
+                "{wallet_type:?} @ {index}"
+            );
+        };
+        expect(WalletType::Braavos, &BraavosAccount::new());
+        expect(WalletType::Argent, &ArgentAccount::new());
+        expect(WalletType::ArgentLegacy, &ArgentAccount::new());
+        assert_eq!(
+            first(WalletType::OpenZeppelin).class_version,
+            "v3.0.0 salt-pubkey"
+        );
+        assert_eq!(
+            first(WalletType::ArgentCairo0).class_version,
+            "proxy+v0.2.4"
+        );
+    }
+}

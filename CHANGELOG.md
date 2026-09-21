@@ -32,9 +32,10 @@ All notable changes to the published Rust crates are documented here.
   `ArgentConstructorLayout::decode`. Given the `DEPLOY_ACCOUNT` fields of an
   account, they state whether a seed can reproduce it (`Derivability::FromSeed`)
   or why not (`Guardian`, `NonStarknetOwner`, `SaltNotPublicKey`,
-  `ImplementationClass`, `UnexpectedConstructorCalldata`), and return the
-  owner and guardian keys, so recovery flows can tell "not discoverable from a
-  phrase" apart from "no such account" and still verify ownership. WASM:
+  `ImplementationClass`, `UnexpectedConstructorCalldata`). They return the
+  address those fields fix and the owner and guardian keys they name, so
+  recovery flows can tell "not discoverable from a phrase" apart from "no such
+  account" and still verify an account by checking both. WASM:
   `inspectAccountDeployment()`.
 - Add the guardian form of the Argent constructor:
   `ArgentConstructorLayout::constructor_calldata_with_guardian`,
@@ -43,7 +44,9 @@ All notable changes to the published Rust crates are documented here.
   v0.3.x, `[0, owner, 0, 0, guardian]` for v0.4.0+). A guardian is
   per-account and not in the seed, so discovery cannot enumerate these
   addresses; once an address is known, its guardian is readable on chain and
-  the address reproduces exactly. WASM: `deriveArgentAccountAddressWithGuardian()`.
+  the address reproduces exactly. A zero guardian means no guardian, as the
+  account's `get_guardian` reports it, and gives the guardian-less address.
+  WASM: `deriveArgentAccountAddressWithGuardian()`.
 
 ### Changed
 
@@ -53,9 +56,12 @@ All notable changes to the published Rust crates are documented here.
   (`0.2.4`, `0.2.3`, `0.2.2`, `0.2.1`); the former `0.2.0` key, which held the
   proxy hash a second time, is removed. The export is superseded by
   `getAccountClassRegistry()`.
-- `generate_candidates` returns 16 candidates per index (was 11). Braavos
-  candidates carry `class_version` `"base v1.1.0"` / `"base v1.0.0"` (was
-  `"base"`).
+- `generate_candidates` returns 16 candidates per index (was 11). The first
+  candidate of each wallet type is the address earlier releases returned: the
+  default Argent preset and the current Braavos base lead their groups.
+  OpenZeppelin candidates now come from the class registry (the embedded
+  manifest) rather than a separate constant. Braavos candidates carry
+  `class_version` `"base v1.1.0"` / `"base v1.0.0"` (was `"base"`).
 - The gateway/oracle Braavos allowlist holds the base (deployment) classes
   only; `BraavosAccount::LEGACY_CLASS_HASH` is an implementation class and is
   no longer accepted for derive/deploy.

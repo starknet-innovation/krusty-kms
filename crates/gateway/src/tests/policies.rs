@@ -252,3 +252,29 @@ fn braavos_unknown_class_hash_still_honours_the_override() {
         .expect("override admits an unknown Braavos class hash");
     assert_eq!(resolved.class_hash(), Felt::from_hex("0xdeadbeef").unwrap());
 }
+
+#[test]
+fn allowlist_refuses_braavos_implementation_classes_on_its_own() {
+    // The check must hold for any caller of the allowlist, not only through
+    // resolve_account_class, so the override cannot waive it here either.
+    for hash in BraavosAccount::implementation_class_hashes() {
+        for allow_unlisted in [false, true] {
+            let err = enforce_class_hash_allowlist(
+                hash,
+                AccountClassKind::Braavos,
+                ChainId::Sepolia,
+                allow_unlisted,
+            )
+            .expect_err("implementation class must be refused");
+            assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+        }
+    }
+    // The override still admits an unknown Braavos class hash.
+    assert!(enforce_class_hash_allowlist(
+        Felt::from_hex("0xdeadbeef").unwrap(),
+        AccountClassKind::Braavos,
+        ChainId::Sepolia,
+        true,
+    )
+    .is_ok());
+}

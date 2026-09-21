@@ -80,10 +80,21 @@ are gone.
   `DEPLOY_ACCOUNT` fields and returns `FromSeed`, `NotFromSeed(reason)` with
   `Guardian | NonStarknetOwner | SaltNotPublicKey | ImplementationClass |
   UnexpectedConstructorCalldata`, or `UnknownClass`, plus the owner and
-  guardian public keys. WASM exposes it as `inspectAccountDeployment`. The
-  derive helpers answer "where would this key's account be" (discovery); the
-  inspector and the guardian builder answer "is this known account mine"
-  (verification).
+  guardian public keys and the address the fields fix. The fields are
+  untrusted (usually an RPC response), so that address is what binds them to
+  an account; a caller verifies by checking the address and the owner key.
+  WASM exposes it as `inspectAccountDeployment`. The derive helpers answer
+  "where would this key's account be" (discovery); the inspector and the
+  guardian builder answer "is this known account mine" (verification).
+- **Zero guardian.** A zero guardian means no guardian on every layout, as
+  `get_guardian` reports it, and yields the guardian-less calldata. v0.4.0+
+  guardian keys are `NonZero`, so a literal `[0, owner, 0, 0, 0]` could never
+  deploy; the builder never emits it and the decoder rejects it.
+- **Discovery tables.** All candidate classes come from the registry
+  (OpenZeppelin included, instead of a separate constant), so anything the
+  inspector calls derivable is generated. Tables load once per scan. The
+  default class leads each wallet type so the first candidate per type is
+  unchanged from earlier releases.
 
 Class hashes and roles, as published by the vendors:
 
@@ -107,18 +118,25 @@ Class hashes and roles, as published by the vendors:
    implementation-only and `try_with_class_hash` rejects it.
 3. `generate_candidates` yields 16 candidates per index: 2 Braavos (one per
    base class), 4 Argent, 4 Argent legacy, 4 Argent Cairo 0, 2 OpenZeppelin.
-   No implementation class is a candidate.
+   No implementation class is a candidate. The first candidate per wallet
+   type equals the default preset's (or current base's) address.
 4. `decode(constructor_calldata(pk)) == StarknetOwnerNoGuardian { pk }` and
    `decode(constructor_calldata_with_guardian(pk, g)) ==
    StarknetOwnerWithGuardian { pk, Some(g) }` for both layouts, the latter
    producing the Mainnet-observed `[0, pk, 0, 0, g]` / `[pk, g]`;
-   `[0, pk, 0]` (the historical broken shape) is rejected. The published
-   templates have the same element count as the builders' output.
+   `[0, pk, 0]` (the historical broken shape) and `[0, pk, 0, 0, 0]` (zero
+   guardian key) are rejected, and a zero guardian builds the guardian-less
+   calldata. Every published template renders, token by token, to exactly
+   the builders' output.
 5. `inspect_deployment` says `FromSeed` for the fixture's deploy fields and
    `NotFromSeed(ImplementationClass)` for its current class; a guardian gives
    `NotFromSeed(Guardian)` with both keys returned, and
    `calculate_address_with_guardian` reproduces that deployment's address
-   while the guardian-less derivation does not.
+   while the guardian-less derivation does not. The inspected address of the
+   issue's deploy fields is the real Mainnet account.
+6. The gateway allowlist refuses a Braavos implementation class with or
+   without `allow_unlisted_class_hash`, on its own, not only through class
+   resolution.
 
 ## Alternatives considered
 

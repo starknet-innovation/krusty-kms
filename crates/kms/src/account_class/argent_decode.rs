@@ -116,6 +116,11 @@ fn decode_signer_with_optional_guardian(calldata: &[Felt]) -> Result<DecodedArge
         {
             Err(malformed("owner is zero"))
         }
+        // StarknetSigner.pubkey is NonZero: the constructor rejects this.
+        DecodedArgentConstructor::StarknetOwnerWithGuardian {
+            guardian: Some(guardian),
+            ..
+        } if guardian == Felt::ZERO => Err(malformed("guardian key is zero")),
         other => Ok(other),
     }
 }
@@ -169,6 +174,22 @@ mod tests {
         );
     }
 
+    /// A zero guardian is "no guardian" on every layout, as `get_guardian`
+    /// reports it. On v0.4.0+ a literal `[0, pk, 0, 0, 0]` is undeployable
+    /// (`NonZero` guardian key), so the builder must never emit it.
+    #[test]
+    fn test_zero_guardian_is_the_guardian_less_calldata() {
+        let pk = Felt::from(42u64);
+        for layout in LAYOUTS {
+            let calldata = layout.constructor_calldata_with_guardian(&pk, &Felt::ZERO);
+            assert_eq!(calldata, layout.constructor_calldata(&pk), "{layout:?}");
+            assert_eq!(
+                layout.decode(&calldata).unwrap(),
+                DecodedArgentConstructor::StarknetOwnerNoGuardian { owner: pk }
+            );
+        }
+    }
+
     #[test]
     fn test_decode_reports_foreign_signers() {
         let pk = Felt::from(42u64);
@@ -194,7 +215,7 @@ mod tests {
     #[test]
     fn test_decode_rejects_calldata_no_layout_accepts() {
         let pk = Felt::from(42u64);
-        let cases: [(ArgentConstructorLayout, &[Felt]); 8] = [
+        let cases: [(ArgentConstructorLayout, &[Felt]); 9] = [
             (ArgentConstructorLayout::OwnerGuardianFelts, &[pk]),
             (
                 ArgentConstructorLayout::OwnerGuardianFelts,
@@ -223,6 +244,11 @@ mod tests {
             (
                 ArgentConstructorLayout::SignerWithOptionalGuardian,
                 &[Felt::ZERO, pk, Felt::ZERO, Felt::ZERO],
+            ),
+            // A Starknet guardian whose key is zero: `NonZero` rejects it.
+            (
+                ArgentConstructorLayout::SignerWithOptionalGuardian,
+                &[Felt::ZERO, pk, Felt::ZERO, Felt::ZERO, Felt::ZERO],
             ),
         ];
         for (layout, calldata) in cases {

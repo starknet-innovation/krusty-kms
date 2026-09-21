@@ -192,7 +192,9 @@ fn argent_guardian_address_is_verifiable_but_not_discoverable() {
 
         // The builder produces the on-chain shape and the address follows.
         assert_eq!(
-            argent.build_constructor_calldata_with_guardian(&pubk, &guardian),
+            argent
+                .constructor_layout()
+                .constructor_calldata_with_guardian(&pubk, &guardian),
             raw_calldata
         );
         let guarded = argent
@@ -213,6 +215,7 @@ fn argent_guardian_address_is_verifiable_but_not_discoverable() {
         // Inspecting the deploy fields says why discovery misses it and
         // returns the keys needed to verify it anyway.
         let inspection = inspect_deployment(&class, &pubk, &raw_calldata);
+        assert_eq!(inspection.address, guarded, "the fields fix this address");
         assert_eq!(
             inspection.derivability,
             Derivability::NotFromSeed(NotDerivableReason::Guardian)

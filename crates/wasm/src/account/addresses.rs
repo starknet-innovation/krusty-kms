@@ -100,7 +100,9 @@ pub fn derive_argent_account_address(
 ///
 /// # Arguments
 /// * `public_key` - The owner's Stark public key (hex string)
-/// * `guardian_public_key` - The guardian's Stark public key (hex string)
+/// * `guardian_public_key` - The guardian's Stark public key (hex string).
+///   `"0x0"` means no guardian, as the account's `get_guardian` reports it,
+///   and gives the same address as `deriveArgentAccountAddress`
 /// * `class_hash` - Optional class hash, as for `deriveArgentAccountAddress`
 ///
 /// # Returns

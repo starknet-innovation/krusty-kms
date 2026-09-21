@@ -54,16 +54,20 @@ impl ArgentConstructorLayout {
     /// shape cannot be enumerated by discovery. It verifies an account whose
     /// address is already known: read the guardian from the account (or its
     /// deploy transaction) and compare the reproduced address.
+    ///
+    /// A zero guardian means "no guardian", as `get_guardian` reports it, and
+    /// yields [`Self::constructor_calldata`]. v0.4.0+ guardians are
+    /// `NonZero`, so a literal `[0, owner, 0, 0, 0]` could never deploy.
     pub fn constructor_calldata_with_guardian(
         self,
         public_key: &Felt,
         guardian: &Felt,
     ) -> Vec<Felt> {
         match self {
+            _ if *guardian == Felt::ZERO => self.constructor_calldata(public_key),
             Self::OwnerGuardianFelts => vec![*public_key, *guardian],
+            // Some(Signer::Starknet(g)): Option tag 0, Signer variant 0, key.
             Self::SignerWithOptionalGuardian => {
-                // Some(Signer::Starknet(g)) is the Option tag 0, the Signer
-                // variant 0, then the key.
                 vec![Felt::ZERO, *public_key, Felt::ZERO, Felt::ZERO, *guardian]
             }
         }
@@ -204,29 +208,21 @@ impl ArgentAccount {
         self.layout
     }
 
-    /// Constructor calldata for `public_key` as owner and a Starknet-key
-    /// `guardian`; see [`ArgentConstructorLayout::constructor_calldata_with_guardian`].
-    pub fn build_constructor_calldata_with_guardian(
-        &self,
-        public_key: &Felt,
-        guardian: &Felt,
-    ) -> Vec<Felt> {
-        self.layout
-            .constructor_calldata_with_guardian(public_key, guardian)
-    }
-
     /// Address of an account deployed with `public_key` as owner and a
-    /// Starknet-key `guardian`, salted with the public key as Argent does.
+    /// Starknet-key `guardian`, salted with the public key as Argent does;
+    /// calldata per [`ArgentConstructorLayout::constructor_calldata_with_guardian`].
     ///
     /// Discovery cannot produce this address (the guardian is not in the
     /// seed); use it to verify an account whose address and guardian are
-    /// known.
+    /// known. A zero guardian gives the guardian-less address.
     pub fn calculate_address_with_guardian(
         &self,
         public_key: &Felt,
         guardian: &Felt,
     ) -> Result<Felt> {
-        let calldata = self.build_constructor_calldata_with_guardian(public_key, guardian);
+        let calldata = self
+            .layout
+            .constructor_calldata_with_guardian(public_key, guardian);
         calculate_contract_address(public_key, &self.class_hash, &calldata, &Felt::ZERO)
     }
 }

@@ -14,12 +14,14 @@
 //! A recovery flow that cannot tell "not discoverable from a phrase" apart
 //! from "no such account" tells users their funds are gone.
 //! [`inspect_deployment`] takes the three `DEPLOY_ACCOUNT` fields that fix an
-//! address and states which case applies, returning the owner and guardian
-//! keys so the caller can verify against its own derived keys.
+//! address and states which case applies. It returns the address those fields
+//! fix and the owner and guardian keys they name; a caller verifies an
+//! account by checking both the address and the owner key.
 
 use super::argent_cairo0::ArgentCairo0;
 use super::registry::{lookup_account_class, AccountFamily, ConstructorShape, KnownAccountClass};
 use super::DecodedArgentConstructor;
+use crate::account::calculate_contract_address;
 use starknet_types_core::felt::Felt;
 
 /// Why an account's address is not a function of a seed-derived key alone.
@@ -61,11 +63,16 @@ pub enum Derivability {
 /// The result of [`inspect_deployment`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeploymentInspection {
+    /// The address the inspected fields fix (deployer zero). Compare it with
+    /// the account being checked: fields that do not hash to that address say
+    /// nothing about it, whatever keys they name.
+    pub address: Felt,
     /// The registry entry for the deployment class, if recognised.
     pub class: Option<KnownAccountClass>,
     /// The Stark public key the constructor binds as owner, when it has one.
-    /// Comparing it with the seed's derived keys verifies ownership even when
-    /// the address itself is not derivable.
+    /// A match with one of the seed's derived keys shows these fields name
+    /// the seed's key; together with a matching [`Self::address`] it shows
+    /// the account is the seed's, even when discovery cannot find it.
     pub owner_public_key: Option<Felt>,
     /// The guardian's Stark public key, when the constructor binds a
     /// Starknet-key guardian.
@@ -76,6 +83,7 @@ pub struct DeploymentInspection {
 impl DeploymentInspection {
     fn unknown_class(class: Option<KnownAccountClass>) -> Self {
         Self {
+            address: Felt::ZERO,
             class,
             owner_public_key: None,
             guardian_public_key: None,
@@ -89,6 +97,7 @@ impl DeploymentInspection {
         reason: NotDerivableReason,
     ) -> Self {
         Self {
+            address: Felt::ZERO,
             class: Some(class),
             owner_public_key: owner,
             guardian_public_key: None,
@@ -98,6 +107,7 @@ impl DeploymentInspection {
 
     fn guarded(class: KnownAccountClass, owner: Felt, guardian: Option<Felt>) -> Self {
         Self {
+            address: Felt::ZERO,
             class: Some(class),
             owner_public_key: Some(owner),
             guardian_public_key: guardian,
@@ -107,6 +117,7 @@ impl DeploymentInspection {
 
     fn from_seed(class: KnownAccountClass, owner: Felt) -> Self {
         Self {
+            address: Felt::ZERO,
             class: Some(class),
             owner_public_key: Some(owner),
             guardian_public_key: None,
@@ -122,11 +133,23 @@ impl DeploymentInspection {
 /// fix a counterfactual address. Passing the class an account runs *today*
 /// yields [`NotDerivableReason::ImplementationClass`] for every upgraded
 /// account; the deploy class is the one to inspect.
+///
+/// The fields are untrusted input (typically an RPC response): the verdict is
+/// about these fields, and [`DeploymentInspection::address`] is what binds
+/// them to an account.
 pub fn inspect_deployment(
     class_hash: &Felt,
     salt: &Felt,
     constructor_calldata: &[Felt],
 ) -> DeploymentInspection {
+    let mut inspection = classify(class_hash, salt, constructor_calldata);
+    inspection.address =
+        calculate_contract_address(salt, class_hash, constructor_calldata, &Felt::ZERO)
+            .expect("the contract address prefix is a valid short string");
+    inspection
+}
+
+fn classify(class_hash: &Felt, salt: &Felt, constructor_calldata: &[Felt]) -> DeploymentInspection {
     let Some(class) = lookup_account_class(class_hash) else {
         return DeploymentInspection::unknown_class(None);
     };
