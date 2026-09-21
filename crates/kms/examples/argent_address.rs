@@ -9,7 +9,9 @@
 //! ```
 //!
 //! Argent has used two key schemes, and the same mnemonic yields a different
-//! address under each, so both are printed:
+//! address under each, so both are printed. Only guardian-less accounts salted
+//! with the public key appear: an account with a guardian is not derivable
+//! from a phrase at all (see `inspect_deployment`).
 //!
 //! - **legacy** (old Argent X): `m/44'/60'/0'/0/0` raw, re-seeded as a new
 //!   BIP-32 master, then `m/44'/9004'/0'/0/{i}` and `grindKey`.
@@ -21,7 +23,6 @@ use krusty_kms::{
     derive_argent_legacy_private_key, derive_private_key_with_coin_type, stark_public_key,
     AccountClass, ArgentAccount, SaltPolicy, STARKNET_COIN_TYPE,
 };
-use starknet_types_core::felt::Felt;
 
 fn main() -> Result<(), String> {
     let mnemonic = std::env::var("MNEMONIC")
@@ -54,15 +55,10 @@ fn main() -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
 
             println!("index {index} [{scheme}]  pubkey {public_key:#x}");
-            for (version, class_hash) in [
-                ("v0.4.0", ArgentAccount::CLASS_HASH),
-                ("v0.3.1", ArgentAccount::CLASS_HASH_V031),
-                ("v0.3.0", ArgentAccount::CLASS_HASH_V030),
-            ] {
-                let account = ArgentAccount::try_with_class_hash(
-                    Felt::from_hex(class_hash).map_err(|e| e.to_string())?,
-                )
-                .map_err(|e| e.to_string())?;
+            // Every known class, with its own constructor layout; which one a
+            // real account was deployed with is not knowable from the seed.
+            for (class_hash, version, layout) in ArgentAccount::known_classes() {
+                let account = ArgentAccount::with_class_hash_and_layout(class_hash, layout);
                 let address = account
                     .calculate_address(&public_key, SaltPolicy::PublicKey)
                     .map_err(|e| e.to_string())?;

@@ -196,3 +196,24 @@ fn test_oz_candidates_cover_both_salt_policies() {
         "salt-pubkey candidate must match the deploy flow's derived address"
     );
 }
+
+/// Argent candidates under direct derivation span every known Cairo 1 class,
+/// not only the default preset (issue #146: v0.3.x accounts were unreachable).
+#[test]
+fn test_argent_direct_candidates_cover_every_known_class() {
+    let candidates = generate_candidates(TEST_MNEMONIC, 1).unwrap();
+    let direct: Vec<_> = candidates
+        .iter()
+        .filter(|c| c.wallet_type == WalletType::Argent)
+        .collect();
+    let known = crate::account_class::ArgentAccount::known_classes();
+    assert_eq!(direct.len(), known.len());
+    for (class_hash, version, _) in known {
+        assert!(
+            direct
+                .iter()
+                .any(|c| c.class_hash == format!("{class_hash:#x}") && c.class_version == version),
+            "missing direct Argent candidate for {version}"
+        );
+    }
+}

@@ -1,0 +1,251 @@
+//! Derivability of a concrete account deployment.
+//!
+//! Two operations are easy to conflate:
+//!
+//! - **Discovery** (phrase to addresses): [`crate::generate_candidates`]
+//!   enumerates the addresses a seed reproduces on its own. An Argent account
+//!   with a guardian is not among them: the guardian is per-account, part of
+//!   the constructor calldata and so of the address, and not derived from the
+//!   seed.
+//! - **Verification** (phrase plus a known address: is this mine?): possible
+//!   for those same accounts. The deploy transaction, or the account itself,
+//!   gives the guardian, and the address reproduces exactly.
+//!
+//! A recovery flow that cannot tell "not discoverable from a phrase" apart
+//! from "no such account" tells users their funds are gone.
+//! [`inspect_deployment`] takes the three `DEPLOY_ACCOUNT` fields that fix an
+//! address and states which case applies, returning the owner and guardian
+//! keys so the caller can verify against its own derived keys.
+
+use super::argent_cairo0::ArgentCairo0;
+use super::registry::{lookup_account_class, AccountFamily, ConstructorShape, KnownAccountClass};
+use super::DecodedArgentConstructor;
+use starknet_types_core::felt::Felt;
+
+/// Why an account's address is not a function of a seed-derived key alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotDerivableReason {
+    /// The constructor binds a guardian. It is per-account and not derived
+    /// from the seed, so discovery cannot enumerate the address; given the
+    /// address, the guardian is readable on chain and
+    /// [`crate::ArgentAccount::calculate_address_with_guardian`] reproduces it.
+    Guardian,
+    /// The owner is not a Starknet-curve signer (Argent v0.4.0+ Secp256k1,
+    /// Secp256r1, EIP-191 or WebAuthn owner).
+    NonStarknetOwner,
+    /// The salt is not the owner public key (nor zero, for OpenZeppelin).
+    /// Argent smart accounts are assigned their salt server-side.
+    SaltNotPublicKey,
+    /// The class is an implementation class: it is what an upgraded account
+    /// runs, never what fixed its address. Inspect the `DEPLOY_ACCOUNT`
+    /// class hash instead of the current one.
+    ImplementationClass,
+    /// The constructor calldata does not match the class's known layout.
+    UnexpectedConstructorCalldata,
+}
+
+/// Whether a deployment can be found by deriving addresses from a seed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Derivability {
+    /// The address is a function of the owner's Stark public key alone, so
+    /// [`crate::generate_candidates`] reproduces it from the seed.
+    FromSeed,
+    /// The account exists but its address depends on inputs outside the seed.
+    /// Discovery cannot enumerate it; verification against a known address
+    /// may still succeed (see [`DeploymentInspection::owner_public_key`]).
+    NotFromSeed(NotDerivableReason),
+    /// The class hash is not in the registry, so nothing can be said.
+    UnknownClass,
+}
+
+/// The result of [`inspect_deployment`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeploymentInspection {
+    /// The registry entry for the deployment class, if recognised.
+    pub class: Option<KnownAccountClass>,
+    /// The Stark public key the constructor binds as owner, when it has one.
+    /// Comparing it with the seed's derived keys verifies ownership even when
+    /// the address itself is not derivable.
+    pub owner_public_key: Option<Felt>,
+    /// The guardian's Stark public key, when the constructor binds a
+    /// Starknet-key guardian.
+    pub guardian_public_key: Option<Felt>,
+    pub derivability: Derivability,
+}
+
+impl DeploymentInspection {
+    fn unknown_class(class: Option<KnownAccountClass>) -> Self {
+        Self {
+            class,
+            owner_public_key: None,
+            guardian_public_key: None,
+            derivability: Derivability::UnknownClass,
+        }
+    }
+
+    fn not_from_seed(
+        class: KnownAccountClass,
+        owner: Option<Felt>,
+        reason: NotDerivableReason,
+    ) -> Self {
+        Self {
+            class: Some(class),
+            owner_public_key: owner,
+            guardian_public_key: None,
+            derivability: Derivability::NotFromSeed(reason),
+        }
+    }
+
+    fn guarded(class: KnownAccountClass, owner: Felt, guardian: Option<Felt>) -> Self {
+        Self {
+            class: Some(class),
+            owner_public_key: Some(owner),
+            guardian_public_key: guardian,
+            derivability: Derivability::NotFromSeed(NotDerivableReason::Guardian),
+        }
+    }
+
+    fn from_seed(class: KnownAccountClass, owner: Felt) -> Self {
+        Self {
+            class: Some(class),
+            owner_public_key: Some(owner),
+            guardian_public_key: None,
+            derivability: Derivability::FromSeed,
+        }
+    }
+}
+
+/// State whether a deployment's address is a function of a seed-derived key.
+///
+/// The arguments are the `DEPLOY_ACCOUNT` transaction's `class_hash`,
+/// `contract_address_salt` and `constructor_calldata`: the three inputs that
+/// fix a counterfactual address. Passing the class an account runs *today*
+/// yields [`NotDerivableReason::ImplementationClass`] for every upgraded
+/// account; the deploy class is the one to inspect.
+pub fn inspect_deployment(
+    class_hash: &Felt,
+    salt: &Felt,
+    constructor_calldata: &[Felt],
+) -> DeploymentInspection {
+    let Some(class) = lookup_account_class(class_hash) else {
+        return DeploymentInspection::unknown_class(None);
+    };
+    let Some(shape) = class.constructor else {
+        // Every deployment class has a shape; a class without one is
+        // implementation-only.
+        return DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::ImplementationClass,
+        );
+    };
+    match shape {
+        ConstructorShape::PublicKey => {
+            inspect_public_key_constructor(class, salt, constructor_calldata)
+        }
+        ConstructorShape::ArgentOwnerGuardianFelts
+        | ConstructorShape::ArgentSignerWithOptionalGuardian => {
+            inspect_argent_constructor(class, shape, salt, constructor_calldata)
+        }
+        ConstructorShape::ArgentCairo0Proxy => {
+            inspect_argent_cairo0_proxy(class, salt, constructor_calldata)
+        }
+    }
+}
+
+/// `[public_key]`: OpenZeppelin and the Braavos base account. Braavos wallets
+/// salt with the public key; OpenZeppelin deployments use either the public
+/// key or zero, and discovery covers both.
+fn inspect_public_key_constructor(
+    class: KnownAccountClass,
+    salt: &Felt,
+    calldata: &[Felt],
+) -> DeploymentInspection {
+    let [owner] = calldata else {
+        return DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::UnexpectedConstructorCalldata,
+        );
+    };
+    let zero_salt_allowed = class.family == AccountFamily::OpenZeppelin && *salt == Felt::ZERO;
+    if *salt == *owner || zero_salt_allowed {
+        DeploymentInspection::from_seed(class, *owner)
+    } else {
+        DeploymentInspection::not_from_seed(
+            class,
+            Some(*owner),
+            NotDerivableReason::SaltNotPublicKey,
+        )
+    }
+}
+
+fn inspect_argent_constructor(
+    class: KnownAccountClass,
+    shape: ConstructorShape,
+    salt: &Felt,
+    calldata: &[Felt],
+) -> DeploymentInspection {
+    let layout = shape
+        .argent_layout()
+        .expect("Argent shapes map to a layout");
+    match layout.decode(calldata) {
+        Err(_) => DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::UnexpectedConstructorCalldata,
+        ),
+        Ok(DecodedArgentConstructor::NonStarknetOwner { .. }) => {
+            DeploymentInspection::not_from_seed(class, None, NotDerivableReason::NonStarknetOwner)
+        }
+        Ok(DecodedArgentConstructor::StarknetOwnerWithGuardian { owner, guardian }) => {
+            DeploymentInspection::guarded(class, owner, guardian)
+        }
+        Ok(DecodedArgentConstructor::StarknetOwnerNoGuardian { owner }) => {
+            owner_salt_verdict(class, owner, salt)
+        }
+    }
+}
+
+/// `[implementation, selector("initialize"), 2, owner, guardian]`.
+fn inspect_argent_cairo0_proxy(
+    class: KnownAccountClass,
+    salt: &Felt,
+    calldata: &[Felt],
+) -> DeploymentInspection {
+    let [implementation, selector, arity, owner, guardian] = calldata else {
+        return DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::UnexpectedConstructorCalldata,
+        );
+    };
+    if *selector != ArgentCairo0::initialize_selector() || *arity != Felt::TWO {
+        return DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::UnexpectedConstructorCalldata,
+        );
+    }
+    if !ArgentCairo0::is_known_implementation(implementation) {
+        // Derivable in principle, but discovery only tries the known
+        // implementations, so it would not find this account.
+        return DeploymentInspection::unknown_class(Some(class));
+    }
+    if *guardian != Felt::ZERO {
+        return DeploymentInspection::guarded(class, *owner, Some(*guardian));
+    }
+    owner_salt_verdict(class, *owner, salt)
+}
+
+fn owner_salt_verdict(class: KnownAccountClass, owner: Felt, salt: &Felt) -> DeploymentInspection {
+    if *salt == owner {
+        DeploymentInspection::from_seed(class, owner)
+    } else {
+        DeploymentInspection::not_from_seed(
+            class,
+            Some(owner),
+            NotDerivableReason::SaltNotPublicKey,
+        )
+    }
+}

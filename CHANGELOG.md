@@ -4,6 +4,73 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add a registry of known account classes labelled by role
+  (`known_account_classes`, `lookup_account_class`, `deployment_classes`,
+  `implementation_classes`, `KnownAccountClass`, `AccountFamily`, `ClassRole`,
+  `ConstructorShape`). A **deployment** class fixes an account's address and
+  is the one to derive from; an **implementation** class is what an upgraded
+  account runs and the one to accept when signing. Every entry names the
+  vendor listing it was checked against, and its constructor calldata
+  convention as an object (`shape`, `fromSeed`, `withGuardian`,
+  `inputsOutsideSeed`): the convention varies by class version and by whether
+  a guardian is set, and neither is inferable from the class hash. WASM:
+  `getAccountClassRegistry()`.
+- Add the missing Braavos classes: the v1.0.0 base (deployment) class
+  `BraavosAccount::BASE_CLASS_HASH_V100` and the v1.1.0 / v1.2.0 account
+  implementations (`ACCOUNT_CLASS_HASH_V110`, `ACCOUNT_CLASS_HASH_V120`), with
+  `BraavosAccount::known_classes`, `deployment_class_hashes`,
+  `implementation_class_hashes`, `is_implementation_class_hash` and
+  `try_with_class_hash`. Discovery now emits one Braavos candidate per base
+  class, so accounts created under Braavos v1.0.0 are found.
+- Add Argent v0.5.0 (`ArgentAccount::CLASS_HASH_V050`), which keeps the
+  v0.4.0 constructor. Discovery tries every known Argent Cairo 1 class under
+  direct derivation too, not only v0.4.0. The Cairo 0 proxy pattern moves to
+  `ArgentCairo0` with its class hashes, `initialize` selector and calldata.
+- Add `inspect_deployment(class_hash, salt, constructor_calldata)` and
+  `ArgentConstructorLayout::decode`. Given the `DEPLOY_ACCOUNT` fields of an
+  account, they state whether a seed can reproduce it (`Derivability::FromSeed`)
+  or why not (`Guardian`, `NonStarknetOwner`, `SaltNotPublicKey`,
+  `ImplementationClass`, `UnexpectedConstructorCalldata`), and return the
+  owner and guardian keys, so recovery flows can tell "not discoverable from a
+  phrase" apart from "no such account" and still verify ownership. WASM:
+  `inspectAccountDeployment()`.
+- Add the guardian form of the Argent constructor:
+  `ArgentConstructorLayout::constructor_calldata_with_guardian`,
+  `ArgentAccount::calculate_address_with_guardian` and
+  `ArgentCairo0::constructor_calldata_with_guardian` (`[owner, guardian]` for
+  v0.3.x, `[0, owner, 0, 0, guardian]` for v0.4.0+). A guardian is
+  per-account and not in the seed, so discovery cannot enumerate these
+  addresses; once an address is known, its guardian is readable on chain and
+  the address reproduces exactly. WASM: `deriveArgentAccountAddressWithGuardian()`.
+
+### Changed
+
+- WASM `getAccountClassHashes()` keeps its shape and existing keys but adds the
+  Braavos entries `base-1.0.0`, `account-1.1.0` and `account-1.2.0` and
+  Argent `0.5.0`. The `argent_legacy` labels now follow Argent X's constants
+  (`0.2.4`, `0.2.3`, `0.2.2`, `0.2.1`); the former `0.2.0` key, which held the
+  proxy hash a second time, is removed. The export is superseded by
+  `getAccountClassRegistry()`.
+- `generate_candidates` returns 16 candidates per index (was 11). Braavos
+  candidates carry `class_version` `"base v1.1.0"` / `"base v1.0.0"` (was
+  `"base"`).
+- The gateway/oracle Braavos allowlist holds the base (deployment) classes
+  only; `BraavosAccount::LEGACY_CLASS_HASH` is an implementation class and is
+  no longer accepted for derive/deploy.
+
+### Security
+
+- The WASM `deriveBraavosAccountAddress` and the gateway/oracle Braavos paths
+  no longer derive from an implementation class hash or an unrecognised class
+  hash. Braavos accounts upgrade inside their deploy transaction, so the class
+  an account runs (what `starknet_getClassHashAt` returns) never fixed its
+  address: deriving from it produced a plausible address no deployment can
+  ever occupy. Both now return an invalid-class-hash error naming the base
+  classes to use. `allow_unlisted_class_hash=true` still admits an unknown
+  hash but cannot admit a known implementation class.
+
 ## [0.11.0] - 2026-09-02
 
 ### Added
