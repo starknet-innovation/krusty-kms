@@ -307,7 +307,7 @@ mod tests {
             private_key: "0xsecret".to_string(),
             derivation_index: 0,
             derivation_path: "m/44'/9004'/0'/0/0".to_string(),
-            class_version: "base v1.1.0".to_string(),
+            class_version: "base".to_string(),
             deployed_class_hash: "0x4".to_string(),
         };
 

@@ -1,10 +1,7 @@
 //! Account class trait and presets for Starknet account contracts.
 //!
 //! Provides a unified interface for computing deployment addresses across
-//! different account contract implementations (OpenZeppelin, Argent, Braavos),
-//! a registry of the known class hashes labelled by the role each plays
-//! ([`known_account_classes`]), and [`inspect_deployment`], which states
-//! whether a concrete deployment can be found from a seed at all.
+//! different account contract implementations (OpenZeppelin, Argent, Braavos).
 
 use crate::account::calculate_contract_address;
 use krusty_kms_common::{ChainId, KmsError, Result};
@@ -90,23 +87,6 @@ fn oz_account_manifest() -> Result<&'static OzAccountManifest> {
         Ok(manifest) => Ok(manifest),
         Err(msg) => Err(KmsError::DeserializationError(msg.clone())),
     }
-}
-
-/// Every manifest-backed OpenZeppelin class as `(version, docs URL, class
-/// hash)`, one entry per distinct class hash across networks.
-pub(crate) fn oz_manifest_classes() -> Result<Vec<(String, String, Felt)>> {
-    let manifest = oz_account_manifest()?;
-    let mut classes: Vec<(String, String, Felt)> = Vec::new();
-    for (version, entry) in &manifest.versions {
-        for network in entry.networks.values() {
-            let class_hash = Felt::from_hex(&network.declared_class_hash)
-                .map_err(|e| KmsError::InvalidClassHash(e.to_string()))?;
-            if !classes.iter().any(|(_, _, known)| *known == class_hash) {
-                classes.push((version.clone(), entry.source.docs.clone(), class_hash));
-            }
-        }
-    }
-    Ok(classes)
 }
 
 /// Where an OpenZeppelin account class hash was resolved from.
@@ -293,31 +273,59 @@ impl AccountClass for OpenZeppelinAccount {
 // ---------------------------------------------------------------------------
 
 mod argent;
-mod argent_decode;
 pub use argent::{ArgentAccount, ArgentConstructorLayout};
-pub use argent_decode::DecodedArgentConstructor;
 
 // ---------------------------------------------------------------------------
 // Braavos Account
 // ---------------------------------------------------------------------------
 
-mod braavos;
-pub use braavos::BraavosAccount;
+/// Braavos account contract preset.
+///
+/// Constructor: `(public_key)`
+pub struct BraavosAccount {
+    class_hash: Felt,
+}
 
-// ---------------------------------------------------------------------------
-// Class registry and deployment inspection
-// ---------------------------------------------------------------------------
+impl BraavosAccount {
+    /// Braavos base account class hash used for deployment.
+    ///
+    /// Braavos uses a proxy-like architecture: accounts are deployed with this
+    /// base class hash, which auto-upgrades to the full implementation via
+    /// `replace_class_syscall`. Address derivation always uses this hash.
+    pub const CLASS_HASH: &str =
+        "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201";
 
-mod argent_cairo0;
-mod constructor_shape;
-mod inspect;
-mod registry;
-pub use argent_cairo0::ArgentCairo0;
-pub use inspect::{inspect_deployment, DeploymentInspection, Derivability, NotDerivableReason};
-pub use registry::{
-    deployment_classes, implementation_classes, known_account_classes, lookup_account_class,
-    proxy_target_classes, AccountFamily, ClassRole, ConstructorShape, KnownAccountClass,
-};
+    /// Previous Braavos class hash (not used for deployment address derivation).
+    pub const LEGACY_CLASS_HASH: &str =
+        "0x00816dd0297efc55dc1e7559020a3a825e81ef734b558f03c83325d4da7e6253";
+
+    pub fn new() -> Self {
+        Self {
+            class_hash: Felt::from_hex(Self::CLASS_HASH).unwrap(),
+        }
+    }
+
+    /// Create with a custom class hash.
+    pub fn with_class_hash(class_hash: Felt) -> Self {
+        Self { class_hash }
+    }
+}
+
+impl Default for BraavosAccount {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AccountClass for BraavosAccount {
+    fn class_hash(&self) -> Felt {
+        self.class_hash
+    }
+
+    fn build_constructor_calldata(&self, public_key: &Felt) -> Vec<Felt> {
+        vec![*public_key]
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -355,6 +363,14 @@ mod tests {
         let oz = OpenZeppelinAccount::latest(ChainId::Sepolia).unwrap();
         let pk = Felt::from(42u64);
         let cd = oz.build_constructor_calldata(&pk);
+        assert_eq!(cd, vec![pk]);
+    }
+
+    #[test]
+    fn test_braavos_calldata() {
+        let braavos = BraavosAccount::new();
+        let pk = Felt::from(42u64);
+        let cd = braavos.build_constructor_calldata(&pk);
         assert_eq!(cd, vec![pk]);
     }
 

@@ -86,14 +86,6 @@ with `InvalidClassHash` even when `allow_unlisted_class_hash: true` — there is
 no known layout to derive the address with. Only the known Argent classes are
 accepted.
 
-The Braavos allowlist holds the **base** (deployment) classes only. Braavos
-accounts upgrade to an account implementation class in their deploy
-transaction, so the class an account runs (`starknet_getClassHashAt`) never
-fixes its address. A known Braavos implementation class hash is rejected with
-`InvalidClassHash` even when `allow_unlisted_class_hash: true`; the override
-still admits a class hash this crate does not know. Which class plays which
-role is listed by `krusty_kms::known_account_classes`.
-
 ## Request Shape
 
 ```json

@@ -3,20 +3,20 @@
 use crate::vectors::{
     ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, BRAAVOS_ACCOUNT_ADDRESS, BRAAVOS_PUBLIC_KEY, MNEMONIC,
 };
-use krusty_kms::{generate_candidates, ArgentAccount, BraavosAccount, WalletType};
+use krusty_kms::{generate_candidates, WalletType};
 use starknet_types_core::felt::Felt;
 
 /// Verify that `generate_candidates` produces at least one candidate for every
 /// known wallet type when scanning a single derivation index.
 ///
 /// Expected per-index breakdown:
-/// - 2 Braavos (one per base deployment class: v1.1.0+ and v1.0.0)
-/// - 4 Argent  (direct derivation, every Cairo 1 class: v0.5.0 .. v0.3.0)
-/// - 4 ArgentLegacy (legacy double derivation, the same Cairo 1 classes)
+/// - 1 Braavos (base deployment hash)
+/// - 1 Argent  (new direct derivation, v0.4.0)
+/// - 3 ArgentLegacy (legacy double derivation, v0.4.0 + v0.3.1 + v0.3.0)
 /// - 4 ArgentCairo0 (proxy + 4 implementation hashes)
 /// - 2 OpenZeppelin (latest manifest hash, salt=pubkey + salt=0)
 ///
-/// Total: 16 candidates per index.
+/// Total: 11 candidates per index.
 #[test]
 fn discovery_generates_candidates_for_all_wallet_types() {
     let candidates = generate_candidates(MNEMONIC, 1).unwrap();
@@ -49,41 +49,16 @@ fn discovery_generates_candidates_for_all_wallet_types() {
     );
     assert!(has_oz, "Must have at least one OpenZeppelin candidate");
 
-    // 16 candidates per index: 2 braavos + 4 argent + 4 legacy + 4 cairo0 + 2 oz
-    let braavos_classes = BraavosAccount::deployment_class_hashes().len();
-    let argent_classes = ArgentAccount::known_classes().len();
-    assert_eq!(braavos_classes, 2);
-    assert_eq!(argent_classes, 4);
+    // 11 candidates per index: 1 braavos + 1 argent + 3 legacy + 4 cairo0 + 2 oz
     assert_eq!(
         candidates.len(),
-        braavos_classes + 2 * argent_classes + 4 + 2,
-        "Expected 16 candidates for 1 index, got {}",
+        11,
+        "Expected 11 candidates for 1 index, got {}",
         candidates.len()
     );
 }
 
-/// Every Argent Cairo 1 class is tried under both key schemes: which class a
-/// real account was deployed with is not knowable from the seed.
-#[test]
-fn discovery_argent_candidates_cover_every_known_class_under_both_schemes() {
-    let candidates = generate_candidates(MNEMONIC, 1).unwrap();
-    for wallet_type in [WalletType::Argent, WalletType::ArgentLegacy] {
-        let classes: Vec<Felt> = candidates
-            .iter()
-            .filter(|c| c.wallet_type == wallet_type)
-            .map(|c| Felt::from_hex(&c.class_hash).unwrap())
-            .collect();
-        for (class_hash, version, _) in ArgentAccount::known_classes() {
-            assert!(
-                classes.contains(&class_hash),
-                "{wallet_type:?} must include Argent {version} ({class_hash:#x})"
-            );
-        }
-    }
-}
-
-/// Verify that the Braavos candidates at index 0 cover every base class and
-/// that the current-base candidate matches the known test vector.
+/// Verify that the Braavos candidate at index 0 matches the known test vector.
 #[test]
 fn discovery_braavos_candidate_matches_known_address() {
     let candidates = generate_candidates(MNEMONIC, 1).unwrap();
@@ -95,24 +70,11 @@ fn discovery_braavos_candidate_matches_known_address() {
 
     assert_eq!(
         braavos.len(),
-        2,
-        "Expected one Braavos candidate per base class at index 0"
+        1,
+        "Expected exactly one Braavos candidate at index 0"
     );
-    for class_hash in BraavosAccount::deployment_class_hashes() {
-        assert!(
-            braavos
-                .iter()
-                .any(|c| Felt::from_hex(&c.class_hash).unwrap() == class_hash),
-            "missing Braavos candidate for base class {class_hash:#x}"
-        );
-    }
 
-    let current_base = Felt::from_hex(BraavosAccount::CLASS_HASH).unwrap();
-    let candidate = braavos
-        .iter()
-        .find(|c| Felt::from_hex(&c.class_hash).unwrap() == current_base)
-        .expect("candidate for the current base class");
-    assert_eq!(candidate.class_version, "base v1.1.0");
+    let candidate = &braavos[0];
 
     // Parse both as Felt for canonical comparison (avoids leading-zero mismatches)
     let candidate_addr = Felt::from_hex(&candidate.address).unwrap();

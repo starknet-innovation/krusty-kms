@@ -312,38 +312,11 @@ fn test_get_account_class_hashes() {
     assert!(parsed.get("braavos").is_some());
     assert!(parsed.get("oz").is_some());
 
-    // Argent Cairo 1 classes, including v0.5.0.
-    let argent = parsed.get("argent").unwrap();
-    for version in ["0.5.0", "0.4.0", "0.3.1", "0.3.0"] {
-        assert!(argent.get(version).is_some(), "argent {version}");
-    }
-
-    // Cairo 0 labels follow Argent X's own constants; the former "0.2.0" key
-    // duplicated the proxy hash and is gone.
+    // Verify argent_legacy contains the expected Cairo 0 class hashes
     let legacy = parsed.get("argent_legacy").unwrap();
     assert!(legacy.get("proxy").is_some());
-    for version in ["0.2.4", "0.2.3", "0.2.2", "0.2.1"] {
-        assert!(legacy.get(version).is_some(), "argent_legacy {version}");
-    }
-    assert!(legacy.get("0.2.0").is_none());
-
-    // Braavos: the historical keys are kept, the missing classes are added.
-    let braavos = parsed.get("braavos").unwrap();
-    assert_eq!(braavos["1.0.0"], krusty_kms::BraavosAccount::CLASS_HASH);
-    assert_eq!(
-        braavos["legacy"],
-        krusty_kms::BraavosAccount::LEGACY_CLASS_HASH
-    );
-    assert_eq!(
-        braavos["base-1.0.0"],
-        krusty_kms::BraavosAccount::BASE_CLASS_HASH_V100
-    );
-    assert_eq!(
-        braavos["account-1.1.0"],
-        krusty_kms::BraavosAccount::ACCOUNT_CLASS_HASH_V110
-    );
-    assert_eq!(
-        braavos["account-1.2.0"],
-        krusty_kms::BraavosAccount::ACCOUNT_CLASS_HASH_V120
-    );
+    assert!(legacy.get("0.2.3").is_some());
+    assert!(legacy.get("0.2.2").is_some());
+    assert!(legacy.get("0.2.1").is_some());
+    assert!(legacy.get("0.2.0").is_some());
 }
