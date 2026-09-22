@@ -45,6 +45,11 @@ pub enum NotDerivableReason {
     /// runs, never what fixed its address. Inspect the `DEPLOY_ACCOUNT`
     /// class hash instead of the current one.
     ImplementationClass,
+    /// The class runs behind a proxy and is never an account's own class
+    /// hash, so nothing is deployed with it. For an Argent Cairo 0 account,
+    /// inspect the proxy class with the proxy's constructor calldata; this
+    /// class is the `implementation` argument inside that calldata.
+    ProxyTargetClass,
     /// An Argent Cairo 0 proxy pointing at an implementation this crate does
     /// not know. The address is a function of the seed key in principle, but
     /// discovery only tries the known implementations, so it will not find
@@ -163,13 +168,15 @@ fn classify(class_hash: &Felt, salt: &Felt, constructor_calldata: &[Felt]) -> De
         return DeploymentInspection::unknown_class(None);
     };
     let Some(shape) = class.constructor else {
-        // Every deployment class has a shape; a class without one is
-        // implementation-only.
-        return DeploymentInspection::not_from_seed(
-            class,
-            None,
-            NotDerivableReason::ImplementationClass,
-        );
+        // Every deployment class has a shape. A class without one is either
+        // what an upgraded account reports, or a class that only ever runs
+        // behind a proxy; the registry's roles tell them apart.
+        let reason = if class.is_proxy_target() {
+            NotDerivableReason::ProxyTargetClass
+        } else {
+            NotDerivableReason::ImplementationClass
+        };
+        return DeploymentInspection::not_from_seed(class, None, reason);
     };
     match shape {
         ConstructorShape::PublicKey => {

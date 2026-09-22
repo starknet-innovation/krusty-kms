@@ -187,3 +187,28 @@ fn unknown_class_hash_yields_no_verdict() {
     assert_eq!(inspection.class, None);
     assert_eq!(inspection.owner_public_key, None);
 }
+
+/// A class that only runs behind a proxy is not an implementation class: no
+/// account reports it, and nothing is deployed with it. The verdict says so
+/// rather than calling it the class an upgraded account runs.
+#[test]
+fn argent_cairo0_target_is_reported_as_a_proxy_target() {
+    for (implementation, version) in ArgentCairo0::known_implementations() {
+        let inspection = inspect_deployment(&implementation, &pk(), &[pk()]);
+        assert_eq!(
+            inspection.derivability,
+            Derivability::NotFromSeed(NotDerivableReason::ProxyTargetClass),
+            "Argent Cairo 0 v{version}"
+        );
+        let class = inspection.class.expect("the target is a known class");
+        assert!(class.is_proxy_target());
+        assert!(!class.is_implementation_class());
+    }
+
+    // A class an upgraded account really does report keeps the other reason.
+    let braavos_implementation = BraavosAccount::implementation_class_hashes()[0];
+    assert_eq!(
+        inspect_deployment(&braavos_implementation, &pk(), &[pk()]).derivability,
+        Derivability::NotFromSeed(NotDerivableReason::ImplementationClass)
+    );
+}

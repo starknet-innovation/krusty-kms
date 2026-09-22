@@ -260,4 +260,17 @@ fn test_inspect_account_deployment_reports_guardians_and_unknown_targets() {
     assert_eq!(unknown_target["known"], true);
     assert_eq!(unknown_target["derivability"], "not_from_seed");
     assert_eq!(unknown_target["reason"], "unknown_proxy_implementation");
+
+    // A class that only runs behind the proxy is not the class an upgraded
+    // account reports, and the reason says which it is.
+    let proxy_target: serde_json::Value = serde_json::from_str(
+        &inspect_account_deployment(
+            krusty_kms::ArgentCairo0::IMPL_CLASS_HASH_V024,
+            pk,
+            vec![pk.to_string()],
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(proxy_target["reason"], "proxy_target_class");
 }

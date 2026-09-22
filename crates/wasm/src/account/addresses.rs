@@ -69,10 +69,15 @@ fn argent_account(class_hash: Option<String>) -> Result<ArgentAccount, JsValue> 
 /// # Arguments
 /// * `public_key` - The Stark public key (hex string)
 /// * `class_hash` - Optional class hash (hex string). Defaults to the Argent
-///   v0.4.0 class hash; every class in `getAccountClassRegistry()` with family
-///   `argent` and a `constructor` is accepted. A class hash that is not a
-///   recognised Argent class is rejected: its constructor layout is unknown,
-///   so any address derived for it could be undeployable.
+///   v0.4.0 class hash. The accepted set is the Argent Cairo 1 classes:
+///   v0.5.0, v0.4.0, v0.3.1 and v0.3.0, which are the `getAccountClassRegistry()`
+///   entries whose constructor shape is `argent_signer_with_optional_guardian`
+///   or `argent_owner_guardian_felts`. The Cairo 0 proxy is not accepted: its
+///   address also depends on the implementation hash, which this export takes
+///   no argument for, so derive it with `calculateContractAddress` and the
+///   proxy's own calldata. Any other class hash is rejected, because its
+///   constructor layout is unknown and an address derived for it could be
+///   undeployable.
 ///
 /// # Returns
 /// The derived account contract address as hex string

@@ -154,7 +154,10 @@ Class hashes and roles, as published by the vendors:
 7. `implementation_classes(Argent)` contains the Cairo 0 proxy and no proxy
    target, so a signing allowlist built from it accepts what an unupgraded
    Cairo 0 account reports.
-8. A proxy pointing at an unknown implementation is
+8. A class inspected as a deployment class that only runs behind a proxy is
+   `NotFromSeed(ProxyTargetClass)`, not `ImplementationClass`: the registry's
+   role decides, not the absence of a constructor.
+9. A proxy pointing at an unknown implementation is
    `NotFromSeed(UnknownProxyImplementation)` with the proxy still reported,
    never `UnknownClass`, which is reserved for a class hash absent from the
    registry.

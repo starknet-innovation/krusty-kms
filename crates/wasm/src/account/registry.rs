@@ -95,7 +95,7 @@ pub fn get_account_class_registry() -> Result<String, JsValue> {
 ///   guardian is set, or `null`
 /// - `derivability`: "from_seed" | "not_from_seed" | "unknown_class"
 /// - `reason`: for `not_from_seed`, one of "guardian" | "non_starknet_owner" |
-///   "salt_not_public_key" | "implementation_class" |
+///   "salt_not_public_key" | "implementation_class" | "proxy_target_class" |
 ///   "unknown_proxy_implementation" | "unexpected_constructor_calldata";
 ///   otherwise `null`
 #[wasm_bindgen(js_name = "inspectAccountDeployment")]
@@ -135,6 +135,7 @@ fn reason_label(reason: NotDerivableReason) -> &'static str {
         NotDerivableReason::NonStarknetOwner => "non_starknet_owner",
         NotDerivableReason::SaltNotPublicKey => "salt_not_public_key",
         NotDerivableReason::ImplementationClass => "implementation_class",
+        NotDerivableReason::ProxyTargetClass => "proxy_target_class",
         NotDerivableReason::UnknownProxyImplementation => "unknown_proxy_implementation",
         NotDerivableReason::UnexpectedConstructorCalldata => "unexpected_constructor_calldata",
     }

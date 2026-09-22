@@ -38,7 +38,7 @@ All notable changes to the published Rust crates are documented here.
   `ArgentConstructorLayout::decode`. Given the `DEPLOY_ACCOUNT` fields of an
   account, they state whether a seed can reproduce it (`Derivability::FromSeed`)
   or why not (`Guardian`, `NonStarknetOwner`, `SaltNotPublicKey`,
-  `ImplementationClass`, `UnknownProxyImplementation`,
+  `ImplementationClass`, `ProxyTargetClass`, `UnknownProxyImplementation`,
   `UnexpectedConstructorCalldata`). They return the
   address those fields fix and the owner and guardian keys they name, so
   recovery flows can tell "not discoverable from a phrase" apart from "no such
@@ -50,10 +50,12 @@ All notable changes to the published Rust crates are documented here.
   `ArgentCairo0::constructor_calldata_with_guardian` (`[owner, guardian]` for
   v0.3.x, `[0, owner, 0, 0, guardian]` for v0.4.0+). A guardian is
   per-account and not in the seed, so discovery cannot enumerate these
-  addresses; once an address is known, its guardian is readable on chain and
-  the address reproduces exactly. A zero guardian means no guardian, as the
-  account's `get_guardian` reports it, and gives the guardian-less address.
-  WASM: `deriveArgentAccountAddressWithGuardian()`.
+  addresses; once an address is known, the guardian in that account's
+  `DEPLOY_ACCOUNT` calldata reproduces it exactly. It must come from that
+  transaction: a guardian can have been changed or removed since deployment,
+  and the current one then reproduces nothing. A zero guardian means no
+  guardian and gives the guardian-less address. WASM:
+  `deriveArgentAccountAddressWithGuardian()`.
 
 ### Changed
 
