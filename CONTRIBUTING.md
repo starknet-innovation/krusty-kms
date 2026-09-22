@@ -448,7 +448,7 @@ Reviewers will look for:
 
 If a reviewer asks for a simplification pass, treat it as part of "done," not as optional polish.
 
-A pull request cannot land while a review thread is still open. The `Review conversations` check fails until every thread is resolved, including outdated ones. Ordinary PR comments are not threads and do not block.
+The `Review conversations` check fails until every review thread is resolved, including outdated ones. Ordinary PR comments are not threads and do not fail that check. GitHub refuses the merge when the default-branch ruleset requires conversation resolution.
 
 ---
 
