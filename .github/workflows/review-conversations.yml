@@ -1,31 +1,45 @@
 name: Review conversations
 
-# Runs from the default branch (pull_request_target and the review events)
-# and checks out that branch, never the pull request head. A pull request
-# therefore cannot delete this gate by editing the workflow. The job only
-# reads review threads; it does not build or execute pull request code.
+# The workflow file is read from the default branch. The job checks out
+# that branch and never runs pull request code, so a pull request cannot
+# delete this gate by editing the workflow.
+#
+# The pass/fail signal is a commit status named "Review conversations" on
+# the pull request head. A pull_request_target job is attached to the base
+# commit, and a required check on that job stays "Expected" after each push.
+# The job itself exits 0 so a failing gate does not paint the base commit red.
+#
+# GitHub Actions has no pull_request_review_thread trigger. Resolving a
+# conversation does not start this workflow. Push a commit, leave a review
+# comment, or run this workflow manually with the pull request number.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  pull_request_review_thread:
-    types: [resolved, unresolved]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to evaluate
+        required: true
+        type: string
 
 permissions:
   contents: read
   pull-requests: read
+  statuses: write
 
 concurrency:
-  group: review-conversations-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  group: review-conversations-${{ github.event.pull_request.number || inputs.pr || github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   conversations:
-    name: All conversations resolved
+    name: Publish conversation status
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,5 +49,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUBLISH_STATUS: "1"
+          STATUS_TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: python3 .github/scripts/check-review-threads.py

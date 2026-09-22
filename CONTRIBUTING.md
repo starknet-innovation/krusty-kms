@@ -448,7 +448,7 @@ Reviewers will look for:
 
 If a reviewer asks for a simplification pass, treat it as part of "done," not as optional polish.
 
-The `Review conversations` check fails until every review thread is resolved, including outdated ones. Ordinary PR comments are not threads and do not fail that check. GitHub refuses the merge when the default-branch ruleset requires conversation resolution.
+The `Review conversations` commit status is posted on the pull request head. It fails until every review thread is resolved, including outdated ones. Ordinary PR comments are not threads and do not fail that status. Resolving a thread does not start the workflow; push a commit, leave a review comment, or run the Review conversations workflow with the pull request number. GitHub refuses the merge when the default-branch ruleset requires conversation resolution or requires this status.
 
 ---
 
