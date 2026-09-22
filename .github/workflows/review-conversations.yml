@@ -1,0 +1,39 @@
+name: Review conversations
+
+# Runs from the default branch (pull_request_target and the review events)
+# and checks out that branch, never the pull request head. A pull request
+# therefore cannot delete this gate by editing the workflow. The job only
+# reads review threads; it does not build or execute pull request code.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  pull_request_review_thread:
+    types: [resolved, unresolved]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: review-conversations-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conversations:
+    name: All conversations resolved
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Reject unresolved review threads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 .github/scripts/check-review-threads.py

@@ -84,6 +84,9 @@ jobs:
       - name: Surface parser self-checks
         run: python3 .github/scripts/lib/surfaces.py
 
+      - name: Review conversation gate self-check
+        run: python3 .github/scripts/test-check-review-threads.py
+
       - name: Function-size ratchet
         run: python3 .github/scripts/check-code-complexity.py --base-ref "$GUARDRAILS_BASE_REF"
 
