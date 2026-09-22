@@ -130,7 +130,7 @@
     },
     {
       "path": "crates/kms/src/account_class.rs",
-      "lines": 520
+      "lines": 504
     },
     {
       "path": "crates/kms/src/derivation.rs",

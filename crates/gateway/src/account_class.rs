@@ -65,18 +65,38 @@ pub(crate) fn resolve_account_class(
             }
 
             Ok(ResolvedAccountClass::Braavos(match &spec.class_hash {
-                Some(class_hash) => {
-                    enforce_class_hash_allowlist(
-                        class_hash.to_felt(),
-                        AccountClassKind::Braavos,
-                        chain_id,
-                        spec.allow_unlisted_class_hash,
-                    )?;
-                    BraavosAccount::with_class_hash(class_hash.to_felt())
-                }
+                Some(class_hash) => resolve_braavos_class(
+                    class_hash.to_felt(),
+                    chain_id,
+                    spec.allow_unlisted_class_hash,
+                )?,
                 None => BraavosAccount::new(),
             }))
         }
+    }
+}
+
+/// Braavos addresses are fixed by a base (deployment) class. The allowlist
+/// holds exactly those; the override waives it for a class this crate does
+/// not know, but cannot make a known implementation class fix an address, so
+/// that stays rejected.
+fn resolve_braavos_class(
+    class_hash: Felt,
+    chain_id: ChainId,
+    allow_unlisted: bool,
+) -> GatewayResult<BraavosAccount> {
+    enforce_class_hash_allowlist(
+        class_hash,
+        AccountClassKind::Braavos,
+        chain_id,
+        allow_unlisted,
+    )?;
+    match BraavosAccount::try_with_class_hash(class_hash) {
+        Ok(account) => Ok(account),
+        Err(_) if allow_unlisted && !BraavosAccount::is_implementation_class_hash(&class_hash) => {
+            Ok(BraavosAccount::with_class_hash(class_hash))
+        }
+        Err(err) => Err(map_kms_error(err)),
     }
 }
 
@@ -102,13 +122,9 @@ fn known_class_hashes(kind: AccountClassKind, chain_id: ChainId) -> Vec<Felt> {
             hashes
         }
         AccountClassKind::Argent => ArgentAccount::known_class_hashes(),
-        AccountClassKind::Braavos => {
-            let mut hashes = vec![Felt::from_hex(BraavosAccount::CLASS_HASH).unwrap()];
-            if let Ok(legacy) = Felt::from_hex(BraavosAccount::LEGACY_CLASS_HASH) {
-                hashes.push(legacy);
-            }
-            hashes
-        }
+        // Deployment (base) classes only: an implementation class never fixes
+        // an address, so deriving or deploying with it is always wrong.
+        AccountClassKind::Braavos => BraavosAccount::deployment_class_hashes(),
     }
 }
 
@@ -118,6 +134,22 @@ pub(crate) fn enforce_class_hash_allowlist(
     chain_id: ChainId,
     allow_unlisted: bool,
 ) -> GatewayResult<()> {
+    // A Braavos implementation class is not "unlisted": it is known, and known
+    // never to fix an address. It is refused before the override so the check
+    // holds for every caller; no override helps, so say what does.
+    if kind == AccountClassKind::Braavos
+        && BraavosAccount::is_implementation_class_hash(&class_hash)
+    {
+        return Err(GatewayError::new(
+            GatewayErrorCode::InvalidClassHash,
+            false,
+            Some(format!(
+                "class_hash {class_hash:#x} is a Braavos account implementation class; \
+                 addresses are fixed by a base (deployment) class, use one of those"
+            )),
+        ));
+    }
+
     if allow_unlisted {
         return Ok(());
     }

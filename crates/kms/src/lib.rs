@@ -23,8 +23,12 @@ pub use account::{
     calculate_contract_address, derive_oz_account_address, encode_short_string, hash_elements,
 };
 pub use account_class::{
-    AccountClass, ArgentAccount, ArgentConstructorLayout, BraavosAccount, OpenZeppelinAccount,
-    OzAccountClassConfig, OzAccountClassSource, OzDeploymentDescriptor, SaltPolicy,
+    deployment_classes, implementation_classes, inspect_deployment, known_account_classes,
+    lookup_account_class, proxy_target_classes, AccountClass, AccountFamily, ArgentAccount,
+    ArgentCairo0, ArgentConstructorLayout, BraavosAccount, ClassRole, ConstructorShape,
+    DecodedArgentConstructor, DeploymentInspection, Derivability, KnownAccountClass,
+    NotDerivableReason, OpenZeppelinAccount, OzAccountClassConfig, OzAccountClassSource,
+    OzDeploymentDescriptor, SaltPolicy,
 };
 pub use derivation::{
     derive_argent_legacy_private_key, derive_keypair, derive_keypair_with_coin_type,

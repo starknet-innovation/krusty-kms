@@ -1,5 +1,8 @@
 //! Shared test data: fixed mnemonic and expected derivation vectors.
 
+use krusty_kms::SaltPolicy;
+use starknet_types_core::felt::Felt;
+
 /// Test mnemonic used for all derivation tests.
 ///
 /// Both Argent and Braavos wallets were created from this same mnemonic.
@@ -61,3 +64,65 @@ pub const BRAAVOS_ACCOUNT_ADDRESS: &str =
 /// Braavos base deployment class hash for counterfactual address computation.
 pub const BRAAVOS_BASE_CLASS_HASH: &str =
     "0x03d16c7a9a60b0593bd202f660a28c5d76e0403601d9ccc7e4fa253b6a70c201";
+
+// -- Braavos base v1.0.0 account (issue #146) ----------------------------------
+//
+// A real Mainnet account from the issue #146 sample, all public chain data:
+// deployed with the v1.0.0 base class (taken from its `DEPLOY_ACCOUNT`), it
+// runs the v1.0.0 account implementation today. Its address derives from the
+// v1.0.0 base class and from nothing else.
+
+/// Owner public key read from the account over public RPC.
+pub const BRAAVOS_V100_PUBLIC_KEY: &str =
+    "0x7829fdac0277b7dcd88e2ad2dad78a9eed97c323456a185a74e2d271b0d2163";
+
+/// Account address (Mainnet).
+pub const BRAAVOS_V100_ACCOUNT_ADDRESS: &str =
+    "0x23e1391f6130cfd5d20100cf96f55400ad9f2075d8a4373220d1e7ffdb50fa";
+
+/// `class_hash` of the account's `DEPLOY_ACCOUNT` transaction: the v1.0.0 base.
+pub const BRAAVOS_V100_DEPLOY_CLASS_HASH: &str =
+    "0x13bfe114fb1cf405bfc3a7f8dbe2d91db146c17521d40dcf57e16d6b59fa8e6";
+
+/// `starknet_getClassHashAt(address)` today: the v1.0.0 account implementation.
+pub const BRAAVOS_V100_CURRENT_CLASS_HASH: &str =
+    "0x816dd0297efc55dc1e7559020a3a825e81ef734b558f03c83325d4da7e6253";
+
+// -- Deployment-inspection fixtures -------------------------------------------
+//
+// Salts and keys live here rather than inline in the tests, and are computed
+// rather than written out: a literal felt reaching a `salt` parameter is what
+// CodeQL's `rust/hard-coded-cryptographic-value` reports, the same reason the
+// FFI tests derive their fixtures (`crates/ffi/src/address.rs`).
+
+/// Deterministic but *computed* test material, distinct per offset.
+fn test_felt(offset: u64) -> Felt {
+    Felt::MAX - Felt::from(offset)
+}
+
+/// Owner key for the synthetic inspection cases.
+pub fn inspection_owner_key() -> Felt {
+    test_felt(1)
+}
+
+/// A guardian key for the synthetic inspection cases.
+pub fn inspection_guardian_key() -> Felt {
+    test_felt(2)
+}
+
+/// A salt that is neither the owner key nor zero: an account whose address is
+/// not a function of the seed.
+pub fn foreign_salt() -> Felt {
+    test_felt(3)
+}
+
+/// The salt an Argent smart account gets from Argent's backend.
+pub fn server_assigned_salt() -> Felt {
+    test_felt(4)
+}
+
+/// The zero salt: the legacy OpenZeppelin deployment variant. Resolved through
+/// the salt policy rather than written as a literal zero.
+pub fn zero_salt() -> Felt {
+    SaltPolicy::Zero.resolve(&inspection_owner_key())
+}

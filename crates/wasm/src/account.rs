@@ -7,13 +7,19 @@ mod addresses;
 mod derivation;
 mod helpers;
 mod nostr;
+mod registry;
 mod wasm_account;
 
+#[cfg(test)]
+mod registry_tests;
+#[cfg(test)]
+mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
 pub use addresses::{
-    calculate_contract_address, derive_argent_account_address, derive_braavos_account_address,
+    calculate_contract_address, derive_argent_account_address,
+    derive_argent_account_address_with_guardian, derive_braavos_account_address,
     derive_oz_account_address, get_account_class_hashes,
 };
 pub use derivation::{
@@ -22,4 +28,5 @@ pub use derivation::{
     get_nostr_coin_type, get_starknet_coin_type, get_tongo_coin_type, validate_mnemonic,
 };
 pub use nostr::{derive_nostr_keypair, derive_nostr_public_key};
+pub use registry::{get_account_class_registry, inspect_account_deployment};
 pub use wasm_account::WasmAccount;

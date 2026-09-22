@@ -3,7 +3,7 @@
 use super::{derivation_request, gateway_with_retention, nostr_sign_request, TestClock};
 use crate::account_class::{enforce_class_hash_allowlist, resolve_account_class};
 use crate::{DeployExecution, OperationRetentionError, OperationRetentionPolicy};
-use krusty_kms::{AccountClass, ArgentAccount, OpenZeppelinAccount};
+use krusty_kms::{AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount};
 use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
     AccountClassKind, AccountClassSpec, FeltHex, GatewayErrorCode, OperationLookupResult,
@@ -184,4 +184,97 @@ fn class_hash_allowlist_does_not_offer_the_override_for_argent() {
         !message.contains("allow_unlisted_class_hash"),
         "Argent rejection must not advertise the override: {message}"
     );
+}
+
+#[test]
+fn class_hash_allowlist_accepts_every_braavos_base_class() {
+    for hash in BraavosAccount::deployment_class_hashes() {
+        assert!(
+            enforce_class_hash_allowlist(hash, AccountClassKind::Braavos, ChainId::Sepolia, false)
+                .is_ok(),
+            "expected Braavos base class {hash:#x} to be allowed"
+        );
+    }
+}
+
+#[test]
+fn braavos_implementation_class_is_rejected_even_with_override() {
+    // The class an upgraded Braavos account runs never fixed its address, so
+    // deriving from it yields an address no deployment produces. Waiving the
+    // allowlist cannot change that (issue #146).
+    for hash in BraavosAccount::implementation_class_hashes() {
+        for allow_unlisted in [false, true] {
+            let resolved = resolve_account_class(
+                &AccountClassSpec {
+                    kind: AccountClassKind::Braavos,
+                    class_hash: Some(FeltHex::parse(&format!("{hash:#x}")).unwrap()),
+                    source_label: None,
+                    allow_unlisted_class_hash: allow_unlisted,
+                },
+                ChainId::Sepolia,
+            );
+            let Err(err) = resolved else {
+                panic!("Braavos implementation class {hash:#x} must be rejected");
+            };
+            assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+            let message = err.message.as_deref().unwrap_or("");
+            assert!(
+                message.contains("implementation class"),
+                "unexpected message: {message}"
+            );
+            assert!(
+                !message.contains("allow_unlisted_class_hash"),
+                "must not advertise an override that cannot help: {message}"
+            );
+        }
+    }
+}
+
+#[test]
+fn braavos_unknown_class_hash_still_honours_the_override() {
+    let spec = |allow_unlisted| AccountClassSpec {
+        kind: AccountClassKind::Braavos,
+        class_hash: Some(FeltHex::parse("0xdeadbeef").unwrap()),
+        source_label: None,
+        allow_unlisted_class_hash: allow_unlisted,
+    };
+    let err = resolve_account_class(&spec(false), ChainId::Sepolia)
+        .err()
+        .expect("unknown Braavos class hash must be rejected by default");
+    assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+    assert!(err
+        .message
+        .as_deref()
+        .unwrap_or("")
+        .contains("allow_unlisted_class_hash=true"));
+
+    let resolved = resolve_account_class(&spec(true), ChainId::Sepolia)
+        .expect("override admits an unknown Braavos class hash");
+    assert_eq!(resolved.class_hash(), Felt::from_hex("0xdeadbeef").unwrap());
+}
+
+#[test]
+fn allowlist_refuses_braavos_implementation_classes_on_its_own() {
+    // The check must hold for any caller of the allowlist, not only through
+    // resolve_account_class, so the override cannot waive it here either.
+    for hash in BraavosAccount::implementation_class_hashes() {
+        for allow_unlisted in [false, true] {
+            let err = enforce_class_hash_allowlist(
+                hash,
+                AccountClassKind::Braavos,
+                ChainId::Sepolia,
+                allow_unlisted,
+            )
+            .expect_err("implementation class must be refused");
+            assert_eq!(err.code, GatewayErrorCode::InvalidClassHash);
+        }
+    }
+    // The override still admits an unknown Braavos class hash.
+    assert!(enforce_class_hash_allowlist(
+        Felt::from_hex("0xdeadbeef").unwrap(),
+        AccountClassKind::Braavos,
+        ChainId::Sepolia,
+        true,
+    )
+    .is_ok());
 }
