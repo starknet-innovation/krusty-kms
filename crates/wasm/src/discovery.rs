@@ -31,9 +31,7 @@ fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, JsValue> {
 /// This is a pure cryptographic operation — no network calls are made.
 /// Each candidate is a possible on-chain account address. To find which
 /// ones are actually deployed, check each address via an RPC provider
-/// (e.g., `provider.getClassHashAt(address)` in starknet.js). That call returns
-/// the class the account *runs*, for Braavos always an implementation class,
-/// never the `classHash` derived from; `getAccountClassRegistry()` labels both.
+/// (e.g., `provider.getClassHashAt(address)` in starknet.js).
 ///
 /// # Security
 ///
@@ -53,7 +51,7 @@ fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, JsValue> {
 /// - `publicKey`: hex string
 /// - `derivationIndex`: number
 /// - `derivationPath`: string (e.g., "m/44'/9004'/0'/0/0")
-/// - `classVersion`: string (e.g., "v0.4.0", "base v1.1.0")
+/// - `classVersion`: string (e.g., "v0.4.0", "braavos-base")
 ///
 /// # Example (JavaScript)
 /// ```javascript
@@ -110,10 +108,12 @@ pub fn generate_account_candidates_with_secrets(
 ///
 /// # Why every address, not just the first
 ///
-/// A wallet type has several address variants at one index: two OpenZeppelin
-/// salt policies, two Braavos base classes, four Argent Cairo 1 classes under
-/// each key scheme, four Argent Cairo 0 implementations. This is a
-/// funds-recovery path: collapsing to one address per type hides accounts.
+/// A wallet type can have several address variants at one index: OpenZeppelin
+/// has two salt policies (`salt = public_key` and the legacy `salt = 0`),
+/// Argent legacy spans three Cairo 1 class hashes, and Argent Cairo 0 spans
+/// four proxy implementations. This is a funds-recovery path, so collapsing to
+/// one address per wallet type silently hides deployed accounts — every
+/// omitted variant is an account the caller cannot find.
 ///
 /// # Returns
 /// JSON string: `{ "0": { "Braavos": ["0x..."], "OpenZeppelin": ["0x...", "0x..."], ... } }`
@@ -359,26 +359,26 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         let index0 = parsed.get("0").expect("index 0 present");
 
-        let variants = |wallet_type: &str| {
-            index0
-                .get(wallet_type)
-                .and_then(|v| v.as_array())
-                .unwrap_or_else(|| panic!("{wallet_type} entry is an array"))
-                .clone()
-        };
-        let oz = variants("OpenZeppelin");
+        let oz = index0
+            .get("OpenZeppelin")
+            .and_then(|v| v.as_array())
+            .expect("OpenZeppelin entry is an array");
         assert_eq!(oz.len(), 2, "both OZ salt policies must be listed: {oz:?}");
         assert_ne!(oz[0], oz[1], "the two salt policies differ in address");
-        // Every variant was silently collapsed to one address before this
-        // change; each of these is an account a recovery could otherwise miss.
-        for (wallet_type, expected) in [
-            ("Braavos", 2),
-            ("Argent", 4),
-            ("ArgentLegacy", 4),
-            ("ArgentCairo0", 4),
-        ] {
-            assert_eq!(variants(wallet_type).len(), expected, "{wallet_type}");
-        }
+
+        // Argent legacy (3 class hashes) and Argent Cairo 0 (4 proxy impls)
+        // were silently collapsed to one address each before this change.
+        let legacy = index0
+            .get("ArgentLegacy")
+            .and_then(|v| v.as_array())
+            .expect("ArgentLegacy entry is an array");
+        assert_eq!(legacy.len(), 3, "all Argent legacy variants: {legacy:?}");
+
+        let cairo0 = index0
+            .get("ArgentCairo0")
+            .and_then(|v| v.as_array())
+            .expect("ArgentCairo0 entry is an array");
+        assert_eq!(cairo0.len(), 4, "all Argent Cairo 0 variants: {cairo0:?}");
 
         // Every address in the compact view must also appear in the full
         // candidate list, so the two APIs cannot drift.
