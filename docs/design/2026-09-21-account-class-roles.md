@@ -95,9 +95,11 @@ are gone.
   template's `implementation` placeholder takes.
 - **Decoding is exact.** `decode` validates every `Signer` variant's payload
   width (Starknet, Secp256k1 and EIP-191 one felt, Secp256r1 two, WebAuthn a
-  length-prefixed origin plus four) and requires the trailing guardian option
-  to consume the calldata exactly. Anything else is malformed, so the verdict
-  never rests on a tag the constructor would have rejected.
+  length-prefixed origin plus four), the value ranges of the types behind them
+  (`u128` limbs, 160-bit `EthAddress`, `u8` origin bytes, `NonZero` where
+  Cairo requires it), and requires the trailing guardian option to consume the
+  calldata exactly. Anything else is malformed, so the verdict never rests on
+  a tag the constructor would have rejected.
 - **Zero guardian.** A zero guardian means no guardian on every layout and
   yields the guardian-less calldata. v0.4.0+
   guardian keys are `NonZero`, so a literal `[0, owner, 0, 0, 0]` could never
@@ -175,11 +177,13 @@ Class hashes and roles, as published by the vendors:
 
 ## Review follow-ups
 
-Automated review on the PR raised four things, all taken:
+Automated review on the PR raised six things, all taken:
 the Cairo 0 proxy role above; the decoder's tag-only classification;
 `UnknownClass` being returned with a known proxy attached, which made the WASM
 output say `known: true` alongside `unknown_class`; and guidance that read a
-guardian from the live account rather than the deploy transaction. CodeQL's
+guardian from the live account rather than the deploy transaction; the
+decoder accepting in-range lengths with out-of-range values; and a changelog
+edit that had duplicated the new entries into released sections. CodeQL's
 hard-coded-salt alerts are addressed by deriving candidate salts from
 `SaltPolicy` and moving test fixtures into their own modules, as
 `crates/ffi/src/address.rs` already does.

@@ -97,6 +97,58 @@ fn test_decode_reports_foreign_signers() {
     );
 }
 
+/// A payload of the right length whose values the constructor's types cannot
+/// hold is rejected too, not classified from its variant tag.
+#[test]
+fn test_decode_rejects_payload_values_out_of_range() {
+    let pk = Felt::from(42u64);
+    let over_u128 = Felt::from(u128::MAX) + Felt::ONE;
+    let over_eth_address = Felt::TWO.pow(160u8);
+    let cases: [(&str, &[Felt]); 6] = [
+        // Secp256r1 owner: a u256 limb wider than u128.
+        (
+            "u256 limb overflow",
+            &[Felt::TWO, over_u128, Felt::ONE, Felt::ONE],
+        ),
+        // Secp256r1 owner: NonZero<u256> cannot be zero.
+        ("zero u256", &[Felt::TWO, Felt::ZERO, Felt::ZERO, Felt::ONE]),
+        // Secp256k1 owner: EthAddress is 160 bits.
+        (
+            "eth address overflow",
+            &[Felt::ONE, over_eth_address, Felt::ONE],
+        ),
+        // Eip191 owner: the constructor asserts a non-zero address.
+        ("zero eth address", &[Felt::THREE, Felt::ZERO, Felt::ONE]),
+        // Webauthn owner: origin elements are u8.
+        (
+            "origin byte overflow",
+            &[
+                Felt::from(4u64),
+                Felt::ONE,
+                Felt::from(256u64),
+                Felt::ONE,
+                Felt::ZERO,
+                Felt::ONE,
+                Felt::ZERO,
+                Felt::ONE,
+            ],
+        ),
+        // Starknet guardian with an out-of-range Secp256r1 payload.
+        (
+            "guardian u256 limb overflow",
+            &[Felt::ZERO, pk, Felt::ZERO, Felt::TWO, over_u128, Felt::ONE],
+        ),
+    ];
+    for (name, calldata) in cases {
+        match ArgentConstructorLayout::SignerWithOptionalGuardian.decode(calldata) {
+            Err(KmsError::DeserializationError(msg)) => {
+                assert!(msg.contains("Argent constructor calldata"), "{name}: {msg}")
+            }
+            other => panic!("{name}: expected rejection, got {other:?}"),
+        }
+    }
+}
+
 /// `decode` rejects calldata the constructor could not deserialise, so a
 /// truncated or over-long payload is an error, not a verdict.
 #[test]
