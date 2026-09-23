@@ -41,10 +41,12 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
 
 `deny.toml` sets `multiple-versions = "deny"`: a new duplicate crate version fails CI
 unless it is listed under `[bans].skip` together with the transitive path that forces
-it. Every current entry is a third-party stack that has not moved to the generation
-krusty uses (RustCrypto 0.11, rand 0.10, syn 3). Reviewed 2026-09-02:
+it. Each entry is a version krusty does not use directly. Most are older generations
+a third-party stack has not left (RustCrypto 0.10, rand 0.8, syn 2). `base64` 0.23
+is the other way around: `reqwest` 0.13.5 moved ahead of the rest of the graph.
+Reviewed 2026-09-02, with the `base64` 0.23 skip added 2026-09-23:
 
-| Old generation | Forced by | Drops when |
+| Skipped version | Forced by | Drops when |
 | --- | --- | --- |
 | aes 0.8, cipher 0.4, crypto-common 0.1, inout 0.1, ctr 0.9, scrypt 0.10, salsa20 0.10, pbkdf2 0.11, thiserror 1 | `starknet-rust-signers 0.19.1 → eth-keystore 0.5.0` (Ethereum keystore loading; krusty never calls it) | starknet-rust bumps eth-keystore |
 | hmac 0.12, sha2 0.10, digest 0.10, block-buffer 0.10, cpufeatures 0.2, rfc6979 0.4 | `starknet-rust-crypto 0.19.1` (also eth-keystore, lambdaworks-crypto, ed25519-dalek) | starknet-rust-crypto moves to RustCrypto 0.11 |
@@ -52,6 +54,7 @@ krusty uses (RustCrypto 0.11, rand 0.10, syn 3). Reviewed 2026-09-02:
 | pkcs8 0.10, spki 0.7, der 0.7, const-oid 0.9, signature 2 | `async-nats 0.50 → nkeys 0.4 → signatory 0.27 / ed25519-dalek 2` (only behind `krusty-kms-client/nats`) | nkeys moves to pkcs8 0.11 / signature 3 |
 | getrandom 0.2 | `krusty-kms-wasm` / `mental-poker-wasm` add it with the `js` feature so rand_core 0.6 consumers work in browsers; ring 0.17 and uuid 0.8 also use it | no rand_core 0.6 consumer is left in the wasm graph |
 | syn 2 | every proc-macro crate except async-trait 0.1.92 (already on syn 3) | the proc-macro ecosystem finishes the syn 3 transition |
+| base64 0.23 | `reqwest` 0.13.5 direct dependency. `hyper-util` 0.1.20 (also inside reqwest), `async-nats` 0.50, `starknet-rust-core` 0.19.1, `tokio-websockets` 0.10.1, and `krusty-kms` stay on 0.22 | those crates and `krusty-kms` move to base64 0.23 |
 
 The lockfile also lists rand 0.9, rand_core 0.9, and getrandom 0.3. They are reached
 only through `proptest` as a dev-dependency of the experimental `mental-poker` crate,
