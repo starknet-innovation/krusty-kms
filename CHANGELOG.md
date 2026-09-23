@@ -86,6 +86,10 @@ All notable changes to the published Rust crates are documented here.
   a `u256` limb wider than `u128`, an `EthAddress` over 160 bits, an origin
   byte over `0xff`, or a zero where Cairo requires `NonZero`, is malformed
   too.
+- `inspect_deployment` rejects a zero owner as malformed instead of reporting
+  it as derivable. No private key yields a zero public key, so a constructor
+  naming one describes a deployment no seed can reproduce, even where the salt
+  matches it trivially.
 - Guidance for verifying a guarded Argent account now points at the account's
   `DEPLOY_ACCOUNT` calldata for the guardian. An account's current guardian
   can have been changed or removed since deployment, and only the deploy-time

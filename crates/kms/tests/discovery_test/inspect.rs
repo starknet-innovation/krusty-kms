@@ -212,3 +212,34 @@ fn argent_cairo0_target_is_reported_as_a_proxy_target() {
         Derivability::NotFromSeed(NotDerivableReason::ImplementationClass)
     );
 }
+
+/// A zero owner is not a public key any seed derives: `stark_public_key`
+/// cannot produce one. Such a deployment is malformed, not discoverable, even
+/// where the salt matches trivially because both are zero.
+#[test]
+fn zero_owner_is_malformed_not_from_seed() {
+    let braavos = felt(BraavosAccount::CLASS_HASH);
+    let oz = OpenZeppelinAccount::latest(ChainId::Sepolia)
+        .unwrap()
+        .class_hash();
+    let proxy = ArgentCairo0::proxy_class_hash();
+    let (implementation, _) = ArgentCairo0::known_implementations()[0];
+
+    let malformed = Derivability::NotFromSeed(NotDerivableReason::UnexpectedConstructorCalldata);
+    for (class_hash, salt, calldata) in [
+        // salt == owner == 0 would otherwise look like the Braavos shape.
+        (braavos, zero_salt(), vec![Felt::ZERO]),
+        // The OpenZeppelin legacy variant deploys with a zero salt.
+        (oz, zero_salt(), vec![Felt::ZERO]),
+        (oz, Felt::ZERO, vec![Felt::ZERO]),
+        (
+            proxy,
+            Felt::ZERO,
+            ArgentCairo0::constructor_calldata(&implementation, &Felt::ZERO),
+        ),
+    ] {
+        let inspection = inspect_deployment(&class_hash, &salt, &calldata);
+        assert_eq!(inspection.derivability, malformed, "{class_hash:#x}");
+        assert_eq!(inspection.owner_public_key, None);
+    }
+}

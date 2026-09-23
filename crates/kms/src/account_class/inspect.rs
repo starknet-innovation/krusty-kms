@@ -207,6 +207,15 @@ fn inspect_public_key_constructor(
             NotDerivableReason::UnexpectedConstructorCalldata,
         );
     };
+    if *owner == Felt::ZERO {
+        // No private key yields a zero public key, so this constructor names
+        // an owner no seed can produce, whatever the salt.
+        return DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::UnexpectedConstructorCalldata,
+        );
+    }
     let zero_salt_allowed = class.family == AccountFamily::OpenZeppelin && *salt == Felt::ZERO;
     if *salt == *owner || zero_salt_allowed {
         DeploymentInspection::from_seed(class, *owner)
@@ -282,6 +291,16 @@ fn inspect_argent_cairo0_proxy(
 }
 
 fn owner_salt_verdict(class: KnownAccountClass, owner: Felt, salt: &Felt) -> DeploymentInspection {
+    if owner == Felt::ZERO {
+        // As above: a zero owner is not a public key any seed derives. The
+        // Cairo 1 decoder rejects it before reaching here; the Cairo 0 proxy
+        // path does not.
+        return DeploymentInspection::not_from_seed(
+            class,
+            None,
+            NotDerivableReason::UnexpectedConstructorCalldata,
+        );
+    }
     if *salt == owner {
         DeploymentInspection::from_seed(class, owner)
     } else {
