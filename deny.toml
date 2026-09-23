@@ -43,8 +43,10 @@ wildcards = "deny"
 allow-wildcard-paths = true
 highlight = "all"
 deny = []
-# Every duplicate below is forced by a third-party stack that has not moved to
-# the generation krusty uses (RustCrypto 0.11, rand 0.10, syn 3). Each entry
+# Every duplicate below is a version krusty does not use directly. Most are an
+# older generation a third-party stack has not left (RustCrypto 0.10, rand 0.8,
+# syn 2). base64 0.23 is the exception: reqwest 0.13.5 moved ahead of the graph.
+# Each entry
 # names the transitive path; when cargo-deny reports a skip that no longer
 # matches anything, delete it instead of leaving a stale allowance. Prefer
 # `skip` over `skip-tree`: a subtree skip would also accept duplicates added
@@ -95,6 +97,10 @@ skip = [
     # 0.1.92 has moved; serde_with, tokio-macros, tracing, starknet-rust macros
     # and the rest are still on syn 2.
     { crate = "syn@2", reason = "proc-macro crates other than async-trait 0.1.92 (syn 3)" },
+    # reqwest 0.13.5 took base64 0.23 directly. hyper-util 0.1.20 (inside that
+    # same reqwest), async-nats 0.50, starknet-rust-core 0.19.1,
+    # tokio-websockets 0.10, and krusty-kms stay on base64 0.22.
+    { crate = "base64@0.23", reason = "reqwest 0.13.5; krusty-kms and the rest of the graph use base64 0.22" },
 ]
 skip-tree = []
 
