@@ -24,6 +24,7 @@ use super::argent_cairo0::ArgentCairo0;
 use super::registry::{lookup_account_class, AccountFamily, ConstructorShape, KnownAccountClass};
 use super::DecodedArgentConstructor;
 use crate::account::calculate_contract_address;
+use crate::stark_signing::is_stark_public_key;
 use starknet_types_core::felt::Felt;
 
 /// Why an account's address is not a function of a seed-derived key alone.
@@ -207,9 +208,9 @@ fn inspect_public_key_constructor(
             NotDerivableReason::UnexpectedConstructorCalldata,
         );
     };
-    if *owner == Felt::ZERO {
-        // No private key yields a zero public key, so this constructor names
-        // an owner no seed can produce, whatever the salt.
+    if !is_stark_public_key(owner) {
+        // Not an x-coordinate of any curve point, so no key derived from a
+        // seed equals it, whatever the salt. Zero is one such felt.
         return DeploymentInspection::not_from_seed(
             class,
             None,
@@ -247,10 +248,12 @@ fn inspect_argent_constructor(
             DeploymentInspection::not_from_seed(class, None, NotDerivableReason::NonStarknetOwner)
         }
         Ok(DecodedArgentConstructor::StarknetOwnerWithGuardian { owner, guardian }) => {
-            DeploymentInspection::guarded(class, owner, guardian)
+            malformed_owner(&class, &owner)
+                .unwrap_or_else(|| DeploymentInspection::guarded(class, owner, guardian))
         }
         Ok(DecodedArgentConstructor::StarknetOwnerNoGuardian { owner }) => {
-            owner_salt_verdict(class, owner, salt)
+            malformed_owner(&class, &owner)
+                .unwrap_or_else(|| owner_salt_verdict(class, owner, salt))
         }
     }
 }
@@ -275,6 +278,9 @@ fn inspect_argent_cairo0_proxy(
             NotDerivableReason::UnexpectedConstructorCalldata,
         );
     }
+    if let Some(inspection) = malformed_owner(&class, owner) {
+        return inspection;
+    }
     if !ArgentCairo0::is_known_implementation(implementation) {
         // The proxy class *is* known; its target is not. Discovery only tries
         // the known implementations, so it would not find this account.
@@ -290,17 +296,21 @@ fn inspect_argent_cairo0_proxy(
     owner_salt_verdict(class, *owner, salt)
 }
 
-fn owner_salt_verdict(class: KnownAccountClass, owner: Felt, salt: &Felt) -> DeploymentInspection {
-    if owner == Felt::ZERO {
-        // As above: a zero owner is not a public key any seed derives. The
-        // Cairo 1 decoder rejects it before reaching here; the Cairo 0 proxy
-        // path does not.
-        return DeploymentInspection::not_from_seed(
-            class,
+/// The verdict for an owner that is not a public key, if it is not one.
+///
+/// Every path that reports an owner runs this first, so no verdict names a
+/// felt that no seed-derived key can equal.
+fn malformed_owner(class: &KnownAccountClass, owner: &Felt) -> Option<DeploymentInspection> {
+    (!is_stark_public_key(owner)).then(|| {
+        DeploymentInspection::not_from_seed(
+            class.clone(),
             None,
             NotDerivableReason::UnexpectedConstructorCalldata,
-        );
-    }
+        )
+    })
+}
+
+fn owner_salt_verdict(class: KnownAccountClass, owner: Felt, salt: &Felt) -> DeploymentInspection {
     if *salt == owner {
         DeploymentInspection::from_seed(class, owner)
     } else {

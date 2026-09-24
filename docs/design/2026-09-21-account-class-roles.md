@@ -151,13 +151,16 @@ Class hashes and roles, as published by the vendors:
 6. The gateway allowlist refuses a Braavos implementation class with or
    without `allow_unlisted_class_hash`, on its own, not only through class
    resolution.
-7. `implementation_classes(Argent)` contains the Cairo 0 proxy and no proxy
+7. An owner that is not a Stark-curve x-coordinate, zero included, is
+   `NotFromSeed(UnexpectedConstructorCalldata)` on every path that would
+   otherwise report it, and no such verdict carries an owner key.
+8. `implementation_classes(Argent)` contains the Cairo 0 proxy and no proxy
    target, so a signing allowlist built from it accepts what an unupgraded
    Cairo 0 account reports.
-8. A class inspected as a deployment class that only runs behind a proxy is
+9. A class inspected as a deployment class that only runs behind a proxy is
    `NotFromSeed(ProxyTargetClass)`, not `ImplementationClass`: the registry's
    role decides, not the absence of a constructor.
-9. A proxy pointing at an unknown implementation is
+10. A proxy pointing at an unknown implementation is
    `NotFromSeed(UnknownProxyImplementation)` with the proxy still reported,
    never `UnknownClass`, which is reserved for a class hash absent from the
    registry.

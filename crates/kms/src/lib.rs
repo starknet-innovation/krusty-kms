@@ -56,7 +56,8 @@ pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
 };
 pub use stark_signing::{
-    sign_stark_hash, stark_public_key, validate_stark_private_key, StarkSignature,
+    is_stark_public_key, sign_stark_hash, stark_public_key, validate_stark_private_key,
+    StarkSignature,
 };
 pub use strk20::{
     derive_scoped_strk20_viewing_key, derive_strk20_viewing_key, fold_strk20_viewing_key,

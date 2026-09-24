@@ -1,11 +1,12 @@
 //! `inspect_deployment`: derivability verdicts for concrete deployments.
 
+use crate::vectors::BRAAVOS_PUBLIC_KEY;
 use crate::vectors::{
     foreign_salt, inspection_guardian_key, inspection_owner_key, server_assigned_salt, zero_salt,
 };
 use krusty_kms::{
-    inspect_deployment, AccountClass, ArgentAccount, ArgentCairo0, BraavosAccount, Derivability,
-    NotDerivableReason, OpenZeppelinAccount,
+    inspect_deployment, is_stark_public_key, AccountClass, ArgentAccount, ArgentCairo0,
+    BraavosAccount, Derivability, NotDerivableReason, OpenZeppelinAccount,
 };
 use krusty_kms_common::ChainId;
 use starknet_types_core::felt::Felt;
@@ -213,9 +214,9 @@ fn argent_cairo0_target_is_reported_as_a_proxy_target() {
     );
 }
 
-/// A zero owner is not a public key any seed derives: `stark_public_key`
-/// cannot produce one. Such a deployment is malformed, not discoverable, even
-/// where the salt matches trivially because both are zero.
+/// An owner that is not a Stark-curve x-coordinate is not a public key any
+/// seed derives, so the deployment is malformed rather than discoverable.
+/// Zero is such a felt, even where the salt matches it trivially.
 #[test]
 fn zero_owner_is_malformed_not_from_seed() {
     let braavos = felt(BraavosAccount::CLASS_HASH);
@@ -227,6 +228,7 @@ fn zero_owner_is_malformed_not_from_seed() {
 
     let malformed = Derivability::NotFromSeed(NotDerivableReason::UnexpectedConstructorCalldata);
     let zero_owner = zero_salt();
+    assert!(!is_stark_public_key(&zero_owner), "zero is off the curve");
     for (case, class_hash, salt, calldata) in [
         // salt == owner == 0 would otherwise look like the Braavos shape.
         ("braavos", braavos, zero_salt(), vec![zero_owner]),
@@ -249,4 +251,61 @@ fn zero_owner_is_malformed_not_from_seed() {
         assert_eq!(inspection.derivability, malformed, "{case}");
         assert_eq!(inspection.owner_public_key, None, "{case}");
     }
+}
+
+/// The same holds for any felt off the curve, not only zero, on every path
+/// that reports an owner: a guardian, an unknown proxy target, or a plain
+/// deployment. Half the field is off the curve, so this is the common case
+/// for a field that did not come from a wallet.
+#[test]
+fn an_owner_off_the_curve_is_malformed_on_every_path() {
+    // The first felt with no curve point, found rather than written down.
+    let off_curve = (1u64..)
+        .map(Felt::from)
+        .find(|candidate| !is_stark_public_key(candidate))
+        .expect("the field has non-residues");
+
+    let braavos = felt(BraavosAccount::CLASS_HASH);
+    let v040 = felt(ArgentAccount::CLASS_HASH);
+    let proxy = ArgentCairo0::proxy_class_hash();
+    let (implementation, _) = ArgentCairo0::known_implementations()[0];
+    let guardian = inspection_guardian_key();
+
+    let malformed = Derivability::NotFromSeed(NotDerivableReason::UnexpectedConstructorCalldata);
+    for (case, class_hash, calldata) in [
+        ("braavos", braavos, vec![off_curve]),
+        (
+            "argent v0.4.0",
+            v040,
+            vec![Felt::ZERO, off_curve, Felt::ONE],
+        ),
+        (
+            "argent v0.4.0 with a guardian",
+            v040,
+            vec![Felt::ZERO, off_curve, Felt::ZERO, Felt::ZERO, guardian],
+        ),
+        (
+            "argent cairo 0 proxy",
+            proxy,
+            ArgentCairo0::constructor_calldata(&implementation, &off_curve),
+        ),
+        (
+            "argent cairo 0 proxy, unknown target",
+            proxy,
+            ArgentCairo0::constructor_calldata(&Felt::from(0xabcdu64), &off_curve),
+        ),
+    ] {
+        let inspection = inspect_deployment(&class_hash, &off_curve, &calldata);
+        assert_eq!(inspection.derivability, malformed, "{case}");
+        assert_eq!(inspection.owner_public_key, None, "{case}");
+    }
+
+    // A key discovery really does derive stays derivable, so the check does
+    // not reject ordinary accounts.
+    let real = Felt::from_hex(BRAAVOS_PUBLIC_KEY).unwrap();
+    assert!(is_stark_public_key(&real));
+    assert_eq!(
+        inspect_deployment(&braavos, &real, &[real]).derivability,
+        Derivability::FromSeed
+    );
 }
