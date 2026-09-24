@@ -4,6 +4,7 @@
 //! following the standard contract address calculation formula.
 
 use krusty_kms_common::{KmsError, Result};
+use starknet_rust_core::utils::normalize_address;
 use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 
@@ -21,8 +22,11 @@ const CONTRACT_ADDRESS_PREFIX: &str = "STARKNET_CONTRACT_ADDRESS";
 ///     salt,
 ///     class_hash,
 ///     calldata_hash
-/// ])
+/// ]) mod (2^251 - 256)
 /// ```
+///
+/// The final reduction matches the sequencer, starknet.js, and the Cairo
+/// `calculate_contract_address_from_deploy_syscall` helper.
 ///
 /// # Arguments
 /// * `salt` - Salt value for address derivation (typically 0 for standard accounts)
@@ -61,7 +65,8 @@ pub fn calculate_contract_address(
         *class_hash,
         calldata_hash,
     ];
-    let address = hash_elements(&elements);
+    // Addresses live in [0, 2^251 - 256); a raw hash above that bound wraps.
+    let address = normalize_address(hash_elements(&elements));
 
     Ok(address)
 }
@@ -182,6 +187,48 @@ mod tests {
 
         let addr = address.unwrap();
         assert_ne!(addr, Felt::ZERO);
+    }
+
+    #[test]
+    fn calculate_contract_address_matches_starknet_rust_core() {
+        let cases: [(Felt, Felt, Vec<Felt>, Felt); 3] = [
+            (
+                Felt::ZERO,
+                Felt::from(123456u64),
+                vec![Felt::from(789u64)],
+                Felt::ZERO,
+            ),
+            (
+                Felt::from_hex_unchecked("0x5ca1ab1e"),
+                Felt::from_hex_unchecked(
+                    "0x00123e6bc1c14ae9934e933d3f64916a6116dd6b036a922b2b1f0815e0d1d300",
+                ),
+                vec![],
+                Felt::from_hex_unchecked("0xabc"),
+            ),
+            (Felt::MAX, Felt::MAX, vec![Felt::MAX, Felt::ONE], Felt::MAX),
+        ];
+
+        for (salt, class_hash, calldata, deployer) in cases {
+            assert_eq!(
+                calculate_contract_address(&salt, &class_hash, &calldata, &deployer).unwrap(),
+                starknet_rust_core::utils::get_contract_address(
+                    salt, class_hash, &calldata, deployer
+                ),
+            );
+        }
+    }
+
+    /// A raw hash at or above the bound is practically unreachable, so pin the
+    /// reduction `calculate_contract_address` applies directly.
+    #[test]
+    fn address_reduction_wraps_at_2_251_minus_256() {
+        let bound = Felt::TWO.pow(251u128) - Felt::from(256u64);
+
+        assert_eq!(normalize_address(bound - Felt::ONE), bound - Felt::ONE);
+        assert_eq!(normalize_address(bound), Felt::ZERO);
+        assert_eq!(normalize_address(bound + Felt::ONE), Felt::ONE);
+        assert_eq!(normalize_address(Felt::MAX), Felt::MAX - bound);
     }
 
     #[test]
