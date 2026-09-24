@@ -226,20 +226,27 @@ fn zero_owner_is_malformed_not_from_seed() {
     let (implementation, _) = ArgentCairo0::known_implementations()[0];
 
     let malformed = Derivability::NotFromSeed(NotDerivableReason::UnexpectedConstructorCalldata);
-    for (class_hash, salt, calldata) in [
+    let zero_owner = zero_salt();
+    for (case, class_hash, salt, calldata) in [
         // salt == owner == 0 would otherwise look like the Braavos shape.
-        (braavos, zero_salt(), vec![Felt::ZERO]),
+        ("braavos", braavos, zero_salt(), vec![zero_owner]),
         // The OpenZeppelin legacy variant deploys with a zero salt.
-        (oz, zero_salt(), vec![Felt::ZERO]),
-        (oz, Felt::ZERO, vec![Felt::ZERO]),
         (
+            "openzeppelin salt-pubkey",
+            oz,
+            zero_salt(),
+            vec![zero_owner],
+        ),
+        ("openzeppelin salt-zero", oz, zero_salt(), vec![zero_owner]),
+        (
+            "argent cairo 0 proxy",
             proxy,
-            Felt::ZERO,
-            ArgentCairo0::constructor_calldata(&implementation, &Felt::ZERO),
+            zero_salt(),
+            ArgentCairo0::constructor_calldata(&implementation, &zero_owner),
         ),
     ] {
         let inspection = inspect_deployment(&class_hash, &salt, &calldata);
-        assert_eq!(inspection.derivability, malformed, "{class_hash:#x}");
-        assert_eq!(inspection.owner_public_key, None);
+        assert_eq!(inspection.derivability, malformed, "{case}");
+        assert_eq!(inspection.owner_public_key, None, "{case}");
     }
 }
