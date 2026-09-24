@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Reduce `calculate_contract_address` results modulo `2^251 - 256`, matching
+  the sequencer, starknet.js, and Cairo's deploy-syscall address helper. The
+  WASM and C-ABI wrappers inherit the fix. Addresses below the bound, which is
+  every address seen in practice, are unchanged.
+
 ## [0.11.0] - 2026-09-02
 
 ### Added
