@@ -1,6 +1,7 @@
 //! Argent account preset and its version-dependent constructor layouts.
 
 use super::AccountClass;
+use crate::account::calculate_contract_address;
 use krusty_kms_common::serialization::serialize_cairo_none;
 use krusty_kms_common::{KmsError, Result};
 use starknet_types_core::felt::Felt;
@@ -13,20 +14,26 @@ use starknet_types_core::felt::Felt;
 /// | Class           | Cairo constructor                           | Calldata        |
 /// |-----------------|---------------------------------------------|-----------------|
 /// | v0.3.0 / v0.3.1 | `(owner: felt252, guardian: felt252)`       | `[owner, 0]`    |
-/// | v0.4.0          | `(owner: Signer, guardian: Option<Signer>)` | `[0, owner, 1]` |
+/// | v0.4.0 / v0.5.0 | `(owner: Signer, guardian: Option<Signer>)` | `[0, owner, 1]` |
 ///
-/// In v0.4.0 `Signer::Starknet` is enum variant `0` and Cairo serialises
-/// `Option::None` as the tag `1`.
+/// In v0.4.0 and v0.5.0 `Signer::Starknet` is enum variant `0` and Cairo
+/// serialises `Option::None` as the tag `1`.
+///
+/// The calldata above is the guardian-less shape a seed can reproduce. With a
+/// Starknet-key guardian the shapes are `[owner, guardian]` and
+/// `[0, owner, 0, 0, guardian]` ([`Self::constructor_calldata_with_guardian`]);
+/// [`Self::decode`] reads either back from on-chain calldata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArgentConstructorLayout {
     /// `constructor(owner: felt252, guardian: felt252)` (v0.3.0, v0.3.1).
     OwnerGuardianFelts,
-    /// `constructor(owner: Signer, guardian: Option<Signer>)` (v0.4.0).
+    /// `constructor(owner: Signer, guardian: Option<Signer>)` (v0.4.0, v0.5.0).
     SignerWithOptionalGuardian,
 }
 
 impl ArgentConstructorLayout {
-    /// Constructor calldata for a Starknet-key owner with no guardian.
+    /// Constructor calldata for a Starknet-key owner with no guardian: the
+    /// one shape a seed reproduces without knowing the address.
     pub fn constructor_calldata(self, public_key: &Felt) -> Vec<Felt> {
         match self {
             Self::OwnerGuardianFelts => vec![*public_key, Felt::ZERO],
@@ -34,6 +41,36 @@ impl ArgentConstructorLayout {
                 let mut calldata = vec![Felt::ZERO, *public_key];
                 calldata.extend(serialize_cairo_none());
                 calldata
+            }
+        }
+    }
+
+    /// Constructor calldata for a Starknet-key owner **with** a Starknet-key
+    /// guardian: `[owner, guardian]` for v0.3.x and
+    /// `[0, owner, 0, 0, guardian]` for v0.4.0+ (`Signer::Starknet` owner,
+    /// `Option::Some(Signer::Starknet)` guardian).
+    ///
+    /// The guardian is per-account and not derived from the seed, so this
+    /// shape cannot be enumerated by discovery. It verifies an account whose
+    /// address is already known: take the guardian from that account's
+    /// `DEPLOY_ACCOUNT` calldata and compare the reproduced address. Only the
+    /// deploy-time guardian fixes the address; an account's current guardian
+    /// can have been changed or removed since, and reproduces nothing.
+    ///
+    /// A zero guardian means "no guardian" and yields
+    /// [`Self::constructor_calldata`]. v0.4.0+ guardians are `NonZero`, so a
+    /// literal `[0, owner, 0, 0, 0]` could never deploy.
+    pub fn constructor_calldata_with_guardian(
+        self,
+        public_key: &Felt,
+        guardian: &Felt,
+    ) -> Vec<Felt> {
+        match self {
+            _ if *guardian == Felt::ZERO => self.constructor_calldata(public_key),
+            Self::OwnerGuardianFelts => vec![*public_key, *guardian],
+            // Some(Signer::Starknet(g)): Option tag 0, Signer variant 0, key.
+            Self::SignerWithOptionalGuardian => {
+                vec![Felt::ZERO, *public_key, Felt::ZERO, Felt::ZERO, *guardian]
             }
         }
     }
@@ -50,9 +87,14 @@ pub struct ArgentAccount {
 }
 
 impl ArgentAccount {
-    /// Argent Account class hash (Cairo 1, v0.4.0).
+    /// Argent Account class hash (Cairo 1, v0.4.0). The default preset.
     pub const CLASS_HASH: &str =
         "0x036078334509b514626504edc9fb252328d1a240e4e948bef8d0c08dff45927f";
+
+    /// Argent Account class hash (Cairo 1, v0.5.0). Same constructor as
+    /// v0.4.0: `(owner: Signer, guardian: Option<Signer>)`.
+    pub const CLASS_HASH_V050: &str =
+        "0x073414441639dcd11d1846f287650a00c60c416b9d3ba45d31c651672125b2c2";
 
     /// Argent Account class hash (Cairo 1, v0.3.1).
     pub const CLASS_HASH_V031: &str =
@@ -72,6 +114,11 @@ impl ArgentAccount {
     /// directly rather than restating the mapping.
     pub fn known_classes() -> Vec<(Felt, &'static str, ArgentConstructorLayout)> {
         vec![
+            (
+                static_class_hash(Self::CLASS_HASH_V050),
+                "v0.5.0",
+                ArgentConstructorLayout::SignerWithOptionalGuardian,
+            ),
             (
                 static_class_hash(Self::CLASS_HASH),
                 "v0.4.0",
@@ -106,7 +153,10 @@ impl ArgentAccount {
             .map(|(_, _, layout)| layout)
     }
 
-    /// Latest supported Argent class (v0.4.0).
+    /// The default Argent class (v0.4.0), the class the on-chain vector in
+    /// this crate's tests pins. v0.5.0 is a known class too and is selected
+    /// with [`Self::try_with_class_hash`]; the default is unchanged so derived
+    /// addresses stay stable across releases.
     pub fn new() -> Self {
         Self::with_class_hash_and_layout(
             static_class_hash(Self::CLASS_HASH),
@@ -158,6 +208,24 @@ impl ArgentAccount {
     /// Constructor calldata layout used by this preset.
     pub fn constructor_layout(&self) -> ArgentConstructorLayout {
         self.layout
+    }
+
+    /// Address of an account deployed with `public_key` as owner and a
+    /// Starknet-key `guardian`, salted with the public key as Argent does;
+    /// calldata per [`ArgentConstructorLayout::constructor_calldata_with_guardian`].
+    ///
+    /// Discovery cannot produce this address (the guardian is not in the
+    /// seed); use it to verify an account whose address and deploy-time
+    /// guardian are known. A zero guardian gives the guardian-less address.
+    pub fn calculate_address_with_guardian(
+        &self,
+        public_key: &Felt,
+        guardian: &Felt,
+    ) -> Result<Felt> {
+        let calldata = self
+            .layout
+            .constructor_calldata_with_guardian(public_key, guardian);
+        calculate_contract_address(public_key, &self.class_hash, &calldata, &Felt::ZERO)
     }
 }
 
@@ -229,6 +297,10 @@ mod tests {
     #[test]
     fn test_argent_try_with_class_hash_accepts_known_classes() {
         for (hash, expected) in [
+            (
+                ArgentAccount::CLASS_HASH_V050,
+                ArgentConstructorLayout::SignerWithOptionalGuardian,
+            ),
             (
                 ArgentAccount::CLASS_HASH,
                 ArgentConstructorLayout::SignerWithOptionalGuardian,

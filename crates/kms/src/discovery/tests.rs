@@ -196,3 +196,67 @@ fn test_oz_candidates_cover_both_salt_policies() {
         "salt-pubkey candidate must match the deploy flow's derived address"
     );
 }
+
+/// Argent candidates under direct derivation span every known Cairo 1 class,
+/// not only the default preset (issue #146: v0.3.x accounts were unreachable).
+#[test]
+fn test_argent_direct_candidates_cover_every_known_class() {
+    let candidates = generate_candidates(TEST_MNEMONIC, 1).unwrap();
+    let direct: Vec<_> = candidates
+        .iter()
+        .filter(|c| c.wallet_type == WalletType::Argent)
+        .collect();
+    let known = crate::account_class::ArgentAccount::known_classes();
+    assert_eq!(direct.len(), known.len());
+    for (class_hash, version, _) in known {
+        assert!(
+            direct
+                .iter()
+                .any(|c| c.class_hash == format!("{class_hash:#x}") && c.class_version == version),
+            "missing direct Argent candidate for {version}"
+        );
+    }
+}
+
+/// Discovery grew from one candidate per wallet type to several. Callers that
+/// read the first address per type (the compact WASM view, `find` by wallet
+/// type) must keep getting the address earlier releases returned alone:
+/// the default preset or current base, under the same key scheme.
+#[test]
+fn test_first_candidate_of_each_wallet_type_is_unchanged() {
+    use crate::account_class::{AccountClass, ArgentAccount, BraavosAccount, SaltPolicy};
+    use starknet_types_core::felt::Felt;
+
+    let candidates = generate_candidates(TEST_MNEMONIC, 2).unwrap();
+    for index in 0..2 {
+        let first = |wallet_type: WalletType| {
+            candidates
+                .iter()
+                .find(|c| c.wallet_type == wallet_type && c.derivation_index == index)
+                .unwrap_or_else(|| panic!("no {wallet_type:?} candidate at {index}"))
+        };
+        let expect = |wallet_type: WalletType, account: &dyn AccountClass| {
+            let candidate = first(wallet_type);
+            let pk = Felt::from_hex(&candidate.public_key).unwrap();
+            let expected = account
+                .calculate_address(&pk, SaltPolicy::PublicKey)
+                .unwrap();
+            assert_eq!(
+                candidate.address,
+                format!("{expected:#x}"),
+                "{wallet_type:?} @ {index}"
+            );
+        };
+        expect(WalletType::Braavos, &BraavosAccount::new());
+        expect(WalletType::Argent, &ArgentAccount::new());
+        expect(WalletType::ArgentLegacy, &ArgentAccount::new());
+        assert_eq!(
+            first(WalletType::OpenZeppelin).class_version,
+            "v3.0.0 salt-pubkey"
+        );
+        assert_eq!(
+            first(WalletType::ArgentCairo0).class_version,
+            "proxy+v0.2.4"
+        );
+    }
+}

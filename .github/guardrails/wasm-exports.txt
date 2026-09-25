@@ -1,5 +1,6 @@
 crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveOzAccountAddress) | pub fn derive_oz_account_address(public_key_x: &str, class_hash: &str, salt: Option<String>) -> Result<String, JsValue>
 crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveArgentAccountAddress) | pub fn derive_argent_account_address(public_key: &str, class_hash: Option<String>) -> Result<String, JsValue>
+crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveArgentAccountAddressWithGuardian) | pub fn derive_argent_account_address_with_guardian(public_key: &str, guardian_public_key: &str, class_hash: Option<String>) -> Result<String, JsValue>
 crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=deriveBraavosAccountAddress) | pub fn derive_braavos_account_address(public_key: &str, class_hash: Option<String>) -> Result<String, JsValue>
 crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=calculateContractAddress) | pub fn calculate_contract_address(address_salt: &str, class_hash: &str, constructor_calldata: Vec<String>, deployer_address: &str) -> Result<String, JsValue>
 crates/wasm/src/account/addresses.rs: wasm_bindgen(js_name=getAccountClassHashes) | pub fn get_account_class_hashes() -> String
@@ -16,6 +17,8 @@ crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveArgentLegacyKe
 crates/wasm/src/account/derivation.rs: wasm_bindgen(js_name=deriveArgentLegacyPublicKey) | pub fn derive_argent_legacy_public_key(mnemonic: &str, address_index: u32, account_index: u32) -> Result<WasmStarkXOnlyPublicKey, JsValue>
 crates/wasm/src/account/nostr.rs: wasm_bindgen(js_name=deriveNostrKeypair) | pub fn derive_nostr_keypair(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmNostrKeypair, JsValue>
 crates/wasm/src/account/nostr.rs: wasm_bindgen(js_name=deriveNostrPublicKey) | pub fn derive_nostr_public_key(mnemonic: &str, address_index: u32, account_index: u32, passphrase: Option<String>) -> Result<WasmNostrPublicKey, JsValue>
+crates/wasm/src/account/registry.rs: wasm_bindgen(js_name=getAccountClassRegistry) | pub fn get_account_class_registry() -> Result<String, JsValue>
+crates/wasm/src/account/registry.rs: wasm_bindgen(js_name=inspectAccountDeployment) | pub fn inspect_account_deployment(class_hash: &str, salt: &str, constructor_calldata: Vec<String>) -> Result<String, JsValue>
 crates/wasm/src/account/wasm_account.rs: pub struct WasmAccount {
 crates/wasm/src/account/wasm_account.rs: impl WasmAccount {
 crates/wasm/src/account/wasm_account.rs: wasm_bindgen(js_name=fromMnemonic) | pub fn from_mnemonic(mnemonic: &str, address_index: u32, account_index: u32, contract_address: &str, passphrase: Option<String>) -> Result<WasmAccount, JsValue>

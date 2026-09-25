@@ -4,8 +4,9 @@ use crate::vectors::{
     ARGENT_ACCOUNT_ADDRESS, ARGENT_PRIVATE_KEY, ARGENT_PUBLIC_KEY, ARGENT_V040_CLASS_HASH, MNEMONIC,
 };
 use krusty_kms::{
-    calculate_contract_address, derive_private_key_with_coin_type, stark_public_key, AccountClass,
-    ArgentAccount, ArgentConstructorLayout, SaltPolicy,
+    calculate_contract_address, derive_private_key_with_coin_type, inspect_deployment,
+    stark_public_key, AccountClass, ArgentAccount, ArgentConstructorLayout, Derivability,
+    NotDerivableReason, SaltPolicy,
 };
 use starknet_types_core::felt::Felt;
 
@@ -163,5 +164,63 @@ fn argent_v03_class_hashes_select_felt_layout() {
             argent.build_constructor_calldata(&pubk),
             vec![pubk, Felt::ZERO]
         );
+    }
+}
+
+// -- Guardians: verification, not discovery -----------------------------------
+
+/// A guardian is part of the constructor calldata and so of the address. The
+/// shapes observed on Mainnet are `(pk, 0)` / `(pk, guardian)` for v0.3.x and
+/// `(0, pk, 1)` / `(0, pk, 0, 0, guardian)` for v0.4.0+. Discovery cannot
+/// enumerate the guardian form (the guardian is per-account, not in the seed),
+/// but given the address and the guardian the address reproduces exactly, and
+/// the inspector hands back both keys so a caller can verify ownership.
+#[test]
+fn argent_guardian_address_is_verifiable_but_not_discoverable() {
+    let pubk = Felt::from_hex(ARGENT_PUBLIC_KEY).unwrap();
+    let guardian = Felt::from_hex("0x1234abcd").unwrap();
+
+    for (class_hash, raw_calldata) in [
+        (
+            ArgentAccount::CLASS_HASH,
+            vec![Felt::ZERO, pubk, Felt::ZERO, Felt::ZERO, guardian],
+        ),
+        (ArgentAccount::CLASS_HASH_V031, vec![pubk, guardian]),
+    ] {
+        let class = Felt::from_hex(class_hash).unwrap();
+        let argent = ArgentAccount::try_with_class_hash(class).unwrap();
+
+        // The builder produces the on-chain shape and the address follows.
+        assert_eq!(
+            argent
+                .constructor_layout()
+                .constructor_calldata_with_guardian(&pubk, &guardian),
+            raw_calldata
+        );
+        let guarded = argent
+            .calculate_address_with_guardian(&pubk, &guardian)
+            .unwrap();
+        assert_eq!(
+            guarded,
+            calculate_contract_address(&pubk, &class, &raw_calldata, &Felt::ZERO).unwrap()
+        );
+        // Not the address discovery derives for this key.
+        assert_ne!(
+            guarded,
+            argent
+                .calculate_address(&pubk, SaltPolicy::PublicKey)
+                .unwrap()
+        );
+
+        // Inspecting the deploy fields says why discovery misses it and
+        // returns the keys needed to verify it anyway.
+        let inspection = inspect_deployment(&class, &pubk, &raw_calldata);
+        assert_eq!(inspection.address, guarded, "the fields fix this address");
+        assert_eq!(
+            inspection.derivability,
+            Derivability::NotFromSeed(NotDerivableReason::Guardian)
+        );
+        assert_eq!(inspection.owner_public_key, Some(pubk));
+        assert_eq!(inspection.guardian_public_key, Some(guardian));
     }
 }

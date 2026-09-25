@@ -24,6 +24,23 @@ use starknet_crypto::{get_public_key, rfc6979_generate_k, sign, Felt, SignError}
 const STARK_CURVE_ORDER_HEX: &str =
     "0x0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
 
+/// Stark curve β parameter: `y² = x³ + x + β` (α is 1).
+const STARK_BETA: Felt =
+    Felt::from_hex_unchecked("0x6f21413efbe40de150e596d72f7a8c5609ad26c15c915c1f4cdfcb99cee9e89");
+
+/// Whether `x` could be a Stark public key, that is the x-coordinate of a
+/// curve point.
+///
+/// A public key is an x-coordinate, and only about half the field's elements
+/// are one: `y² = x³ + x + β` has a root for those and not for the rest. A
+/// felt that is not one is no key's public key, whatever the private key, so
+/// nothing derived from a seed can equal it. Zero is such a felt, since β is
+/// not a square in this field.
+pub fn is_stark_public_key(x: &Felt) -> bool {
+    let y_squared = x * x * x + x + STARK_BETA;
+    y_squared.sqrt().is_some()
+}
+
 /// Deterministic Stark-curve signature output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StarkSignature {

@@ -2,11 +2,15 @@
 
 use crate::vectors::{
     BRAAVOS_ACCOUNT_ADDRESS, BRAAVOS_BASE_CLASS_HASH, BRAAVOS_PASSPHRASE, BRAAVOS_PRIVATE_KEY,
-    BRAAVOS_PUBLIC_KEY, MNEMONIC,
+    BRAAVOS_PUBLIC_KEY, BRAAVOS_V100_ACCOUNT_ADDRESS, BRAAVOS_V100_CURRENT_CLASS_HASH,
+    BRAAVOS_V100_DEPLOY_CLASS_HASH, BRAAVOS_V100_PUBLIC_KEY, MNEMONIC,
 };
 use krusty_kms::{
-    derive_private_key_with_coin_type, stark_public_key, AccountClass, BraavosAccount, SaltPolicy,
+    calculate_contract_address, derive_private_key_with_coin_type, inspect_deployment,
+    lookup_account_class, stark_public_key, AccountClass, AccountFamily, BraavosAccount, ClassRole,
+    Derivability, NotDerivableReason, SaltPolicy,
 };
+use krusty_kms_common::KmsError;
 use starknet_types_core::felt::Felt;
 
 // -- Key derivation -----------------------------------------------------------
@@ -188,5 +192,119 @@ fn braavos_multi_index_discovery() {
                 "Index 0 must match the known test vector"
             );
         }
+    }
+}
+
+// -- Base v1.0.0 accounts (issue #146) ------------------------------------------
+
+/// Regression for issue #146: a real Mainnet account deployed with the v1.0.0
+/// base class. Its address is `calculateContractAddress(pk, base_v1.0.0, [pk],
+/// 0)` and nothing else: the current base class and both implementation
+/// classes it has run give a different, wrong address.
+#[test]
+fn braavos_v100_account_derives_only_from_the_v100_base_class() {
+    let pubk = Felt::from_hex(BRAAVOS_V100_PUBLIC_KEY).unwrap();
+    let expected = Felt::from_hex(BRAAVOS_V100_ACCOUNT_ADDRESS).unwrap();
+    let deploy_class = Felt::from_hex(BRAAVOS_V100_DEPLOY_CLASS_HASH).unwrap();
+    assert_eq!(
+        deploy_class,
+        Felt::from_hex(BraavosAccount::BASE_CLASS_HASH_V100).unwrap()
+    );
+
+    // The raw formula the issue verified against.
+    assert_eq!(
+        calculate_contract_address(&pubk, &deploy_class, &[pubk], &Felt::ZERO).unwrap(),
+        expected,
+        "salt = pk, class = base v1.0.0, calldata = [pk], deployer = 0"
+    );
+    // The preset path agrees.
+    assert_eq!(
+        BraavosAccount::try_with_class_hash(deploy_class)
+            .unwrap()
+            .calculate_address(&pubk, SaltPolicy::PublicKey)
+            .unwrap(),
+        expected
+    );
+
+    // Every other Braavos class derives a wrong address for this account.
+    for wrong in [
+        BraavosAccount::CLASS_HASH,
+        BraavosAccount::LEGACY_CLASS_HASH,
+        BraavosAccount::ACCOUNT_CLASS_HASH_V110,
+        BraavosAccount::ACCOUNT_CLASS_HASH_V120,
+    ] {
+        let addr = BraavosAccount::with_class_hash(Felt::from_hex(wrong).unwrap())
+            .calculate_address(&pubk, SaltPolicy::PublicKey)
+            .unwrap();
+        assert_ne!(
+            addr, expected,
+            "{wrong} must not reproduce a v1.0.0-base account"
+        );
+    }
+}
+
+/// The class an upgraded account runs today is an implementation class: the
+/// registry says so, and the derive path refuses it instead of returning a
+/// plausible wrong address.
+#[test]
+fn braavos_current_class_is_an_implementation_class_not_a_deployment_class() {
+    let current = Felt::from_hex(BRAAVOS_V100_CURRENT_CLASS_HASH).unwrap();
+    let class = lookup_account_class(&current).expect("v1.0.0 account class is known");
+    assert_eq!(class.family, AccountFamily::Braavos);
+    assert_eq!(class.roles, vec![ClassRole::Implementation]);
+    assert!(!class.is_deployment_class());
+
+    match BraavosAccount::try_with_class_hash(current) {
+        Err(KmsError::InvalidClassHash(msg)) => assert!(msg.contains("implementation"), "{msg}"),
+        Err(other) => panic!("expected InvalidClassHash, got {other}"),
+        Ok(_) => panic!("implementation class must be rejected"),
+    }
+}
+
+/// `inspect_deployment` on the account's `DEPLOY_ACCOUNT` fields says it is
+/// derivable from the seed; on its current class it says why not.
+#[test]
+fn braavos_v100_deployment_is_derivable_from_seed() {
+    let pubk = Felt::from_hex(BRAAVOS_V100_PUBLIC_KEY).unwrap();
+    let deploy_class = Felt::from_hex(BRAAVOS_V100_DEPLOY_CLASS_HASH).unwrap();
+    let inspection = inspect_deployment(&deploy_class, &pubk, &[pubk]);
+    assert_eq!(inspection.derivability, Derivability::FromSeed);
+    assert_eq!(inspection.owner_public_key, Some(pubk));
+    // The fields bind to the real Mainnet account.
+    assert_eq!(
+        inspection.address,
+        Felt::from_hex(BRAAVOS_V100_ACCOUNT_ADDRESS).unwrap()
+    );
+    assert_eq!(inspection.class.unwrap().version, "1.0.0");
+
+    let current = Felt::from_hex(BRAAVOS_V100_CURRENT_CLASS_HASH).unwrap();
+    assert_eq!(
+        inspect_deployment(&current, &pubk, &[pubk]).derivability,
+        Derivability::NotFromSeed(NotDerivableReason::ImplementationClass)
+    );
+}
+
+/// Discovery from a seed emits a candidate for every base class, so a v1.0.0
+/// account is found as well as a current one.
+#[test]
+fn braavos_discovery_tries_every_base_class() {
+    let candidates = krusty_kms::generate_candidates(MNEMONIC, 1).unwrap();
+    let braavos_classes: Vec<Felt> = candidates
+        .iter()
+        .filter(|c| c.wallet_type == krusty_kms::WalletType::Braavos)
+        .map(|c| Felt::from_hex(&c.class_hash).unwrap())
+        .collect();
+    assert_eq!(braavos_classes.len(), 2);
+    for base in BraavosAccount::deployment_class_hashes() {
+        assert!(
+            braavos_classes.contains(&base),
+            "missing candidate for {base:#x}"
+        );
+    }
+    for implementation in BraavosAccount::implementation_class_hashes() {
+        assert!(
+            !braavos_classes.contains(&implementation),
+            "implementation class {implementation:#x} must not be a candidate"
+        );
     }
 }

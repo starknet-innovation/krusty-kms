@@ -23,8 +23,12 @@ pub use account::{
     calculate_contract_address, derive_oz_account_address, encode_short_string, hash_elements,
 };
 pub use account_class::{
-    AccountClass, ArgentAccount, ArgentConstructorLayout, BraavosAccount, OpenZeppelinAccount,
-    OzAccountClassConfig, OzAccountClassSource, OzDeploymentDescriptor, SaltPolicy,
+    deployment_classes, implementation_classes, inspect_deployment, known_account_classes,
+    lookup_account_class, proxy_target_classes, AccountClass, AccountFamily, ArgentAccount,
+    ArgentCairo0, ArgentConstructorLayout, BraavosAccount, ClassRole, ConstructorShape,
+    DecodedArgentConstructor, DeploymentInspection, Derivability, KnownAccountClass,
+    NotDerivableReason, OpenZeppelinAccount, OzAccountClassConfig, OzAccountClassSource,
+    OzDeploymentDescriptor, SaltPolicy,
 };
 pub use derivation::{
     derive_argent_legacy_private_key, derive_keypair, derive_keypair_with_coin_type,
@@ -52,7 +56,8 @@ pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
 };
 pub use stark_signing::{
-    sign_stark_hash, stark_public_key, validate_stark_private_key, StarkSignature,
+    is_stark_public_key, sign_stark_hash, stark_public_key, validate_stark_private_key,
+    StarkSignature,
 };
 pub use strk20::{
     derive_scoped_strk20_viewing_key, derive_strk20_viewing_key, fold_strk20_viewing_key,

@@ -6,4 +6,5 @@
 mod argent;
 mod braavos;
 mod candidates;
+mod inspect;
 mod vectors;
