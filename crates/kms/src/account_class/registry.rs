@@ -7,10 +7,11 @@
 //! - a **deployment** class fixes the contract address. It is the
 //!   `class_hash` of the `DEPLOY_ACCOUNT` transaction and the only class an
 //!   address can be derived from;
-//! - an **implementation** class is what the account's address reports on
-//!   chain (`starknet_getClassHashAt`) and what a signer must accept, but it
-//!   never fixes an address. A third role, **proxy target**, is the class a
-//!   proxy delegates to: code the account runs that no address ever reports.
+//! - an **implementation** role marks a class an account's address can report
+//!   on chain (`starknet_getClassHashAt`) and that a signer must accept. A class
+//!   may also have the deployment role and fix addresses; an implementation-only
+//!   class cannot be used for derivation. A third role, **proxy target**, is the
+//!   class a proxy delegates to: code the account runs that no address reports.
 //!
 //! Braavos separates the two by design: every account deploys with a base
 //! class and upgrades itself to the account implementation inside the same
