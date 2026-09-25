@@ -6,10 +6,11 @@ Date: 2026-09-21. Status: accepted. Origin: issue #146.
 
 A class hash plays one of two roles for an account. A **deployment** class is
 the `class_hash` of the `DEPLOY_ACCOUNT` transaction; it fixes the address and
-is the role used when the account runs that class after deployment; it is what
-`starknet_getClassHashAt` returns and what a signer must accept. A class may
-also carry the deployment role and fix addresses; only an implementation-only
-class can never be used for address derivation.
+is the class an address is derived from. An **implementation** class is one an
+account's address reports through `starknet_getClassHashAt` while it runs that
+class, and what a signer must accept. A class may carry both roles, and then it
+does fix addresses; only an implementation-only class can never be used for
+address derivation.
 
 Braavos separates the two by design: every account deploys with a *base* class
 whose constructor is `[public_key]`, the target implementation travels in the

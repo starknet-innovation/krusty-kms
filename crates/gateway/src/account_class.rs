@@ -122,8 +122,8 @@ fn known_class_hashes(kind: AccountClassKind, chain_id: ChainId) -> Vec<Felt> {
             hashes
         }
         AccountClassKind::Argent => ArgentAccount::known_class_hashes(),
-        // Deployment (base) classes only: an implementation class never fixes
-        // an address, so deriving or deploying with it is always wrong.
+        // Deployment (base) classes only: a Braavos implementation class fixes
+        // no address, so deriving or deploying with it is always wrong.
         AccountClassKind::Braavos => BraavosAccount::deployment_class_hashes(),
     }
 }

@@ -144,10 +144,12 @@ impl DeploymentInspection {
 /// State whether a deployment's address is a function of a seed-derived key.
 ///
 /// The arguments are the `DEPLOY_ACCOUNT` transaction's `class_hash`,
+/// `contract_address_salt` and `constructor_calldata`: the three inputs that
 /// fix a counterfactual address. Passing an implementation-only class yields
 /// [`NotDerivableReason::ImplementationClass`]. A current class that also has
 /// the deployment role is inspected as a possible deployment class, so use the
-/// deploy transaction's class hash and always compare [`DeploymentInspection::address`].
+/// deploy transaction's class hash and always compare
+/// [`DeploymentInspection::address`].
 ///
 /// The fields are untrusted input (typically an RPC response): the verdict is
 /// about these fields, and [`DeploymentInspection::address`] is what binds

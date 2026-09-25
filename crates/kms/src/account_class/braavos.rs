@@ -160,7 +160,7 @@ impl BraavosAccount {
     /// Create with a known Braavos **deployment** class hash.
     ///
     /// Returns [`KmsError::InvalidClassHash`] for a known implementation class
-    /// (the class an upgraded account runs, which never fixes an address) and
+    /// (the class an upgraded Braavos account runs, which fixes no address) and
     /// for a class hash this crate does not know. Braavos accounts always
     /// upgrade, so a class hash read from the chain is an implementation
     /// class; derive from [`Self::deployment_class_hashes`] instead.
