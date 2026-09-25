@@ -12,9 +12,10 @@ use wasm_bindgen::prelude::*;
 /// - `deployment`: the class an account is deployed with. It fixes the
 ///   address, so it is the class to **derive from** when looking for an
 ///   account from a seed.
-/// - `implementation`: the class an account's address reports on chain
-///   (`starknet_getClassHashAt`) and what to **accept when signing**; it
-///   never fixes an address.
+/// - `implementation`: a class an account's address can report on chain
+///   (`starknet_getClassHashAt`) and what to **accept when signing**. An entry
+///   may also have the `deployment` role; only implementation-only entries
+///   must not be used for address derivation.
 /// - `proxy_target`: the class a proxy delegates to, named in the proxy's
 ///   constructor calldata. It is code the account runs, but no address ever
 ///   reports it, so a signing allowlist must not expect it. These are the
