@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-25
+
 ### Added
 
 - Add a registry of known account classes labelled by role
