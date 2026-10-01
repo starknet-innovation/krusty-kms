@@ -13,9 +13,9 @@ use super::StarknetRsFelt;
 use crate::abi;
 use crate::wallet::utils::{core_felt_to_rs, rpc_error};
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
-use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Provider;
+use starknet_rust_core::types::{BlockId, BlockTag, Call, FunctionCall};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::Provider;
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
 

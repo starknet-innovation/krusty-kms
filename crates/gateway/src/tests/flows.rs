@@ -36,8 +36,8 @@ async fn derive_account_public_key_matches_starknet_rs_derivation() {
 
     let response = gateway.derive_account(derivation_request()).await.unwrap();
 
-    let expected = starknet_rust::signers::SigningKey::from_secret_scalar(
-        starknet_rust::core::types::Felt::from(123u64),
+    let expected = starknet_rust_signers::SigningKey::from_secret_scalar(
+        starknet_rust_core::types::Felt::from(123u64),
     )
     .verifying_key()
     .scalar();

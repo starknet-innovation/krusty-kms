@@ -5,16 +5,16 @@ use krusty_kms_client::{
     MultisigSignerNotice, NatsMultisigCoordinator, SignedMultisigCoordinationMessage,
 };
 use krusty_kms_common::{Address, ChainId};
-use starknet_rust::core::utils::get_selector_from_name;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::signers::SigningKey;
+use starknet_rust_core::utils::get_selector_from_name;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use url::Url;
 
 fn demo_signing_key(secret: u64) -> SigningKey {
-    SigningKey::from_secret_scalar(starknet_rust::core::types::Felt::from(secret))
+    SigningKey::from_secret_scalar(starknet_rust_core::types::Felt::from(secret))
 }
 
 #[tokio::main]

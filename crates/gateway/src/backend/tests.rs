@@ -15,11 +15,11 @@ use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
     AccountDescriptor, DerivationPath, FeltHex, GatewayErrorCode, KeyDomain, Provenance,
 };
-use starknet_rust::core::types::{
+use starknet_rust_core::types::{
     ExecutionResult, StarknetError, TransactionFinalityStatus, TransactionStatus,
 };
-use starknet_rust::providers::jsonrpc::{HttpTransportError, JsonRpcClientError, JsonRpcError};
-use starknet_rust::providers::{ProviderError, ProviderImplError};
+use starknet_rust_providers::jsonrpc::{HttpTransportError, JsonRpcClientError, JsonRpcError};
+use starknet_rust_providers::{ProviderError, ProviderImplError};
 use starknet_types_core::felt::Felt;
 
 /// Stand-in for a transport error whose `Display` leaks the request URL, the

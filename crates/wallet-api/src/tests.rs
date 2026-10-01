@@ -3,8 +3,8 @@ use super::{
     ReceiptObservation, WaitOptions, MAX_WAIT_TIMEOUT_SECS, MIN_WAIT_INTERVAL_SECS,
     MIN_WAIT_TIMEOUT_SECS,
 };
-use starknet_rust::core::types::{ExecutionResult, StarknetError, TransactionStatus};
-use starknet_rust::providers::ProviderError;
+use starknet_rust_core::types::{ExecutionResult, StarknetError, TransactionStatus};
+use starknet_rust_providers::ProviderError;
 
 #[test]
 fn zero_interval_is_raised_to_the_floor() {

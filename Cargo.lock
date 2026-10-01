@@ -1751,7 +1751,10 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "starknet-rust",
+ "starknet-rust-accounts",
+ "starknet-rust-core",
+ "starknet-rust-providers",
+ "starknet-rust-signers",
  "starknet-types-core",
  "tokio",
  "url",
@@ -1813,7 +1816,10 @@ dependencies = [
  "krusty-kms-crypto",
  "krusty-kms-domain",
  "num-bigint 0.5.1",
- "starknet-rust",
+ "starknet-rust-accounts",
+ "starknet-rust-core",
+ "starknet-rust-providers",
+ "starknet-rust-signers",
  "starknet-types-core",
  "tokio",
  "zeroize",
@@ -1853,7 +1859,8 @@ version = "0.12.1"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
- "starknet-rust",
+ "starknet-rust-core",
+ "starknet-rust-providers",
  "tokio",
 ]
 
@@ -3329,21 +3336,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
-name = "starknet-rust"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16c05baf692407c60e926d39ee819b27638abb2ddf69a4a5e378ee67768fee87"
-dependencies = [
- "starknet-rust-accounts",
- "starknet-rust-contract",
- "starknet-rust-core",
- "starknet-rust-core-derive",
- "starknet-rust-macros",
- "starknet-rust-providers",
- "starknet-rust-signers",
-]
-
-[[package]]
 name = "starknet-rust-accounts"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3356,18 +3348,6 @@ dependencies = [
  "starknet-rust-providers",
  "starknet-rust-signers",
  "thiserror 2.0.21",
-]
-
-[[package]]
-name = "starknet-rust-contract"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34b2606be684c227072088759e91dbe7a5e9ba1826df38d5e00d68268b04ccc7"
-dependencies = [
- "serde_json",
- "starknet-rust-accounts",
- "starknet-rust-core",
- "starknet-rust-providers",
 ]
 
 [[package]]
@@ -3433,16 +3413,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf807adc0b881c58efa7cbdec303da1308250691a3969fb46b5eb47dfb125eca"
 dependencies = [
  "starknet-types-core",
-]
-
-[[package]]
-name = "starknet-rust-macros"
-version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e4524799870f82bb16ec405409d280fddc97f12e2e4d1e363dea00a30f7ae89"
-dependencies = [
- "starknet-rust-core",
- "syn 2.0.119",
 ]
 
 [[package]]

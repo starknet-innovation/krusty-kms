@@ -5,13 +5,13 @@ mod pagination;
 use crate::abi::tongo_events;
 use crate::types::{AEBalance, CipherBalance};
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::types::EmittedEvent;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_core::types::EmittedEvent;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt as CoreFelt;
 use std::sync::Arc;
 
-type StarknetRsFelt = starknet_rust::core::types::Felt;
+type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 fn rs_felt_to_core(felt: StarknetRsFelt) -> CoreFelt {
     CoreFelt::from_bytes_be(&felt.to_bytes_be())

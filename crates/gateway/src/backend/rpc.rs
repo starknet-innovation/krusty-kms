@@ -5,12 +5,12 @@ use super::StarknetRsFelt;
 use crate::GatewayResult;
 use krusty_kms_domain::{BlockSelector, GatewayError, GatewayErrorCode};
 use num_bigint::BigUint;
-use starknet_rust::core::types::{BlockId, BlockTag, FunctionCall, StarknetError};
-use starknet_rust::core::utils::get_selector_from_name;
-use starknet_rust::providers::jsonrpc::{
+use starknet_rust_core::types::{BlockId, BlockTag, FunctionCall, StarknetError};
+use starknet_rust_core::utils::get_selector_from_name;
+use starknet_rust_providers::jsonrpc::{
     HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError,
 };
-use starknet_rust::providers::{Provider, ProviderError, ProviderImplError};
+use starknet_rust_providers::{Provider, ProviderError, ProviderImplError};
 use starknet_types_core::felt::Felt as CoreFelt;
 use std::sync::Arc;
 

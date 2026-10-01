@@ -41,8 +41,10 @@ categories = ["cryptography"]
 
 [workspace.dependencies]
 starknet-types-core = { version = "0.2.4", features = ["hash"] }
-starknet-rust = "=0.19.1"
 starknet-rust-core = "=0.19.1"
+starknet-rust-providers = "=0.19.1"
+starknet-rust-accounts = "=0.19.1"
+starknet-rust-signers = "=0.19.1"
 starknet-crypto = { package = "starknet-rust-crypto", version = "=0.19.1" }
 bip39 = { version = "3.0.0", features = ["zeroize"] }
 hmac = "0.13.0"

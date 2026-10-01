@@ -10,11 +10,11 @@ use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::accounts::AccountFactory;
-use starknet_rust::accounts::OpenZeppelinAccountFactory;
-use starknet_rust::core::types::FeeEstimate;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::signers::{LocalWallet, SigningKey};
+use starknet_rust_accounts::AccountFactory;
+use starknet_rust_accounts::OpenZeppelinAccountFactory;
+use starknet_rust_core::types::FeeEstimate;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
 use super::fee;

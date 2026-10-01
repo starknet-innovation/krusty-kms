@@ -4,7 +4,7 @@ use super::types::{MultisigCall, MultisigCoordinationMessage, MultisigTransactio
 use super::StarknetRsFelt;
 use crate::wallet::utils::{core_felt_to_rs, rs_felt_to_core};
 use krusty_kms_common::{Address, KmsError, Result};
-use starknet_rust::core::utils::starknet_keccak;
+use starknet_rust_core::utils::starknet_keccak;
 use starknet_types_core::felt::Felt;
 use starknet_types_core::hash::{Pedersen, StarkHash};
 

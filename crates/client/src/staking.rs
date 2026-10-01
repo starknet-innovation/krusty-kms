@@ -10,9 +10,9 @@ use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::u256_to_u128;
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Provider;
+use starknet_rust_core::types::{BlockId, BlockTag, Call, FunctionCall};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::Provider;
 use std::sync::Arc;
 
 /// Mainnet staking contract address.
@@ -238,8 +238,8 @@ impl Staking {
 }
 
 fn parse_position_amount(
-    low: &starknet_rust::core::types::Felt,
-    high: &starknet_rust::core::types::Felt,
+    low: &starknet_rust_core::types::Felt,
+    high: &starknet_rust_core::types::Felt,
     field: &str,
     decimals: u8,
 ) -> Result<Amount> {
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn test_populate_enter() {
         let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust::providers::jsonrpc::HttpTransport::new(
+            starknet_rust_providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn test_populate_add() {
         let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust::providers::jsonrpc::HttpTransport::new(
+            starknet_rust_providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn test_populate_exit() {
         let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust::providers::jsonrpc::HttpTransport::new(
+            starknet_rust_providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -316,8 +316,8 @@ mod tests {
     #[test]
     fn test_parse_position_amount_rejects_u256_overflow() {
         let error = parse_position_amount(
-            &starknet_rust::core::types::Felt::ZERO,
-            &starknet_rust::core::types::Felt::ONE,
+            &starknet_rust_core::types::Felt::ZERO,
+            &starknet_rust_core::types::Felt::ONE,
             "amount",
             18,
         )

@@ -4,11 +4,11 @@ use super::super::deploy::bound_deployment;
 use super::super::StarknetRsFelt;
 use krusty_kms_common::fee::{MaxBound, ResourceBoundsCeiling};
 use krusty_kms_domain::GatewayErrorCode;
-use starknet_rust::accounts::{AccountFactory, OpenZeppelinAccountFactory};
-use starknet_rust::core::types::FeeEstimate;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Url;
-use starknet_rust::signers::{LocalWallet, SigningKey};
+use starknet_rust_accounts::{AccountFactory, OpenZeppelinAccountFactory};
+use starknet_rust_core::types::FeeEstimate;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::Url;
+use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
 fn deploy_estimate() -> FeeEstimate {

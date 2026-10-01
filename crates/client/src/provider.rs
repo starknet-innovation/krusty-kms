@@ -2,7 +2,7 @@
 
 use krusty_kms_common::error::redact_url;
 use krusty_kms_common::Result;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 use url::Url;

@@ -21,11 +21,11 @@ use krusty_kms_domain::{
     SnapshotBlockMetadata, TrackedToken,
 };
 use num_bigint::BigUint;
-use starknet_rust::accounts::{AccountFactory, OpenZeppelinAccountFactory};
-use starknet_rust::core::types::{FunctionCall, MaybePreConfirmedBlockWithTxHashes};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Provider;
-use starknet_rust::signers::{LocalWallet, SigningKey};
+use starknet_rust_accounts::{AccountFactory, OpenZeppelinAccountFactory};
+use starknet_rust_core::types::{FunctionCall, MaybePreConfirmedBlockWithTxHashes};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::Provider;
+use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
 /// Default Starknet JSON-RPC backend backed directly by Starknet JSON-RPC primitives.

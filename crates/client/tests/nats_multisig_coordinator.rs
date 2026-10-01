@@ -17,7 +17,7 @@ use krusty_kms_client::{
     NatsMultisigCoordinator, SignedMultisigCoordinationMessage,
 };
 use krusty_kms_common::Address;
-use starknet_rust::signers::SigningKey;
+use starknet_rust_signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::net::TcpListener;
 use std::path::PathBuf;
