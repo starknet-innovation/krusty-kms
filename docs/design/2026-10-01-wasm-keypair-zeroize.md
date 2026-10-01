@@ -29,7 +29,9 @@ the only lockfile change is the new edge).
 
 The JS surface is unchanged: the same classes, constructors, getters, setters,
 and `publicKeyHex`. The export snapshot changes only because it records each
-type's derive list. Rust code can no longer move a field out of these types
+type's derive list. The type tests move to `types/tests.rs` so that
+`types.rs` does not grow past its ratchet; its file-size baseline drops from
+562 to 498 lines. Rust code can no longer move a field out of these types
 (they now implement `Drop`), which affected one test helper; the crate is not
 published to crates.io.
 
