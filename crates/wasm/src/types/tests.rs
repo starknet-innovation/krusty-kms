@@ -74,3 +74,42 @@ fn wasm_nostr_keypair_debug_redacts_private_key() {
     assert!(debug.contains("***"));
     assert!(!debug.contains("aabbccdd"));
 }
+
+fn assert_zeroize_on_drop<T: ZeroizeOnDrop>() {}
+
+#[wasm_bindgen_test]
+fn wasm_keypair_types_zeroize_on_drop() {
+    // `free()` and the JS finalizer both drop the Rust value, so the marker is
+    // what guarantees the owned private-key copy is wiped when JS lets go.
+    assert_zeroize_on_drop::<WasmKeypair>();
+    assert_zeroize_on_drop::<WasmStarkXOnlyKeypair>();
+    assert_zeroize_on_drop::<WasmNostrKeypair>();
+}
+
+#[wasm_bindgen_test]
+fn wasm_keypair_zeroize_wipes_only_the_private_key() {
+    let mut kp = WasmKeypair {
+        private_key: "0xdeadbeef".to_string(),
+        public_key_x: "0x1".to_string(),
+        public_key_y: "0x2".to_string(),
+    };
+    kp.zeroize();
+    assert!(kp.private_key.is_empty());
+    assert_eq!(
+        (kp.public_key_x.as_str(), kp.public_key_y.as_str()),
+        ("0x1", "0x2")
+    );
+
+    let mut x_only = WasmStarkXOnlyKeypair {
+        private_key: "0xdeadbeef".to_string(),
+        public_key_x: "0x1".to_string(),
+    };
+    x_only.zeroize();
+    assert!(x_only.private_key.is_empty());
+    assert_eq!(x_only.public_key_x, "0x1");
+
+    let mut nostr = WasmNostrKeypair::new("aabbccdd".to_string(), "11223344".to_string());
+    nostr.zeroize();
+    assert!(nostr.private_key.is_empty());
+    assert_eq!(nostr.public_key, "11223344");
+}

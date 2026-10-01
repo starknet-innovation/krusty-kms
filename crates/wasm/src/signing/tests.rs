@@ -89,7 +89,8 @@ fn test_sign_stark_hash_rejects_invalid_hash() {
 fn test_nostr_private_key() -> String {
     let mnemonic = "habit hope tip crystal because grunt nation idea electric witness alert like";
     let kp = crate::account::derive_nostr_keypair(mnemonic, 0, 0, None).unwrap();
-    kp.private_key
+    // The keypair wipes its own copy on drop, so hand the test a clone.
+    kp.private_key.clone()
 }
 
 #[wasm_bindgen_test]

@@ -4,6 +4,15 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- The WASM keypair types (`WasmKeypair`, `WasmStarkXOnlyKeypair`,
+  `WasmNostrKeypair`) zeroize the private-key string they own when they are
+  dropped, which is what `free()` and the JS garbage-collection finalizer do.
+  Freed keypairs previously left the key's bytes in WASM linear memory until
+  the allocator reused them. The temporary copy made by each `private_key`
+  getter read, and the JS string it returns, are still not wiped.
+
 ## [0.12.0] - 2026-09-25
 
 ### Added

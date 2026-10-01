@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use starknet_types_core::felt::Felt;
 use std::fmt;
 use wasm_bindgen::prelude::*;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> Result<String, JsValue> {
     let x = Felt::from_hex(public_key_x)
@@ -224,10 +225,13 @@ impl WasmCiphertext {
 ///
 /// This type intentionally exposes `private_key` as a plain hex string for
 /// JS interop (signing, export, wallet recovery). That string lives in the
-/// JS heap and **cannot** be reliably wiped. Prefer companion public-only
-/// APIs (`derivePublicKey`, etc.) when private material is not required.
+/// JS heap and **cannot** be reliably wiped. The copy this object owns in
+/// WASM memory is zeroized when the object is freed (`free()` or garbage
+/// collection); each getter read makes a temporary copy that is freed
+/// without being wiped. Prefer companion public-only APIs
+/// (`derivePublicKey`, etc.) when private material is not required.
 /// Never `console.log` this value; `Debug` redacts the private key.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmKeypair {
     /// Private key as hex string (0x-prefixed). Treat as secret.
@@ -237,8 +241,10 @@ pub struct WasmKeypair {
     #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key X coordinate as hex string
+    #[zeroize(skip)]
     pub public_key_x: String,
     /// Public key Y coordinate as hex string
+    #[zeroize(skip)]
     pub public_key_y: String,
 }
 
@@ -298,15 +304,18 @@ pub struct WasmPublicKey {
 /// # Security / threat model
 ///
 /// `private_key` is a plain hex string in the JS heap and cannot be reliably
-/// wiped. Prefer [`WasmStarkXOnlyPublicKey`] when private material is not
-/// required. `Debug` redacts the private key; default `Serialize` omits it.
-#[derive(Clone, Serialize, Deserialize)]
+/// wiped. The copy this object owns in WASM memory is zeroized when the
+/// object is freed, as for [`WasmKeypair`]. Prefer [`WasmStarkXOnlyPublicKey`]
+/// when private material is not required. `Debug` redacts the private key;
+/// default `Serialize` omits it.
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmStarkXOnlyKeypair {
     /// Private key as hex string (0x-prefixed). Treat as secret.
     #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key X coordinate as hex string
+    #[zeroize(skip)]
     pub public_key_x: String,
 }
 
@@ -404,9 +413,11 @@ pub enum WasmTxType {
 /// # Security / threat model
 ///
 /// `private_key` is a plain hex string in the JS heap and cannot be reliably
-/// wiped. Prefer [`WasmNostrPublicKey`] / `deriveNostrPublicKey` when private
-/// material is not required. `Debug` redacts the private key.
-#[derive(Clone, Serialize, Deserialize)]
+/// wiped. The copy this object owns in WASM memory is zeroized when the
+/// object is freed, as for [`WasmKeypair`]. Prefer [`WasmNostrPublicKey`] /
+/// `deriveNostrPublicKey` when private material is not required. `Debug`
+/// redacts the private key.
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmNostrKeypair {
     /// Private key as hex string (64 hex chars, no 0x prefix). Treat as secret.
@@ -416,6 +427,7 @@ pub struct WasmNostrKeypair {
     #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key as x-only hex string (64 hex chars, no 0x prefix)
+    #[zeroize(skip)]
     pub public_key: String,
 }
 
