@@ -28,6 +28,11 @@ if (Object.hasOwn(packageJson, "scripts")) {
 if (typeof packageJson.name !== "string" || typeof packageJson.version !== "string") {
   throw new Error("npm package must contain string name and version fields");
 }
+// Every published version must name the commit that produced it (issue #137).
+// The build job records this; refuse to publish a tarball that lost it.
+if (!/^[0-9a-f]{40}$/.test(packageJson.gitHead ?? "")) {
+  throw new Error("npm package must record a 40-character gitHead commit");
+}
 process.stdout.write(`${packageJson.name}\n${packageJson.version}\n`);
 NODE
 )"; then
