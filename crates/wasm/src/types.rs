@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use starknet_types_core::felt::Felt;
 use std::fmt;
 use wasm_bindgen::prelude::*;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> Result<String, JsValue> {
     let x = Felt::from_hex(public_key_x)
@@ -224,10 +225,13 @@ impl WasmCiphertext {
 ///
 /// This type intentionally exposes `private_key` as a plain hex string for
 /// JS interop (signing, export, wallet recovery). That string lives in the
-/// JS heap and **cannot** be reliably wiped. Prefer companion public-only
-/// APIs (`derivePublicKey`, etc.) when private material is not required.
+/// JS heap and **cannot** be reliably wiped. The copy this object owns in
+/// WASM memory is zeroized when the object is freed (`free()` or garbage
+/// collection); each getter read makes a temporary copy that is freed
+/// without being wiped. Prefer companion public-only APIs
+/// (`derivePublicKey`, etc.) when private material is not required.
 /// Never `console.log` this value; `Debug` redacts the private key.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmKeypair {
     /// Private key as hex string (0x-prefixed). Treat as secret.
@@ -237,8 +241,10 @@ pub struct WasmKeypair {
     #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key X coordinate as hex string
+    #[zeroize(skip)]
     pub public_key_x: String,
     /// Public key Y coordinate as hex string
+    #[zeroize(skip)]
     pub public_key_y: String,
 }
 
@@ -298,15 +304,18 @@ pub struct WasmPublicKey {
 /// # Security / threat model
 ///
 /// `private_key` is a plain hex string in the JS heap and cannot be reliably
-/// wiped. Prefer [`WasmStarkXOnlyPublicKey`] when private material is not
-/// required. `Debug` redacts the private key; default `Serialize` omits it.
-#[derive(Clone, Serialize, Deserialize)]
+/// wiped. The copy this object owns in WASM memory is zeroized when the
+/// object is freed, as for [`WasmKeypair`]. Prefer [`WasmStarkXOnlyPublicKey`]
+/// when private material is not required. `Debug` redacts the private key;
+/// default `Serialize` omits it.
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmStarkXOnlyKeypair {
     /// Private key as hex string (0x-prefixed). Treat as secret.
     #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key X coordinate as hex string
+    #[zeroize(skip)]
     pub public_key_x: String,
 }
 
@@ -404,9 +413,11 @@ pub enum WasmTxType {
 /// # Security / threat model
 ///
 /// `private_key` is a plain hex string in the JS heap and cannot be reliably
-/// wiped. Prefer [`WasmNostrPublicKey`] / `deriveNostrPublicKey` when private
-/// material is not required. `Debug` redacts the private key.
-#[derive(Clone, Serialize, Deserialize)]
+/// wiped. The copy this object owns in WASM memory is zeroized when the
+/// object is freed, as for [`WasmKeypair`]. Prefer [`WasmNostrPublicKey`] /
+/// `deriveNostrPublicKey` when private material is not required. `Debug`
+/// redacts the private key.
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 #[wasm_bindgen(getter_with_clone)]
 pub struct WasmNostrKeypair {
     /// Private key as hex string (64 hex chars, no 0x prefix). Treat as secret.
@@ -416,6 +427,7 @@ pub struct WasmNostrKeypair {
     #[serde(skip_serializing)]
     pub private_key: String,
     /// Public key as x-only hex string (64 hex chars, no 0x prefix)
+    #[zeroize(skip)]
     pub public_key: String,
 }
 
@@ -480,83 +492,7 @@ pub struct WasmNostrSignature {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn wasm_point_validation_rejects_invalid_hex() {
-        assert!(WasmPoint {
-            x: "not-hex".to_string(),
-            y: "0x1".to_string(),
-        }
-        .validate()
-        .is_err());
-    }
-
-    #[test]
-    fn wasm_point_try_from_rejects_invalid_coordinates() {
-        let error = krusty_kms_common::SerializablePoint::try_from(WasmPoint {
-            x: "0x1".to_string(),
-            y: "not-hex".to_string(),
-        })
-        .unwrap_err();
-        assert!(matches!(error, WasmError::SerializationError(_)));
-    }
-
-    #[test]
-    fn wasm_account_state_total_balance_rejects_overflow() {
-        let state = WasmAccountState {
-            balance: u128::MAX.to_string(),
-            pending_balance: "1".to_string(),
-            nonce: 0,
-        };
-        assert!(matches!(
-            state.checked_total_balance(),
-            Err(WasmError::InvalidAmount(_))
-        ));
-    }
-
-    #[test]
-    fn wasm_keypair_debug_redacts_private_key() {
-        let g = krusty_kms_crypto::StarkCurve::generator();
-        let affine = krusty_kms_crypto::StarkCurve::projective_to_affine(&g).unwrap();
-        let kp = WasmKeypair::new(
-            "0xdeadbeef".to_string(),
-            format!("{:#x}", affine.x()),
-            format!("{:#x}", affine.y()),
-        )
-        .expect("generator is a valid Stark curve point");
-        let debug = format!("{kp:?}");
-        assert!(debug.contains("***"));
-        assert!(!debug.contains("deadbeef"));
-    }
-
-    #[test]
-    fn wasm_keypair_rejects_off_curve_coordinates() {
-        let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
-        assert!(
-            err.contains("not on the Stark curve"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn wasm_public_key_rejects_off_curve_coordinates() {
-        let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
-        assert!(
-            err.contains("not on the Stark curve"),
-            "unexpected error: {err}"
-        );
-    }
-
-    #[test]
-    fn wasm_nostr_keypair_debug_redacts_private_key() {
-        let kp = WasmNostrKeypair::new("aabbccdd".to_string(), "11223344".to_string());
-        let debug = format!("{kp:?}");
-        assert!(debug.contains("***"));
-        assert!(!debug.contains("aabbccdd"));
-    }
-}
+mod tests;
 
 // Note: Parameter types (WasmFundParams, WasmTransferParams, etc.) and
 // proof result types are defined in proof.rs with complete fields.

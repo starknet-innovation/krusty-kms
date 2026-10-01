@@ -194,7 +194,7 @@
     },
     {
       "path": "crates/wasm/src/types.rs",
-      "lines": 562
+      "lines": 498
     }
   ]
 }

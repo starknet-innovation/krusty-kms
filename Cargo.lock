@@ -1879,6 +1879,7 @@ dependencies = [
  "starknet-types-core",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "zeroize",
 ]
 
 [[package]]
