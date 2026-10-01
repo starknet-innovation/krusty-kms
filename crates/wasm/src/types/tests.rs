@@ -1,6 +1,7 @@
 use super::*;
+use wasm_bindgen_test::*;
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_point_validation_rejects_invalid_hex() {
     assert!(WasmPoint {
         x: "not-hex".to_string(),
@@ -10,7 +11,7 @@ fn wasm_point_validation_rejects_invalid_hex() {
     .is_err());
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_point_try_from_rejects_invalid_coordinates() {
     let error = krusty_kms_common::SerializablePoint::try_from(WasmPoint {
         x: "0x1".to_string(),
@@ -20,7 +21,7 @@ fn wasm_point_try_from_rejects_invalid_coordinates() {
     assert!(matches!(error, WasmError::SerializationError(_)));
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_account_state_total_balance_rejects_overflow() {
     let state = WasmAccountState {
         balance: u128::MAX.to_string(),
@@ -33,7 +34,7 @@ fn wasm_account_state_total_balance_rejects_overflow() {
     ));
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_keypair_debug_redacts_private_key() {
     let g = krusty_kms_crypto::StarkCurve::generator();
     let affine = krusty_kms_crypto::StarkCurve::projective_to_affine(&g).unwrap();
@@ -48,7 +49,7 @@ fn wasm_keypair_debug_redacts_private_key() {
     assert!(!debug.contains("deadbeef"));
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_keypair_rejects_off_curve_coordinates() {
     let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
     assert!(
@@ -57,7 +58,7 @@ fn wasm_keypair_rejects_off_curve_coordinates() {
     );
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_public_key_rejects_off_curve_coordinates() {
     let err = validate_affine_public_key("0x1", "0x2").expect_err("off-curve");
     assert!(
@@ -66,7 +67,7 @@ fn wasm_public_key_rejects_off_curve_coordinates() {
     );
 }
 
-#[test]
+#[wasm_bindgen_test]
 fn wasm_nostr_keypair_debug_redacts_private_key() {
     let kp = WasmNostrKeypair::new("aabbccdd".to_string(), "11223344".to_string());
     let debug = format!("{kp:?}");
