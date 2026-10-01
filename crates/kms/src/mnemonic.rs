@@ -2,7 +2,6 @@
 
 use bip39::Mnemonic;
 use krusty_kms_common::{KmsError, Result};
-use rand_core::TryRng;
 use zeroize::Zeroizing;
 
 /// Parse a phrase into a mnemonic that is wiped on drop.
@@ -52,9 +51,7 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
     // Entropy and the parsed word indices are the root secret; both are
     // wiped on drop. Only the returned phrase outlives this function.
     let mut entropy = Zeroizing::new(vec![0u8; entropy_size]);
-    rand::rngs::SysRng
-        .try_fill_bytes(entropy.as_mut_slice())
-        .expect("OS entropy source unavailable");
+    getrandom::fill(entropy.as_mut_slice()).expect("OS entropy source unavailable");
 
     let mnemonic = Mnemonic::from_entropy(&entropy)
         .map(Zeroizing::new)
