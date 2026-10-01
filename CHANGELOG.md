@@ -4,6 +4,22 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- `krusty-kms-wallet-api`, `krusty-kms-gateway` and `krusty-kms-client` depend
+  on the `starknet-rust-core`, `-providers`, `-accounts` and `-signers` crates
+  directly instead of the `starknet-rust` umbrella. The umbrella only
+  re-exports those crates, so every public type is unchanged. It also brought
+  in `starknet-rust-contract` and the `starknet-rust-macros` proc-macro, which
+  built a second, host-side copy of the `starknet-rust-core` / lambdaworks
+  tree. A workspace build compiles 296 units instead of 337.
+  `krusty-kms-wallet-api` on its own no longer pulls in the signer stack
+  (`eth-keystore` and the RustCrypto 0.10 crates under it).
+- `krusty-kms` and `krusty-kms-wasm` read OS entropy with `getrandom::fill` and
+  no longer depend on `rand` or `rand_core`. `rand::rngs::SysRng` was a
+  re-export of `getrandom::SysRng`, which calls the same function, so the
+  entropy source is unchanged.
+
 ## [0.12.1] - 2026-10-01
 
 ### Security
