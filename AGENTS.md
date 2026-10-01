@@ -62,6 +62,37 @@ truth.
   The publish script skips crates that already exist. If code must change, prepare a
   new patch version and tag instead.
 
+Release steps (commands are in the playbook; do not copy them here):
+
+1. **Pick the version.** Start from current `main`. Confirm its workspace version is the
+   latest published `krusty-kms` on crates.io and that the last `publish.yml` run
+   succeeded. Read `## [Unreleased]` and `git log v<last>..origin/main`. Use a patch
+   bump for fixes and a minor bump for behavior or API changes (the crates are pre-1.0).
+   If `## [Unreleased]` is empty, there is nothing to release.
+2. **Branch and bump.** On a focused release branch, change only the root
+   `[workspace.package].version`. For a minor bump, also move every internal
+   `krusty-kms-*` path dependency requirement in `crates/*/Cargo.toml` to the new
+   version, because pre-1.0 caret ranges exclude the next minor. A patch bump leaves
+   them alone.
+3. **Changelog.** Rename the pending notes into `## [<version>] - YYYY-MM-DD` and keep
+   an empty `## [Unreleased]` above it. Run `.github/scripts/verify-release-changelog.sh`.
+4. **Design note.** Add `docs/design/<date>-release-<version>.md`, following the
+   earlier ones: what is included, why this increment, and whether internal dependency
+   ranges moved.
+5. **Verify.** Run `cargo check --workspace --all-targets` to refresh `Cargo.lock`, then
+   the playbook's `cargo package --locked` preflight and `bash tools/check.sh all`.
+6. **Open the PR** titled `chore(release): prepare Krusty <version>`, with Summary,
+   Design, Verification and Publication sections. Merging it is the maintainer's call.
+7. **Tag after merge.** A maintainer tags the merged `main` commit as `v<version>` and
+   pushes it. The tag rulesets let only the repository Admin role create `v*` tags. The
+   `crates-io` environment then waits for reviewer approval or an admin bypass.
+
+The WASM npm package (`@starknetfoundation/krusty-kms-wasm`) takes the workspace
+version. `publish-npm.yml` runs on merge to `main` and skips versions already on npm.
+Merging a version bump therefore starts an npm publish with no tag involved, gated
+only by the protected `npm` environment's reviewer approval. WASM-only fixes reach
+npm only through a workspace version bump.
+
 ### Optional integration tests (external services required)
 
 Some tests are gated behind `-- --ignored` and are **not** part of the default suite.
