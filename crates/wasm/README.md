@@ -25,6 +25,21 @@ console.log(getVersion());
 console.log(poseidonHash("0x1", "0x2"));
 ```
 
+Run `init()` once and share its promise. Once `init()` has resolved, calling
+it again returns the same instance, but two calls that overlap (the second
+starting while the first is still loading) each instantiate the module. The
+one that finishes last replaces the instance under every object created on
+the other: their getters fail with `RuntimeError: Out of bounds memory
+access`, and their frees can release objects the new instance has since
+created.
+
+```ts
+// krusty.ts: the one place that initializes the module
+import init from "@starknetfoundation/krusty-kms-wasm";
+
+export const krustyReady = init();
+```
+
 This package is generated with `wasm-pack --target web` and is intended for
 browser-oriented ESM toolchains that support loading WebAssembly modules.
 
