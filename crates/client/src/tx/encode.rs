@@ -1,6 +1,6 @@
 //! Multicall calldata encoding for `__execute__`.
 
-use starknet_rust::core::types::{Call, Felt};
+use starknet_rust_core::types::{Call, Felt};
 
 /// Encode a list of `Call`s into the `__execute__` multicall format.
 ///

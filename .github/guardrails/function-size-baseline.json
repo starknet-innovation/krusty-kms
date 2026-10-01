@@ -8,7 +8,7 @@
     "crates/client/src/operations.rs::build_transfer_call#1": 96,
     "crates/client/src/operations.rs::build_withdraw_call#1": 89,
     "crates/client/tests/oz_multisig_devnet.rs::openzeppelin_multisig_flow_on_devnet#1": 252,
-    "crates/client/tests/tongo_sepolia_integration.rs::test_full_tongo_sepolia_flow#1": 1073,
+    "crates/client/tests/tongo_sepolia_integration.rs::test_full_tongo_sepolia_flow#1": 1072,
     "crates/crypto/src/audit.rs::prove_with_validation#1": 203,
     "crates/crypto/src/audit.rs::test_audit_typescript_test_vector#1": 110,
     "crates/crypto/src/audit.rs::verify#1": 118,

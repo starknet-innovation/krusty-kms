@@ -8,9 +8,9 @@ use async_trait::async_trait;
 use futures_util::Stream;
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
 use serde::{Deserialize, Deserializer, Serialize};
-use starknet_rust::core::crypto::{ecdsa_verify, Signature as StarkSignature};
-use starknet_rust::core::types::Call;
-use starknet_rust::signers::SigningKey;
+use starknet_rust_core::crypto::{ecdsa_verify, Signature as StarkSignature};
+use starknet_rust_core::types::Call;
+use starknet_rust_signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::pin::Pin;
 

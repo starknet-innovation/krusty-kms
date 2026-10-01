@@ -9,8 +9,8 @@ use crate::tx::Tx;
 use crate::wallet::WalletExecutor;
 use async_trait::async_trait;
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
-use starknet_rust::core::types::Call;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_core::types::Call;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
 use url::Url;
@@ -47,7 +47,7 @@ impl WalletExecutor for RecordingExecutor {
     async fn estimate_fee(
         &self,
         _calls: Vec<Call>,
-    ) -> Result<starknet_rust::core::types::FeeEstimate> {
+    ) -> Result<starknet_rust_core::types::FeeEstimate> {
         unreachable!("confirm_proposal tests never estimate fees")
     }
 

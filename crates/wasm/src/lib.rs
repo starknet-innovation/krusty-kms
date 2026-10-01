@@ -5,6 +5,9 @@
 
 #![forbid(unsafe_code)]
 #![allow(clippy::new_without_default)]
+// wasm-bindgen's `getter_with_clone` option generates a `.clone()` getter for
+// every public field, including `Copy` ones, and clippy 1.99 reports those.
+#![allow(clippy::clone_on_copy)]
 
 pub mod account;
 pub mod calldata;
@@ -224,13 +227,10 @@ pub fn point_add(
 /// Generate a random field element.
 #[wasm_bindgen(js_name = "randomFelt")]
 pub fn random_felt() -> String {
-    use rand_core::TryRng;
     use starknet_types_core::felt::Felt;
 
     let mut bytes = [0u8; 32];
-    rand::rngs::SysRng
-        .try_fill_bytes(&mut bytes)
-        .expect("OS entropy source unavailable");
+    getrandom::fill(&mut bytes).expect("OS entropy source unavailable");
     let felt = Felt::from_bytes_be(&bytes);
     format!("{:#x}", felt)
 }

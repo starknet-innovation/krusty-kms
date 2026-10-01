@@ -3,8 +3,8 @@
 use super::{StarknetRsFelt, TongoEventReader};
 use crate::wallet::utils::rpc_error;
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::types::{AddressFilter, BlockId, BlockTag, EmittedEvent, EventFilter};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust_core::types::{AddressFilter, BlockId, BlockTag, EmittedEvent, EventFilter};
+use starknet_rust_providers::{Provider, ProviderError};
 use std::collections::HashSet;
 use std::future::Future;
 use std::io::{self, Write};
@@ -249,7 +249,7 @@ mod tests {
 mod redaction_tests {
     use super::await_event_page;
     use krusty_kms_common::KmsError;
-    use starknet_rust::providers::{ProviderError, ProviderImplError};
+    use starknet_rust_providers::{ProviderError, ProviderImplError};
     use tokio::time::{Duration, Instant};
 
     #[derive(Debug)]

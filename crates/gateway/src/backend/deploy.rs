@@ -6,9 +6,9 @@ use crate::{map_kms_error, GatewayResult};
 use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError};
 use krusty_kms_domain::{AccountDescriptor, FeltHex, GatewayError, GatewayErrorCode};
-use starknet_rust::accounts::{AccountDeploymentV3, AccountFactoryError};
-use starknet_rust::core::types::{FeeEstimate, StarknetError};
-use starknet_rust::providers::ProviderError;
+use starknet_rust_accounts::{AccountDeploymentV3, AccountFactoryError};
+use starknet_rust_core::types::{FeeEstimate, StarknetError};
+use starknet_rust_providers::ProviderError;
 use starknet_types_core::felt::Felt as CoreFelt;
 
 pub(super) fn map_deploy_submission_error<S: std::fmt::Display>(

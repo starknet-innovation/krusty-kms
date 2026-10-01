@@ -4,8 +4,8 @@
 
 use krusty_kms_common::fee::{ProposedResourceBounds, ResourceBoundsCeiling};
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::accounts::{AccountDeploymentV3, ExecutionV3};
-use starknet_rust::core::types::FeeEstimate;
+use starknet_rust_accounts::{AccountDeploymentV3, ExecutionV3};
+use starknet_rust_core::types::FeeEstimate;
 
 /// Scale `estimate` with the `starknet-rs` multipliers and admit it against `ceiling`.
 pub(super) fn admit_estimate(

@@ -9,13 +9,13 @@ use krusty_kms_common::{AuditCalldata, Result};
 use krusty_kms_sdk::operations::{
     Audit, FundProof, RagequitProof, RolloverProof, TransferProof, WithdrawProof,
 };
-use starknet_rust::core::types::Call;
-use starknet_rust::core::utils::get_selector_from_name;
+use starknet_rust_core::types::Call;
+use starknet_rust_core::utils::get_selector_from_name;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt as CoreFelt;
 
 // Type aliases for clarity
-type StarknetRsFelt = starknet_rust::core::types::Felt;
+type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 /// Convert from starknet-types-core Felt to starknet-rs Felt.
 #[must_use]

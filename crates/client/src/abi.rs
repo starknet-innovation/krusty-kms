@@ -4,10 +4,10 @@
 
 use std::sync::LazyLock;
 
-type StarknetRsFelt = starknet_rust::core::types::Felt;
+type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 fn selector(name: &str) -> StarknetRsFelt {
-    starknet_rust::core::utils::get_selector_from_name(name)
+    starknet_rust_core::utils::get_selector_from_name(name)
         .expect("selector computation should not fail for valid ASCII names")
 }
 
@@ -111,7 +111,7 @@ pub mod tongo_events {
     use super::*;
 
     fn event_selector(name: &str) -> StarknetRsFelt {
-        starknet_rust::core::utils::starknet_keccak(name.as_bytes())
+        starknet_rust_core::utils::starknet_keccak(name.as_bytes())
     }
 
     pub static FUND_EVENT: LazyLock<StarknetRsFelt> = LazyLock::new(|| event_selector("FundEvent"));

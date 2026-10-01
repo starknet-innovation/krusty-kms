@@ -11,7 +11,7 @@ use crate::types::{
 };
 use krusty_kms_common::{Result, SecretFelt};
 use krusty_kms_crypto::StarkCurve;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;

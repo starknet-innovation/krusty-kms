@@ -9,11 +9,11 @@ use krusty_kms_common::amount::Amount;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::u256_to_u128;
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::codec::Decode;
-use starknet_rust::core::types::ByteArray;
-use starknet_rust::core::types::{BlockId, BlockTag, Call, FunctionCall};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust_core::codec::Decode;
+use starknet_rust_core::types::ByteArray;
+use starknet_rust_core::types::{BlockId, BlockTag, Call, FunctionCall};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
 
 /// An ERC-20 contract handle.
@@ -115,8 +115,8 @@ impl Erc20 {
 
     async fn read_string(
         provider: &Arc<JsonRpcClient<HttpTransport>>,
-        address: starknet_rust::core::types::Felt,
-        selector: starknet_rust::core::types::Felt,
+        address: starknet_rust_core::types::Felt,
+        selector: starknet_rust_core::types::Felt,
     ) -> Result<String> {
         let result = provider
             .call(
@@ -139,7 +139,7 @@ impl Erc20 {
 
     async fn read_decimals(
         provider: &Arc<JsonRpcClient<HttpTransport>>,
-        address: starknet_rust::core::types::Felt,
+        address: starknet_rust_core::types::Felt,
     ) -> Result<u8> {
         let result = provider
             .call(
@@ -163,9 +163,9 @@ impl Erc20 {
 
     async fn call_erc20_with_balance_selector_fallback(
         &self,
-        contract_address: starknet_rust::core::types::Felt,
-        account_address: starknet_rust::core::types::Felt,
-    ) -> Result<Vec<starknet_rust::core::types::Felt>> {
+        contract_address: starknet_rust_core::types::Felt,
+        account_address: starknet_rust_core::types::Felt,
+    ) -> Result<Vec<starknet_rust_core::types::Felt>> {
         let primary = FunctionCall {
             contract_address,
             entry_point_selector: *abi::erc20::BALANCE_OF,
@@ -197,7 +197,7 @@ impl Erc20 {
 }
 
 fn decode_balance_response(
-    result: &[starknet_rust::core::types::Felt],
+    result: &[starknet_rust_core::types::Felt],
     decimals: u8,
 ) -> Result<Amount> {
     if result.len() < 2 {
@@ -216,7 +216,7 @@ fn decode_balance_response(
     Ok(Amount::from_raw(raw, decimals))
 }
 
-fn decode_cairo_string(result: &[starknet_rust::core::types::Felt]) -> Result<String> {
+fn decode_cairo_string(result: &[starknet_rust_core::types::Felt]) -> Result<String> {
     if result.len() == 1 {
         let bytes = result[0].to_bytes_be();
         let short = bytes
@@ -259,14 +259,14 @@ mod tests {
     use super::*;
     use krusty_kms_common::chain::ChainId;
     use krusty_kms_common::token::presets;
-    use starknet_rust::core::codec::Encode;
-    use starknet_rust::core::types::StarknetError;
-    use starknet_rust::providers::ProviderError;
+    use starknet_rust_core::codec::Encode;
+    use starknet_rust_core::types::StarknetError;
+    use starknet_rust_providers::ProviderError;
 
     #[test]
     fn test_populate_transfer() {
         let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust::providers::jsonrpc::HttpTransport::new(
+            starknet_rust_providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn test_populate_approve() {
         let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust::providers::jsonrpc::HttpTransport::new(
+            starknet_rust_providers::jsonrpc::HttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -302,8 +302,8 @@ mod tests {
     fn test_decode_balance_response_rejects_values_above_u128() {
         let error = decode_balance_response(
             &[
-                starknet_rust::core::types::Felt::ZERO,
-                starknet_rust::core::types::Felt::ONE,
+                starknet_rust_core::types::Felt::ZERO,
+                starknet_rust_core::types::Felt::ONE,
             ],
             18,
         )

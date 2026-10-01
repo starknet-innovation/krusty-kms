@@ -16,7 +16,7 @@ use krusty_kms_client::{
 };
 use krusty_kms_common::{Address, ChainId, NetworkPreset};
 use serde_json::Value;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::felt::Felt;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -296,9 +296,9 @@ fn wait_options() -> Option<WaitOptions> {
     })
 }
 
-fn signing_key(private_key: &str) -> starknet_rust::signers::SigningKey {
-    starknet_rust::signers::SigningKey::from_secret_scalar(
-        starknet_rust::core::types::Felt::from_hex(private_key).unwrap(),
+fn signing_key(private_key: &str) -> starknet_rust_signers::SigningKey {
+    starknet_rust_signers::SigningKey::from_secret_scalar(
+        starknet_rust_core::types::Felt::from_hex(private_key).unwrap(),
     )
 }
 

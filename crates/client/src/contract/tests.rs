@@ -22,7 +22,7 @@ impl TongoProvider for MockProvider {
         &self,
         request: FunctionCall,
         _block_id: BlockId,
-    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust::providers::ProviderError> {
+    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust_providers::ProviderError> {
         self.requests.lock().unwrap().push(request);
         Ok(self.responses.lock().unwrap().pop_front().unwrap())
     }

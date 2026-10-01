@@ -12,7 +12,7 @@ mod wait;
 #[cfg(test)]
 mod tests;
 
-pub(crate) type StarknetRsFelt = starknet_rust::core::types::Felt;
+pub(crate) type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 pub use interface::{DeployExecution, GatewayBackend};
 pub use starknet::StarknetGatewayBackend;

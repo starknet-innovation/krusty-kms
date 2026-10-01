@@ -1,17 +1,17 @@
 //! Wallet utility functions for Felt conversion and deployment checking.
 
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError, Result};
-use starknet_rust::accounts::AccountFactoryError;
-use starknet_rust::core::types::StarknetError;
-use starknet_rust::core::types::{BlockId, BlockTag};
-use starknet_rust::providers::jsonrpc::{
+use starknet_rust_accounts::AccountFactoryError;
+use starknet_rust_core::types::StarknetError;
+use starknet_rust_core::types::{BlockId, BlockTag};
+use starknet_rust_providers::jsonrpc::{
     HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError,
 };
-use starknet_rust::providers::{Provider, ProviderError, ProviderImplError};
+use starknet_rust_providers::{Provider, ProviderError, ProviderImplError};
 use std::sync::Arc;
 
 /// Type alias for starknet-rs Felt.
-pub type StarknetRsFelt = starknet_rust::core::types::Felt;
+pub type StarknetRsFelt = starknet_rust_core::types::Felt;
 /// Type alias for starknet-types-core Felt.
 pub type CoreFelt = starknet_types_core::felt::Felt;
 
@@ -322,7 +322,7 @@ mod tests {
         let deploy = map_deploy_factory_error(AccountFactoryError::<&str>::Provider(leaky()));
         assert!(matches!(deploy, KmsError::RpcError(m) if m == redacted));
 
-        let rpc = starknet_rust::providers::jsonrpc::JsonRpcError {
+        let rpc = starknet_rust_providers::jsonrpc::JsonRpcError {
             code: -32000,
             message: "invalid api key SECRET_TOKEN".to_string(),
             data: None,

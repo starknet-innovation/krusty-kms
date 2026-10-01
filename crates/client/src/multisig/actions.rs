@@ -10,7 +10,7 @@ use crate::tx::Tx;
 use crate::wallet::utils::core_felt_to_rs;
 use crate::wallet::WalletExecutor;
 use krusty_kms_common::{Address, KmsError, Result};
-use starknet_rust::core::types::Call;
+use starknet_rust_core::types::Call;
 use starknet_types_core::felt::Felt;
 
 impl Multisig {

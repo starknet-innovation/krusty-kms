@@ -14,7 +14,7 @@ use krusty_kms::{
 use krusty_kms_client::{create_provider, deploy_oz_account, estimate_deploy_fee, Wallet};
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
-use starknet_rust::signers::SigningKey;
+use starknet_rust_signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
 
@@ -36,7 +36,7 @@ fn signing_key_from_mnemonic(index: u32) -> SigningKey {
     let keypair = derive_keypair_with_coin_type(TEST_MNEMONIC, index, 0, STARKNET_COIN_TYPE, None)
         .expect("derive starknet keypair");
     let pk_bytes = keypair.private_key.expose_secret().to_bytes_be();
-    let rs_felt = starknet_rust::core::types::Felt::from_bytes_be(&pk_bytes);
+    let rs_felt = starknet_rust_core::types::Felt::from_bytes_be(&pk_bytes);
     SigningKey::from_secret_scalar(rs_felt)
 }
 
