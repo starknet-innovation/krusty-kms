@@ -12,8 +12,8 @@ wasm-bindgen `FinalizationRegistry` collects the object, the Rust value is
 dropped and its buffer goes back to the allocator with the key still in it.
 It stays there until a later allocation reuses those bytes. Building the
 package from `main`, constructing each type from JS with a marker key and
-calling `free()` leaves 56 of the key's 58 bytes in place (the allocator's
-free-list header takes the first 8).
+calling `free()` leaves the key in place: past the 8-byte header the allocator
+writes at the start of a freed block, 56 of the next 58 bytes still hold it.
 
 The core crates already wipe secrets they own (`SecretFelt`,
 `NostrKeyPair`, `Zeroizing` mnemonics). The WASM boundary types did not.
@@ -41,8 +41,10 @@ published to crates.io.
   `wasm_keypair_types_zeroize_on_drop`.
 - `zeroize()` empties `private_key` and leaves the public key fields intact
   (`wasm_keypair_zeroize_wipes_only_the_private_key`).
-- After `free()` on a package built from this change, the key's bytes at its
-  former location read as zeros.
+- The owned private-key buffer is zeroized before it is deallocated. After
+  `free()`, none of the key's bytes remain at its former location; the
+  allocator may then write its own metadata into the freed block, so those
+  bytes are not necessarily all zero.
 
 ## Not covered
 
