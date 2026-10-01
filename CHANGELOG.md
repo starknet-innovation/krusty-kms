@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-01
+
 ### Security
 
 - The WASM keypair types (`WasmKeypair`, `WasmStarkXOnlyKeypair`,
