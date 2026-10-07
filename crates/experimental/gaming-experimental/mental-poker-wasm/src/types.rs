@@ -109,11 +109,12 @@ impl WasmPublicKey {
 
 /// An open (unmasked) card representation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmCard {
     /// Card index (1-based for standard deck: 1-52)
     pub index: u64,
     /// The card's point representation
+    #[wasm_bindgen(getter_with_clone)]
     pub point: WasmPoint,
 }
 

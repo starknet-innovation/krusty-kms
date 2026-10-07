@@ -21,7 +21,7 @@ use wasm_bindgen::prelude::*;
 ///
 /// Determines the number of standard 52-card decks in the shoe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmBlackjackDeckConfig {
     /// Number of standard 52-card decks in the shoe.
     pub num_decks: u32,
@@ -98,7 +98,7 @@ impl WasmBlackjackDeckConfig {
 
 /// Represents the value of a Blackjack hand.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmHandValue {
     /// Hard total (all Aces count as 1).
     pub hard: u8,

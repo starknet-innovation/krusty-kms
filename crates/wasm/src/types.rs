@@ -49,11 +49,13 @@ fn require_affine_public_key(public_key_x: &str, public_key_y: &str) -> Result<(
 
 /// Account state returned from on-chain queries.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmAccountState {
     /// Available balance (can be spent immediately)
+    #[wasm_bindgen(getter_with_clone)]
     pub balance: String,
     /// Pending balance (requires rollover to become available)
+    #[wasm_bindgen(getter_with_clone)]
     pub pending_balance: String,
     /// Current nonce for replay protection
     pub nonce: u64,
@@ -186,10 +188,12 @@ fn parse_point_coordinate(label: &str, value: &str) -> WasmResult<Felt> {
 
 /// Decrypted point result that can explicitly represent the identity point.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmDecryptedPoint {
     pub is_identity: bool,
+    #[wasm_bindgen(getter_with_clone)]
     pub x: Option<String>,
+    #[wasm_bindgen(getter_with_clone)]
     pub y: Option<String>,
 }
 

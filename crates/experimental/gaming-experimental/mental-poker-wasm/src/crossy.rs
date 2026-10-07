@@ -18,7 +18,7 @@ use wasm_bindgen::prelude::*;
 ///
 /// Determines the number of Survive and Hit cards in the deck.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmCrossyDeckConfig {
     /// Number of Survive cards (safe lanes)
     pub survive_count: u32,

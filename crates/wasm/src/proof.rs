@@ -135,28 +135,39 @@ pub fn generate_fund_proof(
 
 /// Parameters for generating a transfer proof.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmTransferParams {
     /// Recipient's Tongo public key
+    #[wasm_bindgen(getter_with_clone)]
     pub recipient_public_key: String,
     /// Amount to transfer
+    #[wasm_bindgen(getter_with_clone)]
     pub amount: String,
     /// Transaction nonce (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub nonce: String,
     /// Chain ID (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub chain_id: String,
     /// Tongo contract address (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub tongo_address: String,
     /// Sender address (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub sender_address: String,
     /// Current balance ciphertext
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_l_x: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_l_y: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_r_x: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_r_y: String,
     /// Bit size for range proof (default: 40)
     pub bit_size: Option<u8>,
     /// Optional auditor public key
+    #[wasm_bindgen(getter_with_clone)]
     pub auditor_public_key: Option<String>,
 }
 
@@ -431,28 +442,39 @@ pub fn generate_rollover_proof(
 
 /// Parameters for generating a withdraw proof.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[wasm_bindgen(getter_with_clone)]
+#[wasm_bindgen]
 pub struct WasmWithdrawParams {
     /// Recipient address for withdrawn funds (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub recipient_address: String,
     /// Amount to withdraw
+    #[wasm_bindgen(getter_with_clone)]
     pub amount: String,
     /// Transaction nonce (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub nonce: String,
     /// Chain ID (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub chain_id: String,
     /// Tongo contract address (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub tongo_address: String,
     /// Sender address (hex)
+    #[wasm_bindgen(getter_with_clone)]
     pub sender_address: String,
     /// Current balance ciphertext
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_l_x: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_l_y: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_r_x: String,
+    #[wasm_bindgen(getter_with_clone)]
     pub current_cipher_r_y: String,
     /// Bit size for range proof (default: 40)
     pub bit_size: Option<u8>,
     /// Optional auditor public key
+    #[wasm_bindgen(getter_with_clone)]
     pub auditor_public_key: Option<String>,
 }
 
