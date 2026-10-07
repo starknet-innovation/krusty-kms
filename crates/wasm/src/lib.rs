@@ -5,9 +5,6 @@
 
 #![forbid(unsafe_code)]
 #![allow(clippy::new_without_default)]
-// wasm-bindgen's `getter_with_clone` option generates a `.clone()` getter for
-// every public field, including `Copy` ones, and clippy 1.99 reports those.
-#![allow(clippy::clone_on_copy)]
 
 pub mod account;
 pub mod calldata;
