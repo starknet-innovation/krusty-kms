@@ -19,6 +19,9 @@ All notable changes to the published Rust crates are documented here.
   no longer depend on `rand` or `rand_core`. `rand::rngs::SysRng` was a
   re-export of `getrandom::SysRng`, which calls the same function, so the
   entropy source is unchanged.
+- WASM `randomFelt` throws a JS error when OS entropy is unavailable, as
+  `randomBytesHex` already did, instead of panicking at the WASM boundary.
+  Rust callers of `krusty_kms_wasm::random_felt` now get a `Result`.
 
 ## [0.12.1] - 2026-10-01
 

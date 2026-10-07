@@ -42,9 +42,11 @@ Source paths change mechanically: `starknet_rust::core::` becomes
 
 `rand::rngs::SysRng` is `pub use getrandom::SysRng`, and its `try_fill_bytes`
 calls `getrandom::fill`. The mnemonic entropy buffer, `randomFelt` and
-`randomBytesHex` now call `getrandom::fill` directly. The entropy source and
-the failure handling stay the same: `generate_mnemonic` and `randomFelt` panic
-when OS entropy fails, and `randomBytesHex` returns an error.
+`randomBytesHex` now call `getrandom::fill` directly, so the entropy source is
+unchanged. `generate_mnemonic` still panics when OS entropy fails.
+`randomFelt` used to panic at the WASM boundary, so it now returns
+`Result<String, JsValue>` and throws a JS error, as `randomBytesHex` already
+did. Its JS name and `string` return type are unchanged.
 
 Two dev-only trims ship with this change. They do not touch production
 dependencies:

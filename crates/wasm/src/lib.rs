@@ -226,13 +226,13 @@ pub fn point_add(
 
 /// Generate a random field element.
 #[wasm_bindgen(js_name = "randomFelt")]
-pub fn random_felt() -> String {
+pub fn random_felt() -> Result<String, JsValue> {
     use starknet_types_core::felt::Felt;
 
     let mut bytes = [0u8; 32];
-    getrandom::fill(&mut bytes).expect("OS entropy source unavailable");
+    getrandom::fill(&mut bytes).map_err(|e| JsValue::from_str(&format!("RNG failed: {e}")))?;
     let felt = Felt::from_bytes_be(&bytes);
-    format!("{:#x}", felt)
+    Ok(format!("{:#x}", felt))
 }
 
 // ============================================================================
@@ -369,8 +369,8 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_random_felt() {
-        let r1 = random_felt();
-        let r2 = random_felt();
+        let r1 = random_felt().unwrap();
+        let r2 = random_felt().unwrap();
         assert!(r1.starts_with("0x"));
         assert!(r2.starts_with("0x"));
         // Should be different (with overwhelming probability)
