@@ -1,4 +1,4 @@
-//! Type conversion layer between `starknet_rust` 0.18 (ours) and `starknet` 0.17 (account_sdk).
+//! Type conversion layer between `starknet_rust` 0.20 (ours) and `starknet` 0.17 (account_sdk).
 //!
 //! Both crates re-export `starknet-types-core 0.2.x` but Rust treats them as distinct types.
 //! We bridge via `Felt::to_bytes_be()` / `Felt::from_bytes_be()` byte roundtrips.
