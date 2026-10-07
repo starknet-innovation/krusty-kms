@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-07
+
 ### Changed
 
 - `krusty-kms-wallet-api`, `krusty-kms-gateway` and `krusty-kms-client` depend
