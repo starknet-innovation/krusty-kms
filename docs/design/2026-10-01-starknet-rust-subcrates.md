@@ -76,6 +76,12 @@ and `BatchError` by numeric JSON-RPC code only. Server messages/data remain
 redacted, covered by client and gateway regression tests. Krusty's own keystore
 implementation remains available and does not depend on upstream `eth-keystore`.
 
+The excluded Controller adapter also pins core/providers to 0.20.0 and
+starknet-types-core to 0.2.4, matching the shared wallet trait and `Tx::new`.
+Its separate `starknet` 0.17 SDK conversion remains field/byte based. The
+pinned Cartridge SDK's exact 0.2.0 core requirement still blocks standalone
+resolution; this update does not change that upstream pin.
+
 The client utility file-size baseline grows solely for those error arms and the
 redaction regression test; no FFI or WASM surface snapshot changes are needed.
 

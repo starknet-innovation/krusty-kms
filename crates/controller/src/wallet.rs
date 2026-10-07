@@ -11,8 +11,8 @@ use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::{Tx, WalletExecutor};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::{Provider, ProviderError};
 use tokio::sync::Mutex;
 
 use crate::convert;
@@ -27,7 +27,7 @@ use crate::SessionPolicy;
 /// `Controller::execute` requires `&mut self` while our trait uses `&self`.
 pub struct ControllerWallet {
     controller: Mutex<Controller>,
-    /// Our `starknet-rust 0.18` provider, used to construct [`Tx`] trackers.
+    /// Our `starknet-rust-providers 0.20` provider, used to construct [`Tx`] trackers.
     provider: Arc<JsonRpcClient<HttpTransport>>,
     address: Address,
     network: NetworkPreset,
@@ -219,7 +219,7 @@ impl ControllerWallet {
 
 #[async_trait::async_trait]
 impl WalletExecutor for ControllerWallet {
-    async fn execute(&self, calls: Vec<starknet_rust::core::types::Call>) -> Result<Tx> {
+    async fn execute(&self, calls: Vec<starknet_rust_core::types::Call>) -> Result<Tx> {
         let sdk_calls: Vec<_> = calls.iter().map(convert::call_to_sdk).collect();
         let mut ctrl = self.controller.lock().await;
 
@@ -249,8 +249,8 @@ impl WalletExecutor for ControllerWallet {
 
     async fn estimate_fee(
         &self,
-        calls: Vec<starknet_rust::core::types::Call>,
-    ) -> Result<starknet_rust::core::types::FeeEstimate> {
+        calls: Vec<starknet_rust_core::types::Call>,
+    ) -> Result<starknet_rust_core::types::FeeEstimate> {
         let sdk_calls: Vec<_> = calls.iter().map(convert::call_to_sdk).collect();
         let ctrl = self.controller.lock().await;
         let est = ctrl
@@ -280,18 +280,18 @@ impl WalletExecutor for ControllerWallet {
 
 async fn check_deployed(
     provider: &Arc<JsonRpcClient<HttpTransport>>,
-    address: starknet_rust::core::types::Felt,
+    address: starknet_rust_core::types::Felt,
 ) -> Result<bool> {
     match provider
         .get_class_hash_at(
-            starknet_rust::core::types::BlockId::Tag(starknet_rust::core::types::BlockTag::Latest),
+            starknet_rust_core::types::BlockId::Tag(starknet_rust_core::types::BlockTag::Latest),
             address,
         )
         .await
     {
         Ok(_) => Ok(true),
         Err(ProviderError::StarknetError(
-            starknet_rust::core::types::StarknetError::ContractNotFound,
+            starknet_rust_core::types::StarknetError::ContractNotFound,
         )) => Ok(false),
         Err(error) => Err(KmsError::RpcError(error.to_string())),
     }
