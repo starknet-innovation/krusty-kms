@@ -52,38 +52,24 @@ deny = []
 # `skip` over `skip-tree`: a subtree skip would also accept duplicates added
 # later underneath it. See docs/supply-chain.md.
 skip = [
-    # starknet-rust-signers 0.19.1 -> eth-keystore 0.5.0 (Ethereum keystore
-    # loading, never exercised by krusty) pins the RustCrypto 0.10 generation
-    # and thiserror 1.
-    { crate = "aes@0.8", reason = "eth-keystore 0.5 via starknet-rust-signers 0.19.1; krusty-kms uses aes 0.9" },
-    { crate = "cipher@0.4", reason = "aes 0.8 / ctr 0.9 via eth-keystore 0.5" },
-    { crate = "crypto-common@0.1", reason = "cipher 0.4 via eth-keystore 0.5" },
-    { crate = "inout@0.1", reason = "cipher 0.4 via eth-keystore 0.5" },
-    { crate = "ctr@0.9", reason = "eth-keystore 0.5 via starknet-rust-signers 0.19.1; krusty-kms uses ctr 0.10" },
-    { crate = "scrypt@0.10", reason = "eth-keystore 0.5 via starknet-rust-signers 0.19.1; krusty-kms uses scrypt 0.12" },
-    { crate = "salsa20@0.10", reason = "scrypt 0.10 via eth-keystore 0.5" },
-    { crate = "pbkdf2@0.11", reason = "eth-keystore 0.5 via starknet-rust-signers 0.19.1; krusty-kms uses pbkdf2 0.13 via scrypt 0.12" },
-    { crate = "thiserror@1", reason = "eth-keystore 0.5 via starknet-rust-signers 0.19.1; everything else is on thiserror 2" },
-    { crate = "thiserror-impl@1", reason = "thiserror 1 via eth-keystore 0.5" },
-    # starknet-rust-crypto 0.19.1 (used by krusty-kms and the starknet-rust
-    # stack) is built on RustCrypto 0.10 traits; krusty crates are on 0.11.
-    { crate = "hmac@0.12", reason = "starknet-rust-crypto 0.19.1, rfc6979 0.4, eth-keystore 0.5; krusty uses hmac 0.13" },
-    { crate = "sha2@0.10", reason = "starknet-rust-crypto 0.19.1, lambdaworks-crypto 0.13, ed25519-dalek 2, eth-keystore 0.5; krusty uses sha2 0.11" },
-    { crate = "digest@0.10", reason = "starknet-rust-crypto 0.19.1, starknet-types-core 0.2.4, blake2 0.10, curve25519-dalek 4; krusty uses digest 0.11" },
+    # RustCrypto 0.10 remains under lambdaworks, blake2 and async-nats.
+    { crate = "crypto-common@0.1", reason = "digest 0.10 via blake2 0.10, lambdaworks and curve25519-dalek 4" },
+    { crate = "sha2@0.10", reason = "lambdaworks-crypto 0.13, ed25519-dalek 2; krusty uses sha2 0.11" },
+    { crate = "digest@0.10", reason = "starknet-types-core 0.2.4, blake2 0.10, curve25519-dalek 4; krusty uses digest 0.11" },
     { crate = "block-buffer@0.10", reason = "digest 0.10" },
-    { crate = "cpufeatures@0.2", reason = "sha2 0.10, aes 0.8, keccak 0.1" },
-    { crate = "rfc6979@0.4", reason = "starknet-rust-crypto 0.19.1; k256 0.14 (krusty-kms) uses rfc6979 0.6" },
+    { crate = "cpufeatures@0.2", reason = "sha2 0.10, keccak 0.1" },
+    { crate = "rfc6979@0.5", reason = "starknet-rust-crypto 0.20.0; k256 0.14 (krusty-kms) uses rfc6979 0.6" },
     # starknet-types-core 0.2.4 -> lambdaworks-math / lambdaworks-crypto 0.13
     # still use num-bigint 0.4, sha3 0.10 and rand 0.8.
-    { crate = "num-bigint@0.4", reason = "lambdaworks-math 0.13, starknet-types-core 0.2.4, starknet-rust-crypto 0.19.1; krusty uses num-bigint 0.5" },
-    { crate = "sha3@0.10", reason = "lambdaworks-crypto 0.13, starknet-rust-core 0.19.1, eth-keystore 0.5; krusty uses sha3 0.12" },
+    { crate = "num-bigint@0.4", reason = "lambdaworks-math 0.13, starknet-types-core 0.2.4, starknet-rust-crypto 0.20.0; krusty uses num-bigint 0.5" },
+    { crate = "sha3@0.10", reason = "lambdaworks-crypto 0.13, starknet-rust-core 0.20.0; krusty uses sha3 0.12" },
     { crate = "keccak@0.1", reason = "sha3 0.10" },
-    { crate = "rand@0.8", reason = "lambdaworks 0.13, eth-keystore 0.5, starknet-rust-signers 0.19.1, nkeys/nuid (async-nats); krusty uses rand 0.10" },
+    { crate = "rand@0.8", reason = "lambdaworks 0.13, starknet-rust-signers 0.20.0, nkeys/nuid (async-nats); krusty uses rand 0.10" },
     { crate = "rand_core@0.6", reason = "rand 0.8, rand_chacha 0.3, signatory 0.27; krusty uses rand_core 0.10" },
     # krusty-kms-wasm / mental-poker-wasm deliberately add getrandom 0.2 with
     # the `js` feature so rand_core 0.6 consumers work in browsers
-    # (see crates/crypto/Cargo.toml); ring 0.17 and uuid 0.8 also need it.
-    { crate = "getrandom@0.2", reason = "wasm js shim for rand_core 0.6 consumers; ring 0.17, uuid 0.8; krusty uses getrandom 0.4" },
+    # (see crates/crypto/Cargo.toml); ring 0.17 also needs it.
+    { crate = "getrandom@0.2", reason = "wasm js shim for rand_core 0.6 consumers; ring 0.17; krusty uses getrandom 0.4" },
     # async-nats 0.50 -> nkeys 0.4 -> signatory 0.27 / ed25519-dalek 2 pin the
     # pkcs8 0.10 / spki 0.7 / der 0.7 / const-oid 0.9 / signature 2 generation;
     # k256 0.14 in krusty-kms is on pkcs8 0.11 / der 0.8 / signature 3. Only
@@ -98,7 +84,7 @@ skip = [
     # and the rest are still on syn 2.
     { crate = "syn@2", reason = "proc-macro crates other than async-trait 0.1.92 (syn 3)" },
     # reqwest 0.13.5 took base64 0.23 directly. hyper-util 0.1.20 (inside that
-    # same reqwest), async-nats 0.50, starknet-rust-core 0.19.1,
+    # same reqwest), async-nats 0.50, starknet-rust-core 0.20.0,
     # tokio-websockets 0.10, and krusty-kms stay on base64 0.22.
     { crate = "base64@0.23", reason = "reqwest 0.13.5; krusty-kms and the rest of the graph use base64 0.22" },
 ]

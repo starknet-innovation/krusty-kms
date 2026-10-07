@@ -50,7 +50,10 @@ fn transport_error_kind(error: &dyn ProviderImplError) -> String {
     match error {
         JsonRpcClientError::JsonError(_)
         | JsonRpcClientError::TransportError(HttpTransportError::Json(_)) => "decode".to_string(),
-        JsonRpcClientError::JsonRpcError(rpc) => format!("json-rpc code {}", rpc.code),
+        JsonRpcClientError::JsonRpcError(rpc)
+        | JsonRpcClientError::TransportError(HttpTransportError::BatchError(rpc)) => {
+            format!("json-rpc code {}", rpc.code)
+        }
         JsonRpcClientError::TransportError(HttpTransportError::Reqwest(http)) => {
             // `http` is a `reqwest::Error`; only its classification is kept.
             if http.is_timeout() {
@@ -65,7 +68,8 @@ fn transport_error_kind(error: &dyn ProviderImplError) -> String {
                 "other".to_string()
             }
         }
-        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_)) => {
+        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_))
+        | JsonRpcClientError::TransportError(HttpTransportError::InvalidNumericResponseId) => {
             "other".to_string()
         }
     }

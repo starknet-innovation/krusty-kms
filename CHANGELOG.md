@@ -7,14 +7,14 @@ All notable changes to the published Rust crates are documented here.
 ### Changed
 
 - `krusty-kms-wallet-api`, `krusty-kms-gateway` and `krusty-kms-client` depend
-  on the `starknet-rust-core`, `-providers`, `-accounts` and `-signers` crates
-  directly instead of the `starknet-rust` umbrella. The umbrella only
-  re-exports those crates, so every public type is unchanged. It also brought
-  in `starknet-rust-contract` and the `starknet-rust-macros` proc-macro, which
-  built a second, host-side copy of the `starknet-rust-core` / lambdaworks
-  tree. A workspace build compiles 296 units instead of 337.
-  `krusty-kms-wallet-api` on its own no longer pulls in the signer stack
-  (`eth-keystore` and the RustCrypto 0.10 crates under it).
+  directly on the starknet-rust sub-crates instead of its umbrella, removing
+  the unused contract and macro crates. Upgrade that family and the crypto
+  alias to 0.20.0, with signers' optional Ethereum keystore support disabled.
+  A workspace build compiles 283 units instead of the original 337.
+  **Rust compatibility:** consumers passing upstream core/provider/account/
+  signer types must upgrade to 0.20.0 too. HTTP batch errors retain only the
+  numeric error code, and invalid response IDs use the existing redacted
+  transport classification. Krusty's own keystore API remains available.
 - `krusty-kms` and `krusty-kms-wasm` read OS entropy with `getrandom::fill` and
   no longer depend on `rand` or `rand_core`. `rand::rngs::SysRng` was a
   re-export of `getrandom::SysRng`, which calls the same function, so the

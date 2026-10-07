@@ -1,6 +1,7 @@
 # Depend on starknet-rust sub-crates, not the umbrella
 
-Date: 2026-10-01. Status: accepted. Origin: dependency-count review.
+Date: 2026-10-01. Updated: 2026-10-07. Status: accepted.
+Origin: dependency-count review.
 
 ## Problem
 
@@ -33,7 +34,9 @@ for three calls to `rand::rngs::SysRng::try_fill_bytes`.
 | kms | `rand`, `rand_core` | `getrandom` 0.4 (already in the graph) |
 | wasm | `rand`, `rand_core`, `getrandom` | `getrandom` |
 
-All of them stay pinned at `=0.19.1`, the version the umbrella resolved to.
+The sub-crates and the `starknet-crypto` alias now pin `=0.20.0` together.
+Signers disables default features and enables only `std`; Krusty does not use
+its Ethereum keystore API. Accounts does not re-enable `keystore`.
 Source paths change mechanically: `starknet_rust::core::` becomes
 `starknet_rust_core::`, and the same for `providers`, `accounts` and `signers`.
 
@@ -57,15 +60,26 @@ dependencies:
 
 ## Interface we keep
 
-The public API is unchanged. Every `starknet_rust::X` path is a `pub use` of
-the sub-crate type, so signatures that expose `Felt`, `JsonRpcClient`,
-`SingleOwnerAccount`, `LocalWallet` or `ProviderError` name the same types.
-Downstream crates that also depend on `starknet-rust` 0.19.1 still unify with
-them.
+The path rename itself preserves the sub-crate types re-exported by the umbrella.
+The subsequent 0.20.0 upgrade changes the upstream core, provider, account and
+signer types exposed by Krusty's Rust APIs. Consumers passing those types must
+also upgrade their starknet-rust dependencies; 0.19.1 provider/account types do
+not unify with 0.20.0. `Felt` still comes from starknet-types-core 0.2.4.
+
+Upstream changes include optional legacy ABIs, response IDs, transport error
+variants, subscription decoding errors, and corrected Cairo 0 class hashing.
+Krusty does not construct legacy ABI/response structs or match subscription errors.
+Its two HTTP error classifiers now handle `InvalidNumericResponseId` as `other`
+and `BatchError` by numeric JSON-RPC code only. Server messages/data remain
+redacted, covered by client and gateway regression tests. Krusty's own keystore
+implementation remains available and does not depend on upstream `eth-keystore`.
+
+The client utility file-size baseline grows solely for those error arms and the
+redaction regression test; no FFI or WASM surface snapshot changes are needed.
 
 ## Measured effect
 
-Counted with `cargo +nightly build --unit-graph` (compile units, excluding
+Original 0.19.1 measurements (2026-10-01), counted with `cargo +nightly build --unit-graph` (compile units, excluding
 build-script runs) and lockfile entries:
 
 | Scope | Before | After |
@@ -84,17 +98,33 @@ and the tokio `full` extras `parking_lot`, `parking_lot_core`, `lock_api`,
 `scopeguard`, `signal-hook-registry` and `redox_syscall`. `rand` 0.10 stays in
 the lockfile because the experimental gaming crates use it.
 
-No `deny.toml` skip changes. `eth-keystore` and its RustCrypto 0.10 crates are
-still reached through `starknet-rust-signers`, which gateway and client need.
+Updated 0.20.0 measurements (2026-10-07), with stable Cargo's unit graph
+(`RUSTC_BOOTSTRAP=1 cargo build --locked --unit-graph -Z unstable-options`),
+excluding build-script runs:
+
+| Scope | Units | Packages in build graph |
+| --- | --- | --- |
+| workspace build | 283 | — |
+| workspace all targets | 378 | 301 |
+| client | 263 | 238 |
+| gateway | 259 | 234 |
+| wallet-api | 205 | 184 |
+| kms | 147 | 130 |
+
+The lockfile has 439 packages (440 before this upgrade). Twelve obsolete version
+entries leave: eth-keystore 0.5, aes 0.8, cipher 0.4, ctr 0.9, inout 0.1,
+scrypt 0.10, salsa20 0.10, pbkdf2 0.11, hmac 0.12, uuid 0.8, thiserror 1 and
+thiserror-impl 1. New upstream constraints also resolve additional optional
+packages, so the net lockfile reduction is one package. Production workspace
+builds drop another 13 compile units, from 296 to 283.
+
+Remove the unmatched keystore-only duplicate allowances and hmac 0.12.
+Retain crypto-common 0.1 and the remaining RustCrypto 0.10 allowances still
+needed by lambdaworks, blake2 and async-nats; replace rfc6979 0.4 with the
+upstream-required 0.5 allowance (Krusty's k256 still requires 0.6).
 
 ## Not done
 
-- **Drop `eth-keystore`.** `starknet-rust-signers` depends on it on every
-  non-wasm target with no feature gate.
-  [software-mansion/starknet-rust#170](https://github.com/software-mansion/starknet-rust/pull/170)
-  proposes a default-on `keystore` feature for it. Once that ships, gateway and
-  client can depend on signers with `default-features = false, features =
-  ["std"]`. That drops 12 crates and the matching `deny.toml` skips.
 - **Trim `k256` features** (drop `pkcs8`). This saves one crate and changes
   the feature set of a signing dependency. Not worth it here.
 - **Move krusty to `num-bigint` 0.4** to share lambdaworks' copy. This saves one

@@ -97,11 +97,15 @@ fn transport_error_kind(error: &dyn ProviderImplError) -> String {
     match error {
         JsonRpcClientError::JsonError(_)
         | JsonRpcClientError::TransportError(HttpTransportError::Json(_)) => "decode".to_string(),
-        JsonRpcClientError::JsonRpcError(rpc) => format!("json-rpc code {}", rpc.code),
+        JsonRpcClientError::JsonRpcError(rpc)
+        | JsonRpcClientError::TransportError(HttpTransportError::BatchError(rpc)) => {
+            format!("json-rpc code {}", rpc.code)
+        }
         JsonRpcClientError::TransportError(HttpTransportError::Reqwest(http)) => {
             http_error_kind(http)
         }
-        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_)) => {
+        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_))
+        | JsonRpcClientError::TransportError(HttpTransportError::InvalidNumericResponseId) => {
             "other".to_string()
         }
     }
@@ -364,5 +368,28 @@ mod tests {
         assert_eq!(message, "provider transport error: connect");
         assert!(!message.contains("SECRET_TOKEN"));
         assert!(!message.contains(&port.to_string()));
+    }
+    #[test]
+    fn new_transport_errors_do_not_expose_server_messages() {
+        let batch =
+            HttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
+                code: -32000,
+                message: "SECRET_TOKEN".to_string(),
+                data: Some(serde_json::json!({"url": "https://rpc.example/SECRET_TOKEN"})),
+            });
+        let batch: ProviderError =
+            JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+        assert_eq!(
+            provider_error_message(&batch),
+            "provider transport error: json-rpc code -32000"
+        );
+        let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
+            HttpTransportError::InvalidNumericResponseId,
+        )
+        .into();
+        assert_eq!(
+            provider_error_message(&invalid),
+            "provider transport error: other"
+        );
     }
 }
