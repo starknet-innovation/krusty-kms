@@ -110,7 +110,7 @@
     },
     {
       "path": "crates/experimental/gaming-experimental/mental-poker-wasm/src/types.rs",
-      "lines": 457
+      "lines": 458
     },
     {
       "path": "crates/experimental/gaming-experimental/qb-game/src/types.rs",
@@ -186,7 +186,7 @@
     },
     {
       "path": "crates/wasm/src/proof.rs",
-      "lines": 955
+      "lines": 977
     },
     {
       "path": "crates/wasm/src/tx_hash.rs",
@@ -194,7 +194,7 @@
     },
     {
       "path": "crates/wasm/src/types.rs",
-      "lines": 498
+      "lines": 502
     }
   ]
 }
