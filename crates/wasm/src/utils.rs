@@ -55,8 +55,6 @@ pub fn grind_key(seed_hex: &str) -> Result<String, JsValue> {
 /// Hex-encoded bytes with `0x` prefix
 #[wasm_bindgen(js_name = "randomBytesHex")]
 pub fn random_bytes_hex(length: usize) -> Result<String, JsValue> {
-    use rand_core::TryRng;
-
     /// Largest byte count this convenience API will generate.
     const MAX_RANDOM_BYTES: usize = 1024;
 
@@ -67,9 +65,7 @@ pub fn random_bytes_hex(length: usize) -> Result<String, JsValue> {
     }
 
     let mut bytes = vec![0u8; length];
-    rand::rngs::SysRng
-        .try_fill_bytes(&mut bytes[..])
-        .map_err(|e| JsValue::from_str(&format!("RNG failed: {e}")))?;
+    getrandom::fill(&mut bytes[..]).map_err(|e| JsValue::from_str(&format!("RNG failed: {e}")))?;
 
     Ok(format!("0x{}", hex::encode(&bytes)))
 }

@@ -10,8 +10,8 @@ use std::sync::Arc;
 use krusty_kms::discovery::{CandidateAccount, WalletType};
 use krusty_kms_common::{KmsError, Result};
 use serde::{Deserialize, Serialize};
-use starknet_rust::core::types::{BlockId, BlockTag, StarknetError};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust_core::types::{BlockId, BlockTag, StarknetError};
+use starknet_rust_providers::{Provider, ProviderError};
 
 use crate::wallet::utils::{core_felt_to_rs, rpc_error, rs_felt_to_core, CoreFelt};
 

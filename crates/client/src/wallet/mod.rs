@@ -12,10 +12,10 @@ use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
 use krusty_kms_wallet_api::Tx;
 pub use krusty_kms_wallet_api::WalletExecutor;
-use starknet_rust::accounts::{AccountError, ExecutionEncoding, SingleOwnerAccount};
-use starknet_rust::core::types::Call;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::signers::{LocalWallet, SigningKey};
+use starknet_rust_accounts::{AccountError, ExecutionEncoding, SingleOwnerAccount};
+use starknet_rust_core::types::Call;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
@@ -196,7 +196,7 @@ impl Wallet {
 
     /// Execute a list of calls via `execute_v3`, honouring [`Wallet::with_fee_ceiling`].
     pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
-        use starknet_rust::accounts::Account;
+        use starknet_rust_accounts::Account;
         let mut execution = self.account.execute_v3(calls);
         if let Some(ceiling) = &self.fee_ceiling {
             let estimate = execution
@@ -221,8 +221,8 @@ impl Wallet {
     pub async fn estimate_fee(
         &self,
         calls: Vec<Call>,
-    ) -> Result<starknet_rust::core::types::FeeEstimate> {
-        use starknet_rust::accounts::Account;
+    ) -> Result<starknet_rust_core::types::FeeEstimate> {
+        use starknet_rust_accounts::Account;
         let estimate = self
             .account
             .execute_v3(calls)
@@ -263,7 +263,7 @@ impl WalletExecutor for Wallet {
     async fn estimate_fee(
         &self,
         calls: Vec<Call>,
-    ) -> Result<starknet_rust::core::types::FeeEstimate> {
+    ) -> Result<starknet_rust_core::types::FeeEstimate> {
         Wallet::estimate_fee(self, calls).await
     }
 

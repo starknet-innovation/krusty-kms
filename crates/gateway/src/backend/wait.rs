@@ -4,12 +4,12 @@
 use super::rpc::provider_error_message;
 use super::StarknetRsFelt;
 use krusty_kms_common::KmsError;
-use starknet_rust::core::types::{
+use starknet_rust_core::types::{
     ExecutionResult, StarknetError, TransactionFinalityStatus, TransactionReceiptWithBlockInfo,
     TransactionStatus,
 };
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::{Provider, ProviderError};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;

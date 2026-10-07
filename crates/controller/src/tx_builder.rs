@@ -5,7 +5,7 @@
 
 use krusty_kms_common::Result;
 use krusty_kms_wallet_api::{Tx, WalletExecutor};
-use starknet_rust::core::types::Call;
+use starknet_rust_core::types::Call;
 
 /// A builder that accumulates Starknet calls and executes them as one batch.
 pub struct TxBuilder<'w> {
@@ -38,7 +38,7 @@ impl<'w> TxBuilder<'w> {
     }
 
     /// Estimate the fee for the batch.
-    pub async fn estimate_fee(&self) -> Result<starknet_rust::core::types::FeeEstimate> {
+    pub async fn estimate_fee(&self) -> Result<starknet_rust_core::types::FeeEstimate> {
         self.wallet.estimate_fee(self.calls.clone()).await
     }
 

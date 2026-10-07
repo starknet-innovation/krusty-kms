@@ -5,15 +5,15 @@
 
 use crate::types::{AccountState, CipherBalance};
 use krusty_kms_common::Result;
-use starknet_rust::core::types::{BlockId, BlockTag, FunctionCall};
-use starknet_rust::core::utils::get_selector_from_name;
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Provider;
+use starknet_rust_core::types::{BlockId, BlockTag, FunctionCall};
+use starknet_rust_core::utils::get_selector_from_name;
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::Provider;
 use starknet_types_core::curve::ProjectivePoint;
 use std::sync::Arc;
 
 // Type aliases to distinguish between starknet-rs and starknet-types-core Felt types
-type StarknetRsFelt = starknet_rust::core::types::Felt;
+type StarknetRsFelt = starknet_rust_core::types::Felt;
 type CoreFelt = starknet_types_core::felt::Felt;
 
 #[async_trait::async_trait]
@@ -22,7 +22,7 @@ trait TongoProvider: Send + Sync {
         &self,
         request: FunctionCall,
         block_id: BlockId,
-    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust::providers::ProviderError>;
+    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust_providers::ProviderError>;
 }
 
 #[async_trait::async_trait]
@@ -31,7 +31,7 @@ impl TongoProvider for JsonRpcClient<HttpTransport> {
         &self,
         request: FunctionCall,
         block_id: BlockId,
-    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust::providers::ProviderError> {
+    ) -> std::result::Result<Vec<StarknetRsFelt>, starknet_rust_providers::ProviderError> {
         Provider::call(self, request, block_id).await
     }
 }

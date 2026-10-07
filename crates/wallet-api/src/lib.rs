@@ -11,16 +11,16 @@ use krusty_kms_common::address::Address;
 use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
-use starknet_rust::core::types::StarknetError;
-use starknet_rust::core::types::{
+use starknet_rust_core::types::StarknetError;
+use starknet_rust_core::types::{
     Call, ExecutionResult, FeeEstimate, TransactionFinalityStatus, TransactionReceipt,
     TransactionReceiptWithBlockInfo, TransactionStatus,
 };
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::{Provider, ProviderError};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
 
-type StarknetRsFelt = starknet_rust::core::types::Felt;
+type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 /// A submitted transaction that can be polled for acceptance.
 pub struct Tx {

@@ -15,11 +15,11 @@ use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
     AccountDescriptor, DerivationPath, FeltHex, GatewayErrorCode, KeyDomain, Provenance,
 };
-use starknet_rust::core::types::{
+use starknet_rust_core::types::{
     ExecutionResult, StarknetError, TransactionFinalityStatus, TransactionStatus,
 };
-use starknet_rust::providers::jsonrpc::{HttpTransportError, JsonRpcClientError, JsonRpcError};
-use starknet_rust::providers::{ProviderError, ProviderImplError};
+use starknet_rust_providers::jsonrpc::{HttpTransportError, JsonRpcClientError, JsonRpcError};
+use starknet_rust_providers::{ProviderError, ProviderImplError};
 use starknet_types_core::felt::Felt;
 
 /// Stand-in for a transport error whose `Display` leaks the request URL, the
@@ -254,4 +254,27 @@ fn selector_fallback_error_keeps_primary_and_fallback_context() {
     assert!(message.contains("balance_of"));
     assert!(message.contains("primary="));
     assert!(message.contains("fallback="));
+}
+
+#[test]
+fn new_transport_errors_do_not_expose_server_messages() {
+    let batch = HttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
+        code: -32000,
+        message: "SECRET_TOKEN".to_string(),
+        data: None,
+    });
+    let batch: ProviderError =
+        JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+    assert_eq!(
+        provider_error_message(&batch),
+        "provider transport error: json-rpc code -32000"
+    );
+    let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
+        HttpTransportError::InvalidNumericResponseId,
+    )
+    .into();
+    assert_eq!(
+        provider_error_message(&invalid),
+        "provider transport error: other"
+    );
 }

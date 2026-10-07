@@ -4,6 +4,27 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- `krusty-kms-wallet-api`, `krusty-kms-gateway` and `krusty-kms-client` depend
+  directly on the starknet-rust sub-crates instead of its umbrella, removing
+  the unused contract and macro crates. Upgrade that family and the crypto
+  alias to 0.20.0, with signers' optional Ethereum keystore support disabled.
+  A workspace build compiles 283 units instead of the original 337.
+  **Rust compatibility:** consumers passing upstream core/provider/account/
+  signer types must upgrade to 0.20.0 too. HTTP batch errors retain only the
+  numeric error code, and invalid response IDs use the existing redacted
+  transport classification. Krusty's own keystore API remains available.
+  The excluded Controller adapter also uses 0.20.0 core/provider types at
+  the shared wallet API boundary; its upstream SDK resolver blocker remains.
+- `krusty-kms` and `krusty-kms-wasm` read OS entropy with `getrandom::fill` and
+  no longer depend on `rand` or `rand_core`. `rand::rngs::SysRng` was a
+  re-export of `getrandom::SysRng`, which calls the same function, so the
+  entropy source is unchanged.
+- WASM `randomFelt` throws a JS error when OS entropy is unavailable, as
+  `randomBytesHex` already did, instead of panicking at the WASM boundary.
+  Rust callers of `krusty_kms_wasm::random_felt` now get a `Result`.
+
 ## [0.12.1] - 2026-10-01
 
 ### Security

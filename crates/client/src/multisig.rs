@@ -26,7 +26,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub(crate) type StarknetRsFelt = starknet_rust::core::types::Felt;
+pub(crate) type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 pub use codec::{coordination_message_hash, hash_transaction, hash_transaction_batch};
 pub use contract::Multisig;

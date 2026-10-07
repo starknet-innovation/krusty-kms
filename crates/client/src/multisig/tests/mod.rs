@@ -6,7 +6,7 @@ mod envelope;
 use super::{MultisigCall, MultisigCoordinationMessage, MultisigSignerNotice};
 use crate::wallet::utils::core_felt_to_rs;
 use krusty_kms_common::{Address, ChainId};
-use starknet_rust::signers::SigningKey;
+use starknet_rust_signers::SigningKey;
 use starknet_types_core::felt::Felt;
 
 fn address(value: u64) -> Address {

@@ -24,7 +24,10 @@ krusty-kms-crypto = { version = "0.12.0", path = "../crypto", default-features =
 async-trait.workspace = true
 hex.workspace = true
 num-bigint.workspace = true
-starknet-rust.workspace = true
+starknet-rust-core.workspace = true
+starknet-rust-providers.workspace = true
+starknet-rust-accounts.workspace = true
+starknet-rust-signers.workspace = true
 starknet-types-core.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 zeroize.workspace = true

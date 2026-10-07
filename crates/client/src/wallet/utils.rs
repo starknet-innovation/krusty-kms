@@ -1,17 +1,17 @@
 //! Wallet utility functions for Felt conversion and deployment checking.
 
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError, Result};
-use starknet_rust::accounts::AccountFactoryError;
-use starknet_rust::core::types::StarknetError;
-use starknet_rust::core::types::{BlockId, BlockTag};
-use starknet_rust::providers::jsonrpc::{
+use starknet_rust_accounts::AccountFactoryError;
+use starknet_rust_core::types::StarknetError;
+use starknet_rust_core::types::{BlockId, BlockTag};
+use starknet_rust_providers::jsonrpc::{
     HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError,
 };
-use starknet_rust::providers::{Provider, ProviderError, ProviderImplError};
+use starknet_rust_providers::{Provider, ProviderError, ProviderImplError};
 use std::sync::Arc;
 
 /// Type alias for starknet-rs Felt.
-pub type StarknetRsFelt = starknet_rust::core::types::Felt;
+pub type StarknetRsFelt = starknet_rust_core::types::Felt;
 /// Type alias for starknet-types-core Felt.
 pub type CoreFelt = starknet_types_core::felt::Felt;
 
@@ -97,11 +97,15 @@ fn transport_error_kind(error: &dyn ProviderImplError) -> String {
     match error {
         JsonRpcClientError::JsonError(_)
         | JsonRpcClientError::TransportError(HttpTransportError::Json(_)) => "decode".to_string(),
-        JsonRpcClientError::JsonRpcError(rpc) => format!("json-rpc code {}", rpc.code),
+        JsonRpcClientError::JsonRpcError(rpc)
+        | JsonRpcClientError::TransportError(HttpTransportError::BatchError(rpc)) => {
+            format!("json-rpc code {}", rpc.code)
+        }
         JsonRpcClientError::TransportError(HttpTransportError::Reqwest(http)) => {
             http_error_kind(http)
         }
-        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_)) => {
+        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_))
+        | JsonRpcClientError::TransportError(HttpTransportError::InvalidNumericResponseId) => {
             "other".to_string()
         }
     }
@@ -322,7 +326,7 @@ mod tests {
         let deploy = map_deploy_factory_error(AccountFactoryError::<&str>::Provider(leaky()));
         assert!(matches!(deploy, KmsError::RpcError(m) if m == redacted));
 
-        let rpc = starknet_rust::providers::jsonrpc::JsonRpcError {
+        let rpc = starknet_rust_providers::jsonrpc::JsonRpcError {
             code: -32000,
             message: "invalid api key SECRET_TOKEN".to_string(),
             data: None,
@@ -364,5 +368,28 @@ mod tests {
         assert_eq!(message, "provider transport error: connect");
         assert!(!message.contains("SECRET_TOKEN"));
         assert!(!message.contains(&port.to_string()));
+    }
+    #[test]
+    fn new_transport_errors_do_not_expose_server_messages() {
+        let batch =
+            HttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
+                code: -32000,
+                message: "SECRET_TOKEN".to_string(),
+                data: Some(serde_json::json!({"url": "https://rpc.example/SECRET_TOKEN"})),
+            });
+        let batch: ProviderError =
+            JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+        assert_eq!(
+            provider_error_message(&batch),
+            "provider transport error: json-rpc code -32000"
+        );
+        let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
+            HttpTransportError::InvalidNumericResponseId,
+        )
+        .into();
+        assert_eq!(
+            provider_error_message(&invalid),
+            "provider transport error: other"
+        );
     }
 }

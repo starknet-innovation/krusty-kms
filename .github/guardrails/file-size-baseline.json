@@ -22,7 +22,7 @@
     },
     {
       "path": "crates/client/src/wallet/utils.rs",
-      "lines": 368
+      "lines": 395
     },
     {
       "path": "crates/client/tests/oz_multisig_devnet.rs",
@@ -30,7 +30,7 @@
     },
     {
       "path": "crates/client/tests/tongo_sepolia_integration.rs",
-      "lines": 1201
+      "lines": 1200
     },
     {
       "path": "crates/common/src/serialization.rs",
@@ -182,7 +182,7 @@
     },
     {
       "path": "crates/wasm/src/lib.rs",
-      "lines": 403
+      "lines": 400
     },
     {
       "path": "crates/wasm/src/proof.rs",

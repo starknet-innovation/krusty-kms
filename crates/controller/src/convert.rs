@@ -1,9 +1,9 @@
-//! Type conversion layer between `starknet_rust` 0.18 (ours) and `starknet` 0.17 (account_sdk).
+//! Type conversion layer between `starknet_rust_core` 0.20 (ours) and `starknet` 0.17 (account_sdk).
 //!
-//! Both crates re-export `starknet-types-core 0.2.x` but Rust treats them as distinct types.
-//! We bridge via `Felt::to_bytes_be()` / `Felt::from_bytes_be()` byte roundtrips.
+//! SDK calls and fee estimates are copied into the 0.20 types used by the shared
+//! wallet API. Felt byte roundtrips preserve values across either core version.
 
-use starknet_rust::core::types as our;
+use starknet_rust_core::types as our;
 use starknet_types_core::felt::Felt as CoreFelt;
 
 /// `starknet` 0.17 types used by `account_sdk`.
@@ -17,13 +17,13 @@ pub(crate) mod sdk {
 // Felt conversion
 // ---------------------------------------------------------------------------
 
-/// Convert our Felt (`starknet-rust 0.18`) to the SDK Felt (`starknet 0.17`).
+/// Convert our Felt (`starknet-rust-core 0.20`) to the SDK Felt (`starknet 0.17`).
 #[inline]
 pub fn felt_ours_to_sdk(f: our::Felt) -> sdk::Felt {
     sdk::Felt::from_bytes_be(&f.to_bytes_be())
 }
 
-/// Convert the SDK Felt (`starknet 0.17`) to our Felt (`starknet-rust 0.18`).
+/// Convert the SDK Felt (`starknet 0.17`) to our Felt (`starknet-rust-core 0.20`).
 #[inline]
 pub fn felt_sdk_to_ours(f: sdk::Felt) -> our::Felt {
     our::Felt::from_bytes_be(&f.to_bytes_be())

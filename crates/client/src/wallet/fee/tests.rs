@@ -3,13 +3,13 @@
 
 use super::*;
 use krusty_kms_common::fee::MaxBound;
-use starknet_rust::accounts::{
+use starknet_rust_accounts::{
     Account, AccountFactory, ExecutionEncoding, OpenZeppelinAccountFactory, SingleOwnerAccount,
 };
-use starknet_rust::core::types::{Felt, ResourceBoundsMapping};
-use starknet_rust::providers::jsonrpc::{HttpTransport, JsonRpcClient};
-use starknet_rust::providers::Url;
-use starknet_rust::signers::{LocalWallet, SigningKey};
+use starknet_rust_core::types::{Felt, ResourceBoundsMapping};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::Url;
+use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
 fn estimate() -> FeeEstimate {
