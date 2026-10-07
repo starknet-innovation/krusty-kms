@@ -15,6 +15,8 @@ All notable changes to the published Rust crates are documented here.
   signer types must upgrade to 0.20.0 too. HTTP batch errors retain only the
   numeric error code, and invalid response IDs use the existing redacted
   transport classification. Krusty's own keystore API remains available.
+  The excluded Controller adapter also uses 0.20.0 core/provider types at
+  the shared wallet API boundary; its upstream SDK resolver blocker remains.
 - `krusty-kms` and `krusty-kms-wasm` read OS entropy with `getrandom::fill` and
   no longer depend on `rand` or `rand_core`. `rand::rngs::SysRng` was a
   re-export of `getrandom::SysRng`, which calls the same function, so the
