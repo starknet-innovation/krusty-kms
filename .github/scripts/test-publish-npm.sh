@@ -41,16 +41,26 @@ chmod +x "$fixture_dir/bin/npm"
 export PATH="$fixture_dir/bin:$PATH"
 export PUBLISH_ARGS_FILE="$fixture_dir/publish-args.txt"
 
-make_tarball valid '{"name":"@starknetfoundation/krusty-kms-wasm","version":"0.0.0-test"}'
+commit='0123456789abcdef0123456789abcdef01234567'
+
+make_tarball valid "{\"name\":\"@starknetfoundation/krusty-kms-wasm\",\"version\":\"0.0.0-test\",\"gitHead\":\"$commit\"}"
 "$publisher" "$fixture_dir/valid.tgz" >/dev/null
 grep -Fx -- '--ignore-scripts' "$PUBLISH_ARGS_FILE" >/dev/null
 grep -Fx -- '--provenance' "$PUBLISH_ARGS_FILE" >/dev/null
 
-make_tarball scripts '{"name":"@starknetfoundation/krusty-kms-wasm","version":"0.0.0-test","scripts":{}}'
+make_tarball scripts "{\"name\":\"@starknetfoundation/krusty-kms-wasm\",\"version\":\"0.0.0-test\",\"gitHead\":\"$commit\",\"scripts\":{}}"
 expect_failure "lifecycle scripts" "$publisher" "$fixture_dir/scripts.tgz"
 
-make_tarball wrong-name '{"name":"attacker-package","version":"0.0.0-test"}'
+make_tarball wrong-name "{\"name\":\"attacker-package\",\"version\":\"0.0.0-test\",\"gitHead\":\"$commit\"}"
 expect_failure "wrong package name" "$publisher" "$fixture_dir/wrong-name.tgz"
+
+# Issue #137: 0.10.0 and 0.11.0 shipped with no gitHead, so no one could map a
+# published tarball to a commit from registry metadata alone.
+make_tarball no-git-head '{"name":"@starknetfoundation/krusty-kms-wasm","version":"0.0.0-test"}'
+expect_failure "missing gitHead" "$publisher" "$fixture_dir/no-git-head.tgz"
+
+make_tarball short-git-head '{"name":"@starknetfoundation/krusty-kms-wasm","version":"0.0.0-test","gitHead":"0123456"}'
+expect_failure "abbreviated gitHead" "$publisher" "$fixture_dir/short-git-head.tgz"
 
 expect_failure "missing tarball" "$publisher" "$fixture_dir/missing.tgz"
 
