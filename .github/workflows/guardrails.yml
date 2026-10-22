@@ -32,6 +32,11 @@ on:
       - ".github/scripts/**"
       - "tools/check.sh"
       - ".github/workflows/**"
+  schedule:
+    # Mondays 06:30 UTC — advisory/yanked-crate sweep of the main lockfile.
+    # Only the `deny` job runs on this event, alongside the scheduled
+    # `security` job in rust.yml.
+    - cron: "30 6 * * 1"
 
 concurrency:
   group: guardrails-${{ github.workflow }}-${{ github.ref }}
@@ -44,6 +49,7 @@ permissions:
 jobs:
   fitness:
     name: Maintainability fitness checks
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -144,6 +150,8 @@ jobs:
 
   deny:
     name: cargo-deny
+    # Also runs on the weekly `schedule` event against `main`; see
+    # docs/design/2026-10-22-scheduled-cargo-audit.md.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -156,6 +164,7 @@ jobs:
 
   docs:
     name: rustdoc link check
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -176,6 +185,7 @@ jobs:
 
   semver:
     name: cargo-semver-checks
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     # Compare publishable crate APIs against the PR base (or origin/main) using
     # locked rustdoc JSON. See .github/scripts/check-semver.sh.

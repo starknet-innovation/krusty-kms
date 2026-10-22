@@ -23,12 +23,18 @@ on:
       - ".github/scripts/check-release-version-base.sh"
       - ".github/scripts/verify-release-changelog.sh"
       - ".github/workflows/rust.yml"
+  schedule:
+    # Mondays 06:30 UTC — advisory sweep of the main lockfile. Only the
+    # `security` job runs on this event; see
+    # docs/design/2026-10-22-scheduled-cargo-audit.md.
+    - cron: "30 6 * * 1"
 
 permissions:
   contents: read
 
 jobs:
   check:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,6 +47,7 @@ jobs:
       - run: bash tools/check.sh test
 
   msrv:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,6 +60,7 @@ jobs:
       - run: cargo check -p krusty-kms-sdk --examples --locked
 
   package:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -68,6 +76,9 @@ jobs:
           --exclude qb-game
 
   security:
+    # Also runs on the weekly `schedule` event against `main`, so advisories
+    # published between pull requests fail here instead of surfacing only
+    # when an unrelated PR next touches the lockfile.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -76,6 +87,7 @@ jobs:
       - run: cargo audit --deny warnings
 
   wasm:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

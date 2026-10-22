@@ -19,7 +19,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |
 | WASM export freeze | `.github/scripts/check-wasm-exports.sh` | `wasm_bindgen` surface drift |
 | Design note | `.github/scripts/check-design-note.sh` | Public API / dep / surface changes without design note |
-| Licenses & advisories | `deny.toml` + `cargo-deny` | Disallowed licenses, yanked crates, unknown sources |
+| Licenses & advisories | `deny.toml` + `cargo-deny` | Disallowed licenses, yanked crates, unknown sources; also weekly on `main` |
 | rustdoc links | `cargo doc` + `RUSTDOCFLAGS` | Broken intra-doc links on publishable crates |
 | Semver | `cargo-semver-checks` via locked rustdoc JSON | Accidental breaking API changes vs PR base / `main` |
 | Cross-compat vectors | `.github/workflows/cross-compat.yml` | Rust↔TS proof drift on touched crates |
