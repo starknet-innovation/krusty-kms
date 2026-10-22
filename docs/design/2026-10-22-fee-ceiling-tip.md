@@ -40,6 +40,16 @@ invoke and deploy, with or without a ceiling (October 2026 audit, H-1).
 4. Serialized ceilings written before `max_tip` existed deserialize with a
    zero tip, never with an RPC-chosen one.
 
+## Estimates
+
+`ExecutionV3::estimate_fee_with_nonce` and the factory equivalent build the
+estimate request with `tip: 0` regardless of the builder's tip
+(`starknet-rust-accounts` 0.20.0, `src/account/execution.rs:413`,
+`src/factory/mod.rs:560`), so no estimate ever carries the RPC's median tip
+and pinning the tip on the estimators would change nothing. The estimate
+therefore excludes the tip; `Wallet::estimate_fee` and `estimate_deploy_fee`
+document that a ceiling bidding `max_tip` adds `l2_gas_consumed × max_tip`.
+
 ## Behaviour change
 
 Transactions signed without a ceiling previously bid the network's median tip

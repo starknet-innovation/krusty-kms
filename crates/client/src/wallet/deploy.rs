@@ -127,6 +127,12 @@ pub async fn deploy_oz_account_with_fee_ceiling(
 }
 
 /// Estimate the fee for deploying an OpenZeppelin account (without submitting).
+///
+/// The estimate excludes the V3 tip: `starknet-rs` sends every estimate request
+/// with `tip: 0` whatever the builder holds, so the RPC's median tip never
+/// enters it. [`deploy_oz_account`] signs a zero tip, so its fee matches this
+/// estimate; [`deploy_oz_account_with_fee_ceiling`] signs the ceiling's
+/// `max_tip`, which adds `l2_gas_consumed × max_tip` when prefunding.
 pub async fn estimate_deploy_fee(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,

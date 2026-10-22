@@ -222,6 +222,13 @@ impl Wallet {
     }
 
     /// Estimate fees for a list of calls.
+    ///
+    /// The estimate excludes the V3 tip: `starknet-rs` sends every estimate
+    /// request with `tip: 0` whatever the builder holds, so the RPC's median
+    /// tip never enters it. [`Wallet::execute`] signs the tip pinned by the
+    /// fee ceiling (`max_tip`, default zero), which adds
+    /// `l2_gas_consumed × max_tip` on top of this estimate; budget for that
+    /// when a ceiling bids a tip.
     pub async fn estimate_fee(
         &self,
         calls: Vec<Call>,

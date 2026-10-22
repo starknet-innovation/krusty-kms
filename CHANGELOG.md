@@ -16,7 +16,15 @@ All notable changes to the published Rust crates are documented here.
   `ResourceBoundsCeiling::new` and every existing signature are unchanged;
   serialized ceilings without `max_tip` deserialize with a zero tip.
   **Behaviour change:** transactions signed without a ceiling bid no priority
-  fee instead of the network median; configure a ceiling to bid one.
+  fee instead of the network median; configure a ceiling to bid one. Fee
+  estimates are unchanged: `starknet-rs` always estimates with a zero tip, so
+  a ceiling that bids one adds `l2_gas_consumed × max_tip` on top of the
+  estimate (now documented on `Wallet::estimate_fee` and
+  `estimate_deploy_fee`).
+- `Cargo.lock` moves `rustls-webpki` to 0.103.16 and `webpki-roots` /
+  `webpki-root-certs` to 1.0.10, clearing RUSTSEC-2026-0381, -0382 and -0383
+  (bundled roots and verification accepting distrusted emSign intermediates)
+  in the RPC and NATS TLS paths. No other dependency changes.
 
 ## [0.13.0] - 2026-10-07
 
