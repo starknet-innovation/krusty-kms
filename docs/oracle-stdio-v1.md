@@ -19,8 +19,10 @@ Optional hardening:
   phrases are rejected).
 - Hosts can cap the fees `deploy_account` may sign by constructing the gateway
   backend with `StarknetGatewayBackend::with_deploy_fee_ceiling`; estimates
-  above the ceiling fail with `InvalidRequest`. A per-request `fee_ceiling`
-  field is a planned follow-up.
+  above the ceiling fail with `InvalidRequest`. The V3 tip is pinned locally on
+  every deploy (the ceiling's `max_tip`, or zero without a ceiling) and is
+  never taken from the RPC. A per-request `fee_ceiling` field is a planned
+  follow-up.
 
 ## Transport Contract
 

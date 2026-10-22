@@ -67,7 +67,8 @@ pub async fn deploy_oz_account(
 /// The RPC estimate is scaled exactly as `starknet-rs` would, rejected with
 /// [`KmsError::FeeEstimationFailed`] if any dimension exceeds the ceiling, and
 /// otherwise pinned on the signed transaction. `None` keeps the unbounded,
-/// RPC-estimated behaviour of [`deploy_oz_account`].
+/// RPC-estimated gas bounds of [`deploy_oz_account`]. The V3 tip is pinned on
+/// both paths (the ceiling's `max_tip`, or zero) and never taken from the RPC.
 pub async fn deploy_oz_account_with_fee_ceiling(
     provider: Arc<JsonRpcClient<HttpTransport>>,
     signing_key: &SigningKey,
@@ -106,7 +107,7 @@ pub async fn deploy_oz_account_with_fee_ceiling(
             .await
             .map_err(|e| KmsError::CryptoError(e.to_string()))?;
 
-    let mut deployment = factory.deploy_v3(salt_rs);
+    let mut deployment = fee::pin_deployment_tip(factory.deploy_v3(salt_rs), fee_ceiling);
     if let Some(ceiling) = fee_ceiling {
         let estimate = deployment
             .estimate_fee()

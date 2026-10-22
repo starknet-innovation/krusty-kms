@@ -25,15 +25,19 @@ a signed fee authorisation the KMS never bounded (audit finding M-3).
 1. Signed bounds are at or below the ceiling in every field, always: the pinned
    values are the admitted proposal, and `starknet-rs` skips its own estimate
    once all six are set.
-2. Absent ceiling is exactly the previous behaviour: the unbounded code path is
-   untouched.
+2. Absent ceiling keeps the gas bounds RPC-estimated and unbounded as before;
+   since 2026-10-22 the tip is pinned to zero on that path too (law 7).
 3. An admitting ceiling signs the same bounds the unbounded path would have
    signed (same `f64` arithmetic and `u64` price range as `starknet-rs`).
 4. Reject, never clamp: clamping would let the RPC steer bounds to the ceiling.
 5. Zero ceiling fields are invalid, and `admit` re-validates so a ceiling built
    by literal or deserialization fails closed.
 6. The worst-case fee a ceiling permits is the sum over dimensions of
-   `max_amount * max_price_per_unit`.
+   `max_amount * max_price_per_unit`, plus `l2_gas.max_amount * max_tip`
+   (law 7).
+7. The V3 tip is never chosen by the RPC. Every signed invoke and deploy pins
+   it before `send`: the ceiling's `max_tip`, or `DEFAULT_TIP` (zero) without
+   a ceiling. See `docs/design/2026-10-22-fee-ceiling-tip.md`.
 
 ## Failure behaviour
 

@@ -1,8 +1,9 @@
-//! Fee-ceiling admission on the deploy path (audit M-3).
+//! Fee-ceiling admission and tip pinning on the deploy path (audit M-3 and
+//! the October 2026 H-1 follow-up).
 
-use super::super::deploy::bound_deployment;
+use super::super::deploy::{bound_deployment, pin_deployment_tip};
 use super::super::StarknetRsFelt;
-use krusty_kms_common::fee::{MaxBound, ResourceBoundsCeiling};
+use krusty_kms_common::fee::{MaxBound, ResourceBoundsCeiling, DEFAULT_TIP};
 use krusty_kms_domain::GatewayErrorCode;
 use starknet_rust_accounts::{AccountFactory, OpenZeppelinAccountFactory};
 use starknet_rust_core::types::FeeEstimate;
@@ -54,23 +55,29 @@ async fn offline_factory(
     .unwrap()
 }
 
+// `prepared()` is synchronous and fails while the nonce, any bound, or the tip
+// is unset. The nonce is normally resolved by `send`, so the tests pin it; the
+// tip must come from the code under test. A request that prepares against the
+// unreachable port-0 provider proves no block was fetched to estimate the tip.
+
 #[tokio::test]
-async fn bound_deployment_signs_exactly_the_admitted_bounds() {
+async fn bound_deployment_signs_exactly_the_admitted_bounds_and_the_ceiling_tip() {
     let factory = offline_factory().await;
-    // Nonce and tip are normally resolved by `send`; pin them so `prepared`
-    // exposes the request without touching the network.
     let deployment = factory
         .deploy_v3(StarknetRsFelt::ONE)
-        .nonce(StarknetRsFelt::ZERO)
-        .tip(0);
+        .nonce(StarknetRsFelt::ZERO);
 
-    let request = bound_deployment(deployment, &deploy_estimate(), &deploy_ceiling(450))
-        .unwrap()
-        .prepared()
-        .unwrap()
-        .get_deploy_request(true, true)
-        .await
-        .unwrap();
+    let request = bound_deployment(
+        deployment,
+        &deploy_estimate(),
+        &deploy_ceiling(450).with_max_tip(11),
+    )
+    .unwrap()
+    .prepared()
+    .unwrap()
+    .get_deploy_request(true, true)
+    .await
+    .unwrap();
 
     let signed = request.resource_bounds;
     assert_eq!(signed.l1_gas.max_amount, 15);
@@ -79,6 +86,55 @@ async fn bound_deployment_signs_exactly_the_admitted_bounds() {
     assert_eq!(signed.l2_gas.max_price_per_unit, 300);
     assert_eq!(signed.l1_data_gas.max_amount, 45);
     assert_eq!(signed.l1_data_gas.max_price_per_unit, 450);
+    assert_eq!(request.tip, 11);
+}
+
+#[tokio::test]
+async fn deployment_tip_is_pinned_without_a_ceiling_so_no_block_is_fetched() {
+    let factory = offline_factory().await;
+    let deployment = pin_deployment_tip(factory.deploy_v3(StarknetRsFelt::ONE), None)
+        .nonce(StarknetRsFelt::ZERO)
+        .l1_gas(1)
+        .l1_gas_price(1)
+        .l2_gas(1)
+        .l2_gas_price(1)
+        .l1_data_gas(1)
+        .l1_data_gas_price(1);
+
+    let request = deployment
+        .prepared()
+        .expect("tip pinned locally; nothing left for the RPC to resolve")
+        .get_deploy_request(true, true)
+        .await
+        .unwrap();
+
+    assert_eq!(request.tip, DEFAULT_TIP);
+    assert_eq!(DEFAULT_TIP, 0);
+}
+
+#[tokio::test]
+async fn deployment_tip_comes_from_the_ceiling_when_one_is_configured() {
+    let factory = offline_factory().await;
+    let deployment = pin_deployment_tip(
+        factory.deploy_v3(StarknetRsFelt::ONE),
+        Some(&deploy_ceiling(450).with_max_tip(5)),
+    )
+    .nonce(StarknetRsFelt::ZERO)
+    .l1_gas(1)
+    .l1_gas_price(1)
+    .l2_gas(1)
+    .l2_gas_price(1)
+    .l1_data_gas(1)
+    .l1_data_gas_price(1);
+
+    let request = deployment
+        .prepared()
+        .unwrap()
+        .get_deploy_request(true, true)
+        .await
+        .unwrap();
+
+    assert_eq!(request.tip, 5);
 }
 
 #[tokio::test]

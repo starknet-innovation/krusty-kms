@@ -195,9 +195,13 @@ impl Wallet {
     }
 
     /// Execute a list of calls via `execute_v3`, honouring [`Wallet::with_fee_ceiling`].
+    ///
+    /// The V3 tip is always pinned locally (the ceiling's `max_tip`, or zero
+    /// without a ceiling); it is never taken from the RPC.
     pub async fn execute(&self, calls: Vec<Call>) -> Result<Tx> {
         use starknet_rust_accounts::Account;
-        let mut execution = self.account.execute_v3(calls);
+        let mut execution =
+            fee::pin_execution_tip(self.account.execute_v3(calls), self.fee_ceiling.as_ref());
         if let Some(ceiling) = &self.fee_ceiling {
             let estimate = execution
                 .estimate_fee()

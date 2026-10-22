@@ -2,7 +2,7 @@
 //! pinned bounds are exactly what the signed request carries.
 
 use super::*;
-use krusty_kms_common::fee::MaxBound;
+use krusty_kms_common::fee::{MaxBound, DEFAULT_TIP};
 use starknet_rust_accounts::{
     Account, AccountFactory, ExecutionEncoding, OpenZeppelinAccountFactory, SingleOwnerAccount,
 };
@@ -92,20 +92,40 @@ fn out_of_range_price_is_rejected_before_admission() {
     ));
 }
 
-#[tokio::test]
-async fn bound_execution_signs_exactly_the_admitted_bounds() {
-    let account = SingleOwnerAccount::new(
+fn offline_account() -> SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, LocalWallet> {
+    SingleOwnerAccount::new(
         offline_provider(),
         signer(),
         Felt::from(9u64),
         Felt::from(1u64),
         ExecutionEncoding::New,
-    );
-    // Nonce and tip are normally resolved by `send`; pin them so `prepared`
-    // exposes the request without touching the network.
-    let execution = account.execute_v3(Vec::new()).nonce(Felt::ZERO).tip(0);
+    )
+}
 
-    let request = bound_execution(execution, &estimate(), &ceiling(30))
+async fn offline_factory(
+) -> OpenZeppelinAccountFactory<LocalWallet, Arc<JsonRpcClient<HttpTransport>>> {
+    OpenZeppelinAccountFactory::new(
+        Felt::from(0x1234u64),
+        Felt::from(1u64),
+        signer(),
+        offline_provider(),
+    )
+    .await
+    .unwrap()
+}
+
+// `prepared()` is synchronous and fails with `NotPreparedError` while the
+// nonce, any bound, or the tip is unset. The nonce is normally resolved by
+// `send`, so the tests pin it; everything else must come from the code under
+// test. A request that prepares therefore proves no block was fetched for the
+// tip, because the provider at port 0 is never reachable.
+
+#[tokio::test]
+async fn bound_execution_signs_exactly_the_admitted_bounds_and_the_ceiling_tip() {
+    let account = offline_account();
+    let execution = account.execute_v3(Vec::new()).nonce(Felt::ZERO);
+
+    let request = bound_execution(execution, &estimate(), &ceiling(30).with_max_tip(11))
         .unwrap()
         .prepared()
         .unwrap()
@@ -117,21 +137,15 @@ async fn bound_execution_signs_exactly_the_admitted_bounds() {
         &request.broadcasted_invoke_txn_v3.resource_bounds,
         &scaled(),
     );
+    assert_eq!(request.broadcasted_invoke_txn_v3.tip, 11);
 }
 
 #[tokio::test]
-async fn bound_deployment_signs_exactly_the_admitted_bounds() {
-    let factory = OpenZeppelinAccountFactory::new(
-        Felt::from(0x1234u64),
-        Felt::from(1u64),
-        signer(),
-        offline_provider(),
-    )
-    .await
-    .unwrap();
-    let deployment = factory.deploy_v3(Felt::ONE).nonce(Felt::ZERO).tip(0);
+async fn bound_deployment_signs_exactly_the_admitted_bounds_and_the_ceiling_tip() {
+    let factory = offline_factory().await;
+    let deployment = factory.deploy_v3(Felt::ONE).nonce(Felt::ZERO);
 
-    let request = bound_deployment(deployment, &estimate(), &ceiling(30))
+    let request = bound_deployment(deployment, &estimate(), &ceiling(30).with_max_tip(11))
         .unwrap()
         .prepared()
         .unwrap()
@@ -140,18 +154,103 @@ async fn bound_deployment_signs_exactly_the_admitted_bounds() {
         .unwrap();
 
     assert_bounds(&request.resource_bounds, &scaled());
+    assert_eq!(request.tip, 11);
+}
+
+#[tokio::test]
+async fn execution_tip_is_pinned_without_a_ceiling_so_no_block_is_fetched() {
+    let account = offline_account();
+    let execution = pin_execution_tip(account.execute_v3(Vec::new()), None)
+        .nonce(Felt::ZERO)
+        .l1_gas(1)
+        .l1_gas_price(1)
+        .l2_gas(1)
+        .l2_gas_price(1)
+        .l1_data_gas(1)
+        .l1_data_gas_price(1);
+
+    let request = execution
+        .prepared()
+        .expect("tip pinned locally; nothing left for the RPC to resolve")
+        .get_invoke_request(true, true)
+        .await
+        .unwrap();
+
+    assert_eq!(request.broadcasted_invoke_txn_v3.tip, DEFAULT_TIP);
+    assert_eq!(DEFAULT_TIP, 0);
+}
+
+#[tokio::test]
+async fn execution_tip_comes_from_the_ceiling_when_one_is_configured() {
+    let account = offline_account();
+    let ceiling = ceiling(30).with_max_tip(5);
+    let execution = pin_execution_tip(account.execute_v3(Vec::new()), Some(&ceiling))
+        .nonce(Felt::ZERO)
+        .l1_gas(1)
+        .l1_gas_price(1)
+        .l2_gas(1)
+        .l2_gas_price(1)
+        .l1_data_gas(1)
+        .l1_data_gas_price(1);
+
+    let request = execution
+        .prepared()
+        .unwrap()
+        .get_invoke_request(true, true)
+        .await
+        .unwrap();
+
+    assert_eq!(request.broadcasted_invoke_txn_v3.tip, 5);
+}
+
+#[tokio::test]
+async fn deployment_tip_is_pinned_without_a_ceiling_so_no_block_is_fetched() {
+    let factory = offline_factory().await;
+    let deployment = pin_deployment_tip(factory.deploy_v3(Felt::ONE), None)
+        .nonce(Felt::ZERO)
+        .l1_gas(1)
+        .l1_gas_price(1)
+        .l2_gas(1)
+        .l2_gas_price(1)
+        .l1_data_gas(1)
+        .l1_data_gas_price(1);
+
+    let request = deployment
+        .prepared()
+        .expect("tip pinned locally; nothing left for the RPC to resolve")
+        .get_deploy_request(true, true)
+        .await
+        .unwrap();
+
+    assert_eq!(request.tip, DEFAULT_TIP);
+}
+
+#[tokio::test]
+async fn deployment_tip_comes_from_the_ceiling_when_one_is_configured() {
+    let factory = offline_factory().await;
+    let ceiling = ceiling(30).with_max_tip(5);
+    let deployment = pin_deployment_tip(factory.deploy_v3(Felt::ONE), Some(&ceiling))
+        .nonce(Felt::ZERO)
+        .l1_gas(1)
+        .l1_gas_price(1)
+        .l2_gas(1)
+        .l2_gas_price(1)
+        .l1_data_gas(1)
+        .l1_data_gas_price(1);
+
+    let request = deployment
+        .prepared()
+        .unwrap()
+        .get_deploy_request(true, true)
+        .await
+        .unwrap();
+
+    assert_eq!(request.tip, 5);
 }
 
 #[tokio::test]
 async fn bound_deployment_refuses_an_estimate_over_the_ceiling() {
-    let factory = OpenZeppelinAccountFactory::new(
-        Felt::from(0x1234u64),
-        Felt::from(1u64),
-        signer(),
-        offline_provider(),
-    )
-    .await
-    .unwrap();
+    let factory = offline_factory().await;
 
     let result = bound_deployment(factory.deploy_v3(Felt::ONE), &estimate(), &ceiling(29));
     assert!(matches!(result, Err(KmsError::FeeEstimationFailed(_))));

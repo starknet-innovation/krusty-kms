@@ -4,13 +4,23 @@
 //! whatever bounds the estimate implies. A [`ResourceBoundsCeiling`] admits
 //! bounds derived from an estimate only when every amount and price is at or
 //! below the ceiling; it never widens or clamps, and degenerate (zero)
-//! ceilings are rejected before any comparison. No I/O happens here.
+//! ceilings are rejected before any comparison. The V3 `tip` is pinned too:
+//! `starknet-rs` otherwise fills an unset tip from the RPC's view of the
+//! pending block, and a tip is paid in full per unit of L2 gas, so it must
+//! never be chosen by the RPC. No I/O happens here.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Multiplier `starknet-rs` applies to estimated gas amounts and prices before signing.
 pub const ESTIMATE_MULTIPLIER: f64 = 1.5;
+
+/// Tip pinned on every transaction signed without a [`ResourceBoundsCeiling`].
+///
+/// Zero: no priority fee is bid, and `starknet-rs` never fetches a block to
+/// estimate one. Callers who want to bid a tip configure a ceiling with
+/// [`ResourceBoundsCeiling::with_max_tip`].
+pub const DEFAULT_TIP: u64 = 0;
 
 /// Dimension names, in the order used by every `[MaxBound; 3]` below.
 const DIMENSIONS: [&str; 3] = ["l1_gas", "l2_gas", "l1_data_gas"];
@@ -70,15 +80,23 @@ impl ProposedResourceBounds {
 
 /// Caller-supplied ceiling on the resource bounds a wallet may sign.
 ///
-/// Invariant: every field is non-zero. [`Self::new`] enforces it and
+/// Invariant: every gas field is non-zero. [`Self::new`] enforces it and
 /// [`Self::admit`] re-checks it, so a deserialized value cannot bypass validation.
-/// The worst-case fee a ceiling permits is `Σ max_amount × max_price_per_unit`.
+/// `max_tip` is the V3 tip the wallet bids; it may be zero (no priority fee)
+/// and is pinned on the signed transaction verbatim, so it is also the most the
+/// transaction can pay per unit of L2 gas on top of `l2_gas.max_price_per_unit`.
+/// The worst-case fee a ceiling permits is therefore
+/// `Σ max_amount × max_price_per_unit + l2_gas.max_amount × max_tip`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ResourceBoundsCeiling {
     pub l1_gas: MaxBound,
     pub l2_gas: MaxBound,
     pub l1_data_gas: MaxBound,
+    /// V3 tip bid per unit of L2 gas, in fri. Missing in serialized ceilings
+    /// written before this field existed, which deserialize as [`DEFAULT_TIP`].
+    #[serde(default)]
+    pub max_tip: u64,
 }
 
 impl ResourceBoundsCeiling {
@@ -92,9 +110,18 @@ impl ResourceBoundsCeiling {
             l1_gas,
             l2_gas,
             l1_data_gas,
+            max_tip: DEFAULT_TIP,
         };
         ceiling.validate()?;
         Ok(ceiling)
+    }
+
+    /// Bid `max_tip` fri per unit of L2 gas on every transaction signed under
+    /// this ceiling. The default is [`DEFAULT_TIP`].
+    #[must_use]
+    pub const fn with_max_tip(mut self, max_tip: u64) -> Self {
+        self.max_tip = max_tip;
+        self
     }
 
     /// Reject degenerate ceilings: a zero field can never admit a live estimate.

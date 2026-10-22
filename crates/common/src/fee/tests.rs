@@ -161,11 +161,39 @@ fn admit_estimate_scales_then_admits() {
 
 #[test]
 fn ceiling_serde_roundtrips() {
-    let ceiling = ResourceBoundsCeiling::new(bound(1, 2), bound(3, 4), bound(5, 6)).unwrap();
+    let ceiling = ResourceBoundsCeiling::new(bound(1, 2), bound(3, 4), bound(5, 6))
+        .unwrap()
+        .with_max_tip(7);
     let json = serde_json::to_string(&ceiling).unwrap();
+    assert!(json.contains("\"max_tip\":7"), "{json}");
     assert_eq!(
         serde_json::from_str::<ResourceBoundsCeiling>(&json).unwrap(),
         ceiling
+    );
+}
+
+#[test]
+fn new_ceiling_bids_no_tip_until_asked() {
+    let ceiling = ResourceBoundsCeiling::new(bound(1, 2), bound(3, 4), bound(5, 6)).unwrap();
+    assert_eq!(ceiling.max_tip, DEFAULT_TIP);
+    assert_eq!(DEFAULT_TIP, 0);
+    assert_eq!(ceiling.with_max_tip(9).max_tip, 9);
+    // A zero tip is a valid bid, not a degenerate ceiling.
+    assert!(ceiling.with_max_tip(0).validate().is_ok());
+}
+
+#[test]
+fn ceilings_serialized_before_max_tip_existed_deserialize_with_no_tip() {
+    let json = r#"{
+        "l1_gas": {"max_amount": 1, "max_price_per_unit": 2},
+        "l2_gas": {"max_amount": 3, "max_price_per_unit": 4},
+        "l1_data_gas": {"max_amount": 5, "max_price_per_unit": 6}
+    }"#;
+    let ceiling: ResourceBoundsCeiling = serde_json::from_str(json).unwrap();
+    assert_eq!(ceiling.max_tip, DEFAULT_TIP);
+    assert_eq!(
+        ceiling,
+        ResourceBoundsCeiling::new(bound(1, 2), bound(3, 4), bound(5, 6)).unwrap()
     );
 }
 
