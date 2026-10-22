@@ -3,7 +3,7 @@
 
 use super::rpc::map_provider_error;
 use crate::{map_kms_error, GatewayResult};
-use krusty_kms_common::fee::ResourceBoundsCeiling;
+use krusty_kms_common::fee::{ResourceBoundsCeiling, DEFAULT_TIP};
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError};
 use krusty_kms_domain::{AccountDescriptor, FeltHex, GatewayError, GatewayErrorCode};
 use starknet_rust_accounts::{AccountDeploymentV3, AccountFactoryError};
@@ -121,8 +121,19 @@ fn indicates_already_deployed(message: &str) -> bool {
     is_already_deployed_validation_failure(message)
 }
 
+/// Pin the V3 tip on `deployment`: the ceiling's `max_tip`, or
+/// [`DEFAULT_TIP`] without a ceiling. Left unset, `starknet-rs` would fetch
+/// the pending block from the RPC and sign its median tip, and a tip is paid
+/// in full per unit of L2 gas.
+pub(super) fn pin_deployment_tip<'f, F>(
+    deployment: AccountDeploymentV3<'f, F>,
+    ceiling: Option<&ResourceBoundsCeiling>,
+) -> AccountDeploymentV3<'f, F> {
+    deployment.tip(ceiling.map_or(DEFAULT_TIP, |ceiling| ceiling.max_tip))
+}
+
 /// Scale `estimate` exactly as `starknet-rs` would, admit it against `ceiling`,
-/// and pin the admitted bounds on `deployment`.
+/// and pin the admitted bounds and the ceiling's tip on `deployment`.
 ///
 /// Rejections are non-retryable: the estimate came from the untrusted RPC, so
 /// retrying against the same endpoint cannot make it admissible.
@@ -145,6 +156,7 @@ pub(super) fn bound_deployment<'f, F>(
             )
         })?;
     Ok(deployment
+        .tip(ceiling.max_tip)
         .l1_gas(bounds.l1_gas.max_amount)
         .l1_gas_price(bounds.l1_gas.max_price_per_unit)
         .l2_gas(bounds.l2_gas.max_amount)

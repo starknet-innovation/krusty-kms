@@ -4,6 +4,28 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- `krusty-kms-client` and `krusty-kms-gateway` pin the V3 `tip` on every
+  signed invoke and deploy-account transaction. Left unset, `starknet-rs`
+  fetched the pending block from the RPC and signed its median tip, and a tip
+  is paid in full per unit of L2 gas, so a hostile RPC could add an unbounded
+  fee term even under a `ResourceBoundsCeiling`. The tip is now the ceiling's
+  new `max_tip` field (set with `ResourceBoundsCeiling::with_max_tip`, default
+  zero) or `krusty_kms_common::fee::DEFAULT_TIP` (zero) without a ceiling.
+  `ResourceBoundsCeiling::new` and every existing signature are unchanged;
+  serialized ceilings without `max_tip` deserialize with a zero tip.
+  **Behaviour change:** transactions signed without a ceiling bid no priority
+  fee instead of the network median; configure a ceiling to bid one. Fee
+  estimates are unchanged: `starknet-rs` always estimates with a zero tip, so
+  a ceiling that bids one adds `l2_gas_consumed × max_tip` on top of the
+  estimate (now documented on `Wallet::estimate_fee` and
+  `estimate_deploy_fee`).
+- `Cargo.lock` moves `rustls-webpki` to 0.103.16 and `webpki-roots` /
+  `webpki-root-certs` to 1.0.10, clearing RUSTSEC-2026-0381, -0382 and -0383
+  (bundled roots and verification accepting distrusted emSign intermediates)
+  in the RPC and NATS TLS paths. No other dependency changes.
+
 ## [0.13.0] - 2026-10-07
 
 ### Changed

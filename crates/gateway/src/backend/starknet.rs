@@ -1,7 +1,8 @@
 //! Default Starknet JSON-RPC implementation of [`GatewayBackend`].
 
 use super::deploy::{
-    bound_deployment, map_deploy_submission_error, validate_open_zeppelin_descriptor,
+    bound_deployment, map_deploy_submission_error, pin_deployment_tip,
+    validate_open_zeppelin_descriptor,
 };
 use super::interface::{DeployExecution, GatewayBackend};
 use super::rpc::{
@@ -49,7 +50,9 @@ impl StarknetGatewayBackend {
     /// Deploy estimates are admitted against `ceiling` and the admitted bounds
     /// pinned on the transaction; estimates above it fail with a non-retryable
     /// `InvalidRequest` naming the dimension. Without a ceiling (the default)
-    /// deploy bounds stay RPC-estimated and unbounded.
+    /// deploy gas bounds stay RPC-estimated and unbounded; the V3 tip is pinned
+    /// on both paths (the ceiling's `max_tip`, or zero) and never taken from
+    /// the RPC.
     #[must_use]
     pub fn with_deploy_fee_ceiling(mut self, ceiling: ResourceBoundsCeiling) -> Self {
         self.deploy_fee_ceiling = Some(ceiling);
@@ -88,7 +91,10 @@ impl StarknetGatewayBackend {
         .await
         .map_err(|error| map_kms_error(KmsError::CryptoError(error.to_string())))?;
 
-        let mut deployment = factory.deploy_v3(core_felt_to_rs(account.salt.to_felt()));
+        let mut deployment = pin_deployment_tip(
+            factory.deploy_v3(core_felt_to_rs(account.salt.to_felt())),
+            self.deploy_fee_ceiling.as_ref(),
+        );
         if let Some(ceiling) = &self.deploy_fee_ceiling {
             let estimate = deployment
                 .estimate_fee()

@@ -57,9 +57,13 @@ let wallet = wallet.with_fee_ceiling(ceiling);
 ```
 
 `deploy_oz_account_with_fee_ceiling` applies the same policy to account
-deployment. Without a ceiling, bounds stay RPC-estimated and unbounded (the
-previous behaviour). See
-[`docs/design/2026-09-01-local-fee-ceilings.md`](../../docs/design/2026-09-01-local-fee-ceilings.md).
+deployment. Without a ceiling, gas bounds stay RPC-estimated and unbounded (the
+previous behaviour). The V3 tip is pinned on every path: the ceiling's
+`max_tip` (`ResourceBoundsCeiling::with_max_tip`, default zero) or zero without
+a ceiling, never a value the RPC chooses. See
+[`docs/design/2026-09-01-local-fee-ceilings.md`](../../docs/design/2026-09-01-local-fee-ceilings.md)
+and
+[`docs/design/2026-10-22-fee-ceiling-tip.md`](../../docs/design/2026-10-22-fee-ceiling-tip.md).
 
 ## Testing
 
