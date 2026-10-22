@@ -1713,7 +1713,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "primeorder",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "signature 3.0.0",
  "wnaf",
 ]
@@ -1759,7 +1759,7 @@ dependencies = [
  "scrypt",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "sha3 0.12.0",
  "starknet-rust-core",
  "starknet-rust-crypto",
@@ -1839,7 +1839,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "starknet-types-core",
  "subtle",
  "zeroize",
@@ -1901,7 +1901,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "starknet-types-core",
 ]
 
@@ -2021,7 +2021,7 @@ dependencies = [
  "rand 0.10.3",
  "rayon",
  "serde",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "starknet-types-core",
  "thiserror",
 ]
@@ -2430,7 +2430,7 @@ dependencies = [
  "rand 0.10.3",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -2962,7 +2962,7 @@ dependencies = [
  "cfg-if",
  "pbkdf2",
  "salsa20",
- "sha2 0.11.0",
+ "sha2 0.11.1",
 ]
 
 [[package]]
@@ -3149,9 +3149,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4"
+checksum = "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
 dependencies = [
  "cfg-if",
  "cpufeatures 0.3.0",
@@ -3358,7 +3358,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "rfc6979 0.5.0",
- "sha2 0.11.0",
+ "sha2 0.11.1",
  "starknet-rust-curve",
  "starknet-types-core",
  "zeroize",
