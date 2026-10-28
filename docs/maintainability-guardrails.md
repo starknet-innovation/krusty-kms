@@ -32,12 +32,17 @@ Push runs are limited to `main` (PR events cover branches) with a concurrency gr
 
 The `npm` GitHub environment is a required security control, not optional release
 metadata. Repository administrators must configure it with at least one required
-reviewer and exactly one custom deployment-branch policy named `main` before enabling
-npm trusted publishing. A wildcard policy is not acceptable, and the generic
+reviewer and exactly one custom deployment policy for the `v*` **tag** pattern before
+enabling npm trusted publishing. A wildcard policy is not acceptable, and the generic
 "protected branches" option is insufficient because it may admit protected release
 branches. Enable prevention of self-review and disable administrator bypass as
 defense-in-depth. The publish job queries the environment and its custom policies and
 fails before package publication if the required controls are absent.
+
+npm releases are tag-triggered (issue #137): publishing on pushes to `main` left a
+published version unbound to a single commit. Switching the workflow requires the
+environment policy to move from the `main` branch to the `v*` tag pattern at the same
+time, because the publish job asserts the tag policy and will otherwise refuse to run.
 
 Configure npm's trusted publisher for this repository, the `publish-npm.yml` workflow,
 and the `npm` environment. Do not add a long-lived npm token as a fallback. The workflow
