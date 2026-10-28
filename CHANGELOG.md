@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-28
+
 ### Security
 
 - `krusty-kms-client` and `krusty-kms-gateway` pin the V3 `tip` on every
