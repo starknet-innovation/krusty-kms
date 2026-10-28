@@ -25,6 +25,15 @@ All notable changes to the published Rust crates are documented here.
   `webpki-root-certs` to 1.0.10, clearing RUSTSEC-2026-0381, -0382 and -0383
   (bundled roots and verification accepting distrusted emSign intermediates)
   in the RPC and NATS TLS paths. No other dependency changes.
+- `Cargo.lock` moves `crypto-bigint` to 0.7.10, `ctutils` to 0.4.6, and
+  `tokio` to 1.54.1, clearing RUSTSEC-2026-0387 (timing variability in
+  `crypto-bigint` operations meant to be constant-time), RUSTSEC-2026-0385
+  (non-constant-time `ctutils` masks), and RUSTSEC-2026-0386 (`tokio`
+  `AsyncFd` constructors). `crypto-bigint` 0.7.6 through 0.7.8 are yanked,
+  so 0.7.10 is the patched release `cargo-deny` accepts; it requires
+  `ctutils` 0.4.6. The workspace floors move with those versions. The
+  `tokio` bump also refreshes `libc`, `mio`, `socket2`, and `tokio-macros`,
+  and drops the unused `windows-sys` 0.60 copy.
 
 ## [0.13.0] - 2026-10-07
 
