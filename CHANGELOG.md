@@ -13,8 +13,11 @@ All notable changes to the published Rust crates are documented here.
   `signBitcoinPsbtInputs` and `signBip322Simple`. A PSBT input is signed only
   when its `witness_utxo` pays the key's P2WPKH script and matches the output
   of its full `non_witness_utxo`; every other byte of the PSBT is kept, and
-  nothing is finalized. `bitcoin_hashes`, already in the graph through
-  `bip39`, becomes a direct dependency for RIPEMD-160.
+  nothing is finalized. Signatures are low-S and ground for low R the way
+  Bitcoin Core does, so each is at most 71 bytes with its sighash byte.
+  `bitcoin_hashes` (for RIPEMD-160) and `ecdsa` (for RFC 6979 additional
+  data), already in the graph through `bip39` and `k256`, become direct
+  dependencies.
 
 ## [0.14.0] - 2026-10-28
 

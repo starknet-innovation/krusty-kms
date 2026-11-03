@@ -4,6 +4,7 @@
 //! Vectors are copied from `bitcoin/bips` (see `_source` in the fixture).
 //! Private keys are kept in their published WIF form and decoded here.
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use krusty_kms::{derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs};
 use krusty_kms_common::KmsError;
 use serde::Deserialize;
@@ -120,12 +121,17 @@ fn bip322_simple_vectors_reproduce_the_published_signature() {
         let key = wif_private_key(&vector.private_key_wif);
         let signature =
             sign_bip322_simple(&key, &vector.address, vector.message.as_bytes()).unwrap();
-        // Each vector lists a low-R signature (nonce grinding, as Bitcoin
-        // Core signs) and the plain RFC 6979 one, which this signer produces.
-        // Both are compared without BIP-322 1.0.0's "smp" variant prefix (see
-        // `sign_bip322_simple`).
+        // Each vector lists the low-R signature Bitcoin Core's grinding
+        // produces, which this signer matches, and the plain RFC 6979 one,
+        // whose r needs a DER padding byte. Both are compared without
+        // BIP-322 1.0.0's "smp" variant prefix (see `sign_bip322_simple`).
+        let witness_len = |encoded: &str| BASE64.decode(&encoded[3..]).unwrap().len();
         assert_eq!(
-            vector.signatures[1].strip_prefix("smp"),
+            witness_len(&vector.signatures[1]),
+            witness_len(&vector.signatures[0]) + 1
+        );
+        assert_eq!(
+            vector.signatures[0].strip_prefix("smp"),
             Some(signature.as_str()),
             "message {:?}",
             vector.message

@@ -14,7 +14,9 @@
 //!
 //! Invariants:
 //! - mainnet only: coin type 0 and the `bc` human-readable part
-//! - signatures are deterministic RFC 6979 ECDSA, low-S, SIGHASH_ALL only
+//! - signatures are deterministic RFC 6979 ECDSA, low-S, SIGHASH_ALL only,
+//!   ground for low R as Bitcoin Core does, so at most 71 bytes with the
+//!   sighash byte
 //! - a PSBT input is signed only when its `witness_utxo` pays this key's
 //!   P2WPKH script and matches the output of the full `non_witness_utxo` it
 //!   spends, so a lying amount cannot reach the sighash

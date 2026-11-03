@@ -1,0 +1,47 @@
+{
+  "_source": "@noble/curves 1.9.7 (npm, integrity sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==) secp256k1.sign(digest, private_key, { lowS: true, prehash: false, extraEntropy }), looped like Bitcoin Core's CKey::Sign(grind = true): first without extraEntropy, then with extraEntropy = LE32(retry) followed by 28 zero bytes until r < 2^255. private_key = sha256(\"krusty-kms low-R key <i>\"), digest = sha256(\"krusty-kms low-R digest <j>\"), i and j in 0..16.",
+  "vectors": [
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "a94b288d5753df95460c750799928829dbd75c54d142d8f1980bc67755ceacc0",
+      "retries": 0,
+      "signature_der": "304402207a5a78c6f09a24975bfa8d4c99c9d5dac1181e65a170a9ce171ce99c412295e702200569751293480a5690c58c64bf75d4eceb9ed905c168700bd337e826930c8800"
+    },
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "93be727a487267b71b3990c34fced6cef9047b1cc51e1ef4756a3e2b0b5c22d4",
+      "retries": 1,
+      "signature_der": "304402207ac802022beed9a807cec8e55ef52782fa879ed227372ff60f800a66ad8add3b0220423caf131a384cb8202e18b8e8e4ecf5e5f3227704b2f06690b0b24319618360"
+    },
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "ccd6a8982f83d815ac74506d748690419e42ac92f250062d8a1bf6bf28ee10bc",
+      "retries": 1,
+      "signature_der": "30440220470ee7506af59a7c2e88f222f2962ee2cc1e3ca070580c376f5cd059e9bc0fcc022055f6e6aa24d3503fd55f54cb30cff4e8e25669176c2d1f44517ed8056e3e539d"
+    },
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "a0056c1ab4a23a58bc78470d4ab877095c015f7b64486a0dabb90d3ec11ae27c",
+      "retries": 0,
+      "signature_der": "3044022026a1227fdbe877d5419d3a0b9becb906048acf7410d55f4880f3d22a4dd29dc102201536c488c9c1f4662f964ba676bd48d5422b95e99a54b804e7b84dd3aa83304e"
+    },
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "d8efe3d9e3a31e1bae40ebdb0cff3490d81c03c347c0a6ed22319a4adc1a465b",
+      "retries": 3,
+      "signature_der": "30440220072e86a550c4184ea417e66ffbf68a875ee4cb0aa152ea7f0d5f15601a75205602201a3e458a407c3124da3a3a46d685951bff2889c36d24f90b43ed798f3067dde5"
+    },
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "d24a48d6bf018bae624cd647c1dab70eb562da573fa046a2e0317f230c1aeb78",
+      "retries": 2,
+      "signature_der": "304402207ad18dc9afeda845da7aad8b0e947b27438ddf66e1ab6a7e1bbf1ec0beae855502205b5f48cb1fbb5c4ba38e4932218196d1ca51d837d06a04f639d4da834024462b"
+    },
+    {
+      "private_key": "96a3fbea13c388b27f446d34a28705d4ca9c4dbf7ee302ca432499ec1bf3beb9",
+      "digest": "cb75378a1ce4941c98a3cd4462f35f26117d2170092b0e1ce1ddfc4b5248538b",
+      "retries": 7,
+      "signature_der": "30440220454dd635906e5535ecc4b373b134567fc3c950d34f611f4084d947f37cb8a97802207693bc3e4f1ea7803f7cab245de7fb4bccf26b66f5a0f0f09793c10c8a08381e"
+    }
+  ]
+}

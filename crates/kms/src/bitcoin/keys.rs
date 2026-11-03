@@ -5,9 +5,11 @@ use super::tx::SIGHASH_ALL;
 use crate::derivation::{derive_master_key, derive_path, require_unhardened_component};
 use crate::mnemonic::mnemonic_to_seed;
 use bitcoin_hashes::{hash160, Hash as _};
-use k256::ecdsa::signature::hazmat::PrehashSigner;
+use ecdsa::hazmat::sign_prehashed_rfc6979;
 use k256::ecdsa::{Signature, SigningKey};
+use k256::Secp256k1;
 use krusty_kms_common::{KmsError, Result};
+use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 /// SLIP-44 coin type for Bitcoin mainnet, used in `m/84'/0'/account'/change/index`.
@@ -17,6 +19,9 @@ pub const BITCOIN_COIN_TYPE: u32 = 0;
 const BIP84_PURPOSE: u32 = 84;
 const HARDENED: u32 = 0x8000_0000;
 const MAINNET_HRP: &str = "bc";
+/// Signing attempts before low-R grinding gives up. Each attempt is low-R
+/// with probability 1/2, so hitting the bound means a broken signer.
+const MAX_LOW_R_ATTEMPTS: u32 = 256;
 
 /// A BIP-84 mainnet P2WPKH keypair.
 ///
@@ -133,17 +138,39 @@ impl P2wpkhSigner {
         encode_segwit_v0(MAINNET_HRP, &self.pubkey_hash)
     }
 
-    /// Sign a SIGHASH_ALL digest: DER-encoded low-S ECDSA followed by the
-    /// sighash byte, as placed in a witness or a PSBT partial signature.
+    /// Sign a SIGHASH_ALL digest: DER-encoded low-R, low-S ECDSA followed by
+    /// the sighash byte, as placed in a witness or a PSBT partial signature.
+    /// The result is at most 71 bytes.
     pub(super) fn sign_sighash_all(&self, sighash: &[u8; 32]) -> Result<Vec<u8>> {
-        let signature: Signature = self
-            .signing_key
-            .sign_prehash(sighash)
-            .map_err(|e| KmsError::CryptoError(format!("bitcoin ECDSA signing failed: {e}")))?;
-        // k256 already normalizes; keep low-S explicit because BIP-146 makes
-        // a high-S signature non-standard.
-        let mut encoded = signature.normalize_s().to_der().as_bytes().to_vec();
+        let mut encoded = self.sign_low_r(sighash)?.to_der().as_bytes().to_vec();
         encoded.push(SIGHASH_ALL);
         Ok(encoded)
+    }
+
+    /// Bitcoin Core's `CKey::Sign` with `grind = true`: plain RFC 6979 first,
+    /// then RFC 6979 with 32 bytes of additional data that are zero except
+    /// for a little-endian counter (1, 2, ...) in the first four, until `r`
+    /// is below 2^255 and needs no DER padding byte. RFC 6979 section 3.6
+    /// appends the data after the reduced digest, exactly where
+    /// libsecp256k1's `nonce_function_rfc6979` puts `data32`, so the bytes
+    /// match Core's.
+    fn sign_low_r(&self, sighash: &[u8; 32]) -> Result<Signature> {
+        let secret = self.signing_key.as_nonzero_scalar();
+        let mut extra_entropy = [0u8; 32];
+        for counter in 0..MAX_LOW_R_ATTEMPTS {
+            extra_entropy[..4].copy_from_slice(&counter.to_le_bytes());
+            let additional_data: &[u8] = if counter == 0 { &[] } else { &extra_entropy };
+            let (signature, _) =
+                sign_prehashed_rfc6979::<Secp256k1, Sha256>(secret, sighash, additional_data);
+            // k256 already normalizes; keep low-S explicit because BIP-146
+            // makes a high-S signature non-standard.
+            let signature = signature.normalize_s();
+            if signature.to_bytes()[0] < 0x80 {
+                return Ok(signature);
+            }
+        }
+        Err(KmsError::CryptoError(format!(
+            "no low-R ECDSA signature after {MAX_LOW_R_ATTEMPTS} attempts"
+        )))
     }
 }

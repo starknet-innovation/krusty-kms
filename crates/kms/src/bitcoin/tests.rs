@@ -6,9 +6,10 @@ use super::bip322::{message_hash, to_sign, to_spend};
 use super::keys::P2wpkhSigner;
 use super::tx::{Reader, Transaction};
 use super::*;
-use k256::ecdsa::signature::hazmat::PrehashVerifier;
-use k256::ecdsa::{Signature, VerifyingKey};
+use k256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
+use k256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use krusty_kms_common::KmsError;
+use serde::Deserialize;
 
 fn bytes(hex_value: &str) -> Vec<u8> {
     hex::decode(hex_value).unwrap()
@@ -50,14 +51,17 @@ fn bip143_native_p2wpkh_sighash_and_signature() {
         .unwrap();
     assert_eq!(hex::encode(sighash), BIP143_SIGHASH);
 
-    // RFC 6979 reproduces the signature published in BIP-143.
+    // The first RFC 6979 attempt is already low-R (r starts 0x36), so no
+    // grinding happens and the signature published in BIP-143 is reproduced.
     let signature = signer.sign_sighash_all(&sighash).unwrap();
     assert_eq!(hex::encode(&signature), BIP143_SIGNATURE);
     verify(&signer, &sighash, &signature);
 }
 
-/// Assert `signature` is a low-S SIGHASH_ALL ECDSA signature over `sighash`.
+/// Assert `signature` is a low-R, low-S SIGHASH_ALL ECDSA signature over
+/// `sighash`, at most 71 bytes with the sighash byte.
 pub(super) fn verify(signer: &P2wpkhSigner, sighash: &[u8; 32], signature: &[u8]) {
+    assert!(signature.len() <= 71, "signature must fit 71 bytes");
     let (sighash_type, der) = signature.split_last().unwrap();
     assert_eq!(*sighash_type, 0x01);
     let signature = Signature::from_der(der).unwrap();
@@ -66,10 +70,73 @@ pub(super) fn verify(signer: &P2wpkhSigner, sighash: &[u8; 32], signature: &[u8]
         signature,
         "signature must be low-S"
     );
+    assert!(signature.to_bytes()[0] < 0x80, "signature must be low-R");
     VerifyingKey::from_sec1_bytes(&signer.public_key)
         .unwrap()
         .verify_prehash(sighash, &signature)
         .unwrap();
+}
+
+/// The first RFC 6979 signature, before any low-R grinding.
+fn plain_rfc6979(private_key: &[u8; 32], digest: &[u8; 32]) -> Signature {
+    SigningKey::from_slice(private_key)
+        .unwrap()
+        .sign_prehash(digest)
+        .unwrap()
+}
+
+#[test]
+fn low_r_grinding_matches_an_independent_implementation() {
+    #[derive(Deserialize)]
+    struct Vectors {
+        vectors: Vec<LowRVector>,
+    }
+    #[derive(Deserialize)]
+    struct LowRVector {
+        private_key: String,
+        digest: String,
+        retries: u32,
+        signature_der: String,
+    }
+    let fixture: Vectors = serde_json::from_str(include_str!(
+        "../../tests/fixtures/bitcoin_low_r_vectors.json"
+    ))
+    .unwrap();
+    assert!(fixture.vectors.iter().any(|vector| vector.retries == 0));
+    assert!(fixture.vectors.iter().any(|vector| vector.retries >= 2));
+
+    for vector in fixture.vectors {
+        let private_key = key(&vector.private_key);
+        let digest = key(&vector.digest);
+        let signer = P2wpkhSigner::new(&private_key).unwrap();
+        let signature = signer.sign_sighash_all(&digest).unwrap();
+        assert_eq!(
+            hex::encode(&signature),
+            format!("{}01", vector.signature_der)
+        );
+        verify(&signer, &digest, &signature);
+        // Grinding ran exactly when the plain RFC 6979 r was high.
+        let plain_is_high_r = plain_rfc6979(&private_key, &digest).to_bytes()[0] >= 0x80;
+        assert_eq!(plain_is_high_r, vector.retries > 0);
+    }
+}
+
+#[test]
+fn low_r_grinding_replaces_a_high_r_signature_deterministically() {
+    // The BIP-322 "" message: its plain RFC 6979 r needs a DER padding byte.
+    let private_key = key(BIP322_PRIVATE_KEY);
+    let signer = P2wpkhSigner::new(&private_key).unwrap();
+    let to_spend = to_spend(&signer.script_pubkey(), b"");
+    let sighash = to_sign(to_spend.txid())
+        .p2wpkh_sighash_all(0, &signer.pubkey_hash, 0)
+        .unwrap();
+    let plain = plain_rfc6979(&private_key, &sighash);
+    assert!(plain.to_bytes()[0] >= 0x80);
+    assert_eq!(plain.to_der().as_bytes().len() + 1, 72);
+
+    let ground = signer.sign_sighash_all(&sighash).unwrap();
+    verify(&signer, &sighash, &ground);
+    assert_eq!(signer.sign_sighash_all(&sighash).unwrap(), ground);
 }
 
 #[test]

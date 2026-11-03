@@ -33,9 +33,15 @@ BIP-84 path has a third component.
 
 - Mainnet only: coin type 0 and the `bc` HRP. `change` is 0 or 1; account and
   address indices must not carry the hardened bit.
-- Signatures are RFC 6979 ECDSA, low-S, SIGHASH_ALL only. Low-R grinding is not
-  done, so BIP-322 output matches the plain RFC 6979 signature listed in the
-  BIP-322 vectors rather than the Bitcoin Core one; both verify.
+- Signatures are RFC 6979 ECDSA, low-S, SIGHASH_ALL only, ground for low R
+  exactly as Bitcoin Core's `CKey::Sign(grind = true)`: plain RFC 6979 first,
+  then RFC 6979 with 32 bytes of additional data, zero except a little-endian
+  counter (1, 2, ...) in the first four, until `r < 2^255`. RFC 6979 section
+  3.6 appends that data after the reduced digest, where libsecp256k1's
+  `nonce_function_rfc6979` appends `data32`, so the bytes are Core's. A
+  signature with its sighash byte is therefore at most 71 bytes, which lets a
+  caller budget the vsize of a fixed-fee transaction. Grinding stops with an
+  error after 256 attempts (each succeeds with probability 1/2).
 - A listed PSBT input is signed only if all hold, else the call fails and
   returns no PSBT:
   - its `witness_utxo` script is this key's native P2WPKH script;
@@ -65,8 +71,10 @@ PSBT version 2, other sighash types, or a public-key-only derivation variant.
 ## Dependencies
 
 `bitcoin_hashes` 0.14.1 (CC0-1.0, already allowed by `deny.toml`) becomes a
-direct dependency of `krusty-kms` for RIPEMD-160. It is already in the graph
-through `bip39`, so the lockfile gains one edge and no crate. Bech32 encoding
+direct dependency of `krusty-kms` for RIPEMD-160, and `ecdsa` 0.17.0 (the
+crate `k256` signs with) for its RFC 6979 additional-data entry point, which
+`k256` does not re-export. Both are already in the graph, through `bip39` and
+`k256`, so the lockfile gains two edges and no crate. Bech32 encoding
 (one fixed-size segwit v0 program), transaction and PSBT encoding are small
 enough to keep local. `rust-bitcoin` was not used: it pulls the C-backed
 `secp256k1-sys`, which does not build for the browser WASM target.
@@ -76,4 +84,10 @@ enough to keep local. `rust-bitcoin` was not used: it pulls the C-backed
 Official BIP-84 (the "abandon … about" mnemonic), BIP-143 native P2WPKH
 (sighash and signature), BIP-322 (message hash, `to_spend`/`to_sign` txids,
 simple signatures) and every BIP-174 invalid-PSBT vector; round trips over the
-BIP-174 valid vectors; one test per refusal above.
+BIP-174 valid vectors; one test per refusal above. BIP-322's simple vectors
+list a Core (low-R) and a plain RFC 6979 signature; grinding reproduces the
+Core one. Low-R grinding is also checked against
+`tests/fixtures/bitcoin_low_r_vectors.json`, generated with `@noble/curves`
+1.9.7 (an independent RFC 6979 implementation whose `extraEntropy` is section
+3.6 additional data) by the same loop, including cases that needed 1 to 7
+retries.

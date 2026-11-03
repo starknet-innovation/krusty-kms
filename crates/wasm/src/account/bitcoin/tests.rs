@@ -54,10 +54,10 @@ fn derivation_refuses_a_change_index_other_than_zero_or_one() {
 
 #[wasm_bindgen_test]
 fn signs_the_bip322_vector() {
-    // The plain RFC 6979 "Hello World" signature from the BIP-322 vectors.
+    // The low-R "Hello World" signature from the BIP-322 vectors.
     assert_eq!(
         sign_bip322_simple(BIP322_KEY, BIP322_ADDRESS, "Hello World").unwrap(),
-        "AkgwRQIhAOzyynlqt93lOKJr+wmmxIens//zPzl9tqIOua93wO6MAiBi5n5EyAcPScOjf1lAqIUIQtr3zKNeavYabHyR8eGhowEhAsfxIAMZZEKUPYWI4BruhAQjzFT8FSFSajuFwrDL1Yhy"
+        "AkcwRAIgZRfIY3p7/DoVTty6YZbWS71bc5Vct9p9Fia83eRmw2QCICK/ENGfwLtptFluMGs2KsqoNSk89pO7F29zJLUx9a/sASECx/EgAxlkQpQ9hYjgGu6EBCPMVPwVIVJqO4XCsMvViHI="
     );
     let error = sign_bip322_simple(BIP84_KEY, BIP322_ADDRESS, "Hello World").unwrap_err();
     assert!(js_error_message(error).starts_with("BIP-322 signing failed:"));

@@ -38,6 +38,8 @@ serde_json.workspace = true
 hex.workspace = true
 getrandom = "0.4"
 k256 = { version = "0.14", features = ["ecdh", "ecdsa"] }
+# RFC 6979 with additional data, for Bitcoin low-R grinding; the ecdsa k256 uses.
+ecdsa = { version = "0.17.0", default-features = false, features = ["algorithm"] }
 starknet-crypto.workspace = true
 zeroize.workspace = true
 subtle.workspace = true

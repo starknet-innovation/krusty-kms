@@ -86,7 +86,8 @@ pub fn derive_bitcoin_p2wpkh_keypair(
 }
 
 /// Add this key's SIGHASH_ALL partial signature to the listed inputs of a
-/// base64 PSBT (version 0) and return the PSBT as base64.
+/// base64 PSBT (version 0) and return the PSBT as base64. Signatures are
+/// low-R and low-S, as Bitcoin Core signs: at most 71 bytes each.
 ///
 /// Each listed input must be this key's P2WPKH coin, proven by a
 /// `witness_utxo` that matches the spent output of its full
