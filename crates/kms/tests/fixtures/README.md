@@ -15,3 +15,7 @@ README lists what each covers. The account-class, hashing, SNIP-12, and
 transaction-hash parity vectors are consumed only by the `krusty-kms` tests.
 Keep the shared copies in sync when regenerating vectors, and edit the JSON
 only through the test tooling that consumes it.
+
+`qsb_hors_v1_vectors.json` is a byte-identical copy of `vectors.json` from the
+draft BIP "QSB Wallet Secret Management" (commit `7def99c`); regenerate it
+with that BIP's `reference.py`, not by hand.

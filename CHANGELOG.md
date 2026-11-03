@@ -4,6 +4,18 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `krusty-kms` and the WASM package implement the `QSB-HORS-v1` profile of
+  the draft BIP "QSB Wallet Secret Management" for Quantum Safe Bitcoin
+  vaults: `derive_qsb_commitments` / `deriveQsbCommitments` (300 HASH160
+  commitments and their root), `qsb_reveal_digest` / `qsbRevealDigest`
+  (`B` and `D` from a strictly parsed legacy transaction `T`), and
+  `reveal_qsb_preimages` / `revealQsbPreimages` (exactly the 15 requested
+  preimages). None of them exposes the derivation key or a full secret set;
+  the caller keeps the disclosure journal. Adds the `ripemd` 0.2.0
+  dependency.
+
 ## [0.14.0] - 2026-10-28
 
 ### Security

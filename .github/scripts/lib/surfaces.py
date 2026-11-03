@@ -1581,6 +1581,13 @@ def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
     return f"{rel_path}: {signature}"
 
 
+# A ``#[wasm_bindgen(...)]`` on a parameter (``#[wasm_bindgen(...)] name: Type``)
+# belongs to the signature it sits in, not to the next export.
+_WASM_PARAM_ATTR_RE = re.compile(
+    r"^\s*#\[wasm_bindgen\(.*\)\]\s*(?:mut\s+)?[A-Za-z_]\w*\s*:"
+)
+
+
 def extract_wasm_exports(root: Path | None = None) -> list[str]:
     root = root or repo_root()
     exports: list[str] = []
@@ -1589,7 +1596,11 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
         rel = str(path.relative_to(root))
         i = 0
         while i < len(lines):
-            if "#[wasm_bindgen" in lines[i] and "wasm_bindgen_test" not in lines[i]:
+            if (
+                "#[wasm_bindgen" in lines[i]
+                and "wasm_bindgen_test" not in lines[i]
+                and not _WASM_PARAM_ATTR_RE.match(lines[i])
+            ):
                 j = i + 1
                 while j < len(lines) and not _DECL_RE.match(lines[j]) and not _IMPL_RE.match(lines[j]):
                     if _is_field_declaration(lines[j]):
@@ -2723,6 +2734,35 @@ def krusty_deps_from_cargo_toml(
     return deps
 
 
+def _assert_wasm_param_attrs_stay_in_their_signature() -> None:
+    import tempfile
+
+    source = """
+#[wasm_bindgen(js_name = "first")]
+pub fn first(
+    #[wasm_bindgen(unchecked_param_type = "number[]")] values: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "second")]
+pub fn second(value: u8) -> u8 {
+    value
+}
+""".lstrip()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "crates/wasm/src"
+        src.mkdir(parents=True)
+        (src / "x.rs").write_text(source)
+        first, second = extract_wasm_exports(Path(tmp))
+    assert first.startswith("crates/wasm/src/x.rs: wasm_bindgen(js_name=first) | pub fn first(")
+    assert 'unchecked_param_type = "number[]")] values: JsValue' in first
+    assert second == (
+        "crates/wasm/src/x.rs: wasm_bindgen(js_name=second) | "
+        "pub fn second(value: u8) -> u8"
+    )
+
+
 def _assert_surfaces_self_checks() -> None:
     assert (
         _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
@@ -2838,6 +2878,7 @@ pub struct Foo {
     assert '#[cfg(feature = "zz_never_enabled")]' in wasm_cfg_line
     assert wasm_cfg_line != wasm_plain
     assert "gated_export" in wasm_cfg_line
+    _assert_wasm_param_attrs_stay_in_their_signature()
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]
