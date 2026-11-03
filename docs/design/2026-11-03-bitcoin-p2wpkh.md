@@ -75,12 +75,15 @@ while encoding a non-ASCII string.
     output equals the `witness_utxo`. BIP-143 commits only to the input's own
     amount, so this defeats a PSBT that lies about it;
   - its sighash type is absent or SIGHASH_ALL;
+  - it carries no redeem or witness script, which a native P2WPKH spend
+    cannot use (BIP-174 has signers check them against the UTXO);
   - it is not already finalized.
 - Index lists must be non-empty, distinct and in range, so no longer than
   the PSBT's input count.
 - Parsing is strict (BIP-174 version 0): at most 4 MiB decoded (longer base64
-  is refused before decoding), minimal CompactSizes, no trailing bytes, no
-  duplicate keys, the key shape of every type BIP-174 defines (proprietary
+  is refused before decoding), minimal CompactSizes (key types included, so
+  `fd 03 00` cannot pose as an unknown type), no trailing bytes, no duplicate
+  (type, key data) pairs, the key shape of every type BIP-174 defines (proprietary
   keys and later BIPs' types stay opaque), no version-2-only fields, empty
   scriptSigs in a legacy-serialized unsigned transaction. Each
   map is kept as ordered key-value pairs, so `serialize(parse(x)) == x`, and

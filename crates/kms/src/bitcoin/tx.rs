@@ -61,16 +61,28 @@ impl<'a> Reader<'a> {
 
     /// Read a minimally encoded CompactSize and return it as a length.
     pub(super) fn compact_size(&mut self) -> Result<usize> {
+        usize::try_from(self.compact_u64()?)
+            .map_err(|_| malformed("CompactSize does not fit in memory"))
+    }
+
+    /// Read a minimally encoded CompactSize as a number, such as a PSBT key
+    /// type, which need not fit in memory.
+    pub(super) fn compact_u64(&mut self) -> Result<u64> {
         let (value, minimum) = match self.array::<1>()?[0] {
             0xfd => (u64::from(u16::from_le_bytes(self.array()?)), 0xfd),
             0xfe => (u64::from(u32::from_le_bytes(self.array()?)), 0x1_0000),
             0xff => (self.u64_le()?, 0x1_0000_0000),
-            small => return Ok(usize::from(small)),
+            small => return Ok(u64::from(small)),
         };
         if value < minimum {
             return Err(malformed("non-canonical CompactSize"));
         }
-        usize::try_from(value).map_err(|_| malformed("CompactSize does not fit in memory"))
+        Ok(value)
+    }
+
+    /// The bytes not yet read.
+    pub(super) fn rest(&self) -> &'a [u8] {
+        self.bytes
     }
 
     /// Read a CompactSize length prefix and that many bytes.

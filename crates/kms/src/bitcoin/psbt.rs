@@ -19,13 +19,14 @@ const MAGIC: &[u8; 5] = b"psbt\xff";
 const MAX_PSBT_BYTES: usize = 4 * 1024 * 1024;
 
 const GLOBAL_UNSIGNED_TX: u8 = 0x00;
-const GLOBAL_XPUB: u8 = 0x01;
 const GLOBAL_VERSION: u8 = 0xfb;
 
 const IN_NON_WITNESS_UTXO: u8 = 0x00;
 const IN_WITNESS_UTXO: u8 = 0x01;
 const IN_PARTIAL_SIG: u8 = 0x02;
 const IN_SIGHASH_TYPE: u8 = 0x03;
+const IN_REDEEM_SCRIPT: u8 = 0x04;
+const IN_WITNESS_SCRIPT: u8 = 0x05;
 const IN_FINAL_SCRIPTSIG: u8 = 0x07;
 const IN_FINAL_SCRIPTWITNESS: u8 = 0x08;
 
@@ -196,6 +197,13 @@ fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u
     if find(map, IN_FINAL_SCRIPTSIG).is_some() || find(map, IN_FINAL_SCRIPTWITNESS).is_some() {
         return Err(refuse("is already finalized"));
     }
+    // BIP-174 has signers check a provided script against the UTXO; a
+    // native P2WPKH spend has neither, so either one is inconsistent.
+    if find(map, IN_REDEEM_SCRIPT).is_some() || find(map, IN_WITNESS_SCRIPT).is_some() {
+        return Err(refuse(
+            "carries a redeem or witness script, which a native P2WPKH input cannot use",
+        ));
+    }
     let sighash_all = u32::from(SIGHASH_ALL).to_le_bytes();
     if find(map, IN_SIGHASH_TYPE).is_some_and(|value| value != sighash_all) {
         return Err(refuse("requests a sighash type other than SIGHASH_ALL"));
@@ -240,7 +248,10 @@ fn put_partial_signature(map: &mut Map, public_key: &[u8; 33], signature: Vec<u8
     }
 }
 
-/// The value of the map's key that is exactly `[key_type]`.
+/// The value of the map's key of type `key_type` with no key data.
+///
+/// `read_map` refuses non-minimal key types, so for a type below 0xfd the
+/// only encoding of that key is the single byte `[key_type]`.
 fn find(map: &Map, key_type: u8) -> Option<&[u8]> {
     map.iter()
         .find(|pair| pair.key == [key_type])
@@ -255,8 +266,14 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
         if key.is_empty() {
             return Ok(map);
         }
-        require_key_shape(scope, key)?;
-        if !keys.insert(key) {
+        // BIP-174 key types are CompactSizes. Reading them minimally means
+        // `fd 03 00` cannot pose as an unknown type 0xfd that hides a sighash
+        // type, a finalized field, or a duplicate of `03`.
+        let mut key_reader = Reader::new(key);
+        let key_type = key_reader.compact_u64()?;
+        let key_data = key_reader.rest();
+        require_key_shape(scope, key_type, key_data)?;
+        if !keys.insert((key_type, key_data)) {
             return Err(malformed("PSBT map repeats a key"));
         }
         let value = reader.var_bytes()?;
@@ -271,21 +288,22 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
 /// type (every type BIP-174 itself defines, except proprietary keys), and
 /// fields that only exist in PSBT version 2 (BIP-370). Types from later BIPs,
 /// such as Taproot's, and unknown types are opaque.
-fn require_key_shape(scope: Scope, key: &[u8]) -> Result<()> {
-    let single = key.len() == 1;
-    let valid = match (scope, key[0]) {
-        (Scope::Global, GLOBAL_UNSIGNED_TX | GLOBAL_VERSION) => single,
-        (Scope::Global, GLOBAL_XPUB) => key.len() == 1 + 78,
+fn require_key_shape(scope: Scope, key_type: u64, key_data: &[u8]) -> Result<()> {
+    let none = key_data.is_empty();
+    let valid = match (scope, key_type) {
+        // Unsigned transaction, version; xpub keyed by a 78-byte extended key.
+        (Scope::Global, 0x00 | 0xfb) => none,
+        (Scope::Global, 0x01) => key_data.len() == 78,
         (Scope::Global, 0x02..=0x06) => false,
-        (Scope::Input, 0x00 | 0x01 | 0x03 | 0x04 | 0x05 | 0x07 | 0x08) => single,
-        (Scope::Input, 0x02 | 0x06) => is_public_key(&key[1..]),
+        (Scope::Input, 0x00 | 0x01 | 0x03 | 0x04 | 0x05 | 0x07 | 0x08) => none,
+        (Scope::Input, 0x02 | 0x06) => is_public_key(key_data),
         // RIPEMD160 and HASH160 preimages are keyed by a 20-byte hash,
         // SHA256 and HASH256 preimages by a 32-byte hash.
-        (Scope::Input, 0x0a | 0x0c) => key.len() == 1 + 20,
-        (Scope::Input, 0x0b | 0x0d) => key.len() == 1 + 32,
+        (Scope::Input, 0x0a | 0x0c) => key_data.len() == 20,
+        (Scope::Input, 0x0b | 0x0d) => key_data.len() == 32,
         (Scope::Input, 0x0e..=0x12) => false,
-        (Scope::Output, 0x00 | 0x01) => single,
-        (Scope::Output, 0x02) => is_public_key(&key[1..]),
+        (Scope::Output, 0x00 | 0x01) => none,
+        (Scope::Output, 0x02) => is_public_key(key_data),
         (Scope::Output, 0x03 | 0x04) => false,
         _ => true,
     };
@@ -293,8 +311,7 @@ fn require_key_shape(scope: Scope, key: &[u8]) -> Result<()> {
         Ok(())
     } else {
         Err(malformed(format!(
-            "PSBT key type {:#04x} has an invalid key or is not allowed in version 0",
-            key[0]
+            "PSBT key type {key_type:#04x} has an invalid key or is not allowed in version 0"
         )))
     }
 }
@@ -316,5 +333,7 @@ fn require_version_zero(global: &Map) -> Result<()> {
     }
 }
 
+#[cfg(test)]
+mod key_encoding_test;
 #[cfg(test)]
 mod tests;

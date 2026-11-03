@@ -6,20 +6,20 @@ use crate::bitcoin::tests::verify;
 use crate::bitcoin::tx::{OutPoint, TxIn};
 
 /// m/84'/0'/0'/0/0 of the BIP-84 test mnemonic (public, never fund it).
-const KEY: &str = "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3";
+pub(super) const KEY: &str = "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3";
 /// m/84'/0'/0'/0/1 of the same mnemonic.
 const OTHER_KEY: &str = "2fd0affa51529f940a358ec0c50de81267d0bf5158ca61887347676946362c5b";
 const AMOUNT: u64 = 100_000;
 
-fn key(hex_value: &str) -> [u8; 32] {
+pub(super) fn key(hex_value: &str) -> [u8; 32] {
     hex::decode(hex_value).unwrap().try_into().unwrap()
 }
 
-fn signer(hex_value: &str) -> P2wpkhSigner {
+pub(super) fn signer(hex_value: &str) -> P2wpkhSigner {
     P2wpkhSigner::new(&key(hex_value)).unwrap()
 }
 
-fn pair(key: &[u8], value: &[u8]) -> Pair {
+pub(super) fn pair(key: &[u8], value: &[u8]) -> Pair {
     Pair {
         key: key.to_vec(),
         value: value.to_vec(),
@@ -60,7 +60,7 @@ fn funding_tx(script: Vec<u8>, salt: u8) -> Transaction {
 /// Input 0 spends this key's coin with full UTXO data; input 1 is a foreign
 /// input carrying an unknown field. Global and output maps carry unknown and
 /// proprietary pairs that must survive signing.
-fn fixture() -> Psbt {
+pub(super) fn fixture() -> Psbt {
     let ours = funding_tx(signer(KEY).script_pubkey(), 1);
     let unsigned_tx = Transaction {
         version: 2,
@@ -88,16 +88,16 @@ fn fixture() -> Psbt {
     }
 }
 
-fn encode(psbt: &Psbt) -> String {
+pub(super) fn encode(psbt: &Psbt) -> String {
     BASE64.encode(psbt.serialize())
 }
 
-fn sign(psbt: &Psbt, indices: &[u32]) -> Result<Psbt> {
+pub(super) fn sign(psbt: &Psbt, indices: &[u32]) -> Result<Psbt> {
     let signed = sign_bitcoin_psbt_inputs(&key(KEY), &encode(psbt), indices)?;
     Psbt::parse(&BASE64.decode(signed).unwrap())
 }
 
-fn assert_signed(psbt: &Psbt, index: usize) {
+pub(super) fn assert_signed(psbt: &Psbt, index: usize) {
     let signer = signer(KEY);
     let partial_key = [&[IN_PARTIAL_SIG][..], &signer.public_key].concat();
     let signature = psbt.inputs[index]
@@ -115,7 +115,7 @@ fn assert_signed(psbt: &Psbt, index: usize) {
     verify(&signer, &sighash, &signature);
 }
 
-fn refusal(psbt: &Psbt, indices: &[u32]) -> String {
+pub(super) fn refusal(psbt: &Psbt, indices: &[u32]) -> String {
     match sign(psbt, indices) {
         Err(KmsError::TransactionError(reason)) => reason,
         other => panic!("expected a refusal, got {other:?}"),
