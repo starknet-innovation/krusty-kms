@@ -37,7 +37,7 @@ impl WasmAccount {
         contract_address: &str,
         passphrase: Option<String>,
     ) -> Result<WasmAccount, JsValue> {
-        // Wrapped first, so a refused contract address still wipes both.
+        // Wrap before anything fallible, so a rejected call wipes both.
         let mnemonic = Zeroizing::new(mnemonic);
         let passphrase = passphrase.map(Zeroizing::new);
         let contract_felt = parse_felt(contract_address)?;
