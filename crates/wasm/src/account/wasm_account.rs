@@ -36,8 +36,9 @@ impl WasmAccount {
         contract_address: &str,
         passphrase: Option<String>,
     ) -> Result<WasmAccount, JsValue> {
-        let contract_felt = parse_felt(contract_address)?;
+        // Wrap before anything fallible, so a rejected call wipes it too.
         let passphrase = passphrase.map(Zeroizing::new);
+        let contract_felt = parse_felt(contract_address)?;
         let passphrase_ref = passphrase.as_deref().map(String::as_str);
 
         let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_mnemonic(

@@ -448,9 +448,9 @@ fn child_scalar(il: &[u8; 32], parent: &[u8; 32]) -> Result<Zeroizing<Scalar>> {
         .ok_or_else(|| {
             KmsError::CryptoError("BIP-32 child derivation failed: IL >= curve order n".to_string())
         })?;
-    let parent = Zeroizing::new(<Scalar as Reduce<FieldBytes>>::reduce(&FieldBytes::from(
-        *parent,
-    )));
+    // Borrow the caller's (already wiped) array; an owned `FieldBytes` copy
+    // of the parent key would be dropped unwiped.
+    let parent = Zeroizing::new(<Scalar as Reduce<FieldBytes>>::reduce(parent.into()));
     let child = Zeroizing::new(*il + *parent);
     if bool::from(child.is_zero()) {
         return Err(KmsError::CryptoError(
