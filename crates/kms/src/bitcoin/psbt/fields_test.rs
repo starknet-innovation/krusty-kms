@@ -242,6 +242,36 @@ fn partial_signatures_need_a_valid_key_and_a_strict_der_signature() {
 }
 
 #[test]
+fn partial_signatures_must_use_the_declared_sighash_type() {
+    let key = [&[IN_PARTIAL_SIG][..], &signer(KEY).public_key].concat();
+    let all = signer(KEY).sign_sighash_all(&[1; 32]).unwrap();
+    let mut none = all.clone();
+    *none.last_mut().unwrap() = 0x02; // SIGHASH_NONE
+                                      // On input 1 (unlisted): a declared type binds its partial signatures.
+    let cases: [(&[u8], u32, bool); 4] = [
+        (&all, 0x01, true),
+        (&none, 0x02, true),
+        (&none, 0x01, false),
+        (&all, 0x02, false),
+    ];
+    for (signature, declared, accepted) in cases {
+        let mut psbt = with_pair(Scope::Input, &key, signature);
+        psbt.inputs[1].push(pair(&[IN_SIGHASH_TYPE], &declared.to_le_bytes()));
+        if accepted {
+            assert!(sign(&psbt, &[0]).is_ok(), "declared {declared:#x}");
+        } else {
+            let reason = malformed_reason(&psbt);
+            assert!(
+                reason.contains("input 1 has a partial signature that does not use its declared"),
+                "declared {declared:#x}: {reason}"
+            );
+        }
+    }
+    // With no declared type, any defined sighash type is allowed.
+    assert!(sign(&with_pair(Scope::Input, &key, &none), &[0]).is_ok());
+}
+
+#[test]
 fn every_input_field_value_is_checked_even_when_the_input_is_not_listed() {
     let cases: [(u8, &[u8], &str); 3] = [
         (IN_WITNESS_UTXO, &[0x01, 0x02], "PSBT_IN_WITNESS_UTXO"),

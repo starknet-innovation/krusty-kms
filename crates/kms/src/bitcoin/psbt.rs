@@ -5,6 +5,7 @@
 //! partial signature in the listed input maps.
 
 mod fields;
+mod input_rules;
 
 use super::keys::P2wpkhSigner;
 use super::tx::{
@@ -83,6 +84,7 @@ impl Psbt {
             .collect::<Result<Vec<_>>>()?;
         for (index, (input, map)) in unsigned_tx.inputs.iter().zip(&inputs).enumerate() {
             require_spent_transaction(index, &input.previous_output, map)?;
+            input_rules::require_declared_sighash(index, map)?;
         }
         let outputs = (0..unsigned_tx.outputs.len())
             .map(|_| read_map(&mut reader, Scope::Output))
