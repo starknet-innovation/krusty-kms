@@ -26,6 +26,7 @@ pub mod error;
 pub mod hashing;
 pub mod nostr_application_data;
 pub mod proof;
+pub mod qsb_hors;
 mod secret_input;
 pub mod signing;
 pub mod strk20;

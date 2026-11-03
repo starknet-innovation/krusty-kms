@@ -27,6 +27,17 @@ All notable changes to the published Rust crates are documented here.
   data), already in the graph through `bip39` and `k256`, become direct
   dependencies.
 
+- `krusty-kms` and the WASM package implement the `QSB-HORS-v1` profile of
+  the draft BIP "QSB Wallet Secret Management" for Quantum Safe Bitcoin
+  vaults: `derive_qsb_commitments` / `deriveQsbCommitments` (300 HASH160
+  commitments and their root), `qsb_reveal_digest` / `qsbRevealDigest`
+  (`B` and `D` from a strictly parsed legacy transaction `T`), and
+  `reveal_qsb_preimages` / `revealQsbPreimages` (exactly the 15 requested
+  preimages). None of them exposes the derivation key or a full secret set;
+  the caller keeps the disclosure journal. Enables `sha2`'s `zeroize`
+  feature in `krusty-kms`, so SHA-2 hash states wipe themselves on drop;
+  HASH160's RIPEMD-160 comes from the existing `bitcoin_hashes` dependency.
+
 ### Security
 
 - `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,

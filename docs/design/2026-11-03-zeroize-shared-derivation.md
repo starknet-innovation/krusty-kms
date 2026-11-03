@@ -110,5 +110,6 @@ unifies `sha2` 0.11's `zeroize` feature across the graph, so it also reaches
   `Zeroizing`, as the Bitcoin branch (#188) does. Its JS API is unchanged, but
   the export snapshot changes.
 - Move STRK20 viewing-key arithmetic to `crypto-bigint`.
-- #187 and #188 each carry their own copy of the wiped HMAC or BIP-32 code for
-  their new paths. Each can switch to `zeroizing_hmac` once this merges.
+- #187 and #188 landed with their own copies of the wiped HMAC for their new
+  paths; this branch moves both onto `zeroizing_hmac`: `bitcoin/bip32.rs`'s
+  HMAC-SHA512, and `qsb_hors/key.rs`, whose copy and duplicate tests go.
