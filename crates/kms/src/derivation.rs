@@ -407,7 +407,7 @@ fn split_key_and_chain(output: &[u8; 64]) -> DerivedKeyPair {
 /// value (e.g. `account_index` x and x|0x8000_0000 derive the same key). For
 /// the non-hardened address index the bit would silently switch to hardened
 /// derivation. Either way, reject rather than alias.
-fn require_unhardened_component(value: u32, field: &str) -> Result<()> {
+pub(crate) fn require_unhardened_component(value: u32, field: &str) -> Result<()> {
     if value & 0x8000_0000 != 0 {
         return Err(KmsError::InvalidDerivationPath(format!(
             "{field} {value} has the BIP-32 hardened bit set (must be < 2^31)"

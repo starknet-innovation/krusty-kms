@@ -4,6 +4,29 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add Bitcoin mainnet P2WPKH support to `krusty-kms`:
+  `derive_bitcoin_p2wpkh_keypair` (BIP-84, `m/84'/0'/account'/change/index`),
+  `sign_bitcoin_psbt_inputs` (BIP-174 version 0, BIP-143 SIGHASH_ALL) and
+  `sign_bip322_simple` (`smp`-prefixed, or unprefixed with
+  `Bip322Encoding::LegacyUnprefixed`), with WASM bindings
+  `deriveBitcoinP2wpkhKeypair(mnemonic, account_index: number, change: number,
+  address_index: number, passphrase?)`, `signBitcoinPsbtInputs(private_key,
+  psbt_base64, input_indices: number[])` and `signBip322Simple(private_key,
+  address, message, legacy_unprefixed?: boolean)`. WASM indices must be exact
+  integers and `input_indices` a plain array, so no number wraps into another
+  key or input. A PSBT input is signed only
+  when its `witness_utxo` pays the key's P2WPKH script and matches the output
+  of its full `non_witness_utxo`; every other byte of the PSBT is kept, and
+  nothing is finalized. A PSBT is refused unless every field matches the key
+  and value format BIP-174 defines and its transactions follow Bitcoin Core's
+  deserialization rules. Signatures are low-S and ground for low R the way
+  Bitcoin Core does, so each is at most 71 bytes with its sighash byte.
+  `bitcoin_hashes` (for RIPEMD-160) and `ecdsa` (for RFC 6979 additional
+  data), already in the graph through `bip39` and `k256`, become direct
+  dependencies.
+
 ### Security
 
 - `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,
@@ -12,7 +35,8 @@ All notable changes to the published Rust crates are documented here.
   `Vec`. HMACs with secret keys or messages (the BIP-32 master key and child
   keys, NIP-44's HKDF and MAC) use a crate-internal HMAC whose padded key and
   SHA-2 states are wiped, which the `hmac` crate cannot do. `sha2`'s `zeroize`
-  feature is now enabled. Derived keys and every public API are unchanged.
+  feature is now enabled, and Bitcoin BIP-84 derivation uses the same wiped
+  HMAC. Derived keys and every public API are unchanged.
   Copies made by the compiler, dependency internals (`bip39`'s PBKDF2,
   scrypt, RFC 6979), and JS strings are not wiped.
 - `krusty-kms-wasm` wipes owned passphrases when a call returns, and a private
