@@ -377,6 +377,15 @@ def _quoted_end(text: str, opening: int) -> int:
     return min(pos, len(text))
 
 
+def _is_identifier_char(ch: str, first: bool) -> bool:
+    """Whether ``ch`` may start (``first``) or continue a Rust identifier.
+
+    ``str.isidentifier`` follows UAX #31 XID_Start / XID_Continue, as Rust
+    does, so combining marks continue an identifier.
+    """
+    return ch.isidentifier() if first else ("a" + ch).isidentifier()
+
+
 def _mask_rust_source(text: str) -> tuple[str, str]:
     """Return ``(code, bare)`` views of Rust source ``text``.
 
@@ -410,9 +419,9 @@ def _mask_rust_source(text: str) -> tuple[str, str]:
             end = _block_comment_end(text, pos)
             blank((code, bare), pos, end)
             pos = end
-        elif ch.isalpha() or ch == "_":
-            end = pos
-            while end < len(text) and (text[end].isalnum() or text[end] == "_"):
+        elif _is_identifier_char(ch, first=True):
+            end = pos + 1
+            while end < len(text) and _is_identifier_char(text[end], first=False):
                 end += 1
             word = text[pos:end]
             hashes = end
@@ -1674,44 +1683,65 @@ def public_api_change_reasons(
     return reasons
 
 
-_WASM_BINDGEN_ATTR_RE = re.compile(r"#\[wasm_bindgen(?:\((.*?)\))?\]", re.DOTALL)
+# Where a ``#[wasm_bindgen`` attribute starts, in masked text.
+_WASM_ATTR_IN_TEXT_RE = re.compile(r"#\[wasm_bindgen\b")
+
+
+def _matching_delimiter(bare: str, opening: int) -> int | None:
+    """Return the offset closing the ``(`` or ``[`` at ``opening`` in masked
+    text, balancing brackets and parens; ``None`` if it never closes."""
+    depth = 0
+    for pos in range(opening, len(bare)):
+        if bare[pos] in "([":
+            depth += 1
+        elif bare[pos] in ")]":
+            depth -= 1
+            if depth == 0:
+                return pos
+    return None
+
+
+def _wasm_bindgen_option_texts(attrs: str) -> list[str]:
+    """Return the option text inside each ``#[wasm_bindgen(...)]`` in ``attrs``.
+
+    Delimiters are found on the masked text, where strings and comments are
+    blank, and the options are taken from the original, so a string such as
+    ``r#"x)]"#`` cannot end an attribute early. Raises ``WasmSurfaceError``
+    for an attribute that never closes rather than recording part of it.
+    """
+    _, bare = _mask_rust_source(attrs)
+    texts: list[str] = []
+    for match in _WASM_ATTR_IN_TEXT_RE.finditer(bare):
+        opening = match.end()
+        while opening < len(bare) and bare[opening].isspace():
+            opening += 1
+        if bare[opening : opening + 1] != "(":
+            continue  # ``#[wasm_bindgen]`` has no options.
+        closing = _matching_delimiter(bare, opening)
+        if closing is None:
+            raise WasmSurfaceError("#[wasm_bindgen(...)] options never close")
+        texts.append(attrs[opening + 1 : closing])
+    return texts
 
 
 def _split_bindgen_args(text: str) -> list[str]:
+    """Split option text at top-level commas, judged on masked text so that
+    commas and delimiters inside strings and comments do not count."""
+    _, bare = _mask_rust_source(text)
     parts: list[str] = []
-    current: list[str] = []
     depth = 0
-    in_string = False
-    quote = ""
-
-    for ch in text:
-        if in_string:
-            current.append(ch)
-            if ch == quote:
-                in_string = False
-            continue
-        if ch in ('"', "'"):
-            in_string = True
-            quote = ch
-            current.append(ch)
-            continue
-        if ch == "(":
+    start = 0
+    for pos, ch in enumerate(bare):
+        if ch in "([":
             depth += 1
-            current.append(ch)
-            continue
-        if ch == ")":
+        elif ch in ")]":
             depth -= 1
-            current.append(ch)
-            continue
-        if ch == "," and depth == 0:
-            part = "".join(current).strip()
+        elif ch == "," and depth == 0:
+            part = text[start:pos].strip()
             if part:
                 parts.append(part)
-            current = []
-            continue
-        current.append(ch)
-
-    tail = "".join(current).strip()
+            start = pos + 1
+    tail = text[start:].strip()
     if tail:
         parts.append(tail)
     return parts
@@ -1728,10 +1758,9 @@ def _normalize_bindgen_option(option: str) -> str:
 
 def _parse_wasm_bindgen_options(attrs: str) -> list[str]:
     raw: list[str] = []
-    for match in _WASM_BINDGEN_ATTR_RE.finditer(attrs):
-        inner = (match.group(1) or "").strip()
-        if inner:
-            raw.extend(_split_bindgen_args(inner))
+    for inner in _wasm_bindgen_option_texts(attrs):
+        if inner.strip():
+            raw.extend(_split_bindgen_args(inner.strip()))
     flags: list[str] = []
     keyed: list[str] = []
     for option in raw:
@@ -1790,10 +1819,17 @@ class WasmSurfaceError(ValueError):
     """The WASM export scanner cannot place an attribute and refuses to guess."""
 
 
-# What follows a parameter's attributes: ``name:`` or ``mut name:``. The name
-# is a Rust identifier (Unicode letters allowed) or a raw one such as
-# ``r#type``; ``[^\W\d]`` is a letter or ``_``.
-_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?(?:r#)?[^\W\d]\w*\s*:(?!:)")
+# What follows a parameter's attributes: ``name:`` or ``mut name:``, where the
+# name may be raw (``r#type``). The candidate token is captured and must pass
+# ``str.isidentifier``, which follows UAX #31 XID_Start / XID_Continue as Rust
+# does, so combining marks (``e\u0301``) are accepted.
+_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?(?:r#)?(?P<name>[^\s:#]+)\s*:(?!:)")
+
+
+def _is_param_start(text: str) -> bool:
+    """Whether ``text`` (masked, stripped) begins with a parameter pattern."""
+    match = _PARAM_PATTERN_RE.match(text)
+    return bool(match) and match.group("name").isidentifier()
 # A ``#[wasm_bindgen]`` attribute, not ``#[wasm_bindgen_test]``.
 _WASM_ATTR_START_RE = re.compile(r"^#\[\s*wasm_bindgen\b")
 # What an item-level attribute may sit on, judged on masked text (so
@@ -1855,7 +1891,7 @@ def _place_wasm_attr(bare: list[str], start: int) -> int | None:
         if follow.startswith("#["):
             line, text = at, follow
             continue
-        if _PARAM_PATTERN_RE.match(follow):
+        if _is_param_start(follow):
             return end
         if _WASM_ITEM_START_RE.match(follow) or _is_field_declaration(follow):
             return None
@@ -3373,6 +3409,69 @@ pub fn last() {}
             raise AssertionError(f"unplaceable attribute was placed: {exports}")
 
 
+def _assert_option_strings_and_xid_names() -> None:
+    after = """
+#[wasm_bindgen(js_name = "after")]
+pub fn after(value: u8) -> u8 {
+    value
+}
+"""
+    tail = "wasm_bindgen(js_name=after) | pub fn after(value: u8) -> u8"
+    # ``)]`` inside a raw or ordinary option string does not end the attribute.
+    options = """
+#[wasm_bindgen(typescript_type = r#""x)]""#)]
+pub fn typed() -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "a)]b", skip_typescript)]
+pub fn quoted_option() -> u8 {
+    0
+}
+"""
+    assert _wasm_exports_of(options + after) == [
+        'wasm_bindgen(typescript_type=r#""x)]""#) | pub fn typed() -> u8',
+        "wasm_bindgen(skip_typescript, js_name=a)]b) | pub fn quoted_option() -> u8",
+        tail,
+    ], _wasm_exports_of(options + after)
+
+    # Parameter names follow XID rules: combining marks may continue a name.
+    accent, book = "é", "किताब"
+    names = f"""
+#[wasm_bindgen(js_name = "accent")]
+pub fn accent(
+    #[wasm_bindgen(unchecked_param_type = "number")] {accent}: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "string")] mut {book}: JsString,
+) -> u8 {{
+    0
+}}
+"""
+    assert _wasm_exports_of(names + after) == [
+        "wasm_bindgen(js_name=accent) | pub fn accent("
+        f'#[wasm_bindgen(unchecked_param_type = "number")] {accent}: JsValue, '
+        f'#[wasm_bindgen(unchecked_param_type = "string")] mut {book}: JsString) -> u8',
+        tail,
+    ], _wasm_exports_of(names + after)
+
+    # A combining mark cannot start a name: still refused, loudly.
+    bad = """
+#[wasm_bindgen(js_name = "bad")]
+pub fn bad(
+    #[wasm_bindgen(unchecked_param_type = "number")] ́e: JsValue,
+) -> u8 {
+    0
+}
+"""
+    try:
+        exports = _wasm_exports_of(bad + after)
+    except WasmSurfaceError as error:
+        assert str(error).startswith(
+            "crates/wasm/src/x.rs: line 3: #[wasm_bindgen] is followed by neither"
+        ), str(error)
+    else:
+        raise AssertionError(f"non-identifier parameter was placed: {exports}")
+
+
 def _assert_surfaces_self_checks() -> None:
     assert (
         _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
@@ -3494,6 +3593,7 @@ pub struct Foo {
     _assert_param_attr_edge_cases()
     _assert_rust_source_masking()
     _assert_masked_scanner_edge_cases()
+    _assert_option_strings_and_xid_names()
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]
