@@ -9,19 +9,19 @@ use serde_json::json;
 use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
 
+/// Derive the Nostr key; the caller holds the mnemonic and passphrase in
+/// `Zeroizing`, and the returned keypair wipes itself on drop.
 fn nostr_private_key(
-    mnemonic: String,
+    mnemonic: &str,
     address_index: u32,
     account_index: u32,
-    passphrase: Option<String>,
+    passphrase: Option<&str>,
 ) -> Result<krusty_kms::NostrKeyPair, JsValue> {
-    let mnemonic = Zeroizing::new(mnemonic);
-    let passphrase = passphrase.map(Zeroizing::new);
     from_sdk_result(krusty_kms::derive_nostr_keypair(
-        &mnemonic,
+        mnemonic,
         address_index,
         account_index,
-        passphrase.as_deref().map(String::as_str),
+        passphrase,
     ))
     .map_err(JsValue::from)
 }
@@ -37,8 +37,10 @@ pub fn wrap_nostr_application_data(
     identifier: &str,
     content: String,
 ) -> Result<String, JsValue> {
+    let (mnemonic, passphrase) = (Zeroizing::new(mnemonic), passphrase.map(Zeroizing::new));
     let content = Zeroizing::new(content);
-    let keypair = nostr_private_key(mnemonic, address_index, account_index, passphrase)?;
+    let passphrase_ref = passphrase.as_deref().map(String::as_str);
+    let keypair = nostr_private_key(&mnemonic, address_index, account_index, passphrase_ref)?;
     from_sdk_result(krusty_kms::wrap_nostr_application_data_at(
         &keypair.private_key,
         recipient_public_key,
@@ -58,7 +60,9 @@ pub fn open_nostr_application_data(
     passphrase: Option<String>,
     event_json: &str,
 ) -> Result<String, JsValue> {
-    let keypair = nostr_private_key(mnemonic, address_index, account_index, passphrase)?;
+    let (mnemonic, passphrase) = (Zeroizing::new(mnemonic), passphrase.map(Zeroizing::new));
+    let passphrase_ref = passphrase.as_deref().map(String::as_str);
+    let keypair = nostr_private_key(&mnemonic, address_index, account_index, passphrase_ref)?;
     let opened = from_sdk_result(krusty_kms::open_nostr_application_data(
         &keypair.private_key,
         event_json,

@@ -24,8 +24,6 @@ unwiped copies while parsing:
   two `String`s (`to_ascii_lowercase`, then `format!`) and the parsed felt into
   a third.
 - Parsed private keys sat in plain `Felt`s and `[u8; 32]`s.
-- `WasmAccount.fromMnemonic` parsed the contract address before wrapping the
-  passphrase, so a refused address freed the passphrase unwiped.
 - `decryptWithKey` dropped a decrypted plaintext that was not UTF-8 unwiped.
 
 ## Change
@@ -44,8 +42,10 @@ unwiped copies while parsing:
     caller's error prefix.
 - The STRK20 check now compares the digits with the felt's big-endian bytes,
   hex-encoded into a wiped stack buffer.
-- `fromMnemonic` wraps the mnemonic and passphrase before it parses the
-  address, and `decryptWithKey` wipes a refused plaintext.
+- Every secret is wrapped before the export's first fallible step, so an
+  error path wipes it too. The base branch already does this for the
+  `fromMnemonic` passphrase, and this change extends it to the mnemonic.
+  `decryptWithKey` wipes a refused plaintext.
 
 The generated TypeScript is unchanged, since `&str` and `String` are both
 `string`. With `wasm-pack build --release` for `--target web` and `nodejs`,
@@ -101,7 +101,7 @@ Secret arguments of `#[wasm_bindgen]` exports on the base branch.
 | Exports | Secret arguments | After |
 | --- | --- | --- |
 | `validateMnemonic`, `deriveKeypair`, `derivePublicKey`, `deriveStarknetKeypair`, `deriveStarknetPublicKey`, `deriveArgentLegacyKeypair`, `deriveArgentLegacyPublicKey`, `deriveNostrKeypair`, `deriveNostrPublicKey` | `mnemonic` | owned, wiped |
-| `WasmAccount.fromMnemonic` | `mnemonic` | owned, wiped; passphrase wrapped before the address is parsed |
+| `WasmAccount.fromMnemonic` | `mnemonic` | owned, wiped before the address is parsed, like the passphrase (base branch) |
 | `WasmAccount.fromPrivateKey` | `private_key` | owned, wiped; parsed into `SecretFelt` |
 | `generateAccountCandidates[WithSecrets]`, `generateAccountAddresses`, `deriveDiscoveryKeypairs[WithSecrets]`, `discoverAccountsFromMnemonic[WithSecrets]` | `mnemonic` | owned, wiped |
 | `encryptPrivateKey` | `private_key_hex`, `password` | owned, wiped |
