@@ -284,12 +284,12 @@ fn transactions_must_be_complete_and_exact() {
 }
 
 /// A valid one-input, one-output `T` of exactly `size` bytes, padded with an
-/// `OP_1` scriptPubKey.
+/// `OP_1` scriptPubKey whose length is a canonical 3-byte CompactSize.
 fn transaction_of_size(size: usize) -> Vec<u8> {
-    let script_len = size - 64;
+    let script_len = size - 62;
     let mut transaction = tx(&VECTOR_TX[..92]);
-    transaction.extend_from_slice(&[1, 0xe8, 3, 0, 0, 0, 0, 0, 0, 0xfe]);
-    transaction.extend_from_slice(&u32::try_from(script_len).unwrap().to_le_bytes());
+    transaction.extend_from_slice(&[1, 0xe8, 3, 0, 0, 0, 0, 0, 0, 0xfd]);
+    transaction.extend_from_slice(&u16::try_from(script_len).unwrap().to_le_bytes());
     transaction.resize(transaction.len() + script_len, 0x51);
     transaction.extend_from_slice(&[0; 4]);
     assert_eq!(transaction.len(), size);
@@ -300,8 +300,10 @@ fn transaction_of_size(size: usize) -> Vec<u8> {
 fn transaction_size_is_bounded_with_room_for_unlocking_data() {
     qsb_reveal_digest(&transaction_of_size(QSB_MAX_TRANSACTION_SIZE), &indices()).unwrap();
     let limit = format!("exceeds the {QSB_MAX_TRANSACTION_SIZE}-byte limit");
-    for size in [QSB_MAX_TRANSACTION_SIZE + 1, 100 * QSB_MAX_TRANSACTION_SIZE] {
-        let error = digest_error(&transaction_of_size(size));
+    // The bound is checked before parsing, so far over it any bytes will do.
+    let far_over = vec![0; 100 * QSB_MAX_TRANSACTION_SIZE];
+    for transaction in [transaction_of_size(QSB_MAX_TRANSACTION_SIZE + 1), far_over] {
+        let error = digest_error(&transaction);
         assert!(error.contains(&limit), "{error}");
     }
 }

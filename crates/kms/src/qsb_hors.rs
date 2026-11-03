@@ -62,13 +62,14 @@ pub const QSB_REVEALS: usize = QSB_ROUND0_REVEALS + QSB_ROUND1_REVEALS;
 /// `T` omits the vault input's scriptSig and every witness, which the real
 /// spend adds: the 15 preimages and the rest of the QSB unlocking data. `T` is
 /// fixed once secrets are exposed, so a `T` that leaves no room for that data
-/// could never confirm and would strand the vault. The bound is Bitcoin Core's
-/// standard transaction weight (400,000 WU) divided by the witness scale
-/// factor: the largest legacy transaction that is itself standard. It keeps
-/// 900,000 bytes of the 4,000,000 WU consensus limit for unlocking data, far
-/// more than a QSB spend needs, while a real withdrawal's `T` is a few hundred
-/// bytes.
-pub const QSB_MAX_TRANSACTION_SIZE: usize = 100_000;
+/// could never be relayed or confirmed and would strand the vault. At 50,000
+/// bytes `T` weighs at most 200,000 WU, half of Bitcoin Core's standard
+/// transaction weight (400,000 WU). The other half covers the unlocking data
+/// with room to spare: consensus caps a scriptSig at 10,000 bytes
+/// (`MAX_SCRIPT_SIZE`), about 40,000 WU per vault input, and a P2WPKH helper's
+/// witness adds about 110 WU, so even a withdrawal spending four vaults stays
+/// standard. A real withdrawal's `T` is a few hundred bytes.
+pub const QSB_MAX_TRANSACTION_SIZE: usize = 50_000;
 
 const REVEAL_TAG: &[u8] = b"QSB-HORS-v1/reveal";
 const NET_TEST: u8 = 0x01;

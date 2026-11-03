@@ -56,12 +56,25 @@ fn js_digest_error(transaction_hex: JsString) -> String {
 /// A valid one-input, one-output `T` of exactly `size` bytes, as hex built in
 /// JS: only its short head ever exists in Rust.
 fn transaction_hex_of_size(size: usize) -> JsString {
-    let script_len = size - 64;
-    let head = format!(
-        "{}01e803000000000000fe{}",
-        &VECTOR_TX[..92],
-        hex::encode(u32::try_from(script_len).unwrap().to_le_bytes())
-    );
+    // The script length in its canonical CompactSize: `fd` and a u16 when
+    // that fits, otherwise `fe` and a u32 (59 fixed bytes plus the prefix).
+    let (prefix, script_len) = match u16::try_from(size - 62) {
+        Ok(len) if len >= 0xfd => (
+            format!("fd{}", hex::encode(len.to_le_bytes())),
+            usize::from(len),
+        ),
+        _ => {
+            let len = size - 64;
+            (
+                format!(
+                    "fe{}",
+                    hex::encode(u32::try_from(len).unwrap().to_le_bytes())
+                ),
+                len,
+            )
+        }
+    };
+    let head = format!("{}01e803000000000000{prefix}", &VECTOR_TX[..92]);
     let script = JsString::from("51").repeat(i32::try_from(script_len).unwrap());
     let transaction = JsString::from(head)
         .concat(&script)
