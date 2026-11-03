@@ -13,6 +13,10 @@ use krusty_kms_common::{KmsError, Result};
 use std::collections::BTreeSet;
 
 const MAGIC: &[u8; 5] = b"psbt\xff";
+/// Largest decoded PSBT accepted (4 MiB): room for ten maximum-size
+/// standard previous transactions. Parsing keeps every pair in its own
+/// allocation, so this bounds heap use as well as input size.
+const MAX_PSBT_BYTES: usize = 4 * 1024 * 1024;
 
 const GLOBAL_UNSIGNED_TX: u8 = 0x00;
 const GLOBAL_XPUB: u8 = 0x01;
@@ -111,7 +115,8 @@ impl Psbt {
 /// # Errors
 ///
 /// - `InvalidPrivateKey` when the key is not a valid secp256k1 scalar
-/// - `DeserializationError` when the base64 or the PSBT is malformed
+/// - `DeserializationError` when the base64 or the PSBT is malformed, or the
+///   PSBT is larger than 4 MiB
 /// - `TransactionError` when the index list is empty, repeats or overruns,
 ///   or a listed input fails a check above; nothing is signed then
 pub fn sign_bitcoin_psbt_inputs(
@@ -120,10 +125,7 @@ pub fn sign_bitcoin_psbt_inputs(
     input_indices: &[u32],
 ) -> Result<String> {
     let signer = P2wpkhSigner::new(private_key)?;
-    let bytes = BASE64
-        .decode(psbt_base64)
-        .map_err(|e| malformed(format!("PSBT is not base64: {e}")))?;
-    let mut psbt = Psbt::parse(&bytes)?;
+    let mut psbt = Psbt::parse(&decode_bounded(psbt_base64)?)?;
 
     for index in checked_indices(input_indices, psbt.inputs.len())? {
         let amount = signable_amount(&psbt, index, &signer)?;
@@ -136,11 +138,35 @@ pub fn sign_bitcoin_psbt_inputs(
     Ok(BASE64.encode(psbt.serialize()))
 }
 
+/// Decode at most `MAX_PSBT_BYTES`, refusing longer text before decoding it.
+fn decode_bounded(psbt_base64: &str) -> Result<Vec<u8>> {
+    let too_large = || malformed(format!("PSBT is larger than {MAX_PSBT_BYTES} bytes"));
+    // Base64 carries three bytes in every four characters.
+    if psbt_base64.len() > MAX_PSBT_BYTES.div_ceil(3) * 4 {
+        return Err(too_large());
+    }
+    let bytes = BASE64
+        .decode(psbt_base64)
+        .map_err(|e| malformed(format!("PSBT is not base64: {e}")))?;
+    if bytes.len() > MAX_PSBT_BYTES {
+        return Err(too_large());
+    }
+    Ok(bytes)
+}
+
 fn checked_indices(indices: &[u32], input_count: usize) -> Result<Vec<usize>> {
     if indices.is_empty() {
         return Err(KmsError::TransactionError(
             "no PSBT inputs were listed to sign".into(),
         ));
+    }
+    // A longer list must repeat or overrun an index; refuse it before
+    // allocating anything sized by it.
+    if indices.len() > input_count {
+        return Err(KmsError::TransactionError(format!(
+            "{} PSBT inputs were listed but the PSBT has {input_count}",
+            indices.len()
+        )));
     }
     let mut seen = BTreeSet::new();
     let mut checked = Vec::with_capacity(indices.len());
@@ -241,8 +267,10 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
     }
 }
 
-/// Refuse keys whose BIP-174 type fixes a shape the key does not have, and
-/// fields that only exist in PSBT version 2 (BIP-370). Other types are opaque.
+/// Refuse a key whose shape differs from the one BIP-174 defines for its
+/// type (every type BIP-174 itself defines, except proprietary keys), and
+/// fields that only exist in PSBT version 2 (BIP-370). Types from later BIPs,
+/// such as Taproot's, and unknown types are opaque.
 fn require_key_shape(scope: Scope, key: &[u8]) -> Result<()> {
     let single = key.len() == 1;
     let valid = match (scope, key[0]) {
@@ -251,6 +279,10 @@ fn require_key_shape(scope: Scope, key: &[u8]) -> Result<()> {
         (Scope::Global, 0x02..=0x06) => false,
         (Scope::Input, 0x00 | 0x01 | 0x03 | 0x04 | 0x05 | 0x07 | 0x08) => single,
         (Scope::Input, 0x02 | 0x06) => is_public_key(&key[1..]),
+        // RIPEMD160 and HASH160 preimages are keyed by a 20-byte hash,
+        // SHA256 and HASH256 preimages by a 32-byte hash.
+        (Scope::Input, 0x0a | 0x0c) => key.len() == 1 + 20,
+        (Scope::Input, 0x0b | 0x0d) => key.len() == 1 + 32,
         (Scope::Input, 0x0e..=0x12) => false,
         (Scope::Output, 0x00 | 0x01) => single,
         (Scope::Output, 0x02) => is_public_key(&key[1..]),

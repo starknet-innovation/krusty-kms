@@ -50,10 +50,13 @@ BIP-84 path has a third component.
     amount, so this defeats a PSBT that lies about it;
   - its sighash type is absent or SIGHASH_ALL;
   - it is not already finalized.
-- Index lists must be non-empty, distinct and in range.
-- Parsing is strict (BIP-174 version 0): minimal CompactSizes, no trailing
-  bytes, no duplicate keys, the key shapes BIP-174 fixes, no version-2-only
-  fields, empty scriptSigs in a legacy-serialized unsigned transaction. Each
+- Index lists must be non-empty, distinct and in range, so no longer than
+  the PSBT's input count.
+- Parsing is strict (BIP-174 version 0): at most 4 MiB decoded (longer base64
+  is refused before decoding), minimal CompactSizes, no trailing bytes, no
+  duplicate keys, the key shape of every type BIP-174 defines (proprietary
+  keys and later BIPs' types stay opaque), no version-2-only fields, empty
+  scriptSigs in a legacy-serialized unsigned transaction. Each
   map is kept as ordered key-value pairs, so `serialize(parse(x)) == x`, and
   signing only adds or replaces this key's `PARTIAL_SIG` in listed inputs.
   Unlisted inputs, outputs, global and unknown fields stay byte-identical.
