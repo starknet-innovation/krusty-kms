@@ -161,18 +161,21 @@ fn global_xpubs_follow_bip32_depth_rules() {
 }
 
 #[test]
-fn proof_of_reserves_commitments_are_refused_on_any_input() {
-    // BIP-127's commitment needs a transaction-level check this signer does
-    // not make, so it refuses the PSBT whether or not the input is listed.
+fn proof_of_reserves_and_message_psbts_are_refused() {
+    // BIP-127's commitment (input 0x09) and BIP-322's signed message (global
+    // 0x09) need checks this signer does not make, so either refuses the
+    // PSBT, whether or not the input is listed.
+    const REASON: &str = "BIP-127/BIP-322 0x09 fields are unsupported";
     for input in [0, 1] {
         let mut psbt = fixture();
         psbt.inputs[input].push(pair(&[0x09], b"Proof of reserves"));
         let reason = malformed_reason(&psbt);
-        assert!(
-            reason.contains("BIP-127 POR_COMMITMENT is not supported"),
-            "input {input}: {reason}"
-        );
+        assert!(reason.contains(REASON), "input {input}: {reason}");
     }
+    let mut psbt = fixture();
+    psbt.global.push(pair(&[0x09], b"Hello World"));
+    let reason = malformed_reason(&psbt);
+    assert!(reason.contains(REASON), "global: {reason}");
 }
 
 #[test]

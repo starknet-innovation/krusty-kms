@@ -5,7 +5,7 @@
 //!
 //! Types the table does not name (later BIPs such as Taproot's, and unknown
 //! types) pass through as opaque once their key type has been read. PSBT v2
-//! (BIP-370) fields and BIP-127 proof-of-reserves commitments are refused.
+//! (BIP-370), BIP-127 proof-of-reserves and BIP-322 message fields are refused.
 
 use super::super::tx::{double_sha256, malformed, Reader, Transaction, TxOut};
 use super::Scope::{self, Global, Input, Output as Out};
@@ -135,9 +135,9 @@ pub(super) fn check_pair(scope: Scope, key_type: u64, key_data: &[u8], value: &[
             "PSBT key type {key_type:#04x} is a PSBT version 2 field, not allowed in version 0"
         )));
     }
-    // BIP-127 proof of reserves needs transaction-level checks this signer does not make.
-    if (scope, key_type) == (Input, 0x09) {
-        return Err(malformed("BIP-127 POR_COMMITMENT is not supported"));
+    // BIP-127 proof-of-reserves and BIP-322 message PSBTs need checks this signer does not make.
+    if matches!((scope, key_type), (Input | Global, 0x09)) {
+        return Err(malformed("BIP-127/BIP-322 0x09 fields are unsupported"));
     }
     let Some(field) = lookup(scope, key_type) else {
         return Ok(());
