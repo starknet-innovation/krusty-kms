@@ -32,7 +32,7 @@ pub use account_class::{
     OzDeploymentDescriptor, SaltPolicy,
 };
 pub use bitcoin::{
-    derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs,
+    derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs, Bip322Encoding,
     BitcoinP2wpkhKeyPair, BITCOIN_COIN_TYPE,
 };
 pub use derivation::{

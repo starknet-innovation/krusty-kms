@@ -1,8 +1,9 @@
 //! BIP-84 key derivation and the P2WPKH signer shared by PSBT and BIP-322.
 
 use super::bech32::encode_segwit_v0;
+use super::bip32;
 use super::tx::SIGHASH_ALL;
-use crate::derivation::{derive_master_key, derive_path, require_unhardened_component};
+use crate::derivation::require_unhardened_component;
 use crate::mnemonic::mnemonic_to_seed;
 use bitcoin_hashes::{hash160, Hash as _};
 use ecdsa::hazmat::sign_prehashed_rfc6979;
@@ -64,6 +65,9 @@ impl core::fmt::Debug for BitcoinP2wpkhKeyPair {
 /// - `InvalidDerivationPath` when `account_index` or `address_index` has the
 ///   hardened bit set, or `change` is not 0 or 1
 /// - `CryptoError` when BIP-32 derivation hits an invalid child key
+///
+/// BIP-32 runs on `k256` scalars and wiped buffers (see `bip32`), not on the
+/// shared `BigUint` helpers.
 pub fn derive_bitcoin_p2wpkh_keypair(
     mnemonic: &str,
     account_index: u32,
@@ -80,7 +84,6 @@ pub fn derive_bitcoin_p2wpkh_keypair(
     }
 
     let seed = Zeroizing::new(mnemonic_to_seed(mnemonic, passphrase.unwrap_or(""))?);
-    let master = derive_master_key(seed.as_ref())?;
     let path = [
         BIP84_PURPOSE | HARDENED,
         BITCOIN_COIN_TYPE | HARDENED,
@@ -88,7 +91,7 @@ pub fn derive_bitcoin_p2wpkh_keypair(
         change,
         address_index,
     ];
-    let (private_key, _chain_code) = derive_path(&master.0, &master.1, &path)?;
+    let private_key = bip32::derive_private_key(seed.as_ref(), &path)?;
     let signer = P2wpkhSigner::new(&private_key)?;
 
     Ok(BitcoinP2wpkhKeyPair {

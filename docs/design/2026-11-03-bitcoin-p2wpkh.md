@@ -19,20 +19,46 @@ Rust (`krusty_kms`, new `bitcoin` module):
   returns `BitcoinP2wpkhKeyPair { private_key, public_key (33-byte compressed),
   address (bc1q…), path }`, at `m/84'/0'/account'/change/index`.
 - `sign_bitcoin_psbt_inputs(private_key, psbt_base64, input_indices) -> base64 PSBT`
-- `sign_bip322_simple(private_key, address, message) -> base64 witness`
+- `sign_bip322_simple(private_key, address, message, encoding) -> smp-prefixed base64 witness`,
+  where `Bip322Encoding::LegacyUnprefixed` drops the prefix
 
-WASM mirrors them as `deriveBitcoinP2wpkhKeypair`, `signBitcoinPsbtInputs`
-and `signBip322Simple`. Private keys cross the boundary as 64 hex characters
-without `0x`, like the Nostr bindings; `WasmBitcoinP2wpkhKeypair` zeroizes its
-private key on drop and redacts it from `Debug` and `Serialize`, like the other
-keypair types. The arguments follow path order (account, change, index), not
-the `(address_index, account_index)` order of the BIP-44 helpers, because a
-BIP-84 path has a third component.
+WASM:
+
+```ts
+deriveBitcoinP2wpkhKeypair(mnemonic: string, account_index: number, change: number, address_index: number, passphrase?: string | null): WasmBitcoinP2wpkhKeypair
+signBitcoinPsbtInputs(private_key: string, psbt_base64: string, input_indices: number[]): string
+signBip322Simple(private_key: string, address: string, message: string, legacy_unprefixed?: boolean): string
+```
+
+Private keys cross the boundary as 64 hex characters without `0x`, like the
+Nostr bindings; `WasmBitcoinP2wpkhKeypair` zeroizes its private key on drop
+and redacts it from `Debug` and `Serialize`, like the other keypair types. The
+arguments follow path order (account, change, index), not the
+`(address_index, account_index)` order of the BIP-44 helpers, because a BIP-84
+path has a third component.
+
+Indices arrive as `JsValue` and must be exact integers from 0 to 2^32 - 1
+before the Rust range checks run: wasm-bindgen's `u32` parameters wrap
+(`2^32` becomes `0`), which would derive account 0's key. `input_indices` must
+be a plain array; a `Uint32Array` has already wrapped its values in JS, so it
+is refused. `legacy_unprefixed` must be a boolean, `undefined` or `null`, not
+any truthy value.
+
+The mnemonic, passphrase and private-key strings are taken as owned `String`s
+and wiped (`Zeroizing`) when the call returns. JS strings cannot be wiped, and
+wasm-bindgen may leave a partial copy in freed memory when it re-allocates
+while encoding a non-ASCII string.
 
 ## Invariants
 
 - Mainnet only: coin type 0 and the `bc` HRP. `change` is 0 or 1; account and
   address indices must not carry the hardened bit.
+- BIP-32 for this path runs on `k256` scalars and `Zeroizing` buffers (key,
+  key bytes, chain code, HMAC output), not on the shared `derivation` helpers,
+  whose `BigUint` and `Vec` copies are never wiped. Stack temporaries and the
+  HMAC-SHA512 state (the `hmac` crate's `zeroize` feature is off) are still
+  not wiped; fixing those and the shared helpers is separate work, because it
+  also changes the Starknet, Tongo and Nostr derivations.
 - Signatures are RFC 6979 ECDSA, low-S, SIGHASH_ALL only, ground for low R
   exactly as Bitcoin Core's `CKey::Sign(grind = true)`: plain RFC 6979 first,
   then RFC 6979 with 32 bytes of additional data, zero except a little-endian
@@ -61,10 +87,12 @@ BIP-84 path has a third component.
   signing only adds or replaces this key's `PARTIAL_SIG` in listed inputs.
   Unlisted inputs, outputs, global and unknown fields stay byte-identical.
 - BIP-322: `address` must be this key's P2WPKH address, lowercase or
-  uppercase. The result is the unprefixed base64 witness. BIP-322 1.0.0 adds an
-  `smp` variant prefix but lets verifiers assume "simple" without one; the
-  unprefixed form is what earlier BIP-322 implementations, such as
-  `bip322-js`, produce and verify.
+  uppercase. The result is `smp` plus the base64 witness: BIP-322 ("Types of
+  Signatures") says signers MUST prefix the variant. The prefix only lets a
+  verifier assume "simple" when there is none, for backward compatibility, so
+  the unprefixed form is an explicit opt-in (`Bip322Encoding::LegacyUnprefixed`,
+  `legacy_unprefixed = true`) for verifiers that predate the prefix, such as
+  `bip322-js` 4.0.0.
 
 ## Not promised
 

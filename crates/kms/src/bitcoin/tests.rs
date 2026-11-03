@@ -182,6 +182,22 @@ fn bip322_message_hash_and_virtual_transaction_vectors() {
 }
 
 #[test]
+fn zeroizing_bip32_matches_the_shared_derivation() {
+    // Same seed and path through `bip32` and the shared BigUint helpers
+    // (here via the Nostr path m/44'/1237'/account'/0/index).
+    const MNEMONIC: &str =
+        "habit hope tip crystal because grunt nation idea electric witness alert like";
+    let seed = crate::mnemonic::mnemonic_to_seed(MNEMONIC, "").unwrap();
+    for (account, index) in [(0, 0), (0, 1), (3, 7), (0x7fff_ffff, 0x7fff_ffff)] {
+        let path = [44 | 1 << 31, 1237 | 1 << 31, account | 1 << 31, 0, index];
+        let ours = super::bip32::derive_private_key(&seed, &path).unwrap();
+        let shared =
+            crate::derivation::derive_nostr_private_key(MNEMONIC, index, account, None).unwrap();
+        assert_eq!(*ours, shared, "account {account}, index {index}");
+    }
+}
+
+#[test]
 fn keypair_debug_redacts_private_key() {
     let keypair = derive_bitcoin_p2wpkh_keypair(
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",

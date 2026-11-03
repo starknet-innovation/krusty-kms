@@ -13,19 +13,40 @@ use sha2::{Digest, Sha256};
 const MESSAGE_TAG: &[u8] = b"BIP0322-signed-message";
 const OP_RETURN: u8 = 0x6a;
 
-/// Sign `message` for `address` with a BIP-322 "simple" signature and return
-/// the base64 consensus-encoded witness stack `[signature, public key]`.
+/// How a BIP-322 "simple" signature is encoded.
+///
+/// BIP-322 ("Types of Signatures") says signers MUST prefix the signature
+/// with its variant, `smp` for simple, and that a verifier might assume the
+/// simple variant when there is no prefix, for backward compatibility.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Bip322Encoding {
+    /// `smp` followed by the base64 witness, as BIP-322 requires of signers.
+    #[default]
+    Prefixed,
+    /// The bare base64 witness, only for verifiers that predate the prefix
+    /// (for example `bip322-js` 4.0.0). Strict verifiers may reject it.
+    LegacyUnprefixed,
+}
+
+const SIMPLE_PREFIX: &str = "smp";
+
+/// Sign `message` for `address` with a BIP-322 "simple" signature: the
+/// base64 consensus-encoded witness stack `[signature, public key]`, prefixed
+/// with `smp` unless `encoding` asks for the legacy form.
 ///
 /// `address` must be this key's mainnet P2WPKH address (lowercase or
-/// uppercase). The result carries no variant prefix: BIP-322 1.0.0 lets a
-/// verifier treat an unprefixed signature as "simple", which is the form
-/// BIP-322 implementations from before that revision produce and accept.
+/// uppercase).
 ///
 /// # Errors
 ///
 /// - `InvalidPrivateKey` when the key is not a valid secp256k1 scalar
 /// - `CryptoError` when `address` is not this key's P2WPKH address
-pub fn sign_bip322_simple(private_key: &[u8; 32], address: &str, message: &[u8]) -> Result<String> {
+pub fn sign_bip322_simple(
+    private_key: &[u8; 32],
+    address: &str,
+    message: &[u8],
+    encoding: Bip322Encoding,
+) -> Result<String> {
     let signer = P2wpkhSigner::new(private_key)?;
     let own = signer.address();
     if address != own && address != own.to_ascii_uppercase() {
@@ -42,7 +63,11 @@ pub fn sign_bip322_simple(private_key: &[u8; 32], address: &str, message: &[u8])
     write_compact_size(&mut witness, 2);
     write_var_bytes(&mut witness, &signature);
     write_var_bytes(&mut witness, &signer.public_key);
-    Ok(BASE64.encode(witness))
+    let encoded = BASE64.encode(witness);
+    Ok(match encoding {
+        Bip322Encoding::Prefixed => format!("{SIMPLE_PREFIX}{encoded}"),
+        Bip322Encoding::LegacyUnprefixed => encoded,
+    })
 }
 
 /// `sha256(sha256(tag) || sha256(tag) || message)`.

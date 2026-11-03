@@ -10,7 +10,7 @@
 //! Outputs:
 //! - the keypair, its compressed public key, `bc1q…` address and path
 //! - the PSBT with a partial signature added to each listed input
-//! - the base64 BIP-322 simple witness
+//! - the BIP-322 simple witness, `smp`-prefixed base64 by default
 //!
 //! Invariants:
 //! - mainnet only: coin type 0 and the `bc` human-readable part
@@ -27,6 +27,7 @@
 //! Everything here reuses the pure-Rust `k256` signer already used for Nostr.
 
 mod bech32;
+mod bip32;
 mod bip322;
 mod keys;
 mod psbt;
@@ -35,6 +36,6 @@ mod tx;
 #[cfg(test)]
 mod tests;
 
-pub use bip322::sign_bip322_simple;
+pub use bip322::{sign_bip322_simple, Bip322Encoding};
 pub use keys::{derive_bitcoin_p2wpkh_keypair, BitcoinP2wpkhKeyPair, BITCOIN_COIN_TYPE};
 pub use psbt::sign_bitcoin_psbt_inputs;

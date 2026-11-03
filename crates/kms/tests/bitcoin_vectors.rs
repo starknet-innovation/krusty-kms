@@ -5,7 +5,9 @@
 //! Private keys are kept in their published WIF form and decoded here.
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use krusty_kms::{derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs};
+use krusty_kms::{
+    derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs, Bip322Encoding,
+};
 use krusty_kms_common::KmsError;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -119,28 +121,30 @@ fn bip84_derivation_refuses_invalid_paths_and_mnemonics() {
 fn bip322_simple_vectors_reproduce_the_published_signature() {
     for vector in fixture().bip322_simple {
         let key = wif_private_key(&vector.private_key_wif);
-        let signature =
-            sign_bip322_simple(&key, &vector.address, vector.message.as_bytes()).unwrap();
+        let message = vector.message.as_bytes();
+        let sign = |address: &str, encoding| sign_bip322_simple(&key, address, message, encoding);
         // Each vector lists the low-R signature Bitcoin Core's grinding
         // produces, which this signer matches, and the plain RFC 6979 one,
-        // whose r needs a DER padding byte. Both are compared without
-        // BIP-322 1.0.0's "smp" variant prefix (see `sign_bip322_simple`).
+        // whose r needs a DER padding byte.
         let witness_len = |encoded: &str| BASE64.decode(&encoded[3..]).unwrap().len();
         assert_eq!(
             witness_len(&vector.signatures[1]),
             witness_len(&vector.signatures[0]) + 1
         );
+
+        // The default is the conformant `smp`-prefixed form, byte for byte.
+        let prefixed = sign(&vector.address, Bip322Encoding::default()).unwrap();
         assert_eq!(
-            vector.signatures[0].strip_prefix("smp"),
-            Some(signature.as_str()),
+            prefixed, vector.signatures[0],
             "message {:?}",
             vector.message
         );
+        // The legacy opt-in is the same witness without the prefix.
+        let legacy = sign(&vector.address, Bip322Encoding::LegacyUnprefixed).unwrap();
+        assert_eq!(Some(legacy.as_str()), prefixed.strip_prefix("smp"));
+
         let upper = vector.address.to_ascii_uppercase();
-        assert_eq!(
-            sign_bip322_simple(&key, &upper, vector.message.as_bytes()).unwrap(),
-            signature
-        );
+        assert_eq!(sign(&upper, Bip322Encoding::Prefixed).unwrap(), prefixed);
     }
 }
 
@@ -156,12 +160,12 @@ fn bip322_refuses_an_address_that_is_not_the_keys() {
 
     for address in [other_key_address.as_str(), &mixed_case, nested_segwit, ""] {
         assert!(matches!(
-            sign_bip322_simple(&key, address, b"Hello World"),
+            sign_bip322_simple(&key, address, b"Hello World", Bip322Encoding::Prefixed),
             Err(KmsError::CryptoError(_))
         ));
     }
     assert!(matches!(
-        sign_bip322_simple(&[0u8; 32], &vector.address, b""),
+        sign_bip322_simple(&[0u8; 32], &vector.address, b"", Bip322Encoding::Prefixed),
         Err(KmsError::InvalidPrivateKey(_))
     ));
 }

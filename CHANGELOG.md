@@ -9,8 +9,14 @@ All notable changes to the published Rust crates are documented here.
 - Add Bitcoin mainnet P2WPKH support to `krusty-kms`:
   `derive_bitcoin_p2wpkh_keypair` (BIP-84, `m/84'/0'/account'/change/index`),
   `sign_bitcoin_psbt_inputs` (BIP-174 version 0, BIP-143 SIGHASH_ALL) and
-  `sign_bip322_simple`, with WASM bindings `deriveBitcoinP2wpkhKeypair`,
-  `signBitcoinPsbtInputs` and `signBip322Simple`. A PSBT input is signed only
+  `sign_bip322_simple` (`smp`-prefixed, or unprefixed with
+  `Bip322Encoding::LegacyUnprefixed`), with WASM bindings
+  `deriveBitcoinP2wpkhKeypair(mnemonic, account_index: number, change: number,
+  address_index: number, passphrase?)`, `signBitcoinPsbtInputs(private_key,
+  psbt_base64, input_indices: number[])` and `signBip322Simple(private_key,
+  address, message, legacy_unprefixed?: boolean)`. WASM indices must be exact
+  integers and `input_indices` a plain array, so no number wraps into another
+  key or input. A PSBT input is signed only
   when its `witness_utxo` pays the key's P2WPKH script and matches the output
   of its full `non_witness_utxo`; every other byte of the PSBT is kept, and
   nothing is finalized. Signatures are low-S and ground for low R the way

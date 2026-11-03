@@ -362,7 +362,7 @@ pub fn derive_argent_legacy_private_key(
 /// This matches the Swift implementation which uses "Bitcoin seed" for BIP-32.
 ///
 /// # Cyclomatic Complexity: 1
-pub(crate) fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
+fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
     let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
         .map_err(|e| KmsError::CryptoError(e.to_string()))?;
     mac.update(seed);
@@ -469,7 +469,7 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<Der
 /// Derive a key along a BIP-44 path.
 ///
 /// # Cyclomatic Complexity: 1
-pub(crate) fn derive_path(
+fn derive_path(
     master_key: &[u8; 32],
     master_chain: &[u8; 32],
     path: &[u32],
