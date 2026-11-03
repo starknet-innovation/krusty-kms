@@ -6,6 +6,27 @@ All notable changes to the published Rust crates are documented here.
 
 ### Added
 
+- Add Bitcoin mainnet P2WPKH support to `krusty-kms`:
+  `derive_bitcoin_p2wpkh_keypair` (BIP-84, `m/84'/0'/account'/change/index`),
+  `sign_bitcoin_psbt_inputs` (BIP-174 version 0, BIP-143 SIGHASH_ALL) and
+  `sign_bip322_simple` (`smp`-prefixed, or unprefixed with
+  `Bip322Encoding::LegacyUnprefixed`), with WASM bindings
+  `deriveBitcoinP2wpkhKeypair(mnemonic, account_index: number, change: number,
+  address_index: number, passphrase?)`, `signBitcoinPsbtInputs(private_key,
+  psbt_base64, input_indices: number[])` and `signBip322Simple(private_key,
+  address, message, legacy_unprefixed?: boolean)`. WASM indices must be exact
+  integers and `input_indices` a plain array, so no number wraps into another
+  key or input. A PSBT input is signed only
+  when its `witness_utxo` pays the key's P2WPKH script and matches the output
+  of its full `non_witness_utxo`; every other byte of the PSBT is kept, and
+  nothing is finalized. A PSBT is refused unless every field matches the key
+  and value format BIP-174 defines and its transactions follow Bitcoin Core's
+  deserialization rules. Signatures are low-S and ground for low R the way
+  Bitcoin Core does, so each is at most 71 bytes with its sighash byte.
+  `bitcoin_hashes` (for RIPEMD-160) and `ecdsa` (for RFC 6979 additional
+  data), already in the graph through `bip39` and `k256`, become direct
+  dependencies.
+
 - `krusty-kms` and the WASM package implement the `QSB-HORS-v1` profile of
   the draft BIP "QSB Wallet Secret Management" for Quantum Safe Bitcoin
   vaults: `derive_qsb_commitments` / `deriveQsbCommitments` (300 HASH160
