@@ -3,6 +3,7 @@
 //! Expected values come from the draft BIP's `reference.py` (BIP draft commit
 //! 7def99c). They are public test fixtures: never fund anything derived here.
 
+use krusty_kms::qsb_hors::QSB_MAX_TRANSACTION_SIZE;
 use krusty_kms::{
     derive_qsb_commitments, qsb_reveal_digest, reveal_qsb_preimages, QsbRevealIndices, QsbVault,
 };
@@ -280,8 +281,29 @@ fn transactions_must_be_complete_and_exact() {
     let mut trailing = transaction.clone();
     trailing.push(0);
     assert!(digest_error(&trailing).contains("1 trailing bytes after locktime"));
-    let oversized = [&transaction[..], &vec![0u8; 1_000_000]].concat();
-    assert!(digest_error(&oversized).contains("exceeds the 1000000-byte limit"));
+}
+
+/// A valid one-input, one-output `T` of exactly `size` bytes, padded with an
+/// `OP_1` scriptPubKey.
+fn transaction_of_size(size: usize) -> Vec<u8> {
+    let script_len = size - 64;
+    let mut transaction = tx(&VECTOR_TX[..92]);
+    transaction.extend_from_slice(&[1, 0xe8, 3, 0, 0, 0, 0, 0, 0, 0xfe]);
+    transaction.extend_from_slice(&u32::try_from(script_len).unwrap().to_le_bytes());
+    transaction.resize(transaction.len() + script_len, 0x51);
+    transaction.extend_from_slice(&[0; 4]);
+    assert_eq!(transaction.len(), size);
+    transaction
+}
+
+#[test]
+fn transaction_size_is_bounded_at_the_block_limit() {
+    assert_eq!(QSB_MAX_TRANSACTION_SIZE, 1_000_000);
+    qsb_reveal_digest(&transaction_of_size(QSB_MAX_TRANSACTION_SIZE), &indices()).unwrap();
+    for size in [QSB_MAX_TRANSACTION_SIZE + 1, 10 * QSB_MAX_TRANSACTION_SIZE] {
+        let error = digest_error(&transaction_of_size(size));
+        assert!(error.contains("exceeds the 1000000-byte limit"), "{error}");
+    }
 }
 
 #[test]

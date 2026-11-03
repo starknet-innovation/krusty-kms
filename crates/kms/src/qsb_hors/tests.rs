@@ -2,7 +2,7 @@
 //! `tests/fixtures/qsb_hors_v1_vectors.json`. `K` has no public path out of
 //! this module, so the vectors stated in terms of `K` are checked here.
 
-use super::key::{hash160, slip21_child_key, QsbKey};
+use super::key::{hash160, hmac, slip21_child_key, QsbKey};
 use super::*;
 use crate::mnemonic::mnemonic_to_seed;
 use serde::Deserialize;
@@ -204,4 +204,51 @@ fn preimages_wipe_on_drop_and_redact_debug() {
     assert_eq!(format!("{revealed:?}"), "QsbPreimages(***)");
     revealed.zeroize();
     assert!(revealed.as_array().iter().flatten().all(|&byte| byte == 0));
+}
+
+#[test]
+fn hmac_matches_rfc_4231() {
+    let message: &[&[u8]] = &[b"what do ya ", b"want for nothing?"];
+    assert_eq!(
+        hex::encode(hmac::<Sha256, 32>(b"Jefe", message).unwrap().as_ref()),
+        "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+    );
+    assert_eq!(
+        hex::encode(hmac::<sha2::Sha512, 64>(b"Jefe", message).unwrap().as_ref()),
+        "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737",
+    );
+}
+
+#[test]
+fn hmac_matches_the_hmac_crate_up_to_one_block() {
+    use ::hmac::{Hmac, KeyInit, Mac};
+    let key: Vec<u8> = (0..=255u8).collect();
+    let message = b"QSB-HORS-v1 differential message";
+    for len in [0, 1, 20, 32, 63, 64] {
+        let mut expected = Hmac::<Sha256>::new_from_slice(&key[..len]).unwrap();
+        expected.update(message);
+        let actual = hmac::<Sha256, 32>(&key[..len], &[message]).unwrap();
+        assert_eq!(&actual[..], &expected.finalize().into_bytes()[..], "{len}");
+    }
+    for len in [0, 18, 32, 64, 127, 128] {
+        let mut expected = Hmac::<sha2::Sha512>::new_from_slice(&key[..len]).unwrap();
+        expected.update(message);
+        let actual = hmac::<sha2::Sha512, 64>(&key[..len], &[message]).unwrap();
+        assert_eq!(&actual[..], &expected.finalize().into_bytes()[..], "{len}");
+    }
+}
+
+#[test]
+fn hmac_refuses_keys_longer_than_a_block_and_wrong_output_sizes() {
+    assert!(hmac::<Sha256, 32>(&[0xaa; 65], &[b"x"]).is_err());
+    assert!(hmac::<sha2::Sha512, 64>(&[0xaa; 129], &[b"x"]).is_err());
+    assert!(hmac::<Sha256, 64>(b"key", &[b"x"]).is_err());
+}
+
+#[test]
+fn hash_states_wipe_themselves_on_drop() {
+    // Fails to compile if sha2's `zeroize` feature is dropped.
+    fn assert_zeroize_on_drop<T: ZeroizeOnDrop>() {}
+    assert_zeroize_on_drop::<Sha256>();
+    assert_zeroize_on_drop::<sha2::Sha512>();
 }

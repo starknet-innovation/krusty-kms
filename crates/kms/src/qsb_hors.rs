@@ -23,6 +23,18 @@
 //!
 //! All parameters are validated before any derivation: [`QsbVault`] and
 //! [`QsbRevealIndices`] can only hold values the profile accepts.
+//!
+//! # Memory
+//!
+//! `K`, every value keyed by it, and every secret live only in buffers that
+//! are wiped when they drop: `Zeroizing` arrays, [`QsbPreimages`], and `sha2`
+//! hashers built with their `zeroize` feature. HMAC is computed locally so
+//! that its padded key is one of those buffers. Not covered: copies the
+//! compiler makes when it moves a value, register spills, the SHA-2
+//! compression functions' stack temporaries, and the BIP-39 seed computation
+//! shared with the rest of the crate (`bip39`'s PBKDF2 state and normalized
+//! passphrase copy). Commitments, `SHA256(secret)`, roots, and digests are
+//! public and not wiped.
 
 mod key;
 mod transaction;
@@ -45,6 +57,9 @@ pub const QSB_ROUND0_REVEALS: usize = 8;
 pub const QSB_ROUND1_REVEALS: usize = 7;
 /// Preimages a withdrawal discloses in total.
 pub const QSB_REVEALS: usize = QSB_ROUND0_REVEALS + QSB_ROUND1_REVEALS;
+/// Largest accepted `T` in bytes: `MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR`,
+/// the largest stripped size a valid transaction can have.
+pub const QSB_MAX_TRANSACTION_SIZE: usize = 1_000_000;
 
 const REVEAL_TAG: &[u8] = b"QSB-HORS-v1/reveal";
 const NET_TEST: u8 = 0x01;

@@ -8,11 +8,22 @@
 //! Numeric arguments arrive as `JsValue` and must be exact, non-negative
 //! integers. wasm-bindgen's `u8`/`u16`/`u32` conversions wrap out-of-range
 //! numbers (`256` becomes `0`, `2^32 + 7` becomes `7`), which would silently
-//! select a different namespace, vault, or secret.
+//! select a different namespace, vault, or secret. Index lists must be plain
+//! arrays: a `Uint16Array` has already wrapped its values in JS. Sizes are
+//! checked before anything is copied out of JS: an index array's length before
+//! its elements are read, and the transaction hex's length before it is
+//! decoded.
+//!
+//! The mnemonic and passphrase are taken as owned strings, the buffers
+//! wasm-bindgen copied them into, and wiped (`Zeroizing`) when the call
+//! returns. The JS strings cannot be wiped, and wasm-bindgen may leave a
+//! partial copy in freed memory when it re-allocates while encoding a
+//! non-ASCII string.
 
 #[cfg(test)]
 mod tests;
 
+use krusty_kms::qsb_hors::{QSB_MAX_TRANSACTION_SIZE, QSB_ROUND0_REVEALS, QSB_ROUND1_REVEALS};
 use krusty_kms::{QsbRevealIndices, QsbVault};
 use serde::de::DeserializeOwned;
 use wasm_bindgen::prelude::*;
@@ -46,7 +57,7 @@ fn js_error(message: impl core::fmt::Display) -> JsValue {
 
 fn exact<T: DeserializeOwned>(value: JsValue, label: &str) -> Result<T, JsValue> {
     serde_wasm_bindgen::from_value(value)
-        .map_err(|_| js_error(format!("Invalid {label}: expected integers in range")))
+        .map_err(|_| js_error(format!("Invalid {label}: expected an integer in range")))
 }
 
 fn vault(net: JsValue, vault_index: JsValue) -> Result<QsbVault, JsValue> {
@@ -56,13 +67,37 @@ fn vault(net: JsValue, vault_index: JsValue) -> Result<QsbVault, JsValue> {
 }
 
 fn reveal_indices(round0: JsValue, round1: JsValue) -> Result<QsbRevealIndices, JsValue> {
-    let round0: Vec<u16> = exact(round0, "QSB round 0 indices")?;
-    let round1: Vec<u16> = exact(round1, "QSB round 1 indices")?;
+    let round0 = reveal_round(&round0, 0, QSB_ROUND0_REVEALS)?;
+    let round1 = reveal_round(&round1, 1, QSB_ROUND1_REVEALS)?;
     QsbRevealIndices::new(&round0, &round1).map_err(js_error)
 }
 
-/// Strict transaction hex: lowercase, no prefix, even length.
+/// Read a plain JS array of exactly `expected` integers. The array is borrowed,
+/// not copied, and its length is checked before any element is read.
+fn reveal_round(value: &JsValue, round: u8, expected: usize) -> Result<Vec<u16>, JsValue> {
+    let label = format!("QSB round {round} indices");
+    let array = value
+        .dyn_ref::<js_sys::Array>()
+        .ok_or_else(|| js_error(format!("Invalid {label}: expected a plain array")))?;
+    let len = array.length();
+    if usize::try_from(len).ok() != Some(expected) {
+        return Err(js_error(format!(
+            "Invalid {label}: expected exactly {expected}, got {len}"
+        )));
+    }
+    (0..len).map(|at| exact(array.get(at), &label)).collect()
+}
+
+/// Strict transaction hex: lowercase, no prefix, even length, and no longer
+/// than the largest valid `T`, checked before decoding.
 fn transaction_bytes(transaction_hex: &str) -> Result<Vec<u8>, JsValue> {
+    let limit = 2 * QSB_MAX_TRANSACTION_SIZE;
+    if transaction_hex.len() > limit {
+        return Err(js_error(format!(
+            "Invalid QSB transaction hex: {} characters exceeds the {limit}-character limit",
+            transaction_hex.len()
+        )));
+    }
     if transaction_hex
         .bytes()
         .any(|byte| byte.is_ascii_uppercase())
@@ -86,14 +121,20 @@ fn transaction_bytes(transaction_hex: &str) -> Result<Vec<u8>, JsValue> {
 /// * `passphrase` - Optional BIP-39 passphrase
 #[wasm_bindgen(js_name = "deriveQsbCommitments")]
 pub fn derive_qsb_commitments(
-    mnemonic: &str,
+    mnemonic: String,
     #[wasm_bindgen(unchecked_param_type = "number")] net: JsValue,
     #[wasm_bindgen(unchecked_param_type = "number")] vault_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmQsbCommitments, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
+    let passphrase = passphrase.map(Zeroizing::new);
     let vault = vault(net, vault_index)?;
-    let commitments = krusty_kms::derive_qsb_commitments(mnemonic, vault, passphrase.as_deref())
-        .map_err(js_error)?;
+    let commitments = krusty_kms::derive_qsb_commitments(
+        &mnemonic,
+        vault,
+        passphrase.as_deref().map(String::as_str),
+    )
+    .map_err(js_error)?;
     Ok(WasmQsbCommitments {
         round0: commitments.round0.iter().map(hex::encode).collect(),
         round1: commitments.round1.iter().map(hex::encode).collect(),
@@ -131,22 +172,28 @@ pub fn qsb_reveal_digest(
 /// # Security / threat model
 ///
 /// Call only after durably recording this request as `exposed`. The returned
-/// preimages are spending secrets. Krusty wipes its own copies, including
-/// their hex encoding, before returning; the JS strings cannot be wiped.
+/// preimages are spending secrets. The Rust-side preimages and their hex
+/// encoding are wiped before returning; the JS strings cannot be wiped.
 #[wasm_bindgen(js_name = "revealQsbPreimages", unchecked_return_type = "string[]")]
 pub fn reveal_qsb_preimages(
-    mnemonic: &str,
+    mnemonic: String,
     #[wasm_bindgen(unchecked_param_type = "number")] net: JsValue,
     #[wasm_bindgen(unchecked_param_type = "number")] vault_index: JsValue,
     #[wasm_bindgen(unchecked_param_type = "number[]")] round0: JsValue,
     #[wasm_bindgen(unchecked_param_type = "number[]")] round1: JsValue,
     passphrase: Option<String>,
 ) -> Result<js_sys::Array, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
+    let passphrase = passphrase.map(Zeroizing::new);
     let vault = vault(net, vault_index)?;
     let indices = reveal_indices(round0, round1)?;
-    let preimages =
-        krusty_kms::reveal_qsb_preimages(mnemonic, vault, &indices, passphrase.as_deref())
-            .map_err(js_error)?;
+    let preimages = krusty_kms::reveal_qsb_preimages(
+        &mnemonic,
+        vault,
+        &indices,
+        passphrase.as_deref().map(String::as_str),
+    )
+    .map_err(js_error)?;
     let revealed = js_sys::Array::new();
     let mut encoded = Zeroizing::new([0u8; 40]);
     for preimage in preimages.as_array() {

@@ -1,20 +1,32 @@
 //! `K` and everything derived from it. Nothing here is reachable from outside
 //! `qsb_hors`: the parent exposes only commitments and validated reveals.
+//!
+//! Every buffer this module owns that holds `K`, a value keyed by it, or a
+//! secret is wiped when it drops: `Zeroizing` arrays, and `sha2` hashers, whose
+//! state and block buffer wipe themselves (`ZeroizeOnDrop`, the `zeroize`
+//! feature, required by [`hmac`]'s bounds so it cannot silently go away). What
+//! Rust cannot promise is not claimed: copies the compiler makes when moving a
+//! value, register spills, and the SHA-2 compression functions' stack
+//! temporaries are not wiped.
 
 use super::{
     QsbCommitment, QsbCommitments, QsbPreimages, QsbRevealIndices, QsbVault, QSB_REVEALS,
     QSB_SECRETS_PER_ROUND, QSB_SECRET_LEN,
 };
 use crate::mnemonic::mnemonic_to_seed;
-use hmac::{Hmac, KeyInit, Mac};
 use krusty_kms_common::{KmsError, Result};
 use ripemd::Ripemd160;
+use sha2::digest::common::BlockSizeUser;
 use sha2::{Digest, Sha256, Sha512};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const PROFILE: &[u8; 11] = b"QSB-HORS-v1";
 const SLIP21_LABEL: &[u8] = b"QSB-HORS";
 const ROOT_TAG: &[u8] = b"QSB-HORS-v1/root";
+/// SHA-512's block, the largest of the hashes used with [`hmac`].
+const MAX_HMAC_BLOCK: usize = 128;
+const IPAD: u8 = 0x36;
+const OPAD: u8 = 0x5c;
 
 /// `K`, the SLIP-0021 child `"QSB-HORS"` of the BIP-39 seed. Wiped on drop.
 pub(super) struct QsbKey(pub(super) Zeroizing<[u8; 32]>);
@@ -43,7 +55,7 @@ impl QsbKey {
         message[13..17].copy_from_slice(&vault.index().to_be_bytes());
         message[17] = round;
         message[18..].copy_from_slice(&index.to_be_bytes());
-        let mut mac = hmac_sha256(self.0.as_ref(), &message)?;
+        let mut mac = hmac::<Sha256, 32>(self.0.as_ref(), &[&message])?;
         Ok(take_output(&mut mac[..]))
     }
 
@@ -89,27 +101,39 @@ impl QsbKey {
 
 /// The key of the SLIP-0021 node at the single label `label`.
 pub(super) fn slip21_child_key(seed: &[u8], label: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
-    let master = hmac_sha512(b"Symmetric key seed", &[seed])?;
-    let mut node = hmac_sha512(&master[..32], &[&[0x00], label])?;
+    let master = hmac::<Sha512, 64>(b"Symmetric key seed", &[seed])?;
+    let mut node = hmac::<Sha512, 64>(&master[..32], &[&[0x00], label])?;
     Ok(take_output(&mut node[32..]))
 }
 
-fn hmac_sha512(key: &[u8], message: &[&[u8]]) -> Result<Zeroizing<[u8; 64]>> {
-    let mut mac = Hmac::<Sha512>::new_from_slice(key).map_err(key_length_error)?;
-    for part in message {
-        mac.update(part);
+/// HMAC (RFC 2104) for a key of at most one block, so the padded key is the
+/// whole key schedule. It is built here rather than taken from the `hmac`
+/// crate, whose `new_from_slice` leaves the padded key in an unwiped local.
+/// The padded key lives in a `Zeroizing` buffer, the inner hash is wiped once
+/// used, and `D: ZeroizeOnDrop` wipes both hash states when they drop.
+pub(super) fn hmac<D, const N: usize>(key: &[u8], message: &[&[u8]]) -> Result<Zeroizing<[u8; N]>>
+where
+    D: Digest + BlockSizeUser + ZeroizeOnDrop,
+{
+    let block = D::block_size();
+    if key.len() > block || block > MAX_HMAC_BLOCK || N != <D as Digest>::output_size() {
+        return Err(KmsError::CryptoError(
+            "HMAC key must fit one block and the output its digest".to_string(),
+        ));
     }
-    Ok(take_output(&mut mac.finalize().into_bytes()))
-}
-
-fn hmac_sha256(key: &[u8], message: &[u8]) -> Result<Zeroizing<[u8; 32]>> {
-    let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(key_length_error)?;
-    mac.update(message);
-    Ok(take_output(&mut mac.finalize().into_bytes()))
-}
-
-fn key_length_error(error: impl core::fmt::Display) -> KmsError {
-    KmsError::CryptoError(error.to_string())
+    let mut pad = Zeroizing::new([0u8; MAX_HMAC_BLOCK]);
+    let pad = &mut pad[..block];
+    pad[..key.len()].copy_from_slice(key);
+    pad.iter_mut().for_each(|byte| *byte ^= IPAD);
+    let mut inner = D::new_with_prefix(&*pad);
+    for part in message {
+        inner.update(part);
+    }
+    let mut inner_hash = inner.finalize();
+    pad.iter_mut().for_each(|byte| *byte ^= IPAD ^ OPAD);
+    let outer = D::new_with_prefix(&*pad).chain_update(&inner_hash);
+    inner_hash.as_mut_slice().zeroize();
+    Ok(take_output(&mut outer.finalize()))
 }
 
 /// Copy a secret-bearing buffer into a wiped-on-drop array, then wipe it.

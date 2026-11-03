@@ -39,13 +39,34 @@ fn indices(values: &[u16]) -> JsValue {
 
 fn reveal(net: JsValue, vault_index: JsValue, round0: JsValue, round1: JsValue) -> String {
     js_error_message(
-        reveal_qsb_preimages(ALL_12, net, vault_index, round0, round1, None).unwrap_err(),
+        reveal_qsb_preimages(ALL_12.into(), net, vault_index, round0, round1, None).unwrap_err(),
     )
+}
+
+fn digest_error(transaction_hex: &str) -> String {
+    js_error_message(
+        qsb_reveal_digest(transaction_hex, indices(&ROUND0), indices(&ROUND1)).unwrap_err(),
+    )
+}
+
+/// A valid one-input, one-output `T` of exactly `size` bytes, as hex.
+fn transaction_hex_of_size(size: usize) -> String {
+    let script_len = size - 64;
+    let mut transaction = VECTOR_TX[..92].to_string();
+    transaction.push_str("01e803000000000000fe");
+    transaction.push_str(&hex::encode(
+        u32::try_from(script_len).unwrap().to_le_bytes(),
+    ));
+    transaction.push_str(&"51".repeat(script_len));
+    transaction.push_str("00000000");
+    assert_eq!(transaction.len(), 2 * size);
+    transaction
 }
 
 #[wasm_bindgen_test]
 fn commitments_match_the_reference() {
-    let commitments = derive_qsb_commitments(ALL_12, number(0.0), number(0.0), None).unwrap();
+    let commitments =
+        derive_qsb_commitments(ALL_12.into(), number(0.0), number(0.0), None).unwrap();
     assert_eq!(
         commitments.root,
         "11f1da69fa1ca2e5f9b23a4416c7c1be994933d2d8d06d5cf80dc4be02e0d3c1"
@@ -80,7 +101,7 @@ fn reveal_digest_matches_the_bip_vector() {
 #[wasm_bindgen_test]
 fn reveal_returns_fifteen_hex_strings_in_request_order() {
     let revealed = reveal_qsb_preimages(
-        ALL_12,
+        ALL_12.into(),
         number(0.0),
         number(0.0),
         indices(&ROUND0),
@@ -97,18 +118,16 @@ fn reveal_returns_fifteen_hex_strings_in_request_order() {
     assert_eq!(revealed[7], "830f76d7a7ad8db6374ff398c34781695bb71bdd");
     assert_eq!(revealed[8], "dd4f9caba9f69ddb708fe760dad229f38fdc9064");
     assert_eq!(revealed[14], "61330a1af9e6388986de70cf2b5f887623f10160");
-
-    // Typed arrays carry the same indices.
-    let typed = reveal_qsb_preimages(
-        ALL_12,
+    let with_passphrase = reveal_qsb_preimages(
+        ALL_12.into(),
         number(0.0),
         number(0.0),
-        js_sys::Uint16Array::from(&ROUND0[..]).into(),
-        js_sys::Uint16Array::from(&ROUND1[..]).into(),
-        None,
+        indices(&ROUND0),
+        indices(&ROUND1),
+        Some("TREZOR".into()),
     )
     .unwrap();
-    assert_eq!(typed.get(14).as_string().unwrap(), revealed[14]);
+    assert_ne!(with_passphrase.get(0).as_string().unwrap(), revealed[0]);
 }
 
 #[wasm_bindgen_test]
@@ -124,7 +143,7 @@ fn numbers_that_would_wrap_are_refused() {
     ] {
         let (round0, round1) = ok();
         let error = reveal(net, number(0.0), round0, round1);
-        assert_eq!(error, "Invalid QSB namespace: expected integers in range");
+        assert_eq!(error, "Invalid QSB namespace: expected an integer in range");
     }
     for vault_index in [
         number(4_294_967_303.0),
@@ -134,33 +153,74 @@ fn numbers_that_would_wrap_are_refused() {
     ] {
         let (round0, round1) = ok();
         let error = reveal(number(0.0), vault_index, round0, round1);
-        assert_eq!(error, "Invalid QSB vault index: expected integers in range");
+        assert_eq!(
+            error,
+            "Invalid QSB vault index: expected an integer in range"
+        );
     }
     for round0 in [
         numbers(&[65_536.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),
         numbers(&[-1.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),
         numbers(&[0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),
-        "0,1,2,3,4,5,6,7".into(),
+        numbers(&[f64::NAN, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),
     ] {
         let error = reveal(number(0.0), number(0.0), round0, indices(&ROUND1));
         assert_eq!(
             error,
-            "Invalid QSB round 0 indices: expected integers in range"
+            "Invalid QSB round 0 indices: expected an integer in range"
+        );
+    }
+    // A typed array has already wrapped its values in JS (65536 is 0 here).
+    for round0 in [
+        js_sys::Uint16Array::from(&ROUND0[..]).into(),
+        "0,1,2,3,4,5,6,7".into(),
+        JsValue::NULL,
+    ] {
+        let error = reveal(number(0.0), number(0.0), round0, indices(&ROUND1));
+        assert_eq!(error, "Invalid QSB round 0 indices: expected a plain array");
+    }
+}
+
+#[wasm_bindgen_test]
+fn index_array_lengths_are_checked_before_elements_are_read() {
+    let nine = indices(&[0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    let error = reveal(number(0.0), number(0.0), nine, indices(&ROUND1));
+    assert_eq!(
+        error,
+        "Invalid QSB round 0 indices: expected exactly 8, got 9"
+    );
+    let eight = indices(&[0, 1, 2, 3, 4, 5, 6, 7]);
+    let error = reveal(number(0.0), number(0.0), indices(&ROUND0), eight);
+    assert_eq!(
+        error,
+        "Invalid QSB round 1 indices: expected exactly 7, got 8"
+    );
+    // Unfilled arrays: reading any element would fail differently.
+    for len in [1_000_000, 2_000_000_000] {
+        let unfilled = js_sys::Array::new_with_length(len).into();
+        let error = reveal(number(0.0), number(0.0), unfilled, indices(&ROUND1));
+        assert_eq!(
+            error,
+            format!("Invalid QSB round 0 indices: expected exactly 8, got {len}")
         );
     }
 }
 
 #[wasm_bindgen_test]
 fn profile_bounds_are_enforced_before_the_mnemonic_is_read() {
-    let error =
-        derive_qsb_commitments("not a mnemonic", number(2.0), number(0.0), None).unwrap_err();
+    let error = derive_qsb_commitments("not a mnemonic".into(), number(2.0), number(0.0), None)
+        .unwrap_err();
     assert!(js_error_message(error).contains("QSB namespace 0x02"));
-    let error =
-        derive_qsb_commitments("not a mnemonic", number(1.0), number(2_147_483_648.0), None)
-            .unwrap_err();
+    let error = derive_qsb_commitments(
+        "not a mnemonic".into(),
+        number(1.0),
+        number(2_147_483_648.0),
+        None,
+    )
+    .unwrap_err();
     assert!(js_error_message(error).contains("must be below 2^31"));
     let error = reveal_qsb_preimages(
-        "not a mnemonic",
+        "not a mnemonic".into(),
         number(0.0),
         number(0.0),
         indices(&[0, 1, 2, 3, 4, 5, 6, 0]),
@@ -175,21 +235,36 @@ fn profile_bounds_are_enforced_before_the_mnemonic_is_read() {
         indices(&ROUND0),
         indices(&ROUND1[..6]),
     );
-    assert!(error.contains("round 1 needs exactly 7 indices"));
-    let error =
-        derive_qsb_commitments("not a mnemonic", number(0.0), number(0.0), None).unwrap_err();
+    assert!(error.contains("round 1 indices: expected exactly 7, got 6"));
+    let error = derive_qsb_commitments("not a mnemonic".into(), number(0.0), number(0.0), None)
+        .unwrap_err();
     assert!(js_error_message(error).starts_with("Invalid mnemonic"));
 }
 
 #[wasm_bindgen_test]
 fn transaction_hex_must_be_strict_and_the_transaction_exact() {
-    let digest = |hex: &str| {
-        js_error_message(qsb_reveal_digest(hex, indices(&ROUND0), indices(&ROUND1)).unwrap_err())
-    };
+    let digest = digest_error;
     assert!(digest(&VECTOR_TX.to_uppercase()).contains("expected lowercase"));
     assert!(digest(&format!("0x{VECTOR_TX}")).starts_with("Invalid QSB transaction hex"));
     assert!(digest(&VECTOR_TX[1..]).starts_with("Invalid QSB transaction hex"));
     let with_script_sig = VECTOR_TX.replacen("0000000000ffffffff", "000000000151ffffffff", 1);
     assert!(digest(&with_script_sig).contains("non-empty scriptSig"));
     assert!(digest(&format!("{VECTOR_TX}00")).contains("trailing bytes"));
+}
+
+#[wasm_bindgen_test]
+fn transaction_hex_length_is_checked_before_decoding() {
+    let at_limit = transaction_hex_of_size(1_000_000);
+    qsb_reveal_digest(&at_limit, indices(&ROUND0), indices(&ROUND1)).unwrap();
+    let one_over = transaction_hex_of_size(1_000_001);
+    assert_eq!(
+        digest_error(&one_over),
+        "Invalid QSB transaction hex: 2000002 characters exceeds the 2000000-character limit"
+    );
+    // Odd length: decoding would fail differently, so the bound ran first.
+    let far_over = "0".repeat(20_000_001);
+    assert_eq!(
+        digest_error(&far_over),
+        "Invalid QSB transaction hex: 20000001 characters exceeds the 2000000-character limit"
+    );
 }

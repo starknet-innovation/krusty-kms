@@ -14,7 +14,8 @@ All notable changes to the published Rust crates are documented here.
   `reveal_qsb_preimages` / `revealQsbPreimages` (exactly the 15 requested
   preimages). None of them exposes the derivation key or a full secret set;
   the caller keeps the disclosure journal. Adds the `ripemd` 0.2.0
-  dependency.
+  dependency and enables `sha2`'s `zeroize` feature in `krusty-kms`, so
+  SHA-2 hash states wipe themselves on drop.
 
 ## [0.14.0] - 2026-10-28
 

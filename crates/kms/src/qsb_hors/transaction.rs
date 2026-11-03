@@ -8,14 +8,12 @@
 //! one output, no duplicate or null outpoints, output values within
 //! `MAX_MONEY`, and a size within the block limit.
 
+use super::QSB_MAX_TRANSACTION_SIZE as MAX_TRANSACTION_SIZE;
 use krusty_kms_common::{KmsError, Result};
 use std::collections::BTreeSet;
 
 /// 21 million BTC in satoshis.
 const MAX_MONEY: u64 = 21_000_000 * 100_000_000;
-/// `MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR`: the largest stripped size a
-/// transaction can have. Adding scriptSigs only makes it larger.
-const MAX_TRANSACTION_SIZE: usize = 1_000_000;
 
 fn malformed(reason: impl core::fmt::Display) -> KmsError {
     KmsError::DeserializationError(format!("QSB transaction: {reason}"))
