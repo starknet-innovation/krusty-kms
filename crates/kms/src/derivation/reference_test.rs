@@ -194,3 +194,23 @@ fn secret_types_wipe() {
     integer.zeroize();
     assert_eq!(*integer, U256::ZERO);
 }
+
+#[test]
+fn child_scalar_checks_il_against_the_order_at_its_boundary() {
+    // BIP-32 refuses IL >= n; the probability is ~2^-128, so test it directly.
+    let n = hex32(SECP256K1_N);
+    let mut n_minus_1 = n;
+    n_minus_1[31] -= 1;
+    let mut one = [0u8; 32];
+    one[31] = 1;
+    let error = child_scalar(&n, &one).unwrap_err().to_string();
+    assert!(error.contains("IL >= curve order n"), "{error}");
+    assert!(child_scalar(&[0xff; 32], &one).is_err());
+    // IL = n - 1 is valid: with parent 1 the child is n = 0 (refused), with
+    // parent 2 it is 1.
+    let zero = child_scalar(&n_minus_1, &one).unwrap_err().to_string();
+    assert!(zero.contains("derived key is zero"), "{zero}");
+    let mut two = [0u8; 32];
+    two[31] = 2;
+    assert_eq!(*child_scalar(&n_minus_1, &two).unwrap(), Scalar::ONE);
+}
