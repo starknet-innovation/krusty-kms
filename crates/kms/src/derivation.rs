@@ -14,11 +14,10 @@
 
 use crate::mnemonic::mnemonic_to_seed;
 use crate::zeroizing_hmac::hmac;
-use crypto_bigint::{NonZero, U256};
+use crypto_bigint::{CtLt, NonZero, U256};
 use k256::ecdsa::SigningKey;
-use k256::elliptic_curve::ops::Reduce;
-use k256::elliptic_curve::PrimeField;
-use k256::{FieldBytes, Scalar};
+use k256::elliptic_curve::{ops::Reduce, Curve};
+use k256::{FieldBytes, Scalar, Secp256k1};
 use krusty_kms_common::{KmsError, Result, SecretFelt};
 use sha2::{Digest, Sha256, Sha512};
 use starknet_types_core::curve::ProjectivePoint;
@@ -441,15 +440,16 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<Der
 ///
 /// The parent is reduced mod n rather than rejected, as the earlier
 /// big-integer code did, so an out-of-range master key (never validated)
-/// still derives the same child.
+/// still derives the same child. `IL` is range-checked in constant time as a
+/// wiped `U256`, and both operands are reduced through borrows, so neither
+/// leaves an owned, unwiped `FieldBytes` copy.
 fn child_scalar(il: &[u8; 32], parent: &[u8; 32]) -> Result<Zeroizing<Scalar>> {
-    let il = Option::<Scalar>::from(Scalar::from_repr(FieldBytes::from(*il)))
-        .map(Zeroizing::new)
-        .ok_or_else(|| {
-            KmsError::CryptoError("BIP-32 child derivation failed: IL >= curve order n".to_string())
-        })?;
-    // Borrow the caller's (already wiped) array; an owned `FieldBytes` copy
-    // of the parent key would be dropped unwiped.
+    let il = Zeroizing::new(U256::from_be_slice(il));
+    if !il.ct_lt(Secp256k1::ORDER.as_ref()).to_bool() {
+        let reason = "BIP-32 child derivation failed: IL >= curve order n";
+        return Err(KmsError::CryptoError(reason.to_string()));
+    }
+    let il = Zeroizing::new(<Scalar as Reduce<U256>>::reduce(&il));
     let parent = Zeroizing::new(<Scalar as Reduce<FieldBytes>>::reduce(parent.into()));
     let child = Zeroizing::new(*il + *parent);
     if bool::from(child.is_zero()) {
