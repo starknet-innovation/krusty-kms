@@ -1648,16 +1648,17 @@ def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
     return f"{rel_path}: {signature}"
 
 
-# What follows a parameter's attributes: ``name:`` or ``mut name:``.
-_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?[A-Za-z_]\w*\s*:(?!:)")
+# What follows a parameter's attributes: ``name:`` or ``mut name:``, where
+# the name may be a raw identifier such as ``r#type``.
+_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?(?:r#)?[A-Za-z_]\w*\s*:(?!:)")
 
 
 def _attr_close(lines: list[str], line: int, text: str) -> tuple[int, str] | None:
     """Find where the attribute starting ``text`` (``#[...``) closes.
 
-    Brackets and parens are balanced across lines, ignoring string literals,
-    which may contain either. Returns the closing line and the text after the
-    attribute on it, or ``None`` if the attribute never closes.
+    Brackets and parens are balanced across lines, ignoring string literals
+    and ``//`` comments, which may contain either. Returns the closing line
+    and the text after the attribute on it, or ``None`` if it never closes.
     """
     depth = 0
     # While inside a string: the text that ends it, and whether it is raw
@@ -1683,6 +1684,8 @@ def _attr_close(lines: list[str], line: int, text: str) -> tuple[int, str] | Non
                 hashes = _raw_string_hashes(text, pos)
                 raw = hashes is not None
                 closing = '"' + "#" * (hashes or 0)
+            elif text.startswith("//", pos):
+                break  # The rest of the line is a comment.
             elif ch in "([":
                 depth += 1
             elif ch in ")]":
@@ -3049,6 +3052,51 @@ pub fn after(value: u8) -> u8 {
     ], exports
 
 
+def _assert_param_attr_edge_cases() -> None:
+    import tempfile
+
+    # A raw-identifier parameter (``r#type``), and a ``//`` comment holding
+    # ``)]`` inside a multiline attribute, keep the attribute with its own
+    # parameter instead of moving its options onto the next export.
+    prefix = "crates/wasm/src/x.rs: "
+    source = """
+#[wasm_bindgen(js_name = "rawid")]
+pub fn rawid(
+    #[wasm_bindgen(unchecked_param_type = "number")]
+    r#type: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "noted")]
+pub fn noted(
+    #[wasm_bindgen(
+        unchecked_param_type = "number" // keep )]
+    )]
+    value: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "after")]
+pub fn after(value: u8) -> u8 {
+    value
+}
+""".lstrip()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "crates/wasm/src"
+        src.mkdir(parents=True)
+        (src / "x.rs").write_text(source)
+        exports = extract_wasm_exports(Path(tmp))
+    assert exports == [
+        prefix + "wasm_bindgen(js_name=rawid) | pub fn rawid("
+        '#[wasm_bindgen(unchecked_param_type = "number")] r#type: JsValue) -> u8',
+        prefix + "wasm_bindgen(js_name=noted) | pub fn noted("
+        '#[wasm_bindgen(unchecked_param_type = "number")] value: JsValue) -> u8',
+        prefix + "wasm_bindgen(js_name=after) | pub fn after(value: u8) -> u8",
+    ], exports
+
+
 def _assert_surfaces_self_checks() -> None:
     assert (
         _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
@@ -3167,6 +3215,7 @@ pub struct Foo {
     _assert_wasm_param_attrs_stay_in_their_signature()
     _assert_raw_strings_are_literals()
     _assert_comments_stay_out_of_signatures()
+    _assert_param_attr_edge_cases()
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]
