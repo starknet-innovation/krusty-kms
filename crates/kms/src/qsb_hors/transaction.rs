@@ -6,8 +6,12 @@
 //! Besides the encoding itself, the parser therefore applies Bitcoin's
 //! context-free transaction rules (`CheckTransaction`): at least one input and
 //! one output, no duplicate or null outpoints, and output values within
-//! `MAX_MONEY`. Its size is capped at `QSB_MAX_TRANSACTION_SIZE`, which
-//! reserves block weight for the unlocking data the real spend adds.
+//! `MAX_MONEY`. Its size is capped at `QSB_MAX_TRANSACTION_SIZE` before
+//! parsing, and once parsed `T` must leave room, input by input, for the
+//! unlocking data the real spend adds (see `MAX_UNLOCKING_WEIGHT_PER_INPUT`).
+
+#[cfg(test)]
+mod tests;
 
 use super::QSB_MAX_TRANSACTION_SIZE as MAX_TRANSACTION_SIZE;
 use krusty_kms_common::{KmsError, Result};
@@ -15,6 +19,27 @@ use std::collections::BTreeSet;
 
 /// 21 million BTC in satoshis.
 const MAX_MONEY: u64 = 21_000_000 * 100_000_000;
+/// Bitcoin Core's standard transaction weight (`MAX_STANDARD_TX_WEIGHT`).
+const MAX_STANDARD_TX_WEIGHT: usize = 400_000;
+/// Weight units per non-witness byte (`WITNESS_SCALE_FACTOR`).
+const WITNESS_SCALE_FACTOR: usize = 4;
+/// Consensus limit on any script, scriptSigs included (`MAX_SCRIPT_SIZE`).
+const MAX_SCRIPT_SIZE: usize = 10_000;
+/// A `MAX_SCRIPT_SIZE` scriptSig's CompactSize length takes 3 bytes; `T` has 1.
+const SCRIPT_SIG_LENGTH_GROWTH: usize = 3 - 1;
+/// The largest P2WPKH witness, in bytes (1 WU each): the item count, then a
+/// 73-byte DER signature with its sighash byte and a 33-byte compressed key,
+/// each after a 1-byte length.
+const MAX_P2WPKH_WITNESS: usize = 1 + (1 + 73) + (1 + 33);
+/// The segwit marker and flag, added once when any input has a witness.
+const SEGWIT_MARKER_AND_FLAG: usize = 2;
+/// The most weight signing can add to one input of `T`, without knowing which
+/// inputs are vaults: a full legacy scriptSig (`MAX_SCRIPT_SIZE` bytes plus
+/// its longer length prefix, at `WITNESS_SCALE_FACTOR` WU per byte) and a
+/// P2WPKH witness, the two input kinds a QSB withdrawal signs. That is
+/// 4 × (10,000 + 2) + 109 = 40,117 WU. Other witness types are not budgeted.
+const MAX_UNLOCKING_WEIGHT_PER_INPUT: usize =
+    WITNESS_SCALE_FACTOR * (MAX_SCRIPT_SIZE + SCRIPT_SIG_LENGTH_GROWTH) + MAX_P2WPKH_WITNESS;
 
 fn malformed(reason: impl core::fmt::Display) -> KmsError {
     KmsError::DeserializationError(format!("QSB transaction: {reason}"))
@@ -37,7 +62,7 @@ pub(super) fn validate(bytes: &[u8]) -> Result<()> {
             "segwit marker or empty input list; T must be legacy-serialized with at least one input",
         ));
     }
-    inputs(&mut reader)?;
+    let input_count = inputs(&mut reader)?;
     outputs(&mut reader)?;
     reader.take(4, "locktime")?;
     if reader.at != bytes.len() {
@@ -46,10 +71,28 @@ pub(super) fn validate(bytes: &[u8]) -> Result<()> {
             bytes.len() - reader.at
         )));
     }
-    Ok(())
+    unlocking_budget(bytes.len(), input_count)
 }
 
-fn inputs(reader: &mut Reader<'_>) -> Result<()> {
+/// Refuse a `T` whose signed spend could exceed the standard weight, so that
+/// fixing `T` at exposure can never strand the withdrawal.
+fn unlocking_budget(len: usize, input_count: u64) -> Result<()> {
+    let worst = usize::try_from(input_count)
+        .ok()
+        .and_then(|count| count.checked_mul(MAX_UNLOCKING_WEIGHT_PER_INPUT))
+        .and_then(|unlocking| unlocking.checked_add(SEGWIT_MARKER_AND_FLAG))
+        .and_then(|unlocking| unlocking.checked_add(WITNESS_SCALE_FACTOR * len));
+    match worst {
+        Some(weight) if weight <= MAX_STANDARD_TX_WEIGHT => Ok(()),
+        _ => Err(malformed(format!(
+            "T leaves no room for its inputs' unlocking data: {input_count} inputs \
+             signed could weigh more than the {MAX_STANDARD_TX_WEIGHT} WU standard limit"
+        ))),
+    }
+}
+
+/// Parse the input list and return the number of inputs.
+fn inputs(reader: &mut Reader<'_>) -> Result<u64> {
     let count = reader.compact_size("input count")?;
     let mut outpoints = BTreeSet::new();
     for input in 0..count {
@@ -68,7 +111,7 @@ fn inputs(reader: &mut Reader<'_>) -> Result<()> {
         }
         reader.take(4, "sequence")?;
     }
-    Ok(())
+    Ok(count)
 }
 
 fn outputs(reader: &mut Reader<'_>) -> Result<()> {
