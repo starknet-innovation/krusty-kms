@@ -10,19 +10,23 @@
 //! numbers (`256` becomes `0`, `2^32 + 7` becomes `7`), which would silently
 //! select a different namespace, vault, or secret. Index lists must be plain
 //! arrays: a `Uint16Array` has already wrapped its values in JS. Sizes are
-//! checked before anything is copied out of JS: an index array's length before
-//! its elements are read, and the transaction hex's length before it is
-//! decoded.
+//! checked before anything is copied out of JS: the transaction hex arrives as
+//! a `JsString`, not a `&str`, so wasm-bindgen does not copy it into WASM
+//! memory on entry, and its length is checked in JS before it is converted; an
+//! index array is borrowed and its length checked before any element is read.
 //!
 //! The mnemonic and passphrase are taken as owned strings, the buffers
 //! wasm-bindgen copied them into, and wiped (`Zeroizing`) when the call
-//! returns. The JS strings cannot be wiped, and wasm-bindgen may leave a
-//! partial copy in freed memory when it re-allocates while encoding a
+//! returns. They are not length-bounded: they come from the wallet's own
+//! secret store rather than from a transaction assembler, and BIP-39 sets no
+//! passphrase limit. The JS strings cannot be wiped, and wasm-bindgen may leave
+//! a partial copy in freed memory when it re-allocates while encoding a
 //! non-ASCII string.
 
 #[cfg(test)]
 mod tests;
 
+use js_sys::JsString;
 use krusty_kms::qsb_hors::{QSB_MAX_TRANSACTION_SIZE, QSB_ROUND0_REVEALS, QSB_ROUND1_REVEALS};
 use krusty_kms::{QsbRevealIndices, QsbVault};
 use serde::de::DeserializeOwned;
@@ -88,16 +92,22 @@ fn reveal_round(value: &JsValue, round: u8, expected: usize) -> Result<Vec<u16>,
     (0..len).map(|at| exact(array.get(at), &label)).collect()
 }
 
-/// Strict transaction hex: lowercase, no prefix, even length, and no longer
-/// than the largest valid `T`, checked before decoding.
-fn transaction_bytes(transaction_hex: &str) -> Result<Vec<u8>, JsValue> {
+/// Strict transaction hex: a JS string no longer than the largest valid `T`,
+/// checked before it is copied into WASM, then lowercase, no prefix, and even
+/// length.
+fn transaction_bytes(transaction_hex: &JsString) -> Result<Vec<u8>, JsValue> {
+    if !transaction_hex.is_string() {
+        return Err(js_error("Invalid QSB transaction hex: expected a string"));
+    }
+    // UTF-16 code units, read in JS. Valid hex has one unit per character.
+    let len = transaction_hex.length();
     let limit = 2 * QSB_MAX_TRANSACTION_SIZE;
-    if transaction_hex.len() > limit {
+    if usize::try_from(len).unwrap_or(usize::MAX) > limit {
         return Err(js_error(format!(
-            "Invalid QSB transaction hex: {} characters exceeds the {limit}-character limit",
-            transaction_hex.len()
+            "Invalid QSB transaction hex: {len} characters exceeds the {limit}-character limit"
         )));
     }
+    let transaction_hex = String::from(transaction_hex);
     if transaction_hex
         .bytes()
         .any(|byte| byte.is_ascii_uppercase())
@@ -151,12 +161,12 @@ pub fn derive_qsb_commitments(
 /// order the spend reveals them.
 #[wasm_bindgen(js_name = "qsbRevealDigest")]
 pub fn qsb_reveal_digest(
-    transaction_hex: &str,
+    #[wasm_bindgen(unchecked_param_type = "string")] transaction_hex: JsString,
     #[wasm_bindgen(unchecked_param_type = "number[]")] round0: JsValue,
     #[wasm_bindgen(unchecked_param_type = "number[]")] round1: JsValue,
 ) -> Result<WasmQsbRevealDigest, JsValue> {
     let indices = reveal_indices(round0, round1)?;
-    let transaction = transaction_bytes(transaction_hex)?;
+    let transaction = transaction_bytes(&transaction_hex)?;
     let digest = krusty_kms::qsb_reveal_digest(&transaction, &indices).map_err(js_error)?;
     Ok(WasmQsbRevealDigest {
         binding: hex::encode(digest.binding),

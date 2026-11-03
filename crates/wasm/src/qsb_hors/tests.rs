@@ -44,23 +44,36 @@ fn reveal(net: JsValue, vault_index: JsValue, round0: JsValue, round1: JsValue) 
 }
 
 fn digest_error(transaction_hex: &str) -> String {
+    js_digest_error(transaction_hex.into())
+}
+
+fn js_digest_error(transaction_hex: JsString) -> String {
     js_error_message(
         qsb_reveal_digest(transaction_hex, indices(&ROUND0), indices(&ROUND1)).unwrap_err(),
     )
 }
 
-/// A valid one-input, one-output `T` of exactly `size` bytes, as hex.
-fn transaction_hex_of_size(size: usize) -> String {
+/// A valid one-input, one-output `T` of exactly `size` bytes, as hex built in
+/// JS: only its short head ever exists in Rust.
+fn transaction_hex_of_size(size: usize) -> JsString {
     let script_len = size - 64;
-    let mut transaction = VECTOR_TX[..92].to_string();
-    transaction.push_str("01e803000000000000fe");
-    transaction.push_str(&hex::encode(
-        u32::try_from(script_len).unwrap().to_le_bytes(),
-    ));
-    transaction.push_str(&"51".repeat(script_len));
-    transaction.push_str("00000000");
-    assert_eq!(transaction.len(), 2 * size);
+    let head = format!(
+        "{}01e803000000000000fe{}",
+        &VECTOR_TX[..92],
+        hex::encode(u32::try_from(script_len).unwrap().to_le_bytes())
+    );
+    let script = JsString::from("51").repeat(i32::try_from(script_len).unwrap());
+    let transaction = JsString::from(head)
+        .concat(&script)
+        .concat(&JsString::from("00000000"));
+    assert_eq!(usize::try_from(transaction.length()).unwrap(), 2 * size);
     transaction
+}
+
+fn wasm_memory_bytes() -> usize {
+    let memory: js_sys::WebAssembly::Memory = wasm_bindgen::memory().unchecked_into();
+    let buffer: js_sys::ArrayBuffer = memory.buffer().unchecked_into();
+    usize::try_from(buffer.byte_length()).unwrap()
 }
 
 #[wasm_bindgen_test]
@@ -87,7 +100,7 @@ fn commitments_match_the_reference() {
 fn reveal_digest_matches_the_bip_vector() {
     let round0 = numbers(&[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
     let round1 = indices(&[140, 141, 142, 143, 144, 145, 146]);
-    let digest = qsb_reveal_digest(VECTOR_TX, round0, round1).unwrap();
+    let digest = qsb_reveal_digest(VECTOR_TX.into(), round0, round1).unwrap();
     assert_eq!(
         digest.binding,
         "d50c25f740af092cc115965a317beae0d72397eabd2b0495148de1c5e6bd2c4e"
@@ -253,18 +266,30 @@ fn transaction_hex_must_be_strict_and_the_transaction_exact() {
 }
 
 #[wasm_bindgen_test]
-fn transaction_hex_length_is_checked_before_decoding() {
+fn transaction_hex_is_bounded_in_js_before_it_is_copied() {
     let at_limit = transaction_hex_of_size(1_000_000);
-    qsb_reveal_digest(&at_limit, indices(&ROUND0), indices(&ROUND1)).unwrap();
-    let one_over = transaction_hex_of_size(1_000_001);
+    qsb_reveal_digest(at_limit, indices(&ROUND0), indices(&ROUND1)).unwrap();
+    // At the limit but not a valid T: the parser refuses it, not the bound.
+    let error = js_digest_error(JsString::from("00").repeat(1_000_000));
+    assert!(error.contains("QSB transaction: segwit marker"), "{error}");
     assert_eq!(
-        digest_error(&one_over),
+        js_digest_error(transaction_hex_of_size(1_000_001)),
         "Invalid QSB transaction hex: 2000002 characters exceeds the 2000000-character limit"
     );
-    // Odd length: decoding would fail differently, so the bound ran first.
-    let far_over = "0".repeat(20_000_001);
+    // Tens of millions of characters, odd so that decoding would fail
+    // differently: refused before WASM memory could hold a copy of it.
+    let before = wasm_memory_bytes();
+    let far_over = JsString::from("0").repeat(50_000_001);
     assert_eq!(
-        digest_error(&far_over),
-        "Invalid QSB transaction hex: 20000001 characters exceeds the 2000000-character limit"
+        js_digest_error(far_over),
+        "Invalid QSB transaction hex: 50000001 characters exceeds the 2000000-character limit"
     );
+    assert!(wasm_memory_bytes() - before < 50_000_001);
+    // Untyped callers can pass anything; only a JS string is read.
+    for value in [JsValue::from(42), js_sys::Array::new_with_length(8).into()] {
+        assert_eq!(
+            js_digest_error(value.unchecked_into()),
+            "Invalid QSB transaction hex: expected a string"
+        );
+    }
 }
