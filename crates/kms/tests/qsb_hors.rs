@@ -297,12 +297,12 @@ fn transaction_of_size(size: usize) -> Vec<u8> {
 }
 
 #[test]
-fn transaction_size_is_bounded_at_the_block_limit() {
-    assert_eq!(QSB_MAX_TRANSACTION_SIZE, 1_000_000);
+fn transaction_size_is_bounded_with_room_for_unlocking_data() {
     qsb_reveal_digest(&transaction_of_size(QSB_MAX_TRANSACTION_SIZE), &indices()).unwrap();
-    for size in [QSB_MAX_TRANSACTION_SIZE + 1, 10 * QSB_MAX_TRANSACTION_SIZE] {
+    let limit = format!("exceeds the {QSB_MAX_TRANSACTION_SIZE}-byte limit");
+    for size in [QSB_MAX_TRANSACTION_SIZE + 1, 100 * QSB_MAX_TRANSACTION_SIZE] {
         let error = digest_error(&transaction_of_size(size));
-        assert!(error.contains("exceeds the 1000000-byte limit"), "{error}");
+        assert!(error.contains(&limit), "{error}");
     }
 }
 

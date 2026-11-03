@@ -267,14 +267,19 @@ fn transaction_hex_must_be_strict_and_the_transaction_exact() {
 
 #[wasm_bindgen_test]
 fn transaction_hex_is_bounded_in_js_before_it_is_copied() {
-    let at_limit = transaction_hex_of_size(1_000_000);
+    let size = QSB_MAX_TRANSACTION_SIZE;
+    let chars = 2 * size;
+    let at_limit = transaction_hex_of_size(size);
     qsb_reveal_digest(at_limit, indices(&ROUND0), indices(&ROUND1)).unwrap();
     // At the limit but not a valid T: the parser refuses it, not the bound.
-    let error = js_digest_error(JsString::from("00").repeat(1_000_000));
+    let error = js_digest_error(JsString::from("00").repeat(i32::try_from(size).unwrap()));
     assert!(error.contains("QSB transaction: segwit marker"), "{error}");
     assert_eq!(
-        js_digest_error(transaction_hex_of_size(1_000_001)),
-        "Invalid QSB transaction hex: 2000002 characters exceeds the 2000000-character limit"
+        js_digest_error(transaction_hex_of_size(size + 1)),
+        format!(
+            "Invalid QSB transaction hex: {} characters exceeds the {chars}-character limit",
+            chars + 2
+        )
     );
     // Tens of millions of characters, odd so that decoding would fail
     // differently: refused before WASM memory could hold a copy of it.
@@ -282,7 +287,9 @@ fn transaction_hex_is_bounded_in_js_before_it_is_copied() {
     let far_over = JsString::from("0").repeat(50_000_001);
     assert_eq!(
         js_digest_error(far_over),
-        "Invalid QSB transaction hex: 50000001 characters exceeds the 2000000-character limit"
+        format!(
+            "Invalid QSB transaction hex: 50000001 characters exceeds the {chars}-character limit"
+        )
     );
     assert!(wasm_memory_bytes() - before < 50_000_001);
     // Untyped callers can pass anything; only a JS string is read.

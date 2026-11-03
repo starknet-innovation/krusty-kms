@@ -338,6 +338,119 @@ def _blank_string_literals(text: str) -> str:
     return text
 
 
+# The characters ``str.splitlines`` breaks on. Masking keeps them, so masked
+# and original text split into the same lines with the same columns.
+_LINE_BREAKS = frozenset("\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029")
+# A char literal after its opening quote; anything else after ``'`` is a
+# lifetime or a label.
+_CHAR_LITERAL_RE = re.compile(
+    r"(?:\\(?:x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\}|[^\n])|[^\\'\n])'"
+)
+
+
+def _block_comment_end(text: str, start: int) -> int:
+    """Return the offset just past the ``/* */`` comment opening at ``start``.
+
+    Rust block comments nest. An unclosed comment runs to the end of ``text``.
+    """
+    depth = 0
+    pos = start
+    while pos < len(text):
+        if text.startswith("/*", pos):
+            depth += 1
+            pos += 2
+        elif text.startswith("*/", pos):
+            depth -= 1
+            pos += 2
+            if depth == 0:
+                return pos
+        else:
+            pos += 1
+    return len(text)
+
+
+def _quoted_end(text: str, opening: int) -> int:
+    """Return the offset of the ``"`` closing the escaped string at ``opening``."""
+    pos = opening + 1
+    while pos < len(text) and text[pos] != '"':
+        pos += 2 if text[pos] == "\\" else 1
+    return min(pos, len(text))
+
+
+def _mask_rust_source(text: str) -> tuple[str, str]:
+    """Return ``(code, bare)`` views of Rust source ``text``.
+
+    ``code`` replaces every comment (``//`` to the end of the line and nested
+    ``/* */``) with spaces. ``bare`` also blanks the contents of every string
+    and char literal (ordinary, byte, C, and raw ``r#"..."#`` strings with any
+    number of ``#``, including multiline ones, and ``'x'`` / ``b'x'``) but
+    keeps their delimiters. Line breaks are kept and every other masked
+    character becomes one space, so both views split into the same lines and
+    columns as ``text``. An unterminated literal or comment masks to the end.
+    Callers make syntax decisions on ``bare`` and take output from ``code``.
+    """
+    code = list(text)
+    bare = list(text)
+
+    def blank(views: tuple[list[str], ...], start: int, end: int) -> None:
+        for pos in range(start, end):
+            if text[pos] not in _LINE_BREAKS:
+                for view in views:
+                    view[pos] = " "
+
+    pos = 0
+    while pos < len(text):
+        ch = text[pos]
+        if text.startswith("//", pos):
+            end = text.find("\n", pos)
+            end = len(text) if end < 0 else end
+            blank((code, bare), pos, end)
+            pos = end
+        elif text.startswith("/*", pos):
+            end = _block_comment_end(text, pos)
+            blank((code, bare), pos, end)
+            pos = end
+        elif ch.isalpha() or ch == "_":
+            end = pos
+            while end < len(text) and (text[end].isalnum() or text[end] == "_"):
+                end += 1
+            word = text[pos:end]
+            hashes = end
+            while hashes < len(text) and text[hashes] == "#":
+                hashes += 1
+            if word in ("r", "br", "cr") and text[hashes : hashes + 1] == '"':
+                close = text.find('"' + "#" * (hashes - end), hashes + 1)
+                close = len(text) if close < 0 else close
+                blank((bare,), hashes + 1, close)
+                pos = close + 1 + (hashes - end)
+            elif word in ("b", "c") and text[end : end + 1] == '"':
+                close = _quoted_end(text, end)
+                blank((bare,), end + 1, close)
+                pos = close + 1
+            elif word == "b" and text[end : end + 1] == "'":
+                literal = _CHAR_LITERAL_RE.match(text, end + 1)
+                pos = end + 1
+                if literal:
+                    blank((bare,), end + 1, literal.end() - 1)
+                    pos = literal.end()
+            else:
+                pos = end
+        elif ch == '"':
+            close = _quoted_end(text, pos)
+            blank((bare,), pos + 1, close)
+            pos = close + 1
+        elif ch == "'":
+            literal = _CHAR_LITERAL_RE.match(text, pos + 1)
+            if literal:
+                blank((bare,), pos + 1, literal.end() - 1)
+                pos = literal.end()
+            else:
+                pos += 1
+        else:
+            pos += 1
+    return "".join(code), "".join(bare)
+
+
 def _generic_depth(text: str) -> int:
     # ``->`` must not count as a generic closer.
     cleaned = text.replace("->", " ")
@@ -441,22 +554,30 @@ def _find_impl_block_end(lines: list[str], impl_line: int) -> int:
 
 
 def _collect_impl_pub_fns(
-    lines: list[str], impl_line: int, end_line: int
+    lines: list[str],
+    impl_line: int,
+    end_line: int,
+    views: tuple[list[str], list[str]] | None = None,
 ) -> list[tuple[int, str, str]]:
-    """Collect ``pub fn`` exports from a ``#[wasm_bindgen] impl`` body."""
+    """Collect ``pub fn`` exports from a ``#[wasm_bindgen] impl`` body.
+
+    With ``(code, bare)`` ``views``, braces are counted on ``bare`` and text
+    taken from ``code``, as in ``_collect_rust_signature``.
+    """
     methods: list[tuple[int, str, str]] = []
     depth = 0
     started = False
     pending_attrs: list[str] = []
+    code, bare = views if views is not None else (lines, lines)
 
     for j in range(impl_line, end_line + 1):
-        line = lines[j]
+        line = code[j]
         stripped = line.strip()
 
         if not started:
-            if "{" not in line:
+            if "{" not in bare[j]:
                 continue
-            depth += _brace_delta(line)
+            depth += _brace_delta(bare[j])
             started = True
             if depth <= 0:
                 break
@@ -469,13 +590,13 @@ def _collect_impl_pub_fns(
                 continue
             if _is_pub_fn_declaration(line):
                 attrs = "\n".join(pending_attrs)
-                signature = _collect_rust_signature(lines, j)
+                signature = _collect_rust_signature(lines, j, views)
                 methods.append((j, attrs, signature))
                 pending_attrs = []
             else:
                 pending_attrs = []
 
-        depth += _brace_delta(line)
+        depth += _brace_delta(bare[j])
 
     return methods
 
@@ -654,8 +775,19 @@ def _collect_trait_items(lines: list[str], open_line: int) -> list[str]:
     return items
 
 
-def _collect_rust_signature(lines: list[str], start: int) -> str:
-    """Collect a single-line normalized Rust declaration (fn/struct/enum/impl)."""
+def _collect_rust_signature(
+    lines: list[str],
+    start: int,
+    views: tuple[list[str], list[str]] | None = None,
+) -> str:
+    """Collect a single-line normalized Rust declaration (fn/struct/enum/impl).
+
+    ``views`` are the ``(code, bare)`` lines from ``_mask_rust_source``. With
+    them, a function signature is delimited on ``bare`` and its text taken
+    from ``code``, so strings and comments of any form, on any number of
+    lines, cannot end it early or leak into it. Without them each line is
+    judged on its own, as the public-surface and FFI extractors expect.
+    """
     first = lines[start]
 
     if _IMPL_RE.match(first):
@@ -738,33 +870,39 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
 
     # Delimiters are judged on ``bare`` text, with string literals blanked, so
     # an attribute such as ``unchecked_param_type = "a)]b"`` cannot end the
-    # signature early; ``parts`` keeps the original text.
+    # signature early; ``parts`` keeps the original text, without comments.
     parts: list[str] = []
     bare_parts: list[str] = []
     for j in range(start, len(lines)):
-        # A ``//`` comment is not signature text: dropped, it can neither end
-        # the signature at a brace nor leak into the snapshot.
-        line = _code_part(lines[j])
+        if views is None:
+            # A ``//`` comment is not signature text: dropped, it can neither
+            # end the signature at a brace nor leak into the snapshot.
+            code_line = _code_part(lines[j])
+            bare_line = _blank_string_literals(code_line)
+        else:
+            code_line, bare_line = views[0][j], views[1][j]
+        line = code_line.strip()
         if not line:
             continue
-        bare_line = _blank_string_literals(line)
         if "{" in bare_line:
-            before = line[: bare_line.index("{")].strip()
+            before = code_line[: bare_line.index("{")].strip()
             if before:
                 parts.append(before)
             return _normalize_ws(" ".join(parts))
         parts.append(line)
-        bare_parts.append(bare_line)
+        bare_parts.append(bare_line.strip())
         combined = " ".join(parts)
         bare = " ".join(bare_parts)
+        tail = bare_parts[-1]
         if ";" in bare_line and _paren_depth(bare) == 0 and _generic_depth(bare) <= 0:
             return _normalize_ws(combined)
         if "(" in bare and _paren_depth(bare) == 0:
-            nxt = lines[j + 1].strip() if j + 1 < len(lines) else ""
+            following = lines if views is None else views[1]
+            nxt = following[j + 1].strip() if j + 1 < len(lines) else ""
             if nxt.startswith("->") or nxt.startswith("where"):
                 continue
             if re.search(r"\bwhere\b", bare) and (
-                line == "where" or line.endswith(",") or line.endswith(":")
+                tail == "where" or tail.endswith(",") or tail.endswith(":")
             ):
                 continue
             # Keep collecting while a multiline return type's generics/parens
@@ -1648,55 +1786,45 @@ def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
     return f"{rel_path}: {signature}"
 
 
-# What follows a parameter's attributes: ``name:`` or ``mut name:``, where
-# the name may be a raw identifier such as ``r#type``.
-_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?(?:r#)?[A-Za-z_]\w*\s*:(?!:)")
+class WasmSurfaceError(ValueError):
+    """The WASM export scanner cannot place an attribute and refuses to guess."""
 
 
-def _attr_close(lines: list[str], line: int, text: str) -> tuple[int, str] | None:
+# What follows a parameter's attributes: ``name:`` or ``mut name:``. The name
+# is a Rust identifier (Unicode letters allowed) or a raw one such as
+# ``r#type``; ``[^\W\d]`` is a letter or ``_``.
+_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?(?:r#)?[^\W\d]\w*\s*:(?!:)")
+# A ``#[wasm_bindgen]`` attribute, not ``#[wasm_bindgen_test]``.
+_WASM_ATTR_START_RE = re.compile(r"^#\[\s*wasm_bindgen\b")
+# What an item-level attribute may sit on, judged on masked text (so
+# ``extern "C"`` reads ``extern " "``).
+_WASM_ITEM_START_RE = re.compile(
+    r"^(?:pub(?:\s*\([^)]*\))?\s+)?"
+    r'(?:(?:async|unsafe|const|default|extern(?:\s+"[^"]*")?)\s+)*'
+    r"(?:fn|struct|enum|union|impl|trait|type|const|static|mod|extern|use)\b"
+)
+
+
+def _attr_close(bare: list[str], line: int, text: str) -> tuple[int, str] | None:
     """Find where the attribute starting ``text`` (``#[...``) closes.
 
-    Brackets and parens are balanced across lines, ignoring string literals
-    and ``//`` comments, which may contain either. Returns the closing line
-    and the text after the attribute on it, or ``None`` if it never closes.
+    ``bare`` are masked lines, so strings and comments are already blank and
+    brackets and parens simply balance. Returns the closing line and the text
+    after the attribute on it, or ``None`` if the attribute never closes.
     """
     depth = 0
-    # While inside a string: the text that ends it, and whether it is raw
-    # (``r#"..."#`` has no escapes and ends at ``"#``).
-    closing: str | None = None
-    raw = escaped = False
     while True:
-        pos = 0
-        while pos < len(text):
-            ch = text[pos]
-            if closing is not None and raw:
-                if text.startswith(closing, pos):
-                    pos += len(closing) - 1
-                    closing = None
-            elif closing is not None:
-                if escaped:
-                    escaped = False
-                elif ch == "\\":
-                    escaped = True
-                elif ch == '"':
-                    closing = None
-            elif ch == '"':
-                hashes = _raw_string_hashes(text, pos)
-                raw = hashes is not None
-                closing = '"' + "#" * (hashes or 0)
-            elif text.startswith("//", pos):
-                break  # The rest of the line is a comment.
-            elif ch in "([":
+        for pos, ch in enumerate(text):
+            if ch in "([":
                 depth += 1
             elif ch in ")]":
                 depth -= 1
                 if depth == 0:
                     return line, text[pos + 1 :]
-            pos += 1
         line += 1
-        if line >= len(lines):
+        if line >= len(bare):
             return None
-        text = lines[line]
+        text = bare[line]
 
 
 def _code_part(text: str) -> str:
@@ -1705,77 +1833,93 @@ def _code_part(text: str) -> str:
     return (text if cut < 0 else text[:cut]).strip()
 
 
-def _wasm_param_attr_end(lines: list[str], start: int) -> int | None:
-    """Return the last line of the parameter attributes starting at ``start``.
+def _place_wasm_attr(bare: list[str], start: int) -> int | None:
+    """Classify the ``#[wasm_bindgen]`` attribute that opens ``bare[start]``.
 
-    A ``#[wasm_bindgen(...)]``, on one line or several, is a parameter
-    attribute when the attributes it begins are followed by a parameter
-    pattern (``name:``). Such an attribute belongs to the signature it sits
-    in, not to the next export. Returns ``None`` for item-level attributes.
+    Returns the last line of the run of attributes it begins when they sit on
+    a parameter (``name:``): such attributes belong to the signature they are
+    in, not to the next export. Returns ``None`` when they sit on an item or a
+    field. Raises ``WasmSurfaceError`` when the attribute never closes or is
+    followed by anything else, rather than guessing where it belongs.
     """
-    text = lines[start].lstrip()
-    if not text.startswith("#[wasm_bindgen"):
-        return None
-    line = start
+    line, text = start, bare[start].lstrip()
     while True:
-        closed = _attr_close(lines, line, text)
+        closed = _attr_close(bare, line, text)
         if closed is None:
-            return None
+            raise WasmSurfaceError(f"line {line + 1}: attribute never closes")
         end, rest = closed
-        follow, at = _code_part(rest), end
-        while not follow and at + 1 < len(lines):
+        follow, at = rest.strip(), end
+        while not follow and at + 1 < len(bare):
             at += 1
-            follow = _code_part(lines[at])
+            follow = bare[at].strip()
         if follow.startswith("#["):
             line, text = at, follow
             continue
-        return end if _PARAM_PATTERN_RE.match(follow) else None
+        if _PARAM_PATTERN_RE.match(follow):
+            return end
+        if _WASM_ITEM_START_RE.match(follow) or _is_field_declaration(follow):
+            return None
+        shown = follow[:40] or "end of file"
+        raise WasmSurfaceError(
+            f"line {start + 1}: #[wasm_bindgen] is followed by neither a parameter "
+            f"nor an item ({shown!r})"
+        )
 
 
 def extract_wasm_exports(root: Path | None = None) -> list[str]:
+    """Return the ``#[wasm_bindgen]`` export surface under ``crates/wasm/src``.
+
+    Each file is masked once (``_mask_rust_source``): every syntax decision is
+    made on the ``bare`` view and every recorded text comes from the ``code``
+    view, so strings and comments cannot move an attribute or end a signature.
+    Raises ``WasmSurfaceError`` naming the file and line of an attribute the
+    scanner cannot place.
+    """
     root = root or repo_root()
     exports: list[str] = []
     for path in sorted((root / "crates/wasm/src").rglob("*.rs")):
-        lines = path.read_text().splitlines()
+        text = path.read_text()
+        lines = text.splitlines()
+        code_text, bare_text = _mask_rust_source(text)
+        views = (code_text.splitlines(), bare_text.splitlines())
+        code, bare = views
+        if not len(lines) == len(code) == len(bare):
+            raise WasmSurfaceError(f"{path}: masking changed the line count")
         rel = str(path.relative_to(root))
         i = 0
         while i < len(lines):
-            param_end = _wasm_param_attr_end(lines, i)
-            if param_end is not None:
-                i = param_end + 1
-                continue
-            if "#[wasm_bindgen" in lines[i] and "wasm_bindgen_test" not in lines[i]:
-                j = i + 1
-                while j < len(lines) and not _DECL_RE.match(lines[j]) and not _IMPL_RE.match(lines[j]):
-                    if _is_field_declaration(lines[j]):
-                        j = len(lines)
-                        break
-                    j += 1
-                if j < len(lines):
-                    preceding = _collect_preceding_api_attrs(lines, i)
-                    bindgen_attrs = "\n".join(lines[i:j])
-                    attrs = (
-                        f"{preceding}\n{bindgen_attrs}" if preceding else bindgen_attrs
-                    )
-                    if _IMPL_RE.match(lines[j]):
-                        signature = _collect_rust_signature(lines, j)
-                        exports.append(_format_wasm_export(rel, attrs, signature))
-                        end = _find_impl_block_end(lines, j)
-                        for _, method_attrs, method_sig in _collect_impl_pub_fns(
-                            lines, j, end
-                        ):
-                            exports.append(
-                                _format_wasm_export(rel, method_attrs, method_sig)
-                            )
-                        i = end + 1
-                    else:
-                        signature = _collect_rust_signature(lines, j)
-                        exports.append(_format_wasm_export(rel, attrs, signature))
-                        i = j + 1
-                else:
-                    i += 1
-            else:
+            if "#[wasm_bindgen" not in bare[i] or "wasm_bindgen_test" in bare[i]:
                 i += 1
+                continue
+            if _WASM_ATTR_START_RE.match(bare[i].lstrip()):
+                try:
+                    param_end = _place_wasm_attr(bare, i)
+                except WasmSurfaceError as error:
+                    raise WasmSurfaceError(f"{rel}: {error}") from None
+                if param_end is not None:
+                    i = param_end + 1
+                    continue
+            j = i + 1
+            while j < len(lines) and not _DECL_RE.match(bare[j]) and not _IMPL_RE.match(bare[j]):
+                if _is_field_declaration(bare[j]):
+                    j = len(lines)
+                    break
+                j += 1
+            if j >= len(lines):
+                i += 1
+                continue
+            preceding = _collect_preceding_api_attrs(code, i)
+            bindgen_attrs = "\n".join(code[i:j])
+            attrs = f"{preceding}\n{bindgen_attrs}" if preceding else bindgen_attrs
+            signature = _collect_rust_signature(lines, j, views)
+            exports.append(_format_wasm_export(rel, attrs, signature))
+            if _IMPL_RE.match(bare[j]):
+                end = _find_impl_block_end(bare, j)
+                for _, method_attrs, method_sig in _collect_impl_pub_fns(lines, j, end, views):
+                    exports.append(_format_wasm_export(rel, method_attrs, method_sig))
+                i = end + 1
+            else:
+                i = j + 1
     return exports
 
 
@@ -3097,6 +3241,138 @@ pub fn after(value: u8) -> u8 {
     ], exports
 
 
+def _wasm_exports_of(source: str) -> list[str]:
+    """Run ``extract_wasm_exports`` on one ``crates/wasm/src/x.rs`` file."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "crates/wasm/src"
+        src.mkdir(parents=True)
+        (src / "x.rs").write_text(source.lstrip())
+        return [
+            export.removeprefix("crates/wasm/src/x.rs: ")
+            for export in extract_wasm_exports(Path(tmp))
+        ]
+
+
+def _assert_rust_source_masking() -> None:
+    masked = {
+        # (source, code view, bare view)
+        'f("a\\"b") // c )': ('f("a\\"b")' + " " * 7, 'f("    ")' + " " * 7),
+        "x /* a /* b */ c */ y": ("x" + " " * 19 + "y", "x" + " " * 19 + "y"),
+        "r##\"a\"#b\"## br\"[\" cr#\"(\"#": (
+            "r##\"a\"#b\"## br\"[\" cr#\"(\"#",
+            "r##\"    \"## br\" \" cr#\" \"#",
+        ),
+        "let q = '\"'; let l: &'a str = b'(';": (
+            "let q = '\"'; let l: &'a str = b'(';",
+            "let q = ' '; let l: &'a str = b' ';",
+        ),
+        'c"(" r#type': ('c"(" r#type', 'c" " r#type'),
+        '"open': ('"open', '"    '),
+        "/* open": ("       ", "       "),
+    }
+    for text, expected in masked.items():
+        assert _mask_rust_source(text) == expected, (text, _mask_rust_source(text))
+    text = 'a("x\ny") /* p\nq */ b c // d\r\ne'
+    code, bare = _mask_rust_source(text)
+    assert len(code) == len(bare) == len(text)
+    assert code.splitlines() and len(code.splitlines()) == len(text.splitlines())
+    assert [len(line) for line in bare.splitlines()] == [len(line) for line in text.splitlines()]
+
+
+def _assert_masked_scanner_edge_cases() -> None:
+    after = """
+#[wasm_bindgen(js_name = "after")]
+pub fn after(value: u8) -> u8 {
+    value
+}
+"""
+    tail = "wasm_bindgen(js_name=after) | pub fn after(value: u8) -> u8"
+    cases = {
+        # A multiline raw string holding ``))``, a quote and ``//``.
+        """
+#[wasm_bindgen(js_name = "described")]
+pub fn described(
+    #[wasm_bindgen(param_description = r#"spans
+        lines )) and "quotes" // too"#)]
+    value: JsValue,
+) -> u8 {
+    0
+}
+""": "wasm_bindgen(js_name=described) | pub fn described("
+        '#[wasm_bindgen(param_description = r#"spans lines)) and "quotes" // too"#)] '
+        "value: JsValue) -> u8",
+        # A block comment holding ``)]`` inside the attribute.
+        """
+#[wasm_bindgen(js_name = "blocked")]
+pub fn blocked(
+    #[wasm_bindgen(unchecked_param_type = "number" /* keep )] */)]
+    value: JsValue,
+) -> u8 {
+    0
+}
+""": "wasm_bindgen(js_name=blocked) | pub fn blocked("
+        '#[wasm_bindgen(unchecked_param_type = "number")] value: JsValue) -> u8',
+        # A nested block comment.
+        """
+#[wasm_bindgen(js_name = "nested")]
+pub fn nested(
+    #[wasm_bindgen(
+        unchecked_param_type = "number" /* outer /* inner )] */ still )] */
+    )]
+    value: JsValue,
+) -> u8 {
+    0
+}
+""": "wasm_bindgen(js_name=nested) | pub fn nested("
+        '#[wasm_bindgen(unchecked_param_type = "number")] value: JsValue) -> u8',
+        # A Unicode parameter name.
+        """
+#[wasm_bindgen(js_name = "unicode")]
+pub fn unicode(
+    #[wasm_bindgen(unchecked_param_type = "number")] écart: JsValue,
+) -> u8 {
+    0
+}
+""": "wasm_bindgen(js_name=unicode) | pub fn unicode("
+        '#[wasm_bindgen(unchecked_param_type = "number")] écart: JsValue) -> u8',
+    }
+    for source, expected in cases.items():
+        exports = _wasm_exports_of(source + after)
+        assert exports == [expected, tail], exports
+
+    # Attributes the scanner cannot place fail the check, naming file and
+    # line, instead of moving onto the next export or being dropped.
+    unplaceable = {
+        """
+#[wasm_bindgen(js_name = "open"
+pub fn open() -> u8 {
+    0
+}
+""": "crates/wasm/src/x.rs: line 1: attribute never closes",
+        """
+pub fn stray() {
+    #[wasm_bindgen(js_name = "stray")]
+    let value = 1;
+}
+"""
+        + after: "crates/wasm/src/x.rs: line 2: #[wasm_bindgen] is followed by neither",
+        """
+pub fn last() {}
+#[wasm_bindgen(js_name = "dangling")]
+""": "crates/wasm/src/x.rs: line 2: #[wasm_bindgen] is followed by neither "
+        "a parameter nor an item ('end of file')",
+    }
+    for source, message in unplaceable.items():
+        try:
+            exports = _wasm_exports_of(source)
+        except WasmSurfaceError as error:
+            assert str(error).startswith(message), str(error)
+        else:
+            raise AssertionError(f"unplaceable attribute was placed: {exports}")
+
+
 def _assert_surfaces_self_checks() -> None:
     assert (
         _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
@@ -3216,6 +3492,8 @@ pub struct Foo {
     _assert_raw_strings_are_literals()
     _assert_comments_stay_out_of_signatures()
     _assert_param_attr_edge_cases()
+    _assert_rust_source_masking()
+    _assert_masked_scanner_edge_cases()
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]

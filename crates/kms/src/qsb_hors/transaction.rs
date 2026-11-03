@@ -5,8 +5,9 @@
 //! `T` may be retried, so a `T` that can never confirm would strand the vault.
 //! Besides the encoding itself, the parser therefore applies Bitcoin's
 //! context-free transaction rules (`CheckTransaction`): at least one input and
-//! one output, no duplicate or null outpoints, output values within
-//! `MAX_MONEY`, and a size within the block limit.
+//! one output, no duplicate or null outpoints, and output values within
+//! `MAX_MONEY`. Its size is capped at `QSB_MAX_TRANSACTION_SIZE`, which
+//! reserves block weight for the unlocking data the real spend adds.
 
 use super::QSB_MAX_TRANSACTION_SIZE as MAX_TRANSACTION_SIZE;
 use krusty_kms_common::{KmsError, Result};
