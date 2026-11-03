@@ -742,7 +742,9 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
     parts: list[str] = []
     bare_parts: list[str] = []
     for j in range(start, len(lines)):
-        line = lines[j].strip()
+        # A ``//`` comment is not signature text: dropped, it can neither end
+        # the signature at a brace nor leak into the snapshot.
+        line = _code_part(lines[j])
         if not line:
             continue
         bare_line = _blank_string_literals(line)
@@ -1694,6 +1696,12 @@ def _attr_close(lines: list[str], line: int, text: str) -> tuple[int, str] | Non
         text = lines[line]
 
 
+def _code_part(text: str) -> str:
+    """``text`` stripped, without a ``//`` comment; string literals are respected."""
+    cut = _blank_string_literals(text).find("//")
+    return (text if cut < 0 else text[:cut]).strip()
+
+
 def _wasm_param_attr_end(lines: list[str], start: int) -> int | None:
     """Return the last line of the parameter attributes starting at ``start``.
 
@@ -1711,10 +1719,10 @@ def _wasm_param_attr_end(lines: list[str], start: int) -> int | None:
         if closed is None:
             return None
         end, rest = closed
-        follow, at = rest.strip(), end
+        follow, at = _code_part(rest), end
         while not follow and at + 1 < len(lines):
             at += 1
-            follow = lines[at].strip()
+            follow = _code_part(lines[at])
         if follow.startswith("#["):
             line, text = at, follow
             continue
@@ -3005,6 +3013,42 @@ pub fn after(value: u8) -> u8 {
     ], exports
 
 
+def _assert_comments_stay_out_of_signatures() -> None:
+    import tempfile
+
+    # ``//`` comments between a parameter attribute and its parameter, or
+    # after code (even holding a brace or a URL in a string), stay out.
+    prefix = "crates/wasm/src/x.rs: "
+    commented = """
+#[wasm_bindgen(js_name = "commented")]
+pub fn commented(
+    #[wasm_bindgen(unchecked_param_type = "number")]
+    // a note between the attribute and its parameter
+    first: JsValue, // a trailing note with { a brace
+    #[wasm_bindgen(param_description = "see https://x.test")] // trailing note
+    second: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "after")]
+pub fn after(value: u8) -> u8 {
+    value
+}
+""".lstrip()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "crates/wasm/src"
+        src.mkdir(parents=True)
+        (src / "x.rs").write_text(commented)
+        exports = extract_wasm_exports(Path(tmp))
+    assert exports == [
+        prefix + "wasm_bindgen(js_name=commented) | pub fn commented("
+        '#[wasm_bindgen(unchecked_param_type = "number")] first: JsValue, '
+        '#[wasm_bindgen(param_description = "see https://x.test")] second: JsValue) -> u8',
+        prefix + "wasm_bindgen(js_name=after) | pub fn after(value: u8) -> u8",
+    ], exports
+
+
 def _assert_surfaces_self_checks() -> None:
     assert (
         _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
@@ -3122,6 +3166,7 @@ pub struct Foo {
     assert "gated_export" in wasm_cfg_line
     _assert_wasm_param_attrs_stay_in_their_signature()
     _assert_raw_strings_are_literals()
+    _assert_comments_stay_out_of_signatures()
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]
