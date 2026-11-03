@@ -5,10 +5,9 @@
 //!
 //! # Secrets at the boundary
 //!
-//! An owned passphrase (`Option<String>`) is held in `Zeroizing` and wiped
-//! when the call returns. Secrets taken as `&str` (mnemonics, private keys)
-//! are wasm-bindgen's copies, which it frees after the call without wiping.
-//! The caller's JS strings cannot be wiped from Rust at all.
+//! Mnemonics, passphrases, and private keys are taken as owned strings, held
+//! in `Zeroizing`, and wiped when the call returns. Derived private keys are
+//! returned to the JS heap. See [`crate`] for what is not wiped.
 
 mod addresses;
 mod derivation;

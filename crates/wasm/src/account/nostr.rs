@@ -27,14 +27,15 @@ use zeroize::Zeroizing;
 /// Nostr keypair with private key and x-only public key (both 64 hex chars)
 #[wasm_bindgen(js_name = "deriveNostrKeypair")]
 pub fn derive_nostr_keypair(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmNostrKeypair, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
-        mnemonic,
+        &mnemonic,
         address_index,
         account_index,
         passphrase.as_deref().map(String::as_str),
@@ -56,14 +57,15 @@ pub fn derive_nostr_keypair(
 /// Prefer this over [`derive_nostr_keypair`] when private key material is not needed.
 #[wasm_bindgen(js_name = "deriveNostrPublicKey")]
 pub fn derive_nostr_public_key(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmNostrPublicKey, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
-        mnemonic,
+        &mnemonic,
         address_index,
         account_index,
         passphrase.as_deref().map(String::as_str),

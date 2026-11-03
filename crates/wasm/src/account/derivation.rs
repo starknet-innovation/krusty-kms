@@ -23,8 +23,8 @@ pub fn generate_mnemonic(word_count: Option<u8>) -> Result<String, JsValue> {
 
 /// Validate a mnemonic phrase.
 #[wasm_bindgen(js_name = "validateMnemonic")]
-pub fn validate_mnemonic(mnemonic: &str) -> bool {
-    krusty_kms::validate_mnemonic(mnemonic).is_ok()
+pub fn validate_mnemonic(mnemonic: String) -> bool {
+    krusty_kms::validate_mnemonic(&Zeroizing::new(mnemonic)).is_ok()
 }
 
 /// Derive a keypair from mnemonic (for external use).
@@ -37,14 +37,15 @@ pub fn validate_mnemonic(mnemonic: &str) -> bool {
 /// JS property access still exposes it.
 #[wasm_bindgen(js_name = "deriveKeypair")]
 pub fn derive_keypair(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair(
-        mnemonic,
+        &mnemonic,
         address_index,
         account_index,
         passphrase.as_deref().map(String::as_str),
@@ -70,14 +71,15 @@ pub fn derive_keypair(
 /// Prefer this over [`derive_keypair`] when private key material is not needed.
 #[wasm_bindgen(js_name = "derivePublicKey")]
 pub fn derive_public_key(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmPublicKey, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair(
-        mnemonic,
+        &mnemonic,
         address_index,
         account_index,
         passphrase.as_deref().map(String::as_str),
@@ -115,14 +117,15 @@ pub fn derive_public_key(
 /// Keypair with private key and public key coordinates
 #[wasm_bindgen(js_name = "deriveStarknetKeypair")]
 pub fn derive_starknet_keypair(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
-        mnemonic,
+        &mnemonic,
         address_index,
         account_index,
         krusty_kms::STARKNET_COIN_TYPE,
@@ -150,14 +153,15 @@ pub fn derive_starknet_keypair(
 /// not needed (e.g. address derivation).
 #[wasm_bindgen(js_name = "deriveStarknetPublicKey")]
 pub fn derive_starknet_public_key(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmPublicKey, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
-        mnemonic,
+        &mnemonic,
         address_index,
         account_index,
         krusty_kms::STARKNET_COIN_TYPE,
@@ -217,12 +221,13 @@ pub fn get_nostr_coin_type() -> u32 {
 /// * `account_index` - HD wallet account index (default: 0)
 #[wasm_bindgen(js_name = "deriveArgentLegacyKeypair")]
 pub fn derive_argent_legacy_keypair(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
 ) -> Result<WasmStarkXOnlyKeypair, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let pk = SecretFelt::new(
-        krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
+        krusty_kms::derive_argent_legacy_private_key(&mnemonic, address_index, account_index)
             .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
     );
     let pubk = krusty_kms::stark_public_key(pk.expose_secret())
@@ -241,12 +246,13 @@ pub fn derive_argent_legacy_keypair(
 /// `stark_public_key` is x-only (not a full affine point).
 #[wasm_bindgen(js_name = "deriveArgentLegacyPublicKey")]
 pub fn derive_argent_legacy_public_key(
-    mnemonic: &str,
+    mnemonic: String,
     address_index: u32,
     account_index: u32,
 ) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let pk = SecretFelt::new(
-        krusty_kms::derive_argent_legacy_private_key(mnemonic, address_index, account_index)
+        krusty_kms::derive_argent_legacy_private_key(&mnemonic, address_index, account_index)
             .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
     );
     let pubk = krusty_kms::stark_public_key(pk.expose_secret())

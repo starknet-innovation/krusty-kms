@@ -14,9 +14,11 @@
 //! via [`CandidateAccount::with_secrets`] / [`DerivedKeypair::with_secrets`].
 //! Treat those return values as secret: never log them, never send them to
 //! untrusted JS contexts, and prefer keeping secrets in secure storage.
+//! The mnemonic is taken as an owned string and wiped when the call returns.
 
 use krusty_kms::discovery::{CandidateAccount, DerivedKeypair};
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, JsValue> {
     serde_json::to_string(value)
@@ -67,11 +69,12 @@ fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, JsValue> {
 /// ```
 #[wasm_bindgen(js_name = "generateAccountCandidates")]
 pub fn generate_account_candidates(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
+    let candidates = krusty_kms::discovery::generate_candidates(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Discovery failed: {e}")))?;
 
     to_json_string(&candidates)
@@ -86,11 +89,12 @@ pub fn generate_account_candidates(
 /// default public-only API for discovery scans.
 #[wasm_bindgen(js_name = "generateAccountCandidatesWithSecrets")]
 pub fn generate_account_candidates_with_secrets(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
+    let candidates = krusty_kms::discovery::generate_candidates(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Discovery failed: {e}")))?;
 
     let with_secrets = candidates
@@ -119,11 +123,12 @@ pub fn generate_account_candidates_with_secrets(
 /// JSON string: `{ "0": { "Braavos": ["0x..."], "OpenZeppelin": ["0x...", "0x..."], ... } }`
 #[wasm_bindgen(js_name = "generateAccountAddresses")]
 pub fn generate_account_addresses(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
+    let candidates = krusty_kms::discovery::generate_candidates(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Discovery failed: {e}")))?;
 
     // Group by (derivation_index, wallet_type) → every distinct address.
@@ -180,11 +185,12 @@ pub fn generate_account_addresses(
 /// ```
 #[wasm_bindgen(js_name = "deriveDiscoveryKeypairs")]
 pub fn derive_discovery_keypairs(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(mnemonic, max)
+    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
 
     to_json_string(&keypairs)
@@ -197,11 +203,12 @@ pub fn derive_discovery_keypairs(
 /// **Opt-in secret API.** Treat the returned JSON as secret material.
 #[wasm_bindgen(js_name = "deriveDiscoveryKeypairsWithSecrets")]
 pub fn derive_discovery_keypairs_with_secrets(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(mnemonic, max)
+    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
 
     let with_secrets = keypairs
@@ -227,13 +234,14 @@ pub fn derive_discovery_keypairs_with_secrets(
 /// [`discover_accounts_from_mnemonic_with_secrets`] when key material is required.
 #[wasm_bindgen(js_name = "discoverAccountsFromMnemonic")]
 pub fn discover_accounts_from_mnemonic(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(mnemonic, max)
+    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
-    let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
+    let candidates = krusty_kms::discovery::generate_candidates(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Candidate generation failed: {e}")))?;
 
     let result = serde_json::json!({
@@ -251,13 +259,14 @@ pub fn discover_accounts_from_mnemonic(
 /// **Opt-in secret API.** Treat the returned JSON as secret material.
 #[wasm_bindgen(js_name = "discoverAccountsFromMnemonicWithSecrets")]
 pub fn discover_accounts_from_mnemonic_with_secrets(
-    mnemonic: &str,
+    mnemonic: String,
     max_index: Option<u32>,
 ) -> Result<String, JsValue> {
+    let mnemonic = Zeroizing::new(mnemonic);
     let max = max_index.unwrap_or(5);
-    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(mnemonic, max)
+    let keypairs = krusty_kms::discovery::derive_discovery_keypairs(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Keypair derivation failed: {e}")))?;
-    let candidates = krusty_kms::discovery::generate_candidates(mnemonic, max)
+    let candidates = krusty_kms::discovery::generate_candidates(&mnemonic, max)
         .map_err(|e| JsValue::from_str(&format!("Candidate generation failed: {e}")))?;
 
     let keypairs_with_secrets = keypairs
@@ -288,7 +297,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_generate_account_candidates_public_only() {
-        let result = generate_account_candidates(TEST_MNEMONIC, Some(1));
+        let result = generate_account_candidates(TEST_MNEMONIC.into(), Some(1));
         assert!(result.is_ok());
         let json = result.unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&json).unwrap();
@@ -320,7 +329,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_generate_account_candidates_with_secrets() {
-        let result = generate_account_candidates_with_secrets(TEST_MNEMONIC, Some(1));
+        let result = generate_account_candidates_with_secrets(TEST_MNEMONIC.into(), Some(1));
         assert!(result.is_ok());
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&result.unwrap()).unwrap();
         assert!(!parsed.is_empty());
@@ -332,13 +341,13 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_generate_account_candidates_invalid_mnemonic() {
-        let result = generate_account_candidates("not a valid mnemonic", Some(1));
+        let result = generate_account_candidates("not a valid mnemonic".into(), Some(1));
         assert!(result.is_err());
     }
 
     #[wasm_bindgen_test]
     fn test_generate_account_addresses_compact() {
-        let result = generate_account_addresses(TEST_MNEMONIC, Some(1));
+        let result = generate_account_addresses(TEST_MNEMONIC.into(), Some(1));
         assert!(result.is_ok());
         let json = result.unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -355,7 +364,7 @@ mod tests {
     /// the `salt = public_key` variant was added ahead of it.
     #[wasm_bindgen_test]
     fn test_generate_account_addresses_keeps_all_variants() {
-        let json = generate_account_addresses(TEST_MNEMONIC, Some(1)).unwrap();
+        let json = generate_account_addresses(TEST_MNEMONIC.into(), Some(1)).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         let index0 = parsed.get("0").expect("index 0 present");
 
@@ -382,9 +391,10 @@ mod tests {
 
         // Every address in the compact view must also appear in the full
         // candidate list, so the two APIs cannot drift.
-        let full: Vec<serde_json::Value> =
-            serde_json::from_str(&generate_account_candidates(TEST_MNEMONIC, Some(1)).unwrap())
-                .unwrap();
+        let full: Vec<serde_json::Value> = serde_json::from_str(
+            &generate_account_candidates(TEST_MNEMONIC.into(), Some(1)).unwrap(),
+        )
+        .unwrap();
         let full_addrs: Vec<&str> = full
             .iter()
             .map(|c| c.get("address").unwrap().as_str().unwrap())
@@ -399,7 +409,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_derive_discovery_keypairs_public_only() {
-        let result = derive_discovery_keypairs(TEST_MNEMONIC, Some(1)).unwrap();
+        let result = derive_discovery_keypairs(TEST_MNEMONIC.into(), Some(1)).unwrap();
         let parsed: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
         assert!(!parsed.is_empty());
         assert!(parsed[0].get("publicKey").is_some());
@@ -408,7 +418,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_discover_accounts_public_only() {
-        let result = discover_accounts_from_mnemonic(TEST_MNEMONIC, Some(1)).unwrap();
+        let result = discover_accounts_from_mnemonic(TEST_MNEMONIC.into(), Some(1)).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
         let keypairs = parsed.get("keypairs").unwrap().as_array().unwrap();
         let candidates = parsed.get("candidates").unwrap().as_array().unwrap();

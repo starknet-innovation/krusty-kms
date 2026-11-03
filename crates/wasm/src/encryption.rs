@@ -2,9 +2,16 @@
 //!
 //! Thin wrappers around `krusty_kms::encryption` and `krusty_kms::keystore`
 //! that convert between hex strings and the internal byte representations.
+//!
+//! Passwords, private keys, mnemonics, symmetric keys, and plaintexts are
+//! taken as owned strings and wiped when the call returns, and so is a decoded
+//! symmetric key. Decrypted secrets are returned to the JS heap (see
+//! [`crate`]).
 
+use crate::secret_input::{decode_secret_hex, SecretHexError};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 use krusty_kms::encryption::{self, EncryptedKey, EncryptedPayload};
 use krusty_kms::keystore;
@@ -44,11 +51,12 @@ pub struct WasmEncryptedPayload {
 /// @returns Encrypted key with hex-encoded nonce, salt, and ciphertext
 #[wasm_bindgen(js_name = "encryptPrivateKey")]
 pub fn encrypt_private_key(
-    private_key_hex: &str,
-    password: &str,
+    private_key_hex: String,
+    password: String,
     scrypt_n: u32,
 ) -> Result<WasmEncryptedKey, JsValue> {
-    let result = encryption::encrypt_private_key(private_key_hex, password, scrypt_n)
+    let (private_key_hex, password) = (Zeroizing::new(private_key_hex), Zeroizing::new(password));
+    let result = encryption::encrypt_private_key(&private_key_hex, &password, scrypt_n)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))?;
 
     Ok(WasmEncryptedKey {
@@ -71,9 +79,10 @@ pub fn decrypt_private_key(
     nonce: &str,
     salt: &str,
     encrypted_key: &str,
-    password: &str,
+    password: String,
     scrypt_n: u32,
 ) -> Result<String, JsValue> {
+    let password = Zeroizing::new(password);
     let encrypted = EncryptedKey {
         nonce: hex::decode(nonce)
             .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {e}")))?,
@@ -83,7 +92,7 @@ pub fn decrypt_private_key(
             .map_err(|e| JsValue::from_str(&format!("Invalid encrypted key hex: {e}")))?,
     };
 
-    encryption::decrypt_private_key(&encrypted, password, scrypt_n)
+    encryption::decrypt_private_key(&encrypted, &password, scrypt_n)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
 }
 
@@ -97,15 +106,12 @@ pub fn decrypt_private_key(
 /// @param keyHex - Hex-encoded 32-byte key (64 hex chars)
 /// @returns Encrypted payload with hex-encoded nonce and ciphertext
 #[wasm_bindgen(js_name = "encryptWithKey")]
-pub fn encrypt_with_key(plaintext: &str, key_hex: &str) -> Result<WasmEncryptedPayload, JsValue> {
-    let key_bytes =
-        hex::decode(key_hex).map_err(|e| JsValue::from_str(&format!("Invalid key hex: {e}")))?;
-    if key_bytes.len() != 32 {
-        return Err(JsValue::from_str(
-            "Key must be exactly 32 bytes (64 hex chars)",
-        ));
-    }
-    let key: [u8; 32] = key_bytes.try_into().unwrap();
+pub fn encrypt_with_key(
+    plaintext: String,
+    key_hex: String,
+) -> Result<WasmEncryptedPayload, JsValue> {
+    let plaintext = Zeroizing::new(plaintext);
+    let key = parse_symmetric_key(&Zeroizing::new(key_hex))?;
 
     let result = encryption::encrypt_with_key(plaintext.as_bytes(), &key)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))?;
@@ -123,15 +129,8 @@ pub fn encrypt_with_key(plaintext: &str, key_hex: &str) -> Result<WasmEncryptedP
 /// @param keyHex - Hex-encoded 32-byte key (64 hex chars)
 /// @returns Decrypted plaintext as a UTF-8 string
 #[wasm_bindgen(js_name = "decryptWithKey")]
-pub fn decrypt_with_key(nonce: &str, ciphertext: &str, key_hex: &str) -> Result<String, JsValue> {
-    let key_bytes =
-        hex::decode(key_hex).map_err(|e| JsValue::from_str(&format!("Invalid key hex: {e}")))?;
-    if key_bytes.len() != 32 {
-        return Err(JsValue::from_str(
-            "Key must be exactly 32 bytes (64 hex chars)",
-        ));
-    }
-    let key: [u8; 32] = key_bytes.try_into().unwrap();
+pub fn decrypt_with_key(nonce: &str, ciphertext: &str, key_hex: String) -> Result<String, JsValue> {
+    let key = parse_symmetric_key(&Zeroizing::new(key_hex))?;
 
     let payload = EncryptedPayload {
         nonce: hex::decode(nonce)
@@ -143,8 +142,22 @@ pub fn decrypt_with_key(nonce: &str, ciphertext: &str, key_hex: &str) -> Result<
     let plaintext = encryption::decrypt_with_key(&payload, &key)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))?;
 
-    String::from_utf8(plaintext)
-        .map_err(|e| JsValue::from_str(&format!("Decrypted data is not valid UTF-8: {e}")))
+    // A refused plaintext never reaches JS, so it is wiped here.
+    String::from_utf8(plaintext).map_err(|e| {
+        let error = format!("Decrypted data is not valid UTF-8: {}", e.utf8_error());
+        drop(Zeroizing::new(e.into_bytes()));
+        JsValue::from_str(&error)
+    })
+}
+
+/// Decode a 64 hex-char symmetric key into a wiped buffer.
+fn parse_symmetric_key(key_hex: &str) -> Result<Zeroizing<[u8; 32]>, JsValue> {
+    decode_secret_hex(key_hex).map_err(|error| match error {
+        SecretHexError::Hex(e) => JsValue::from_str(&format!("Invalid key hex: {e}")),
+        SecretHexError::Length(_) => {
+            JsValue::from_str("Key must be exactly 32 bytes (64 hex chars)")
+        }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -158,8 +171,13 @@ pub fn decrypt_with_key(nonce: &str, ciphertext: &str, key_hex: &str) -> Result<
 /// @param scryptN - Scrypt cost parameter N (power of 2, e.g. 32768)
 /// @returns JSON keystore string
 #[wasm_bindgen(js_name = "encryptKeystore")]
-pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result<String, JsValue> {
-    keystore::encrypt_keystore(mnemonic, password, scrypt_n)
+pub fn encrypt_keystore(
+    mnemonic: String,
+    password: String,
+    scrypt_n: u32,
+) -> Result<String, JsValue> {
+    let (mnemonic, password) = (Zeroizing::new(mnemonic), Zeroizing::new(password));
+    keystore::encrypt_keystore(&mnemonic, &password, scrypt_n)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
 }
 
@@ -169,8 +187,8 @@ pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result
 /// @param password - The password used during encryption
 /// @returns Decrypted mnemonic phrase
 #[wasm_bindgen(js_name = "decryptKeystore")]
-pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String, JsValue> {
-    keystore::decrypt_keystore(keystore_json, password)
+pub fn decrypt_keystore(keystore_json: &str, password: String) -> Result<String, JsValue> {
+    keystore::decrypt_keystore(keystore_json, &Zeroizing::new(password))
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
 }
 
@@ -180,8 +198,8 @@ pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String, J
 /// @param password - The password used during encryption
 /// @returns Decrypted content as hex string (typically a private key)
 #[wasm_bindgen(js_name = "decryptEthersKeystore")]
-pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<String, JsValue> {
-    keystore::decrypt_ethers_keystore(keystore_json, password)
+pub fn decrypt_ethers_keystore(keystore_json: &str, password: String) -> Result<String, JsValue> {
+    keystore::decrypt_ethers_keystore(keystore_json, &Zeroizing::new(password))
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
 }
 
@@ -203,13 +221,14 @@ mod tests {
         let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
         let password = test_password(0);
 
-        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
+        let encrypted =
+            encrypt_private_key(private_key.into(), password.clone(), TEST_SCRYPT_N).unwrap();
 
         let decrypted = decrypt_private_key(
             &encrypted.nonce,
             &encrypted.salt,
             &encrypted.encrypted_key,
-            &password,
+            password,
             TEST_SCRYPT_N,
         )
         .unwrap();
@@ -222,9 +241,10 @@ mod tests {
         let plaintext = "some secret data";
         let key_hex = "0101010101010101010101010101010101010101010101010101010101010101";
 
-        let encrypted = encrypt_with_key(plaintext, key_hex).unwrap();
+        let encrypted = encrypt_with_key(plaintext.into(), key_hex.into()).unwrap();
 
-        let decrypted = decrypt_with_key(&encrypted.nonce, &encrypted.ciphertext, key_hex).unwrap();
+        let decrypted =
+            decrypt_with_key(&encrypted.nonce, &encrypted.ciphertext, key_hex.into()).unwrap();
 
         assert_eq!(decrypted, plaintext);
     }
@@ -234,8 +254,9 @@ mod tests {
         let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
         let password = test_password(0);
 
-        let keystore_json = encrypt_keystore(mnemonic, &password, TEST_SCRYPT_N).unwrap();
-        let decrypted = decrypt_keystore(&keystore_json, &password).unwrap();
+        let keystore_json =
+            encrypt_keystore(mnemonic.into(), password.clone(), TEST_SCRYPT_N).unwrap();
+        let decrypted = decrypt_keystore(&keystore_json, password).unwrap();
 
         assert_eq!(decrypted, mnemonic);
     }

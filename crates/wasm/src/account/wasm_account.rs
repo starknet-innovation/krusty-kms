@@ -3,6 +3,7 @@
 use super::helpers::{decrypted_point_to_wasm, parse_ciphertext, parse_felt, parse_u128_decimal};
 use crate::error::from_sdk_result;
 use crate::types::{WasmAccountState, WasmCiphertext, WasmDecryptedPoint};
+use krusty_kms_common::SecretFelt;
 use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
 
@@ -30,18 +31,20 @@ impl WasmAccount {
     /// New WasmAccount instance or error
     #[wasm_bindgen(js_name = "fromMnemonic")]
     pub fn from_mnemonic(
-        mnemonic: &str,
+        mnemonic: String,
         address_index: u32,
         account_index: u32,
         contract_address: &str,
         passphrase: Option<String>,
     ) -> Result<WasmAccount, JsValue> {
-        let contract_felt = parse_felt(contract_address)?;
+        // Wrapped first, so a refused contract address still wipes both.
+        let mnemonic = Zeroizing::new(mnemonic);
         let passphrase = passphrase.map(Zeroizing::new);
+        let contract_felt = parse_felt(contract_address)?;
         let passphrase_ref = passphrase.as_deref().map(String::as_str);
 
         let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_mnemonic(
-            mnemonic,
+            &mnemonic,
             address_index,
             account_index,
             contract_felt,
@@ -58,14 +61,14 @@ impl WasmAccount {
     /// * `contract_address` - Tongo contract address (hex string)
     #[wasm_bindgen(js_name = "fromPrivateKey")]
     pub fn from_private_key(
-        private_key: &str,
+        private_key: String,
         contract_address: &str,
     ) -> Result<WasmAccount, JsValue> {
-        let sk = parse_felt(private_key)?;
+        let sk = SecretFelt::new(parse_felt(&Zeroizing::new(private_key))?);
         let contract_felt = parse_felt(contract_address)?;
 
         let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_private_key(
-            sk,
+            *sk.expose_secret(),
             contract_felt,
         ))
         .map_err(JsValue::from)?;

@@ -2,6 +2,18 @@
 //!
 //! Provides JavaScript/TypeScript-accessible APIs for account management,
 //! proof generation, and cryptographic operations.
+//!
+//! # Secret inputs
+//!
+//! Secret arguments (mnemonics, passphrases, passwords, private keys, seeds,
+//! scalars, symmetric keys, plaintexts, and the signature a STRK20 viewing key
+//! is folded from) are taken as owned `String`s and put in `Zeroizing` by the
+//! export's first statement, so the WASM copy of the JS string is wiped when
+//! the call returns or fails. Parsed keys are held in `SecretFelt` or
+//! `Zeroizing` arrays. Not wiped: the JS string itself; the ASCII prefix
+//! wasm-bindgen leaves in a freed buffer when it re-allocates to encode a
+//! non-ASCII string; compiler copies; copies inside dependencies; and every
+//! secret returned to JS. See `docs/design/2026-11-03-zeroize-wasm-string-inputs.md`.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::new_without_default)]
@@ -14,6 +26,7 @@ pub mod error;
 pub mod hashing;
 pub mod nostr_application_data;
 pub mod proof;
+mod secret_input;
 pub mod signing;
 pub mod strk20;
 pub mod tx_hash;
@@ -21,6 +34,7 @@ pub mod types;
 pub mod utils;
 
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 pub use account::{
     derive_keypair, derive_nostr_keypair, generate_mnemonic, get_nostr_coin_type,
@@ -123,13 +137,16 @@ pub fn poseidon_hash_two(a: &str, b: &str) -> Result<String, JsValue> {
 /// # Returns
 /// Resulting point as {x, y} object
 #[wasm_bindgen(js_name = "scalarMul")]
-pub fn scalar_mul(scalar: &str, point_x: &str, point_y: &str) -> Result<types::WasmPoint, JsValue> {
+pub fn scalar_mul(
+    scalar: String,
+    point_x: &str,
+    point_y: &str,
+) -> Result<types::WasmPoint, JsValue> {
     use krusty_kms_crypto::StarkCurve;
     use starknet_types_core::curve::ProjectivePoint;
     use starknet_types_core::felt::Felt;
 
-    let s =
-        Felt::from_hex(scalar).map_err(|e| JsValue::from_str(&format!("Invalid scalar: {e}")))?;
+    let s = secret_input::parse_secret_felt(&Zeroizing::new(scalar), "Invalid scalar")?;
     let px =
         Felt::from_hex(point_x).map_err(|e| JsValue::from_str(&format!("Invalid point X: {e}")))?;
     let py =
@@ -138,7 +155,7 @@ pub fn scalar_mul(scalar: &str, point_x: &str, point_y: &str) -> Result<types::W
     let point = ProjectivePoint::from_affine(px, py)
         .map_err(|e| JsValue::from_str(&format!("Invalid point: {e:?}")))?;
 
-    let result = StarkCurve::mul(&s, Some(&point));
+    let result = StarkCurve::mul(s.expose_secret(), Some(&point));
     let affine = result
         .to_affine()
         .map_err(|_| JsValue::from_str("Result is point at infinity"))?;
@@ -157,14 +174,12 @@ pub fn scalar_mul(scalar: &str, point_x: &str, point_y: &str) -> Result<types::W
 /// # Returns
 /// Resulting point as {x, y} object
 #[wasm_bindgen(js_name = "scalarMulGenerator")]
-pub fn scalar_mul_generator(scalar: &str) -> Result<types::WasmPoint, JsValue> {
+pub fn scalar_mul_generator(scalar: String) -> Result<types::WasmPoint, JsValue> {
     use krusty_kms_crypto::StarkCurve;
-    use starknet_types_core::felt::Felt;
 
-    let s =
-        Felt::from_hex(scalar).map_err(|e| JsValue::from_str(&format!("Invalid scalar: {e}")))?;
+    let s = secret_input::parse_secret_felt(&Zeroizing::new(scalar), "Invalid scalar")?;
 
-    let result = StarkCurve::mul_generator(&s);
+    let result = StarkCurve::mul_generator(s.expose_secret());
     let affine = result
         .to_affine()
         .map_err(|_| JsValue::from_str("Result is point at infinity"))?;
@@ -343,7 +358,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_scalar_mul_generator() {
-        let result = scalar_mul_generator("0x1");
+        let result = scalar_mul_generator("0x1".into());
         assert!(result.is_ok());
         let point = result.unwrap();
         // g^1 should equal g
@@ -358,7 +373,7 @@ mod tests {
         let result = point_add(&g.x, &g.y, &g.x, &g.y);
         assert!(result.is_ok());
         // g + g should equal 2g
-        let two_g = scalar_mul_generator("0x2").unwrap();
+        let two_g = scalar_mul_generator("0x2".into()).unwrap();
         let added = result.unwrap();
         assert_eq!(added.x, two_g.x);
         assert_eq!(added.y, two_g.y);
