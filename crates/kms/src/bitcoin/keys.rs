@@ -97,7 +97,7 @@ pub fn derive_bitcoin_p2wpkh_keypair(
     Ok(BitcoinP2wpkhKeyPair {
         private_key: *private_key,
         public_key: signer.public_key,
-        address: signer.address(),
+        address: signer.address()?,
         path: format!(
             "m/{BIP84_PURPOSE}'/{BITCOIN_COIN_TYPE}'/{account_index}'/{change}/{address_index}"
         ),
@@ -137,7 +137,7 @@ impl P2wpkhSigner {
         script
     }
 
-    pub(super) fn address(&self) -> String {
+    pub(super) fn address(&self) -> Result<String> {
         encode_segwit_v0(MAINNET_HRP, &self.pubkey_hash)
     }
 
@@ -168,7 +168,11 @@ impl P2wpkhSigner {
             // k256 already normalizes; keep low-S explicit because BIP-146
             // makes a high-S signature non-standard.
             let signature = signature.normalize_s();
-            if signature.to_bytes()[0] < 0x80 {
+            if signature
+                .to_bytes()
+                .first()
+                .is_some_and(|byte| *byte < 0x80)
+            {
                 return Ok(signature);
             }
         }

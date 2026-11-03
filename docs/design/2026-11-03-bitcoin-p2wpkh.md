@@ -97,6 +97,12 @@ while encoding a non-ASCII string.
   `serialize(parse(x)) == x`, and signing only adds or replaces this key's
   `PARTIAL_SIG` in listed inputs. Unlisted inputs, outputs, global and
   unknown fields stay byte-identical.
+- Nothing panics on hostile input. The `bitcoin` module denies
+  `clippy::indexing_slicing` (tests opt out), so every index and slice is
+  checked and becomes an error, and a test runs every BIP-174 vector and this
+  crate's own PSBTs through the signer truncated at every offset, with every
+  byte flipped, and with every length byte set to 0x00, 0xfd and 0xff.
+- A global xpub's path has exactly as many elements as its depth byte.
 - Transactions follow Bitcoin Core's deserialization rules: minimal
   CompactSizes, no trailing bytes, and no witness record whose stacks are all
   empty ("Superfluous witness record"). The unsigned transaction may have

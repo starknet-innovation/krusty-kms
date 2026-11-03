@@ -41,6 +41,8 @@ enum Value {
     Version,
     /// A 4-byte fingerprint followed by 4-byte path elements.
     KeyOrigin,
+    /// A key origin with as many path elements as the extended key's depth.
+    XpubKeyOrigin,
     /// A consensus-encoded witness stack.
     WitnessStack,
     Preimage(fn(&[u8]) -> Vec<u8>),
@@ -92,7 +94,7 @@ use Value as V;
 #[rustfmt::skip]
 const FIELDS: [Field; 22] = [
     f(Global, 0x00, "PSBT_GLOBAL_UNSIGNED_TX", K::None, V::UnsignedTransaction),
-    f(Global, 0x01, "PSBT_GLOBAL_XPUB", K::ExtendedPublicKey, V::KeyOrigin),
+    f(Global, 0x01, "PSBT_GLOBAL_XPUB", K::ExtendedPublicKey, V::XpubKeyOrigin),
     f(Global, 0xfb, "PSBT_GLOBAL_VERSION", K::None, V::Version),
     f(Global, 0xfc, "PSBT_GLOBAL_PROPRIETARY", K::Proprietary, V::Any),
     f(Input, 0x00, "PSBT_IN_NON_WITNESS_UTXO", K::None, V::Transaction),
@@ -164,8 +166,9 @@ fn key_is_valid(key: KeyData, key_data: &[u8]) -> bool {
         // version(4) depth(1) parent fingerprint(4) child(4) chain code(32) key(33).
         KeyData::ExtendedPublicKey => {
             key_data.len() == 78
-                && matches!(key_data[45], 0x02 | 0x03)
-                && is_public_key(&key_data[45..])
+                && key_data.get(45..).is_some_and(|public_key| {
+                    matches!(public_key.first(), Some(0x02 | 0x03)) && is_public_key(public_key)
+                })
         }
         KeyData::Proprietary => is_proprietary_key(key_data),
     }
@@ -191,7 +194,15 @@ fn check_value(field: &Field, key_data: &[u8], value: &[u8]) -> Result<()> {
             }
             value.len() == 4
         }
-        Value::KeyOrigin => !value.is_empty() && value.len().is_multiple_of(4),
+        Value::KeyOrigin => is_key_origin(value),
+        // BIP-174: the number of path elements must match the depth byte of
+        // the 78-byte extended key.
+        Value::XpubKeyOrigin => {
+            is_key_origin(value)
+                && key_data.get(4).is_some_and(|depth| {
+                    (value.len() / 4).checked_sub(1) == Some(usize::from(*depth))
+                })
+        }
         Value::WitnessStack => is_witness_stack(value),
         Value::Preimage(hash) => {
             if hash(value) != key_data {
@@ -218,6 +229,11 @@ fn within<T>(field: &Field, parsed: Result<T>) -> Result<T> {
         }
         other => other,
     })
+}
+
+/// A 4-byte fingerprint followed by whole 4-byte path elements.
+fn is_key_origin(value: &[u8]) -> bool {
+    !value.is_empty() && value.len().is_multiple_of(4)
 }
 
 /// A SEC1 public key, compressed or not, that is a point on secp256k1.
@@ -255,31 +271,47 @@ fn read_witness_stack(reader: &mut Reader<'_>) -> Result<()> {
 /// Bitcoin Core's `CheckSignatureEncoding` with DERSIG and STRICTENC: strict
 /// DER (BIP-66) followed by a defined sighash type.
 fn is_signature(sig: &[u8]) -> bool {
-    let (Some(&sighash_type), Some(der)) = (sig.last(), sig.get(..sig.len().saturating_sub(1)))
-    else {
+    let Some((&sighash_type, der)) = sig.split_last() else {
         return false;
     };
-    matches!(sighash_type & !0x80, 0x01..=0x03) && is_strict_der(der, sig.len())
+    matches!(sighash_type & !0x80, 0x01..=0x03) && is_strict_der(der)
 }
 
-/// BIP-66 `IsValidSignatureEncoding`, on the signature without its last byte.
-fn is_strict_der(der: &[u8], total_len: usize) -> bool {
-    if !(9..=73).contains(&total_len) || der[0] != 0x30 || usize::from(der[1]) != total_len - 3 {
+/// BIP-66 `IsValidSignatureEncoding` on the DER part:
+/// `30 <len> 02 <len R> <R> 02 <len S> <S>`, 8 to 72 bytes, each integer
+/// non-empty, non-negative and without a needless leading zero. Parsed with
+/// checked splits only, so no length byte can index past the end.
+fn is_strict_der(der: &[u8]) -> bool {
+    let [0x30, len, body @ ..] = der else {
         return false;
-    }
-    let len_r = usize::from(der[3]);
-    if 5 + len_r >= total_len {
-        return false;
-    }
-    let len_s = usize::from(der[5 + len_r]);
-    let integer = |at: usize, len: usize| {
-        len != 0 && der[at] & 0x80 == 0 && !(len > 1 && der[at] == 0x00 && der[at + 1] & 0x80 == 0)
     };
-    len_r + len_s + 7 == total_len
-        && der[2] == 0x02
-        && integer(4, len_r)
-        && der[len_r + 4] == 0x02
-        && integer(len_r + 6, len_s)
+    if !(8..=72).contains(&der.len()) || usize::from(*len) != body.len() {
+        return false;
+    }
+    let Some((r, rest)) = der_integer(body) else {
+        return false;
+    };
+    let Some((s, rest)) = der_integer(rest) else {
+        return false;
+    };
+    rest.is_empty() && is_minimal_positive(r) && is_minimal_positive(s)
+}
+
+/// Split `02 <len> <len bytes>` off the front.
+fn der_integer(bytes: &[u8]) -> Option<(&[u8], &[u8])> {
+    let [0x02, len, rest @ ..] = bytes else {
+        return None;
+    };
+    rest.split_at_checked(usize::from(*len))
+}
+
+fn is_minimal_positive(integer: &[u8]) -> bool {
+    match integer {
+        [] => false,
+        [first, ..] if first & 0x80 != 0 => false,
+        [0x00, second, ..] => second & 0x80 != 0,
+        _ => true,
+    }
 }
 
 fn ripemd160_of(value: &[u8]) -> Vec<u8> {

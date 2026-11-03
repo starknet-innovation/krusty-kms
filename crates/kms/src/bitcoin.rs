@@ -26,6 +26,11 @@
 //!
 //! Everything here reuses the pure-Rust `k256` signer already used for Nostr.
 
+// Parsers here read attacker-supplied PSBTs, transactions and keys, often
+// inside a WASM signer, where a panic traps the whole module. Every index or
+// slice must be checked and turned into an error; test modules opt out.
+#![deny(clippy::indexing_slicing)]
+
 mod bech32;
 mod bip32;
 mod bip322;

@@ -48,7 +48,7 @@ pub fn sign_bip322_simple(
     encoding: Bip322Encoding,
 ) -> Result<String> {
     let signer = P2wpkhSigner::new(private_key)?;
-    let own = signer.address();
+    let own = signer.address()?;
     if address != own && address != own.to_ascii_uppercase() {
         return Err(KmsError::CryptoError(
             "BIP-322 address is not this key's mainnet P2WPKH address".into(),

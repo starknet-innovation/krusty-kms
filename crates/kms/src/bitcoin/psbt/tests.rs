@@ -1,6 +1,9 @@
 //! PSBT signing: the happy path, preservation of everything unlisted, and
 //! every refusal.
 
+// Tests index freely: a panic is a test failure, not a trapped signer.
+#![allow(clippy::indexing_slicing)]
+
 use super::*;
 use crate::bitcoin::tests::verify;
 use crate::bitcoin::tx::{OutPoint, TxIn};

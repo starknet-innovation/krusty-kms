@@ -4,6 +4,8 @@
 //! encoding of their own key, which is exact because bech32 is a bijection
 //! between canonical strings and (hrp, version, program).
 
+use krusty_kms_common::{KmsError, Result};
+
 const CHARSET: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 const GENERATORS: [u32; 5] = [
     0x3b6a_57b2,
@@ -16,7 +18,7 @@ const GENERATORS: [u32; 5] = [
 const BECH32_CONST: u32 = 1;
 
 /// Encode a segwit v0 program as a lowercase bech32 address.
-pub(super) fn encode_segwit_v0(hrp: &str, program: &[u8]) -> String {
+pub(super) fn encode_segwit_v0(hrp: &str, program: &[u8]) -> Result<String> {
     let mut data = vec![0u8];
     data.extend(to_base32(program));
 
@@ -25,9 +27,13 @@ pub(super) fn encode_segwit_v0(hrp: &str, program: &[u8]) -> String {
     address.push_str(hrp);
     address.push('1');
     for value in data.iter().chain(checksum.iter()) {
-        address.push(char::from(CHARSET[usize::from(*value)]));
+        // Values are five bits, so this never fails; it is checked anyway.
+        let character = CHARSET
+            .get(usize::from(*value))
+            .ok_or_else(|| KmsError::CryptoError("bech32 value is not five bits".into()))?;
+        address.push(char::from(*character));
     }
-    address
+    Ok(address)
 }
 
 fn checksum(hrp: &[u8], data: &[u8]) -> [u8; 6] {

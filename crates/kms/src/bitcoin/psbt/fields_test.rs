@@ -3,6 +3,9 @@
 //! transactions. Each malformed field refuses the whole PSBT, whichever input
 //! or map it is in.
 
+// Tests index freely: a panic is a test failure, not a trapped signer.
+#![allow(clippy::indexing_slicing)]
+
 use super::tests::{
     assert_signed, fixture, funding_tx, malformed_reason, pair, sign, signer, txin, witness_utxo,
     KEY,
@@ -11,7 +14,7 @@ use super::*;
 
 /// The fixture with input 1 also spending a coin with full UTXO data, so a
 /// previous transaction can sit on an unlisted input.
-fn two_owned_inputs() -> Psbt {
+pub(super) fn two_owned_inputs() -> Psbt {
     let mut psbt = fixture();
     let second = funding_tx(signer(KEY).script_pubkey(), 2);
     psbt.unsigned_tx.inputs[1] = txin(second.txid(), 1);
@@ -77,7 +80,6 @@ fn key_origin_values_are_a_fingerprint_and_whole_path_elements() {
     ]
     .concat();
     let keys = [
-        (Scope::Global, xpub.as_slice()),
         (Scope::Input, derivation_input.as_slice()),
         (Scope::Output, derivation_output.as_slice()),
     ];
@@ -91,6 +93,28 @@ fn key_origin_values_are_a_fingerprint_and_whole_path_elements() {
         }
         for len in [4, 8, 20] {
             assert!(sign(&with_pair(scope, key, &vec![7; len]), &[0]).is_ok());
+        }
+    }
+    // A global xpub's path has exactly as many elements as its depth byte.
+    for depth in [0u8, 2] {
+        let mut xpub = xpub.clone();
+        xpub[5] = depth;
+        for elements in 0..4 {
+            let value = vec![7; 4 + 4 * elements];
+            let psbt = with_pair(Scope::Global, &xpub, &value);
+            if elements == usize::from(depth) {
+                assert!(sign(&psbt, &[0]).is_ok(), "depth {depth}");
+            } else {
+                let reason = malformed_reason(&psbt);
+                assert!(
+                    reason.contains("PSBT_GLOBAL_XPUB has a malformed value"),
+                    "depth {depth}, {elements} elements: {reason}"
+                );
+            }
+        }
+        for len in [0, 3, 5] {
+            let reason = malformed_reason(&with_pair(Scope::Global, &xpub, &vec![7; len]));
+            assert!(reason.contains("has a malformed value"), "{len}: {reason}");
         }
     }
     // The listed input may carry its own key origin too.
@@ -121,7 +145,16 @@ fn partial_signatures_need_a_valid_key_and_a_strict_der_signature() {
     padded_r.insert(4, 0x00);
     padded_r[1] += 1;
     padded_r[3] += 1;
-    for value in [Vec::new(), vec![0x30, 0x01], undefined_type, padded_r] {
+    // Total length 9 with an R length of 3: the S length byte would sit one
+    // past the end, which once indexed out of bounds.
+    let short_s = vec![0x30, 0x06, 0x02, 0x03, 0x11, 0x22, 0x33, 0x44, 0x01];
+    for value in [
+        Vec::new(),
+        vec![0x30, 0x01],
+        undefined_type,
+        padded_r,
+        short_s,
+    ] {
         let reason = malformed_reason(&with_pair(Scope::Input, &key, &value));
         assert!(
             reason.contains("PSBT_IN_PARTIAL_SIG has a malformed value"),

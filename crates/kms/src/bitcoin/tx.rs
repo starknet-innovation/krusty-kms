@@ -30,21 +30,19 @@ impl<'a> Reader<'a> {
     }
 
     pub(super) fn take(&mut self, len: usize) -> Result<&'a [u8]> {
-        if len > self.bytes.len() {
-            return Err(malformed(format!(
-                "needs {len} bytes, {} left",
-                self.bytes.len()
-            )));
-        }
-        let (head, tail) = self.bytes.split_at(len);
+        let left = self.bytes.len();
+        let (head, tail) = self
+            .bytes
+            .split_at_checked(len)
+            .ok_or_else(|| malformed(format!("needs {len} bytes, {left} left")))?;
         self.bytes = tail;
         Ok(head)
     }
 
     fn array<const N: usize>(&mut self) -> Result<[u8; N]> {
-        let mut out = [0u8; N];
-        out.copy_from_slice(self.take(N)?);
-        Ok(out)
+        self.take(N)?
+            .try_into()
+            .map_err(|_| malformed(format!("needs {N} bytes")))
     }
 
     fn u32_le(&mut self) -> Result<u32> {

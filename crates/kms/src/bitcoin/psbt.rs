@@ -133,16 +133,24 @@ pub fn sign_bitcoin_psbt_inputs(
     psbt_base64: &str,
     input_indices: &[u32],
 ) -> Result<String> {
-    let signer = P2wpkhSigner::new(private_key)?;
+    sign_with(&P2wpkhSigner::new(private_key)?, psbt_base64, input_indices)
+}
+
+/// `sign_bitcoin_psbt_inputs` for a signer that is already set up.
+fn sign_with(signer: &P2wpkhSigner, psbt_base64: &str, input_indices: &[u32]) -> Result<String> {
     let mut psbt = Psbt::parse(&decode_bounded(psbt_base64)?)?;
 
     for index in checked_indices(input_indices, psbt.inputs.len())? {
-        let amount = signable_amount(&psbt, index, &signer)?;
+        let amount = signable_amount(&psbt, index, signer)?;
         let sighash = psbt
             .unsigned_tx
             .p2wpkh_sighash_all(index, &signer.pubkey_hash, amount)?;
         let signature = signer.sign_sighash_all(&sighash)?;
-        put_partial_signature(&mut psbt.inputs[index], &signer.public_key, signature);
+        let map = psbt
+            .inputs
+            .get_mut(index)
+            .ok_or_else(|| out_of_range(index))?;
+        put_partial_signature(map, &signer.public_key, signature);
     }
     Ok(BASE64.encode(psbt.serialize()))
 }
@@ -219,7 +227,7 @@ fn require_spent_transaction(index: usize, outpoint: &OutPoint, map: &Map) -> Re
 /// Check that input `index` is this key's P2WPKH spend and return its
 /// amount, proven against the full previous transaction.
 fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u64> {
-    let map = &psbt.inputs[index];
+    let map = psbt.inputs.get(index).ok_or_else(|| out_of_range(index))?;
     let refuse = |reason: &str| KmsError::TransactionError(format!("PSBT input {index}: {reason}"));
 
     // Fields the table marks as wrong for a plain P2WPKH SIGHASH_ALL spend:
@@ -247,7 +255,12 @@ fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u
         find(map, IN_NON_WITNESS_UTXO).ok_or_else(|| refuse("has no non_witness_utxo"))?,
     )?;
     // `Psbt::parse` proved this is the transaction the input spends.
-    let outpoint = &psbt.unsigned_tx.inputs[index].previous_output;
+    let outpoint = &psbt
+        .unsigned_tx
+        .inputs
+        .get(index)
+        .ok_or_else(|| out_of_range(index))?
+        .previous_output;
     let spent = usize::try_from(outpoint.vout)
         .ok()
         .and_then(|vout| previous_tx.outputs.get(vout))
@@ -256,6 +269,11 @@ fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u
         return Err(refuse("witness_utxo does not match the output it spends"));
     }
     Ok(witness_utxo.value)
+}
+
+/// `checked_indices` already bounds every index; this keeps lookups checked.
+fn out_of_range(index: usize) -> KmsError {
+    KmsError::TransactionError(format!("PSBT input {index} is out of range"))
 }
 
 fn put_partial_signature(map: &mut Map, public_key: &[u8; 33], signature: Vec<u8>) {
@@ -311,5 +329,7 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
 mod fields_test;
 #[cfg(test)]
 mod key_encoding_test;
+#[cfg(test)]
+mod no_panic_test;
 #[cfg(test)]
 mod tests;

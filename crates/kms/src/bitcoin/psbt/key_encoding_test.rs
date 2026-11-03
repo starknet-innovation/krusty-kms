@@ -2,6 +2,9 @@
 //! to their keys, and a listed native P2WPKH input may not carry a redeem or
 //! witness script.
 
+// Tests index freely: a panic is a test failure, not a trapped signer.
+#![allow(clippy::indexing_slicing)]
+
 use super::tests::{assert_signed, fixture, malformed_reason, pair, refusal, sign, signer, KEY};
 use super::*;
 

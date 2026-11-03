@@ -2,6 +2,9 @@
 //! Public-API vectors (BIP-84, BIP-322 signatures, BIP-174) live in
 //! `crates/kms/tests/bitcoin_vectors.rs`.
 
+// Tests index freely: a panic is a test failure, not a trapped signer.
+#![allow(clippy::indexing_slicing)]
+
 use super::bip322::{message_hash, to_sign, to_spend};
 use super::keys::P2wpkhSigner;
 use super::tx::{Reader, Transaction};
@@ -27,7 +30,7 @@ fn display_txid(txid: [u8; 32]) -> String {
 }
 
 // BIP-143, "Native P2WPKH" example: the second input spends a P2WPKH output.
-const BIP143_UNSIGNED_TX: &str = "0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000";
+pub(super) const BIP143_UNSIGNED_TX: &str = "0100000002fff7f7881a8099afa6940d42d1e7f6362bec38171ea3edf433541db4e4ad969f0000000000eeffffffef51e1b804cc89d182d279655c3aa89e815b1b309fe287d9b2b55d57b90ec68a0100000000ffffffff02202cb206000000001976a9148280b37df378db99f66f85c95a783a76ac7a6d5988ac9093510d000000001976a9143bde42dbee7e4dbe6a21b2d50ce2f0167faa815988ac11000000";
 const BIP143_PRIVATE_KEY: &str = "619c335025c7f4012e556c2a58b2506e30b8511b53ade95ea316fd8c3286feb9";
 const BIP143_PUBLIC_KEY: &str =
     "025476c2e83188368da1ff3e292e7acafcdb3566bb0ad253f62fc70f07aeee6357";
@@ -165,7 +168,7 @@ fn bip322_message_hash_and_virtual_transaction_vectors() {
     // The vectors' key, L3VFeEujGtevx9w18HD1fhRbCH67Az2dpCymeRE1SoPK6XQtaN2k.
     let signer = P2wpkhSigner::new(&key(BIP322_PRIVATE_KEY)).unwrap();
     assert_eq!(
-        signer.address(),
+        signer.address().unwrap(),
         "bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l"
     );
     let challenge = signer.script_pubkey();

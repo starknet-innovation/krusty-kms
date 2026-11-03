@@ -33,7 +33,7 @@ pub(super) fn derive_private_key(seed: &[u8], path: &[u32]) -> Result<Zeroizing<
     let mut output = hmac_sha512(b"Bitcoin seed", &[seed])?;
     let mut key = Zeroizing::new(parse_scalar(&output, "master key")?);
     let mut chain_code = Zeroizing::new([0u8; 32]);
-    chain_code.copy_from_slice(&output[32..]);
+    copy_half(&mut chain_code, &output, Half::Right);
 
     for &index in path {
         output = if index & HARDENED != 0 {
@@ -50,7 +50,7 @@ pub(super) fn derive_private_key(seed: &[u8], path: &[u32]) -> Result<Zeroizing<
                 "BIP-32 child derivation failed: derived key is zero".into(),
             ));
         }
-        chain_code.copy_from_slice(&output[32..]);
+        copy_half(&mut chain_code, &output, Half::Right);
     }
     Ok(scalar_bytes(&key))
 }
@@ -69,10 +69,26 @@ fn hmac_sha512(key: &[u8], parts: &[&[u8]]) -> Result<Zeroizing<[u8; 64]>> {
     Ok(output)
 }
 
+enum Half {
+    Left,
+    Right,
+}
+
+/// Copy one half of an HMAC-SHA512 output, without indexing.
+fn copy_half(destination: &mut [u8; 32], output: &[u8; 64], half: Half) {
+    let skip = match half {
+        Half::Left => 0,
+        Half::Right => 32,
+    };
+    for (byte, source) in destination.iter_mut().zip(output.iter().skip(skip)) {
+        *byte = *source;
+    }
+}
+
 /// Parse the left half of an HMAC output as a non-zero scalar below `n`.
 fn parse_scalar(output: &[u8; 64], what: &str) -> Result<Scalar> {
     let mut repr = [0u8; 32];
-    repr.copy_from_slice(&output[..32]);
+    copy_half(&mut repr, output, Half::Left);
     let scalar = Option::<Scalar>::from(Scalar::from_repr(repr.into()));
     repr.zeroize();
     match scalar {
