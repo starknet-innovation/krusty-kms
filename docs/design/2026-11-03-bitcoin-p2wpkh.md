@@ -84,7 +84,8 @@ while encoding a non-ASCII string.
   is refused before decoding), minimal CompactSizes (key types included, so
   `fd 03 00` cannot pose as an unknown type), no trailing bytes, no duplicate
   (type, key data) pairs, the key shape of every type BIP-174 defines (proprietary
-  keys and later BIPs' types stay opaque), no version-2-only fields, empty
+  keys and later BIPs' types stay opaque), hash-preimage values (0x0a-0x0d)
+  that hash to their key in every input, signed or not, no version-2-only fields, empty
   scriptSigs in a legacy-serialized unsigned transaction. Each
   map is kept as ordered key-value pairs, so `serialize(parse(x)) == x`, and
   signing only adds or replaces this key's `PARTIAL_SIG` in listed inputs.

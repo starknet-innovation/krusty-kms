@@ -4,11 +4,14 @@
 //! PSBT reproduces it byte for byte. Signing only adds or replaces this key's
 //! partial signature in the listed input maps.
 
+mod fields;
+
 use super::keys::P2wpkhSigner;
 use super::tx::{
     malformed, write_compact_size, write_var_bytes, Reader, Transaction, TxOut, SIGHASH_ALL,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use fields::{require_key_shape, require_preimage};
 use krusty_kms_common::{KmsError, Result};
 use std::collections::BTreeSet;
 
@@ -277,51 +280,11 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
             return Err(malformed("PSBT map repeats a key"));
         }
         let value = reader.var_bytes()?;
+        require_preimage(scope, key_type, key_data, value)?;
         map.push(Pair {
             key: key.to_vec(),
             value: value.to_vec(),
         });
-    }
-}
-
-/// Refuse a key whose shape differs from the one BIP-174 defines for its
-/// type (every type BIP-174 itself defines, except proprietary keys), and
-/// fields that only exist in PSBT version 2 (BIP-370). Types from later BIPs,
-/// such as Taproot's, and unknown types are opaque.
-fn require_key_shape(scope: Scope, key_type: u64, key_data: &[u8]) -> Result<()> {
-    let none = key_data.is_empty();
-    let valid = match (scope, key_type) {
-        // Unsigned transaction, version; xpub keyed by a 78-byte extended key.
-        (Scope::Global, 0x00 | 0xfb) => none,
-        (Scope::Global, 0x01) => key_data.len() == 78,
-        (Scope::Global, 0x02..=0x06) => false,
-        (Scope::Input, 0x00 | 0x01 | 0x03 | 0x04 | 0x05 | 0x07 | 0x08) => none,
-        (Scope::Input, 0x02 | 0x06) => is_public_key(key_data),
-        // RIPEMD160 and HASH160 preimages are keyed by a 20-byte hash,
-        // SHA256 and HASH256 preimages by a 32-byte hash.
-        (Scope::Input, 0x0a | 0x0c) => key_data.len() == 20,
-        (Scope::Input, 0x0b | 0x0d) => key_data.len() == 32,
-        (Scope::Input, 0x0e..=0x12) => false,
-        (Scope::Output, 0x00 | 0x01) => none,
-        (Scope::Output, 0x02) => is_public_key(key_data),
-        (Scope::Output, 0x03 | 0x04) => false,
-        _ => true,
-    };
-    if valid {
-        Ok(())
-    } else {
-        Err(malformed(format!(
-            "PSBT key type {key_type:#04x} has an invalid key or is not allowed in version 0"
-        )))
-    }
-}
-
-/// Whether `bytes` has the shape of a SEC1 public key (compressed or not).
-fn is_public_key(bytes: &[u8]) -> bool {
-    match bytes {
-        [0x02 | 0x03, rest @ ..] => rest.len() == 32,
-        [0x04, rest @ ..] => rest.len() == 64,
-        _ => false,
     }
 }
 

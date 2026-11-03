@@ -121,8 +121,10 @@ fn hash_preimage_keys_must_carry_their_hash_length() {
                 "type {key_type:#04x} with {len} bytes"
             );
         }
+        // The right length gets past the shape check to the value check:
+        // 0x11 bytes are not the hash of "preimage".
         let key = [&[key_type][..], &vec![0x11; hash_len]].concat();
         let result = sign(&psbt(&[pair(&key, b"preimage")], &[]), &[0]);
-        assert!(matches!(result, Err(KmsError::TransactionError(_))));
+        assert!(is_malformed(result, "does not hash to its key"));
     }
 }
