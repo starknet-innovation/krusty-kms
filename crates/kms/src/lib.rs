@@ -4,6 +4,7 @@
 
 pub mod account;
 pub mod account_class;
+pub mod bitcoin;
 pub mod derivation;
 pub mod discovery;
 pub mod encryption;
@@ -29,6 +30,10 @@ pub use account_class::{
     DecodedArgentConstructor, DeploymentInspection, Derivability, KnownAccountClass,
     NotDerivableReason, OpenZeppelinAccount, OzAccountClassConfig, OzAccountClassSource,
     OzDeploymentDescriptor, SaltPolicy,
+};
+pub use bitcoin::{
+    derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs, Bip322Encoding,
+    BitcoinP2wpkhKeyPair, BITCOIN_COIN_TYPE,
 };
 pub use derivation::{
     derive_argent_legacy_private_key, derive_keypair, derive_keypair_with_coin_type,
