@@ -1,8 +1,12 @@
 //! Mnemonic-bound NIP-59 application-data operations.
+//!
+//! The owned passphrase is wiped when the call returns; the mnemonic and the
+//! caller's JS strings are not (see [`crate::account`]).
 
 use crate::error::from_sdk_result;
 use serde_json::json;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 fn nostr_private_key(
     mnemonic: &str,
@@ -10,11 +14,12 @@ fn nostr_private_key(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<krusty_kms::NostrKeyPair, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     from_sdk_result(krusty_kms::derive_nostr_keypair(
         mnemonic,
         address_index,
         account_index,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)
 }

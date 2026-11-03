@@ -4,6 +4,7 @@ use super::helpers::{decrypted_point_to_wasm, parse_ciphertext, parse_felt, pars
 use crate::error::from_sdk_result;
 use crate::types::{WasmAccountState, WasmCiphertext, WasmDecryptedPoint};
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 /// WASM-accessible Tongo account.
 ///
@@ -36,7 +37,8 @@ impl WasmAccount {
         passphrase: Option<String>,
     ) -> Result<WasmAccount, JsValue> {
         let contract_felt = parse_felt(contract_address)?;
-        let passphrase_ref = passphrase.as_deref();
+        let passphrase = passphrase.map(Zeroizing::new);
+        let passphrase_ref = passphrase.as_deref().map(String::as_str);
 
         let inner = from_sdk_result(krusty_kms_sdk::TongoAccount::from_mnemonic(
             mnemonic,

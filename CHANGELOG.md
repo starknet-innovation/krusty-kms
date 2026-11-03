@@ -4,6 +4,20 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,
+  chain codes, and intermediates in wiped fixed-size types (`k256` scalars,
+  `crypto-bigint` integers, `Zeroizing` arrays) instead of `BigUint` and
+  `Vec`. HMACs with secret keys or messages (the BIP-32 master key and child
+  keys, NIP-44's HKDF and MAC) use a crate-internal HMAC whose padded key and
+  SHA-2 states are wiped, which the `hmac` crate cannot do. `sha2`'s `zeroize`
+  feature is now enabled. Derived keys and every public API are unchanged.
+  Copies made by the compiler, dependency internals (`bip39`'s PBKDF2,
+  scrypt, RFC 6979), and JS strings are not wiped.
+- `krusty-kms-wasm` wipes owned passphrases when a call returns, and a private
+  key rejected by the `WasmKeypair` or `WasmStarkXOnlyKeypair` constructor.
+
 ## [0.14.0] - 2026-10-28
 
 ### Security

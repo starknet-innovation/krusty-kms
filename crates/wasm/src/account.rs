@@ -2,6 +2,13 @@
 //!
 //! Provides account creation, key derivation, and state management
 //! functionality accessible from JavaScript/TypeScript.
+//!
+//! # Secrets at the boundary
+//!
+//! An owned passphrase (`Option<String>`) is held in `Zeroizing` and wiped
+//! when the call returns. Secrets taken as `&str` (mnemonics, private keys)
+//! are wasm-bindgen's copies, which it frees after the call without wiping.
+//! The caller's JS strings cannot be wiped from Rust at all.
 
 mod addresses;
 mod derivation;

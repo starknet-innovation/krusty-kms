@@ -18,6 +18,7 @@ pub mod stark_signing;
 pub mod strk20;
 pub mod tx_hash;
 pub mod typed_data;
+mod zeroizing_hmac;
 
 pub use account::{
     calculate_contract_address, derive_oz_account_address, encode_short_string, hash_elements,

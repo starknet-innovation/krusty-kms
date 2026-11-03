@@ -270,12 +270,14 @@ impl WasmKeypair {
         public_key_x: String,
         public_key_y: String,
     ) -> Result<WasmKeypair, JsValue> {
-        require_affine_public_key(&public_key_x, &public_key_y)?;
-        Ok(Self {
+        // Built before validating so a rejected key is wiped on drop.
+        let keypair = Self {
             private_key,
             public_key_x,
             public_key_y,
-        })
+        };
+        require_affine_public_key(&keypair.public_key_x, &keypair.public_key_y)?;
+        Ok(keypair)
     }
 
     /// Get the full public key as fixed-width `0x` + 128 hex digits (x||y).
@@ -339,11 +341,13 @@ impl WasmStarkXOnlyKeypair {
         private_key: String,
         public_key_x: String,
     ) -> Result<WasmStarkXOnlyKeypair, JsValue> {
-        require_felt_hex(&public_key_x, "public_key_x")?;
-        Ok(Self {
+        // Built before validating so a rejected key is wiped on drop.
+        let keypair = Self {
             private_key,
             public_key_x,
-        })
+        };
+        require_felt_hex(&keypair.public_key_x, "public_key_x")?;
+        Ok(keypair)
     }
 
     /// Return the x-only public key as fixed-width `0x` + 64 hex digits.
