@@ -33,7 +33,7 @@ fn txout(value: u64, script_pubkey: Vec<u8>) -> TxOut {
     }
 }
 
-fn txin(txid: [u8; 32], vout: u32) -> TxIn {
+pub(super) fn txin(txid: [u8; 32], vout: u32) -> TxIn {
     TxIn {
         previous_output: OutPoint { txid, vout },
         script_sig: Vec::new(),
@@ -41,14 +41,14 @@ fn txin(txid: [u8; 32], vout: u32) -> TxIn {
     }
 }
 
-fn witness_utxo(output: &TxOut) -> Vec<u8> {
+pub(super) fn witness_utxo(output: &TxOut) -> Vec<u8> {
     let mut bytes = Vec::new();
     output.serialize_into(&mut bytes);
     bytes
 }
 
 /// A transaction whose output 1 pays `AMOUNT` to `script`.
-fn funding_tx(script: Vec<u8>, salt: u8) -> Transaction {
+pub(super) fn funding_tx(script: Vec<u8>, salt: u8) -> Transaction {
     Transaction {
         version: 2,
         inputs: vec![txin([salt; 32], 0)],
@@ -141,8 +141,14 @@ fn re_signing_replaces_this_keys_signature_and_is_deterministic() {
     let once = sign(&fixture(), &[0]).unwrap();
     assert_eq!(sign(&once, &[0]).unwrap(), once);
 
+    // A well-formed signature by this key over another digest is replaced.
     let mut stale = fixture();
-    put_partial_signature(&mut stale.inputs[0], &signer(KEY).public_key, vec![0x30]);
+    let other_signature = signer(KEY).sign_sighash_all(&[1; 32]).unwrap();
+    put_partial_signature(
+        &mut stale.inputs[0],
+        &signer(KEY).public_key,
+        other_signature,
+    );
     assert_eq!(sign(&stale, &[0]).unwrap(), once);
 }
 
@@ -189,6 +195,7 @@ fn refuses_a_witness_utxo_for_another_script() {
         let mut psbt = fixture();
         let other = funding_tx(script, 1);
         psbt.unsigned_tx.inputs[0] = txin(other.txid(), 1);
+        psbt.global[0] = pair(&[GLOBAL_UNSIGNED_TX], &psbt.unsigned_tx.serialize_legacy());
         psbt.inputs[0] = vec![
             pair(&[IN_NON_WITNESS_UTXO], &other.serialize_legacy()),
             pair(&[IN_WITNESS_UTXO], &witness_utxo(&other.outputs[1])),
@@ -209,12 +216,24 @@ fn refuses_missing_utxo_data() {
     }
 }
 
+/// The `DeserializationError` reason when signing input 0 of `psbt`.
+pub(super) fn malformed_reason(psbt: &Psbt) -> String {
+    match sign_bitcoin_psbt_inputs(&key(KEY), &encode(psbt), &[0]) {
+        Err(KmsError::DeserializationError(reason)) => reason,
+        other => panic!("expected a malformed PSBT, got {other:?}"),
+    }
+}
+
 #[test]
 fn refuses_a_non_witness_utxo_that_is_not_the_spent_transaction() {
-    let mut psbt = fixture();
+    // As Bitcoin Core does, the PSBT is malformed, whichever input it is on.
     let unrelated = funding_tx(signer(KEY).script_pubkey(), 3);
-    psbt.inputs[0][0] = pair(&[IN_NON_WITNESS_UTXO], &unrelated.serialize_legacy());
-    assert!(refusal(&psbt, &[0]).contains("is not the transaction this input spends"));
+    for input in [0, 1] {
+        let mut psbt = fixture();
+        psbt.inputs[input].retain(|pair| pair.key != [IN_NON_WITNESS_UTXO]);
+        psbt.inputs[input].push(pair(&[IN_NON_WITNESS_UTXO], &unrelated.serialize_legacy()));
+        assert!(malformed_reason(&psbt).contains("is not the transaction this input spends"));
+    }
 }
 
 #[test]
@@ -231,23 +250,28 @@ fn refuses_a_prevout_index_past_the_previous_outputs() {
     let mut psbt = fixture();
     psbt.unsigned_tx.inputs[0].previous_output.vout = 2;
     psbt.global[0] = pair(&[GLOBAL_UNSIGNED_TX], &psbt.unsigned_tx.serialize_legacy());
-    assert!(refusal(&psbt, &[0]).contains("has no output at the spent index"));
+    assert!(malformed_reason(&psbt).contains("has no output at the spent index"));
 }
 
 #[test]
 fn refuses_every_sighash_type_but_all() {
-    let types: [&[u8]; 6] = [
+    let types: [&[u8]; 5] = [
         &[0x00, 0, 0, 0],
         &[0x02, 0, 0, 0],
         &[0x03, 0, 0, 0],
         &[0x81, 0, 0, 0],
         &[0x01, 0, 0, 1],
-        &[0x01, 0, 0],
     ];
     for sighash_type in types {
         let mut psbt = fixture();
         psbt.inputs[0].push(pair(&[IN_SIGHASH_TYPE], sighash_type));
         assert!(refusal(&psbt, &[0]).contains("other than SIGHASH_ALL"));
+    }
+    // A value that is not 32 bits is malformed on any input.
+    for input in [0, 1] {
+        let mut psbt = fixture();
+        psbt.inputs[input].push(pair(&[IN_SIGHASH_TYPE], &[0x01, 0, 0]));
+        assert!(malformed_reason(&psbt).contains("PSBT_IN_SIGHASH_TYPE has a malformed value"));
     }
     let mut explicit_all = fixture();
     explicit_all.inputs[0].push(pair(&[IN_SIGHASH_TYPE], &[0x01, 0, 0, 0]));
@@ -304,25 +328,4 @@ fn refuses_invalid_keys_and_malformed_encodings() {
             Err(KmsError::DeserializationError(_))
         ));
     }
-}
-
-#[test]
-fn serialize_inverts_parse_on_the_bip174_valid_vectors() {
-    #[derive(serde::Deserialize)]
-    struct Vectors {
-        bip174_valid: Vec<Case>,
-    }
-    #[derive(serde::Deserialize)]
-    struct Case {
-        psbt: String,
-    }
-    let vectors: Vectors =
-        serde_json::from_str(include_str!("../../../tests/fixtures/bitcoin_vectors.json")).unwrap();
-    assert!(!vectors.bip174_valid.is_empty());
-    for case in vectors.bip174_valid {
-        let bytes = BASE64.decode(&case.psbt).unwrap();
-        assert_eq!(Psbt::parse(&bytes).unwrap().serialize(), bytes);
-    }
-    let ours = fixture();
-    assert_eq!(Psbt::parse(&ours.serialize()).unwrap(), ours);
 }

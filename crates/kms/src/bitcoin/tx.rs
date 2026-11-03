@@ -185,8 +185,9 @@ pub(super) struct Transaction {
 
 impl Transaction {
     /// Parse the legacy serialization, the only form BIP-174 allows for the
-    /// unsigned transaction. A witness-serialized transaction is refused: its
-    /// marker byte reads as an empty input list.
+    /// unsigned transaction. Empty input and output lists are allowed, as in
+    /// BIP-174's valid vectors; a witness-serialized transaction then fails
+    /// to parse exactly, because its marker reads as an empty input list.
     pub(super) fn parse_legacy(bytes: &[u8]) -> Result<Self> {
         let mut reader = Reader::new(bytes);
         let version = reader.u32_le()?;
@@ -202,7 +203,10 @@ impl Transaction {
         })
     }
 
-    /// Parse the network serialization, with or without segwit data.
+    /// Parse the network serialization, with or without segwit data, by
+    /// Bitcoin Core's deserialization rules: minimal CompactSizes, no trailing
+    /// bytes, and no witness record whose stacks are all empty. A transaction
+    /// with no inputs or no outputs, which no real coin comes from, is refused.
     pub(super) fn parse_network(bytes: &[u8]) -> Result<Self> {
         let mut reader = Reader::new(bytes);
         let version = reader.u32_le()?;
@@ -212,11 +216,20 @@ impl Transaction {
         }
         let inputs = parse_inputs(&mut reader)?;
         let outputs = parse_outputs(&mut reader)?;
+        if inputs.is_empty() || outputs.is_empty() {
+            return Err(malformed("transaction has no inputs or no outputs"));
+        }
         if segwit {
+            let mut has_witness = false;
             for _ in &inputs {
-                for _ in 0..reader.compact_size()? {
+                let items = reader.compact_size()?;
+                has_witness |= items > 0;
+                for _ in 0..items {
                     reader.var_bytes()?;
                 }
+            }
+            if !has_witness {
+                return Err(malformed("superfluous witness record"));
             }
         }
         let lock_time = reader.u32_le()?;
@@ -294,9 +307,6 @@ impl Transaction {
 
 fn parse_inputs(reader: &mut Reader<'_>) -> Result<Vec<TxIn>> {
     let count = reader.compact_size()?;
-    if count == 0 {
-        return Err(malformed("transaction has no inputs"));
-    }
     let mut inputs = Vec::new();
     for _ in 0..count {
         inputs.push(TxIn {
@@ -313,9 +323,6 @@ fn parse_inputs(reader: &mut Reader<'_>) -> Result<Vec<TxIn>> {
 
 fn parse_outputs(reader: &mut Reader<'_>) -> Result<Vec<TxOut>> {
     let count = reader.compact_size()?;
-    if count == 0 {
-        return Err(malformed("transaction has no outputs"));
-    }
     let mut outputs = Vec::new();
     for _ in 0..count {
         outputs.push(TxOut::parse(reader)?);

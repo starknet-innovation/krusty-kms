@@ -18,6 +18,8 @@ struct Fixture {
     bip322_simple: Vec<Bip322Vector>,
     bip174_invalid: Vec<PsbtCase>,
     bip174_valid: Vec<PsbtCase>,
+    bip174_signer_check_failures: Vec<PsbtCase>,
+    bip174_role_examples: Vec<PsbtCase>,
 }
 
 #[derive(Deserialize)]
@@ -185,13 +187,27 @@ fn bip174_invalid_psbts_are_refused_as_malformed() {
 
 #[test]
 fn bip174_valid_psbts_parse_but_have_nothing_for_this_key() {
-    let key = wif_private_key(&fixture().bip322_simple[0].private_key_wif);
-    for case in fixture().bip174_valid {
-        let result = sign_bitcoin_psbt_inputs(&key, &case.psbt, &[0]);
-        assert!(
-            matches!(result, Err(KmsError::TransactionError(_))),
-            "{}: {result:?}",
-            case.case
-        );
+    // The valid vectors, the ones that only fail signer checks, and every
+    // PSBT of the role examples. None spends this key's P2WPKH coin, so each
+    // parses and then every input is refused, rather than being malformed.
+    let fixture = fixture();
+    let key = wif_private_key(&fixture.bip322_simple[0].private_key_wif);
+    let cases = fixture
+        .bip174_valid
+        .iter()
+        .chain(&fixture.bip174_signer_check_failures)
+        .chain(&fixture.bip174_role_examples);
+    let mut checked = 0;
+    for case in cases {
+        for index in 0..3 {
+            let result = sign_bitcoin_psbt_inputs(&key, &case.psbt, &[index]);
+            assert!(
+                matches!(result, Err(KmsError::TransactionError(_))),
+                "{} input {index}: {result:?}",
+                case.case
+            );
+        }
+        checked += 1;
     }
+    assert_eq!(checked, 10 + 4 + 11);
 }

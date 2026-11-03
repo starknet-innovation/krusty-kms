@@ -242,10 +242,32 @@ fn transaction_parsers_fail_closed() {
     no_outputs.truncate(4 + 1 + 2 * 41);
     no_outputs.extend([0x00, 0, 0, 0, 0]);
 
-    for invalid in [&trailing[..], truncated, &no_outputs[..], &[0u8; 4][..]] {
+    for invalid in [&trailing[..], truncated, &[0u8; 4][..]] {
         assert!(Transaction::parse_legacy(invalid).is_err());
         assert!(Transaction::parse_network(invalid).is_err());
     }
+    // BIP-174's valid vectors include unsigned transactions with empty input
+    // or output lists, but no coin comes from such a transaction.
+    assert!(Transaction::parse_legacy(&no_outputs)
+        .unwrap()
+        .outputs
+        .is_empty());
+    assert!(Transaction::parse_network(&no_outputs).is_err());
+}
+
+#[test]
+fn network_parser_refuses_a_superfluous_witness_record() {
+    // Bitcoin Core: "Superfluous witness record" when every stack is empty.
+    let legacy = bytes(BIP143_UNSIGNED_TX);
+    let (version, rest) = legacy.split_at(4);
+    let (body, lock_time) = rest.split_at(rest.len() - 4);
+    let with_witness = |stacks: &[u8]| [version, &[0x00, 0x01], body, stacks, lock_time].concat();
+
+    let error = Transaction::parse_network(&with_witness(&[0x00, 0x00])).unwrap_err();
+    assert!(error.to_string().contains("superfluous witness record"));
+    // One stack with one (even empty) item is a witness.
+    assert!(Transaction::parse_network(&with_witness(&[0x00, 0x01, 0x00])).is_ok());
+    assert!(Transaction::parse_network(&with_witness(&[0x01, 0x00, 0x00])).is_ok());
 }
 
 #[test]

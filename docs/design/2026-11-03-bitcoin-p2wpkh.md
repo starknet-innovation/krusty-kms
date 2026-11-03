@@ -80,16 +80,28 @@ while encoding a non-ASCII string.
   - it is not already finalized.
 - Index lists must be non-empty, distinct and in range, so no longer than
   the PSBT's input count.
-- Parsing is strict (BIP-174 version 0): at most 4 MiB decoded (longer base64
-  is refused before decoding), minimal CompactSizes (key types included, so
-  `fd 03 00` cannot pose as an unknown type), no trailing bytes, no duplicate
-  (type, key data) pairs, the key shape of every type BIP-174 defines (proprietary
-  keys and later BIPs' types stay opaque), hash-preimage values (0x0a-0x0d)
-  that hash to their key in every input, signed or not, no version-2-only fields, empty
-  scriptSigs in a legacy-serialized unsigned transaction. Each
-  map is kept as ordered key-value pairs, so `serialize(parse(x)) == x`, and
-  signing only adds or replaces this key's `PARTIAL_SIG` in listed inputs.
-  Unlisted inputs, outputs, global and unknown fields stay byte-identical.
+- Parsing is strict (BIP-174 version 0). The PSBT is at most 4 MiB decoded
+  (longer base64 is refused before decoding). Key types are minimal
+  CompactSizes, so `fd 03 00` cannot pose as an unknown type, and no map
+  repeats a (type, key data) pair. Every pair is checked against one table,
+  `psbt/fields.rs`, holding every field BIP-174 defines: key data (none, a
+  20- or 32-byte hash, an on-curve public key, a 78-byte extended key, or a
+  parsed proprietary identifier and subtype) and value (a legacy unsigned
+  transaction with empty scriptSigs, a network transaction, an output, a
+  strict-DER signature with a defined sighash type, a 32-bit sighash type,
+  version 0, a fingerprint plus whole path elements, a witness stack, or a
+  preimage that hashes to its key). PSBT version 2 fields are refused, and
+  types the table does not name pass through once their type is read. As in
+  Bitcoin Core, a `non_witness_utxo` on any input must be the transaction
+  that input spends. Each map is kept as ordered key-value pairs, so
+  `serialize(parse(x)) == x`, and signing only adds or replaces this key's
+  `PARTIAL_SIG` in listed inputs. Unlisted inputs, outputs, global and
+  unknown fields stay byte-identical.
+- Transactions follow Bitcoin Core's deserialization rules: minimal
+  CompactSizes, no trailing bytes, and no witness record whose stacks are all
+  empty ("Superfluous witness record"). The unsigned transaction may have
+  empty input and output lists, as two BIP-174 valid vectors do; a previous
+  transaction may not.
 - BIP-322: `address` must be this key's P2WPKH address, lowercase or
   uppercase. The result is `smp` plus the base64 witness: BIP-322 ("Types of
   Signatures") says signers MUST prefix the variant. The prefix only lets a
@@ -118,8 +130,9 @@ enough to keep local. `rust-bitcoin` was not used: it pulls the C-backed
 
 Official BIP-84 (the "abandon … about" mnemonic), BIP-143 native P2WPKH
 (sighash and signature), BIP-322 (message hash, `to_spend`/`to_sign` txids,
-simple signatures) and every BIP-174 invalid-PSBT vector; round trips over the
-BIP-174 valid vectors; one test per refusal above. BIP-322's simple vectors
+simple signatures) and every PSBT in BIP-174's test vectors: the 20 invalid
+ones are refused, and the other 25 parse, round-trip byte for byte and have
+nothing this key can sign. One test per refusal above. BIP-322's simple vectors
 list a Core (low-R) and a plain RFC 6979 signature; grinding reproduces the
 Core one. Low-R grinding is also checked against
 `tests/fixtures/bitcoin_low_r_vectors.json`, generated with `@noble/curves`

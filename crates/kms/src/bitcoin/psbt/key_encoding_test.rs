@@ -2,18 +2,11 @@
 //! to their keys, and a listed native P2WPKH input may not carry a redeem or
 //! witness script.
 
-use super::tests::{assert_signed, encode, fixture, key, pair, refusal, sign, signer, KEY};
+use super::tests::{assert_signed, fixture, malformed_reason, pair, refusal, sign, signer, KEY};
 use super::*;
 
 /// A change to the fixture that must make it malformed.
 type Edit = fn(&mut Psbt);
-
-fn malformed_reason(psbt: &Psbt) -> String {
-    match sign_bitcoin_psbt_inputs(&key(KEY), &encode(psbt), &[0]) {
-        Err(KmsError::DeserializationError(reason)) => reason,
-        other => panic!("expected a malformed PSBT, got {other:?}"),
-    }
-}
 
 #[test]
 fn non_minimal_key_types_are_refused_in_every_map() {
@@ -71,10 +64,13 @@ fn minimal_multi_byte_unknown_types_pass_through_unchanged() {
 
 #[test]
 fn refuses_a_redeem_or_witness_script_on_a_listed_input() {
-    for field in [IN_REDEEM_SCRIPT, IN_WITNESS_SCRIPT] {
+    for (field, what) in [
+        (IN_REDEEM_SCRIPT, "a redeem script"),
+        (IN_WITNESS_SCRIPT, "a witness script"),
+    ] {
         let mut psbt = fixture();
         psbt.inputs[0].push(pair(&[field], &signer(KEY).script_pubkey()));
-        assert!(refusal(&psbt, &[0]).contains("redeem or witness script"));
+        assert!(refusal(&psbt, &[0]).contains(what));
     }
     // On an unlisted input they are not this signer's to judge, and stay.
     let mut psbt = fixture();

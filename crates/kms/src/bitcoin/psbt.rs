@@ -8,10 +8,11 @@ mod fields;
 
 use super::keys::P2wpkhSigner;
 use super::tx::{
-    malformed, write_compact_size, write_var_bytes, Reader, Transaction, TxOut, SIGHASH_ALL,
+    malformed, write_compact_size, write_var_bytes, OutPoint, Reader, Transaction, TxOut,
+    SIGHASH_ALL,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use fields::{require_key_shape, require_preimage};
+use fields::{check_pair, refused_on_listed_input};
 use krusty_kms_common::{KmsError, Result};
 use std::collections::BTreeSet;
 
@@ -22,15 +23,22 @@ const MAGIC: &[u8; 5] = b"psbt\xff";
 const MAX_PSBT_BYTES: usize = 4 * 1024 * 1024;
 
 const GLOBAL_UNSIGNED_TX: u8 = 0x00;
-const GLOBAL_VERSION: u8 = 0xfb;
 
 const IN_NON_WITNESS_UTXO: u8 = 0x00;
 const IN_WITNESS_UTXO: u8 = 0x01;
 const IN_PARTIAL_SIG: u8 = 0x02;
 const IN_SIGHASH_TYPE: u8 = 0x03;
+
+// Types only the tests name; `fields::FIELDS` owns the rules for them.
+#[cfg(test)]
+const GLOBAL_VERSION: u8 = 0xfb;
+#[cfg(test)]
 const IN_REDEEM_SCRIPT: u8 = 0x04;
+#[cfg(test)]
 const IN_WITNESS_SCRIPT: u8 = 0x05;
+#[cfg(test)]
 const IN_FINAL_SCRIPTSIG: u8 = 0x07;
+#[cfg(test)]
 const IN_FINAL_SCRIPTWITNESS: u8 = 0x08;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,7 +49,7 @@ struct Pair {
 
 type Map = Vec<Pair>;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Scope {
     Global,
     Input,
@@ -63,22 +71,19 @@ impl Psbt {
         if reader.take(MAGIC.len())? != MAGIC {
             return Err(malformed("missing PSBT magic bytes"));
         }
+        // `read_map` checks every pair against the BIP-174 field table,
+        // including the version and the unsigned transaction's scriptSigs.
         let global = read_map(&mut reader, Scope::Global)?;
-        require_version_zero(&global)?;
         let unsigned_tx = Transaction::parse_legacy(
             find(&global, GLOBAL_UNSIGNED_TX)
                 .ok_or_else(|| malformed("PSBT has no unsigned transaction"))?,
         )?;
-        if unsigned_tx
-            .inputs
-            .iter()
-            .any(|input| !input.script_sig.is_empty())
-        {
-            return Err(malformed("unsigned transaction has a scriptSig"));
-        }
         let inputs = (0..unsigned_tx.inputs.len())
             .map(|_| read_map(&mut reader, Scope::Input))
             .collect::<Result<Vec<_>>>()?;
+        for (index, (input, map)) in unsigned_tx.inputs.iter().zip(&inputs).enumerate() {
+            require_spent_transaction(index, &input.previous_output, map)?;
+        }
         let outputs = (0..unsigned_tx.outputs.len())
             .map(|_| read_map(&mut reader, Scope::Output))
             .collect::<Result<Vec<_>>>()?;
@@ -191,21 +196,40 @@ fn checked_indices(indices: &[u32], input_count: usize) -> Result<Vec<usize>> {
     Ok(checked)
 }
 
+/// As Bitcoin Core does when it decodes a PSBT, refuse a `non_witness_utxo`
+/// that is not the transaction its input spends, on any input.
+fn require_spent_transaction(index: usize, outpoint: &OutPoint, map: &Map) -> Result<()> {
+    let Some(bytes) = find(map, IN_NON_WITNESS_UTXO) else {
+        return Ok(());
+    };
+    let previous_tx = Transaction::parse_network(bytes)?;
+    if previous_tx.txid() != outpoint.txid {
+        return Err(malformed(format!(
+            "PSBT input {index}: non_witness_utxo is not the transaction this input spends"
+        )));
+    }
+    if usize::try_from(outpoint.vout).map_or(true, |vout| vout >= previous_tx.outputs.len()) {
+        return Err(malformed(format!(
+            "PSBT input {index}: non_witness_utxo has no output at the spent index"
+        )));
+    }
+    Ok(())
+}
+
 /// Check that input `index` is this key's P2WPKH spend and return its
 /// amount, proven against the full previous transaction.
 fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u64> {
     let map = &psbt.inputs[index];
     let refuse = |reason: &str| KmsError::TransactionError(format!("PSBT input {index}: {reason}"));
 
-    if find(map, IN_FINAL_SCRIPTSIG).is_some() || find(map, IN_FINAL_SCRIPTWITNESS).is_some() {
-        return Err(refuse("is already finalized"));
-    }
-    // BIP-174 has signers check a provided script against the UTXO; a
-    // native P2WPKH spend has neither, so either one is inconsistent.
-    if find(map, IN_REDEEM_SCRIPT).is_some() || find(map, IN_WITNESS_SCRIPT).is_some() {
-        return Err(refuse(
-            "carries a redeem or witness script, which a native P2WPKH input cannot use",
-        ));
+    // Fields the table marks as wrong for a plain P2WPKH SIGHASH_ALL spend:
+    // finalized fields, and redeem or witness scripts (BIP-174 has signers
+    // check those against the UTXO, and a native P2WPKH spend has neither).
+    for pair in map {
+        let key_type = Reader::new(&pair.key).compact_u64()?;
+        if let Some(reason) = refused_on_listed_input(key_type) {
+            return Err(refuse(reason));
+        }
     }
     let sighash_all = u32::from(SIGHASH_ALL).to_le_bytes();
     if find(map, IN_SIGHASH_TYPE).is_some_and(|value| value != sighash_all) {
@@ -222,12 +246,8 @@ fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u
     let previous_tx = Transaction::parse_network(
         find(map, IN_NON_WITNESS_UTXO).ok_or_else(|| refuse("has no non_witness_utxo"))?,
     )?;
+    // `Psbt::parse` proved this is the transaction the input spends.
     let outpoint = &psbt.unsigned_tx.inputs[index].previous_output;
-    if previous_tx.txid() != outpoint.txid {
-        return Err(refuse(
-            "non_witness_utxo is not the transaction this input spends",
-        ));
-    }
     let spent = usize::try_from(outpoint.vout)
         .ok()
         .and_then(|vout| previous_tx.outputs.get(vout))
@@ -275,12 +295,11 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
         let mut key_reader = Reader::new(key);
         let key_type = key_reader.compact_u64()?;
         let key_data = key_reader.rest();
-        require_key_shape(scope, key_type, key_data)?;
         if !keys.insert((key_type, key_data)) {
             return Err(malformed("PSBT map repeats a key"));
         }
         let value = reader.var_bytes()?;
-        require_preimage(scope, key_type, key_data, value)?;
+        check_pair(scope, key_type, key_data, value)?;
         map.push(Pair {
             key: key.to_vec(),
             value: value.to_vec(),
@@ -288,14 +307,8 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
     }
 }
 
-fn require_version_zero(global: &Map) -> Result<()> {
-    match find(global, GLOBAL_VERSION) {
-        None => Ok(()),
-        Some(value) if value == [0, 0, 0, 0] => Ok(()),
-        Some(_) => Err(malformed("only PSBT version 0 is supported")),
-    }
-}
-
+#[cfg(test)]
+mod fields_test;
 #[cfg(test)]
 mod key_encoding_test;
 #[cfg(test)]
