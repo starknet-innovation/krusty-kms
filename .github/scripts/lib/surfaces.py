@@ -280,6 +280,16 @@ def _paren_depth(text: str) -> int:
     return text.count("(") - text.count(")")
 
 
+# A complete ``"..."`` literal, honouring backslash escapes.
+_STRING_LITERAL_RE = re.compile(r'"(?:\\.|[^"\\])*"')
+
+
+def _blank_string_literals(text: str) -> str:
+    """Blank every complete string literal's contents, keeping offsets, so
+    delimiter counts and searches ignore delimiters inside strings."""
+    return _STRING_LITERAL_RE.sub(lambda m: '"' + " " * (len(m.group()) - 2) + '"', text)
+
+
 def _generic_depth(text: str) -> int:
     # ``->`` must not count as a generic closer.
     cleaned = text.replace("->", " ")
@@ -678,33 +688,40 @@ def _collect_rust_signature(lines: list[str], start: int) -> str:
                 return _normalize_ws(" ".join(parts))
         return _normalize_ws(" ".join(parts))
 
+    # Delimiters are judged on ``bare`` text, with string literals blanked, so
+    # an attribute such as ``unchecked_param_type = "a)]b"`` cannot end the
+    # signature early; ``parts`` keeps the original text.
     parts: list[str] = []
+    bare_parts: list[str] = []
     for j in range(start, len(lines)):
         line = lines[j].strip()
         if not line:
             continue
-        if "{" in line:
-            before = line.split("{", 1)[0].strip()
+        bare_line = _blank_string_literals(line)
+        if "{" in bare_line:
+            before = line[: bare_line.index("{")].strip()
             if before:
                 parts.append(before)
             return _normalize_ws(" ".join(parts))
         parts.append(line)
+        bare_parts.append(bare_line)
         combined = " ".join(parts)
-        if ";" in line and _paren_depth(combined) == 0 and _generic_depth(combined) <= 0:
+        bare = " ".join(bare_parts)
+        if ";" in bare_line and _paren_depth(bare) == 0 and _generic_depth(bare) <= 0:
             return _normalize_ws(combined)
-        if "(" in combined and _paren_depth(combined) == 0:
+        if "(" in bare and _paren_depth(bare) == 0:
             nxt = lines[j + 1].strip() if j + 1 < len(lines) else ""
             if nxt.startswith("->") or nxt.startswith("where"):
                 continue
-            if re.search(r"\bwhere\b", combined) and (
+            if re.search(r"\bwhere\b", bare) and (
                 line == "where" or line.endswith(",") or line.endswith(":")
             ):
                 continue
             # Keep collecting while a multiline return type's generics/parens
             # remain open (e.g. ``-> Result<\n Felt,\n>``).
-            if "->" in combined:
-                after_arrow = combined.split("->", 1)[1]
-                if _generic_depth(combined) > 0 or _paren_depth(after_arrow) > 0:
+            if "->" in bare:
+                after_arrow = bare.split("->", 1)[1]
+                if _generic_depth(bare) > 0 or _paren_depth(after_arrow) > 0:
                     continue
             return _normalize_ws(combined)
     return _normalize_ws(" ".join(parts))
@@ -1581,11 +1598,67 @@ def _format_wasm_export(rel_path: str, attrs: str, signature: str) -> str:
     return f"{rel_path}: {signature}"
 
 
-# A ``#[wasm_bindgen(...)]`` on a parameter (``#[wasm_bindgen(...)] name: Type``)
-# belongs to the signature it sits in, not to the next export.
-_WASM_PARAM_ATTR_RE = re.compile(
-    r"^\s*#\[wasm_bindgen\(.*\)\]\s*(?:mut\s+)?[A-Za-z_]\w*\s*:"
-)
+# What follows a parameter's attributes: ``name:`` or ``mut name:``.
+_PARAM_PATTERN_RE = re.compile(r"^(?:mut\s+)?[A-Za-z_]\w*\s*:(?!:)")
+
+
+def _attr_close(lines: list[str], line: int, text: str) -> tuple[int, str] | None:
+    """Find where the attribute starting ``text`` (``#[...``) closes.
+
+    Brackets and parens are balanced across lines, ignoring string literals,
+    which may contain either. Returns the closing line and the text after the
+    attribute on it, or ``None`` if the attribute never closes.
+    """
+    depth = 0
+    in_string = escaped = False
+    while True:
+        for pos, ch in enumerate(text):
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+            elif ch == '"':
+                in_string = True
+            elif ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+                if depth == 0:
+                    return line, text[pos + 1 :]
+        line += 1
+        if line >= len(lines):
+            return None
+        text = lines[line]
+
+
+def _wasm_param_attr_end(lines: list[str], start: int) -> int | None:
+    """Return the last line of the parameter attributes starting at ``start``.
+
+    A ``#[wasm_bindgen(...)]``, on one line or several, is a parameter
+    attribute when the attributes it begins are followed by a parameter
+    pattern (``name:``). Such an attribute belongs to the signature it sits
+    in, not to the next export. Returns ``None`` for item-level attributes.
+    """
+    text = lines[start].lstrip()
+    if not text.startswith("#[wasm_bindgen"):
+        return None
+    line = start
+    while True:
+        closed = _attr_close(lines, line, text)
+        if closed is None:
+            return None
+        end, rest = closed
+        follow, at = rest.strip(), end
+        while not follow and at + 1 < len(lines):
+            at += 1
+            follow = lines[at].strip()
+        if follow.startswith("#["):
+            line, text = at, follow
+            continue
+        return end if _PARAM_PATTERN_RE.match(follow) else None
 
 
 def extract_wasm_exports(root: Path | None = None) -> list[str]:
@@ -1596,11 +1669,11 @@ def extract_wasm_exports(root: Path | None = None) -> list[str]:
         rel = str(path.relative_to(root))
         i = 0
         while i < len(lines):
-            if (
-                "#[wasm_bindgen" in lines[i]
-                and "wasm_bindgen_test" not in lines[i]
-                and not _WASM_PARAM_ATTR_RE.match(lines[i])
-            ):
+            param_end = _wasm_param_attr_end(lines, i)
+            if param_end is not None:
+                i = param_end + 1
+                continue
+            if "#[wasm_bindgen" in lines[i] and "wasm_bindgen_test" not in lines[i]:
                 j = i + 1
                 while j < len(lines) and not _DECL_RE.match(lines[j]) and not _IMPL_RE.match(lines[j]):
                     if _is_field_declaration(lines[j]):
@@ -2745,8 +2818,53 @@ pub fn first(
     0
 }
 
-#[wasm_bindgen(js_name = "second")]
-pub fn second(value: u8) -> u8 {
+#[wasm_bindgen(js_name = "one")]
+pub fn one(
+    #[wasm_bindgen(
+        unchecked_param_type = "number[]"
+    )]
+    values: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "two")]
+pub fn two(
+    #[wasm_bindgen(
+        unchecked_param_type = "number"
+    )]
+    a: JsValue,
+    #[wasm_bindgen(
+        unchecked_param_type = "string"
+    )] b: JsString,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "quoted")]
+pub fn quoted(
+    #[wasm_bindgen(
+        unchecked_param_type = "a)]b",
+        param_description = "[x] (y"
+    )]
+    mut text: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(
+    js_name = "mixed",
+    unchecked_return_type = "string[]"
+)]
+pub fn mixed(
+    #[wasm_bindgen(unchecked_param_type = "number")] n: JsValue,
+    plain: u8,
+) -> js_sys::Array {
+    js_sys::Array::new()
+}
+
+#[wasm_bindgen(js_name = "last")]
+pub fn last(value: u8) -> u8 {
     value
 }
 """.lstrip()
@@ -2754,13 +2872,24 @@ pub fn second(value: u8) -> u8 {
         src = Path(tmp) / "crates/wasm/src"
         src.mkdir(parents=True)
         (src / "x.rs").write_text(source)
-        first, second = extract_wasm_exports(Path(tmp))
-    assert first.startswith("crates/wasm/src/x.rs: wasm_bindgen(js_name=first) | pub fn first(")
-    assert 'unchecked_param_type = "number[]")] values: JsValue' in first
-    assert second == (
-        "crates/wasm/src/x.rs: wasm_bindgen(js_name=second) | "
-        "pub fn second(value: u8) -> u8"
-    )
+        exports = extract_wasm_exports(Path(tmp))
+    prefix = "crates/wasm/src/x.rs: "
+    assert exports == [
+        prefix + "wasm_bindgen(js_name=first) | pub fn first("
+        '#[wasm_bindgen(unchecked_param_type = "number[]")] values: JsValue) -> u8',
+        prefix + "wasm_bindgen(js_name=one) | pub fn one("
+        '#[wasm_bindgen(unchecked_param_type = "number[]")] values: JsValue) -> u8',
+        prefix + "wasm_bindgen(js_name=two) | pub fn two("
+        '#[wasm_bindgen(unchecked_param_type = "number")] a: JsValue, '
+        '#[wasm_bindgen(unchecked_param_type = "string")] b: JsString) -> u8',
+        prefix + "wasm_bindgen(js_name=quoted) | pub fn quoted("
+        '#[wasm_bindgen(unchecked_param_type = "a)]b", param_description = "[x] (y")] '
+        "mut text: JsValue) -> u8",
+        prefix + "wasm_bindgen(js_name=mixed, unchecked_return_type=string[]) | "
+        'pub fn mixed(#[wasm_bindgen(unchecked_param_type = "number")] n: JsValue, '
+        "plain: u8) -> js_sys::Array",
+        prefix + "wasm_bindgen(js_name=last) | pub fn last(value: u8) -> u8",
+    ], exports
 
 
 def _assert_surfaces_self_checks() -> None:
