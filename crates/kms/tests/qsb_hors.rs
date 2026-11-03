@@ -3,11 +3,11 @@
 //! Expected values come from the draft BIP's `reference.py` (BIP draft commit
 //! 7def99c). They are public test fixtures: never fund anything derived here.
 
+use bitcoin_hashes::{hash160, Hash as _};
 use krusty_kms::qsb_hors::QSB_MAX_TRANSACTION_SIZE;
 use krusty_kms::{
     derive_qsb_commitments, qsb_reveal_digest, reveal_qsb_preimages, QsbRevealIndices, QsbVault,
 };
-use ripemd::Ripemd160;
 use sha2::{Digest, Sha256};
 
 const ALL_12: &str = "all all all all all all all all all all all all";
@@ -149,8 +149,8 @@ fn every_preimage_opens_its_indexed_commitment() {
         .map(|&i| commitments.round0[usize::from(i)])
         .chain(ROUND1.iter().map(|&i| commitments.round1[usize::from(i)]));
     for (preimage, commitment) in revealed.as_array().iter().zip(opened) {
-        let hash160: [u8; 20] = Ripemd160::digest(Sha256::digest(preimage)).into();
-        assert_eq!(hash160, commitment);
+        // An independent HASH160 (bitcoin_hashes' own SHA-256 and RIPEMD-160).
+        assert_eq!(hash160::Hash::hash(preimage).to_byte_array(), commitment);
     }
 }
 

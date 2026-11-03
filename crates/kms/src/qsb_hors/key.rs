@@ -14,8 +14,8 @@ use super::{
     QSB_SECRETS_PER_ROUND, QSB_SECRET_LEN,
 };
 use crate::mnemonic::mnemonic_to_seed;
+use bitcoin_hashes::{ripemd160, Hash as _};
 use krusty_kms_common::{KmsError, Result};
-use ripemd::Ripemd160;
 use sha2::digest::common::BlockSizeUser;
 use sha2::{Digest, Sha256, Sha512};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -144,6 +144,9 @@ fn take_output<const N: usize>(output: &mut [u8]) -> Zeroizing<[u8; N]> {
     taken
 }
 
+/// `HASH160(data)`. SHA-256 runs in `sha2`, whose state holds `data` (a
+/// secret) and wipes on drop; RIPEMD-160, from `bitcoin_hashes`, which does
+/// not wipe, only ever sees that digest.
 pub(super) fn hash160(data: &[u8]) -> QsbCommitment {
-    Ripemd160::digest(Sha256::digest(data)).into()
+    ripemd160::Hash::hash(&Sha256::digest(data)).to_byte_array()
 }

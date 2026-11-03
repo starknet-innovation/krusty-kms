@@ -34,9 +34,9 @@ All notable changes to the published Rust crates are documented here.
   (`B` and `D` from a strictly parsed legacy transaction `T`), and
   `reveal_qsb_preimages` / `revealQsbPreimages` (exactly the 15 requested
   preimages). None of them exposes the derivation key or a full secret set;
-  the caller keeps the disclosure journal. Adds the `ripemd` 0.2.0
-  dependency and enables `sha2`'s `zeroize` feature in `krusty-kms`, so
-  SHA-2 hash states wipe themselves on drop.
+  the caller keeps the disclosure journal. Enables `sha2`'s `zeroize`
+  feature in `krusty-kms`, so SHA-2 hash states wipe themselves on drop;
+  HASH160's RIPEMD-160 comes from the existing `bitcoin_hashes` dependency.
 
 ## [0.14.0] - 2026-10-28
 

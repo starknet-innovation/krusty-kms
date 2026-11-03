@@ -31,7 +31,6 @@ bitcoin_hashes = { version = "0.14.1", default-features = false }
 hmac.workspace = true
 # `zeroize` makes SHA-2 hashers wipe their state on drop; qsb_hors requires it.
 sha2 = { workspace = true, features = ["zeroize"] }
-ripemd = { version = "0.2.0", default-features = false }
 sha3 = "0.12"
 num-bigint.workspace = true
 num-traits.workspace = true
