@@ -193,7 +193,8 @@ fn zeroizing_bip32_matches_the_shared_derivation() {
         let ours = super::bip32::derive_private_key(&seed, &path).unwrap();
         let shared =
             crate::derivation::derive_nostr_private_key(MNEMONIC, index, account, None).unwrap();
-        assert_eq!(*ours, shared, "account {account}, index {index}");
+        // `assert!`, not `assert_eq!`: a failure names the path, never the keys.
+        assert!(*ours == shared, "derivation differs at path {path:?}");
     }
 }
 
