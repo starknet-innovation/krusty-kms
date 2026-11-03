@@ -50,7 +50,12 @@ fn bip143_native_p2wpkh_sighash_and_signature() {
     assert_eq!(hex::encode(signer.script_pubkey()), BIP143_SCRIPT_PUBKEY);
 
     let sighash = tx
-        .p2wpkh_sighash_all(1, &signer.pubkey_hash, BIP143_AMOUNT)
+        .p2wpkh_sighash_all(
+            &tx.sighash_midstate(),
+            1,
+            &signer.pubkey_hash,
+            BIP143_AMOUNT,
+        )
         .unwrap();
     assert_eq!(hex::encode(sighash), BIP143_SIGHASH);
 
@@ -130,8 +135,9 @@ fn low_r_grinding_replaces_a_high_r_signature_deterministically() {
     let private_key = key(BIP322_PRIVATE_KEY);
     let signer = P2wpkhSigner::new(&private_key).unwrap();
     let to_spend = to_spend(&signer.script_pubkey(), b"");
-    let sighash = to_sign(to_spend.txid())
-        .p2wpkh_sighash_all(0, &signer.pubkey_hash, 0)
+    let to_sign = to_sign(to_spend.txid());
+    let sighash = to_sign
+        .p2wpkh_sighash_all(&to_sign.sighash_midstate(), 0, &signer.pubkey_hash, 0)
         .unwrap();
     let plain = plain_rfc6979(&private_key, &sighash);
     assert!(plain.to_bytes()[0] >= 0x80);

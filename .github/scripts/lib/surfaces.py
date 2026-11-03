@@ -280,14 +280,62 @@ def _paren_depth(text: str) -> int:
     return text.count("(") - text.count(")")
 
 
-# A complete ``"..."`` literal, honouring backslash escapes.
-_STRING_LITERAL_RE = re.compile(r'"(?:\\.|[^"\\])*"')
+def _raw_string_hashes(text: str, quote: int) -> int | None:
+    """Return the ``#`` count if the ``"`` at ``quote`` opens a raw string.
+
+    ``r"``, ``r#"``, ``br##"`` and so on open a raw string when the ``r`` (or
+    ``br``) is not the end of an identifier. Anything else, including ``b"``,
+    is an ordinary string with backslash escapes, and yields ``None``.
+    """
+    start = quote
+    while start > 0 and text[start - 1] == "#":
+        start -= 1
+    if start == 0 or text[start - 1] != "r":
+        return None
+    prefix = start - 1
+    if prefix > 0 and text[prefix - 1] == "b":
+        prefix -= 1
+    if prefix > 0 and (text[prefix - 1].isalnum() or text[prefix - 1] == "_"):
+        return None
+    return quote - start
+
+
+def _string_literal_spans(text: str) -> list[tuple[int, int]]:
+    """Return the opening and closing quote offsets of each complete string
+    literal in ``text``.
+
+    ``"..."`` and ``b"..."`` honour backslash escapes. A raw ``r"..."``,
+    ``r#"..."#`` or ``br##"..."##`` has no escapes and ends only at a ``"``
+    followed by as many ``#`` as opened it, so inner quotes stay inside it.
+    An unterminated literal ends the scan.
+    """
+    spans: list[tuple[int, int]] = []
+    pos = 0
+    while (opening := text.find('"', pos)) != -1:
+        hashes = _raw_string_hashes(text, opening)
+        if hashes is not None:
+            closing = text.find('"' + "#" * hashes, opening + 1)
+            if closing == -1:
+                break
+            spans.append((opening, closing))
+            pos = closing + 1 + hashes
+            continue
+        index = opening + 1
+        while index < len(text) and text[index] != '"':
+            index += 2 if text[index] == "\\" else 1
+        if index >= len(text):
+            break
+        spans.append((opening, index))
+        pos = index + 1
+    return spans
 
 
 def _blank_string_literals(text: str) -> str:
     """Blank every complete string literal's contents, keeping offsets, so
     delimiter counts and searches ignore delimiters inside strings."""
-    return _STRING_LITERAL_RE.sub(lambda m: '"' + " " * (len(m.group()) - 2) + '"', text)
+    for opening, closing in reversed(_string_literal_spans(text)):
+        text = text[: opening + 1] + " " * (closing - opening - 1) + text[closing:]
+    return text
 
 
 def _generic_depth(text: str) -> int:
@@ -1610,24 +1658,36 @@ def _attr_close(lines: list[str], line: int, text: str) -> tuple[int, str] | Non
     attribute on it, or ``None`` if the attribute never closes.
     """
     depth = 0
-    in_string = escaped = False
+    # While inside a string: the text that ends it, and whether it is raw
+    # (``r#"..."#`` has no escapes and ends at ``"#``).
+    closing: str | None = None
+    raw = escaped = False
     while True:
-        for pos, ch in enumerate(text):
-            if in_string:
+        pos = 0
+        while pos < len(text):
+            ch = text[pos]
+            if closing is not None and raw:
+                if text.startswith(closing, pos):
+                    pos += len(closing) - 1
+                    closing = None
+            elif closing is not None:
                 if escaped:
                     escaped = False
                 elif ch == "\\":
                     escaped = True
                 elif ch == '"':
-                    in_string = False
+                    closing = None
             elif ch == '"':
-                in_string = True
+                hashes = _raw_string_hashes(text, pos)
+                raw = hashes is not None
+                closing = '"' + "#" * (hashes or 0)
             elif ch in "([":
                 depth += 1
             elif ch in ")]":
                 depth -= 1
                 if depth == 0:
                     return line, text[pos + 1 :]
+            pos += 1
         line += 1
         if line >= len(lines):
             return None
@@ -2892,6 +2952,59 @@ pub fn last(value: u8) -> u8 {
     ], exports
 
 
+def _assert_raw_strings_are_literals() -> None:
+    import tempfile
+
+    blanked = {
+        'r#""{x}""#': 'r#"     "#',
+        'r"a{b"': 'r"   "',
+        'br##"x"#{"##': 'br##"    "##',
+        'br"a)]"': 'br"   "',
+        'b"a\\"{"': 'b"    "',
+        '"\\\\" {': '"  " {',
+        'f(r#"{"#, "}", b"(")': 'f(r#" "#, " ", b" ")',
+        # An identifier ending in ``r`` before a quote is not a raw prefix.
+        'bar"x"': 'bar" "',
+        # Unterminated literals are left alone.
+        'r#"open': 'r#"open',
+        '"open': '"open',
+    }
+    for text, expected in blanked.items():
+        assert _blank_string_literals(text) == expected, (text, _blank_string_literals(text))
+
+    source = """
+#[wasm_bindgen(js_name = "raw")]
+pub fn raw(
+    #[wasm_bindgen(unchecked_param_type = r#""{x}""#)] value: JsValue,
+    #[wasm_bindgen(
+        unchecked_param_type = r"a)]b"
+    )]
+    other: JsValue,
+    #[wasm_bindgen(param_description = br##"say "#{}" (here)"##)] bytes: JsValue,
+) -> u8 {
+    0
+}
+
+#[wasm_bindgen(js_name = "after")]
+pub fn after(value: u8) -> u8 {
+    value
+}
+""".lstrip()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "crates/wasm/src"
+        src.mkdir(parents=True)
+        (src / "x.rs").write_text(source)
+        exports = extract_wasm_exports(Path(tmp))
+    prefix = "crates/wasm/src/x.rs: "
+    assert exports == [
+        prefix + "wasm_bindgen(js_name=raw) | pub fn raw("
+        '#[wasm_bindgen(unchecked_param_type = r#""{x}""#)] value: JsValue, '
+        '#[wasm_bindgen(unchecked_param_type = r"a)]b")] other: JsValue, '
+        '#[wasm_bindgen(param_description = br##"say "#{}" (here)"##)] bytes: JsValue) -> u8',
+        prefix + "wasm_bindgen(js_name=after) | pub fn after(value: u8) -> u8",
+    ], exports
+
+
 def _assert_surfaces_self_checks() -> None:
     assert (
         _format_field('#[wasm_bindgen(skip)]', "pub foo: String")
@@ -3008,6 +3121,7 @@ pub struct Foo {
     assert wasm_cfg_line != wasm_plain
     assert "gated_export" in wasm_cfg_line
     _assert_wasm_param_attrs_stay_in_their_signature()
+    _assert_raw_strings_are_literals()
     assert _resolve_qualified_path(
         ["self", "interface", "GatewayBackend"], "backend"
     ) == ["backend", "interface", "GatewayBackend"]

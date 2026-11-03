@@ -166,6 +166,7 @@ fn key_is_valid(key: KeyData, key_data: &[u8]) -> bool {
         // version(4) depth(1) parent fingerprint(4) child(4) chain code(32) key(33).
         KeyData::ExtendedPublicKey => {
             key_data.len() == 78
+                && is_master_consistent(key_data)
                 && key_data.get(45..).is_some_and(|public_key| {
                     matches!(public_key.first(), Some(0x02 | 0x03)) && is_public_key(public_key)
                 })
@@ -229,6 +230,15 @@ fn within<T>(field: &Field, parsed: Result<T>) -> Result<T> {
         }
         other => other,
     })
+}
+
+/// BIP-32: a depth-0 (master) extended key has a zero parent fingerprint
+/// (bytes 5..9) and a zero child number (bytes 9..13).
+fn is_master_consistent(xpub: &[u8]) -> bool {
+    xpub.get(4) != Some(&0)
+        || xpub
+            .get(5..13)
+            .is_some_and(|header| header.iter().all(|b| *b == 0))
 }
 
 /// A 4-byte fingerprint followed by whole 4-byte path elements.

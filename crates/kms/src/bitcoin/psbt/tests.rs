@@ -111,9 +111,10 @@ pub(super) fn assert_signed(psbt: &Psbt, index: usize) {
     let amount = TxOut::parse_exact(find(&psbt.inputs[index], IN_WITNESS_UTXO).unwrap())
         .unwrap()
         .value;
+    let midstate = psbt.unsigned_tx.sighash_midstate();
     let sighash = psbt
         .unsigned_tx
-        .p2wpkh_sighash_all(index, &signer.pubkey_hash, amount)
+        .p2wpkh_sighash_all(&midstate, index, &signer.pubkey_hash, amount)
         .unwrap();
     verify(&signer, &sighash, &signature);
 }

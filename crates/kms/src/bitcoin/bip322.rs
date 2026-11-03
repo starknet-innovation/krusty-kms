@@ -56,7 +56,9 @@ pub fn sign_bip322_simple(
     }
 
     let to_spend = to_spend(&signer.script_pubkey(), message);
-    let sighash = to_sign(to_spend.txid()).p2wpkh_sighash_all(0, &signer.pubkey_hash, 0)?;
+    let to_sign = to_sign(to_spend.txid());
+    let sighash =
+        to_sign.p2wpkh_sighash_all(&to_sign.sighash_midstate(), 0, &signer.pubkey_hash, 0)?;
     let signature = signer.sign_sighash_all(&sighash)?;
 
     let mut witness = Vec::new();

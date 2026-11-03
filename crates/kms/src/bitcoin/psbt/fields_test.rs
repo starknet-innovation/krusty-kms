@@ -66,19 +66,24 @@ fn proprietary_keys_must_parse_in_every_scope() {
     }
 }
 
+/// A depth-0 `PSBT_GLOBAL_XPUB` key for this key's public key.
+fn master_xpub() -> Vec<u8> {
+    // Type, then version, depth, parent fingerprint, child number, chain
+    // code and key.
+    [
+        &[0x01, 0x04, 0x88, 0xb2, 0x1e, 0][..],
+        &[0; 8],
+        &[0; 32],
+        &signer(KEY).public_key,
+    ]
+    .concat()
+}
+
 #[test]
 fn key_origin_values_are_a_fingerprint_and_whole_path_elements() {
     let public_key = signer(KEY).public_key;
     let derivation_input = [&[0x06][..], &public_key].concat();
     let derivation_output = [&[0x02][..], &public_key].concat();
-    // version, depth, parent fingerprint, child number, chain code, key.
-    let xpub = [
-        &[0x01, 0x04, 0x88, 0xb2, 0x1e, 0][..],
-        &[0; 8],
-        &[0; 32],
-        &public_key,
-    ]
-    .concat();
     let keys = [
         (Scope::Input, derivation_input.as_slice()),
         (Scope::Output, derivation_output.as_slice()),
@@ -95,9 +100,20 @@ fn key_origin_values_are_a_fingerprint_and_whole_path_elements() {
             assert!(sign(&with_pair(scope, key, &vec![7; len]), &[0]).is_ok());
         }
     }
-    // A global xpub's path has exactly as many elements as its depth byte.
+    // The listed input may carry its own key origin too.
+    let mut psbt = fixture();
+    psbt.inputs[0].push(pair(
+        &derivation_input,
+        &[0xaa, 0xbb, 0xcc, 0xdd, 0, 0, 0, 0x80],
+    ));
+    assert_signed(&sign(&psbt, &[0]).unwrap(), 0);
+}
+
+#[test]
+fn global_xpubs_follow_bip32_depth_rules() {
+    // The path has exactly as many elements as the depth byte.
     for depth in [0u8, 2] {
-        let mut xpub = xpub.clone();
+        let mut xpub = master_xpub();
         xpub[5] = depth;
         for elements in 0..4 {
             let value = vec![7; 4 + 4 * elements];
@@ -117,15 +133,25 @@ fn key_origin_values_are_a_fingerprint_and_whole_path_elements() {
             assert!(reason.contains("has a malformed value"), "{len}: {reason}");
         }
     }
-    // The listed input may carry its own key origin too.
-    let mut psbt = fixture();
-    psbt.inputs[0].push(pair(
-        &derivation_input,
-        &[0xaa, 0xbb, 0xcc, 0xdd, 0, 0, 0, 0x80],
-    ));
-    assert_signed(&sign(&psbt, &[0]).unwrap(), 0);
+    // A master (depth 0) xpub has a zero parent fingerprint and child
+    // number; a deeper one may have any.
+    for (offset, field) in [(6, "parent fingerprint"), (10, "child number")] {
+        let mut master = master_xpub();
+        master[offset] = 1;
+        let reason = malformed_reason(&with_pair(Scope::Global, &master, &[7; 4]));
+        assert!(
+            reason.contains("PSBT_GLOBAL_XPUB has an invalid key"),
+            "{field}: {reason}"
+        );
+        let mut child = master.clone();
+        child[5] = 1;
+        assert!(
+            sign(&with_pair(Scope::Global, &child, &[7; 8]), &[0]).is_ok(),
+            "{field}"
+        );
+    }
     // An extended key whose public key is not on the curve is invalid.
-    let mut bad_xpub = xpub.clone();
+    let mut bad_xpub = master_xpub();
     bad_xpub[46..].fill(0xff);
     let reason = malformed_reason(&with_pair(Scope::Global, &bad_xpub, &[0; 4]));
     assert!(

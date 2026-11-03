@@ -102,7 +102,11 @@ while encoding a non-ASCII string.
   checked and becomes an error, and a test runs every BIP-174 vector and this
   crate's own PSBTs through the signer truncated at every offset, with every
   byte flipped, and with every length byte set to 0x00, 0xfd and 0xff.
-- A global xpub's path has exactly as many elements as its depth byte.
+- A global xpub's path has exactly as many elements as its depth byte, and
+  a depth-0 xpub has a zero parent fingerprint and child number (BIP-32).
+- Signing is linear in the PSBT: BIP-143's `hashPrevouts`, `hashSequence`
+  and `hashOutputs` are computed once per call and shared by every signed
+  input.
 - Transactions follow Bitcoin Core's deserialization rules: minimal
   CompactSizes, no trailing bytes, and no witness record whose stacks are all
   empty ("Superfluous witness record"). The unsigned transaction may have

@@ -172,6 +172,13 @@ impl TxOut {
     }
 }
 
+/// The transaction-wide part of a BIP-143 SIGHASH_ALL preimage.
+pub(super) struct SighashMidstate {
+    hash_prevouts: [u8; 32],
+    hash_sequence: [u8; 32],
+    hash_outputs: [u8; 32],
+}
+
 /// A transaction without its witness data, which no caller here needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Transaction {
@@ -262,20 +269,12 @@ impl Transaction {
         double_sha256(&self.serialize_legacy())
     }
 
-    /// BIP-143 SIGHASH_ALL digest for input `index` spending a P2WPKH output
-    /// of `amount` satoshis locked to `pubkey_hash`.
-    pub(super) fn p2wpkh_sighash_all(
-        &self,
-        index: usize,
-        pubkey_hash: &[u8; 20],
-        amount: u64,
-    ) -> Result<[u8; 32]> {
-        let input = self
-            .inputs
-            .get(index)
-            .ok_or_else(|| malformed(format!("no input {index} to sign")))?;
-        let mut prevouts = Vec::new();
-        let mut sequences = Vec::new();
+    /// BIP-143's `hashPrevouts`, `hashSequence` and `hashOutputs` for
+    /// SIGHASH_ALL. They cover the whole transaction, so they are computed
+    /// once and shared by every input signed, which keeps signing linear.
+    pub(super) fn sighash_midstate(&self) -> SighashMidstate {
+        let mut prevouts = Vec::with_capacity(36 * self.inputs.len());
+        let mut sequences = Vec::with_capacity(4 * self.inputs.len());
         for each in &self.inputs {
             each.previous_output.serialize_into(&mut prevouts);
             sequences.extend(each.sequence.to_le_bytes());
@@ -284,11 +283,31 @@ impl Transaction {
         for output in &self.outputs {
             output.serialize_into(&mut outputs);
         }
+        SighashMidstate {
+            hash_prevouts: double_sha256(&prevouts),
+            hash_sequence: double_sha256(&sequences),
+            hash_outputs: double_sha256(&outputs),
+        }
+    }
 
+    /// BIP-143 SIGHASH_ALL digest for input `index` spending a P2WPKH output
+    /// of `amount` satoshis locked to `pubkey_hash`, given this transaction's
+    /// `sighash_midstate`.
+    pub(super) fn p2wpkh_sighash_all(
+        &self,
+        midstate: &SighashMidstate,
+        index: usize,
+        pubkey_hash: &[u8; 20],
+        amount: u64,
+    ) -> Result<[u8; 32]> {
+        let input = self
+            .inputs
+            .get(index)
+            .ok_or_else(|| malformed(format!("no input {index} to sign")))?;
         let mut preimage = Vec::with_capacity(182);
         preimage.extend(self.version.to_le_bytes());
-        preimage.extend(double_sha256(&prevouts));
-        preimage.extend(double_sha256(&sequences));
+        preimage.extend(midstate.hash_prevouts);
+        preimage.extend(midstate.hash_sequence);
         input.previous_output.serialize_into(&mut preimage);
         // scriptCode for P2WPKH: OP_DUP OP_HASH160 PUSH20 <hash> OP_EQUALVERIFY OP_CHECKSIG.
         preimage.extend([0x19, 0x76, 0xa9, 0x14]);
@@ -296,7 +315,7 @@ impl Transaction {
         preimage.extend([0x88, 0xac]);
         preimage.extend(amount.to_le_bytes());
         preimage.extend(input.sequence.to_le_bytes());
-        preimage.extend(double_sha256(&outputs));
+        preimage.extend(midstate.hash_outputs);
         preimage.extend(self.lock_time.to_le_bytes());
         preimage.extend(u32::from(SIGHASH_ALL).to_le_bytes());
         Ok(double_sha256(&preimage))

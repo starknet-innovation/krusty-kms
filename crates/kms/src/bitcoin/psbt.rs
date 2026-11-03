@@ -140,11 +140,13 @@ pub fn sign_bitcoin_psbt_inputs(
 fn sign_with(signer: &P2wpkhSigner, psbt_base64: &str, input_indices: &[u32]) -> Result<String> {
     let mut psbt = Psbt::parse(&decode_bounded(psbt_base64)?)?;
 
-    for index in checked_indices(input_indices, psbt.inputs.len())? {
+    let indices = checked_indices(input_indices, psbt.inputs.len())?;
+    let midstate = psbt.unsigned_tx.sighash_midstate();
+    for index in indices {
         let amount = signable_amount(&psbt, index, signer)?;
-        let sighash = psbt
-            .unsigned_tx
-            .p2wpkh_sighash_all(index, &signer.pubkey_hash, amount)?;
+        let sighash =
+            psbt.unsigned_tx
+                .p2wpkh_sighash_all(&midstate, index, &signer.pubkey_hash, amount)?;
         let signature = signer.sign_sighash_all(&sighash)?;
         let map = psbt
             .inputs
@@ -331,5 +333,7 @@ mod fields_test;
 mod key_encoding_test;
 #[cfg(test)]
 mod no_panic_test;
+#[cfg(test)]
+mod scaling_test;
 #[cfg(test)]
 mod tests;
