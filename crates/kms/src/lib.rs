@@ -15,6 +15,7 @@ pub mod multisig;
 pub mod nostr_application_data;
 mod nostr_nip44;
 pub mod nostr_signing;
+pub mod qsb_hors;
 pub mod stark_signing;
 pub mod strk20;
 pub mod tx_hash;
@@ -59,6 +60,10 @@ pub use nostr_application_data::{
 };
 pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,
+};
+pub use qsb_hors::{
+    derive_qsb_commitments, qsb_reveal_digest, reveal_qsb_preimages, QsbCommitment, QsbCommitments,
+    QsbPreimages, QsbRevealDigest, QsbRevealIndices, QsbVault,
 };
 pub use stark_signing::{
     is_stark_public_key, sign_stark_hash, stark_public_key, validate_stark_private_key,
