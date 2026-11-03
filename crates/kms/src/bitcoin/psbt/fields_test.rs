@@ -161,6 +161,32 @@ fn global_xpubs_follow_bip32_depth_rules() {
 }
 
 #[test]
+fn global_xpubs_need_a_bip32_public_version() {
+    let versions: [([u8; 4], bool); 6] = [
+        ([0x04, 0x88, 0xb2, 0x1e], true),  // xpub
+        ([0x04, 0x35, 0x87, 0xcf], true),  // tpub
+        ([0x04, 0x88, 0xad, 0xe4], false), // xprv
+        ([0x04, 0x35, 0x83, 0x94], false), // tprv
+        ([0x04, 0xb2, 0x47, 0x46], false), // SLIP-132 zpub, not BIP-32
+        ([0, 0, 0, 0], false),
+    ];
+    for (version, accepted) in versions {
+        let mut xpub = master_xpub();
+        xpub[1..5].copy_from_slice(&version);
+        let psbt = with_pair(Scope::Global, &xpub, &[7; 4]);
+        if accepted {
+            assert!(sign(&psbt, &[0]).is_ok(), "{version:02x?}");
+        } else {
+            let reason = malformed_reason(&psbt);
+            assert!(
+                reason.contains("PSBT_GLOBAL_XPUB has an invalid key"),
+                "{version:02x?}: {reason}"
+            );
+        }
+    }
+}
+
+#[test]
 fn partial_signatures_need_a_valid_key_and_a_strict_der_signature() {
     let public_key = signer(KEY).public_key;
     let key = [&[IN_PARTIAL_SIG][..], &public_key].concat();

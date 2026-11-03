@@ -166,6 +166,7 @@ fn key_is_valid(key: KeyData, key_data: &[u8]) -> bool {
         // version(4) depth(1) parent fingerprint(4) child(4) chain code(32) key(33).
         KeyData::ExtendedPublicKey => {
             key_data.len() == 78
+                && has_public_version(key_data)
                 && is_master_consistent(key_data)
                 && key_data.get(45..).is_some_and(|public_key| {
                     matches!(public_key.first(), Some(0x02 | 0x03)) && is_public_key(public_key)
@@ -230,6 +231,16 @@ fn within<T>(field: &Field, parsed: Result<T>) -> Result<T> {
         }
         other => other,
     })
+}
+
+/// BIP-32's extended public key versions: mainnet `xpub` and testnet `tpub`.
+const PUBLIC_VERSIONS: [[u8; 4]; 2] = [[0x04, 0x88, 0xb2, 0x1e], [0x04, 0x35, 0x87, 0xcf]];
+
+/// BIP-174 carries a BIP-32 extended public key, so its version bytes must
+/// be `xpub` or `tpub`; a private-key, SLIP-132 or unknown version is invalid.
+fn has_public_version(xpub: &[u8]) -> bool {
+    xpub.get(..4)
+        .is_some_and(|version| PUBLIC_VERSIONS.iter().any(|known| known == version))
 }
 
 /// BIP-32: a depth-0 (master) extended key has a zero parent fingerprint
