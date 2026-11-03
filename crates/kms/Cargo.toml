@@ -26,6 +26,8 @@ krusty-kms-crypto = { version = "0.14.0", path = "../crypto", default-features =
 starknet-types-core.workspace = true
 starknet-rust-core.workspace = true
 bip39.workspace = true
+# RIPEMD-160 for P2WPKH key hashes; already in the graph through bip39.
+bitcoin_hashes = { version = "0.14.1", default-features = false }
 # `zeroize` makes SHA-2 hashers wipe their state on drop; zeroizing_hmac requires it.
 sha2 = { workspace = true, features = ["zeroize"] }
 sha3 = "0.12"
@@ -37,6 +39,8 @@ serde_json.workspace = true
 hex.workspace = true
 getrandom = "0.4"
 k256 = { version = "0.14", features = ["ecdh", "ecdsa"] }
+# RFC 6979 with additional data, for Bitcoin low-R grinding; the ecdsa k256 uses.
+ecdsa = { version = "0.17.0", default-features = false, features = ["algorithm"] }
 starknet-crypto.workspace = true
 zeroize.workspace = true
 subtle.workspace = true

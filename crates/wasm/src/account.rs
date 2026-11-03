@@ -11,6 +11,7 @@
 //! The caller's JS strings cannot be wiped from Rust at all.
 
 mod addresses;
+mod bitcoin;
 mod derivation;
 mod helpers;
 mod nostr;
@@ -28,6 +29,10 @@ pub use addresses::{
     calculate_contract_address, derive_argent_account_address,
     derive_argent_account_address_with_guardian, derive_braavos_account_address,
     derive_oz_account_address, get_account_class_hashes,
+};
+pub use bitcoin::{
+    derive_bitcoin_p2wpkh_keypair, sign_bip322_simple, sign_bitcoin_psbt_inputs,
+    WasmBitcoinP2wpkhKeypair,
 };
 pub use derivation::{
     derive_argent_legacy_keypair, derive_argent_legacy_public_key, derive_keypair,
