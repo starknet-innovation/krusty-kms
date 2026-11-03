@@ -26,6 +26,8 @@ krusty-kms-crypto = { version = "0.14.0", path = "../crypto", default-features =
 starknet-types-core.workspace = true
 starknet-rust-core.workspace = true
 bip39.workspace = true
+# RIPEMD-160 for P2WPKH key hashes; already in the graph through bip39.
+bitcoin_hashes = { version = "0.14.1", default-features = false }
 hmac.workspace = true
 sha2.workspace = true
 sha3 = "0.12"

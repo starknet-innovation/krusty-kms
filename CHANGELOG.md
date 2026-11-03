@@ -4,6 +4,18 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add Bitcoin mainnet P2WPKH support to `krusty-kms`:
+  `derive_bitcoin_p2wpkh_keypair` (BIP-84, `m/84'/0'/account'/change/index`),
+  `sign_bitcoin_psbt_inputs` (BIP-174 version 0, BIP-143 SIGHASH_ALL) and
+  `sign_bip322_simple`, with WASM bindings `deriveBitcoinP2wpkhKeypair`,
+  `signBitcoinPsbtInputs` and `signBip322Simple`. A PSBT input is signed only
+  when its `witness_utxo` pays the key's P2WPKH script and matches the output
+  of its full `non_witness_utxo`; every other byte of the PSBT is kept, and
+  nothing is finalized. `bitcoin_hashes`, already in the graph through
+  `bip39`, becomes a direct dependency for RIPEMD-160.
+
 ## [0.14.0] - 2026-10-28
 
 ### Security

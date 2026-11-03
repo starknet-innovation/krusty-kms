@@ -362,7 +362,7 @@ pub fn derive_argent_legacy_private_key(
 /// This matches the Swift implementation which uses "Bitcoin seed" for BIP-32.
 ///
 /// # Cyclomatic Complexity: 1
-fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
+pub(crate) fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
     let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
         .map_err(|e| KmsError::CryptoError(e.to_string()))?;
     mac.update(seed);
@@ -391,7 +391,7 @@ fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
 /// value (e.g. `account_index` x and x|0x8000_0000 derive the same key). For
 /// the non-hardened address index the bit would silently switch to hardened
 /// derivation. Either way, reject rather than alias.
-fn require_unhardened_component(value: u32, field: &str) -> Result<()> {
+pub(crate) fn require_unhardened_component(value: u32, field: &str) -> Result<()> {
     if value & 0x8000_0000 != 0 {
         return Err(KmsError::InvalidDerivationPath(format!(
             "{field} {value} has the BIP-32 hardened bit set (must be < 2^31)"
@@ -469,7 +469,7 @@ fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<Der
 /// Derive a key along a BIP-44 path.
 ///
 /// # Cyclomatic Complexity: 1
-fn derive_path(
+pub(crate) fn derive_path(
     master_key: &[u8; 32],
     master_chain: &[u8; 32],
     path: &[u32],

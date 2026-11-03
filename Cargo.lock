@@ -1744,6 +1744,7 @@ dependencies = [
  "aes",
  "base64 0.22.1",
  "bip39",
+ "bitcoin_hashes",
  "chacha20",
  "chacha20poly1305",
  "ctr",
