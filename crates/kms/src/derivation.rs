@@ -7,7 +7,7 @@
 //!
 //! Seeds, private keys, chain codes, and HMAC outputs live only in
 //! `Zeroizing` arrays, `k256` scalars and `crypto-bigint` integers held in
-//! `Zeroizing`, and the wiped HMAC of [`crate::zeroizing_hmac`]. Not wiped:
+//! `Zeroizing`, and the crate's internal wiped HMAC (`zeroizing_hmac`). Not wiped:
 //! copies the compiler makes when it moves a value, register spills, and
 //! temporaries inside `k256`, `crypto-bigint`, and the SHA-2 functions. The
 //! keys these functions return (`Felt`, `[u8; 32]`) are the caller's to wipe.
