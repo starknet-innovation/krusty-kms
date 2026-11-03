@@ -1,0 +1,116 @@
+{
+  "warning": "Public test fixtures. Never use for funds.",
+  "seed_vectors": [
+    {
+      "seed_source": "bip39",
+      "mnemonic": "all all all all all all all all all all all all",
+      "passphrase": "",
+      "seed": "c76c4ac4f4e4a00d6b274d5c39c700bb4a7ddc04fbc6f78e85ca75007b5b495f74a9043eeb77bdd53aa6fc3a0e31462270316fa04b8c19114c8798706cd02ac8",
+      "key": "f86a8947e1c227cf1a6d9a83c767291ef2f3fd51dd53b94f844bd5bde6e9e3e1"
+    },
+    {
+      "seed_source": "raw32",
+      "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "key": "22a1dc63adc3daaf94f0442e53b7aa8fe3750b4789396052eacaafc3c73696ed"
+    }
+  ],
+  "key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "secrets": [
+    {
+      "net": 0,
+      "v": 0,
+      "r": 0,
+      "i": 0,
+      "secret": "df83cf4950602d2d3b90041023b941271bc7c494",
+      "commitment": "887b040fb41eb3cf514e3bd63986f08697b943c4"
+    },
+    {
+      "net": 0,
+      "v": 0,
+      "r": 1,
+      "i": 149,
+      "secret": "84f94456b5537fc0a7b922e056673e455d666c0a",
+      "commitment": "27567ff92caad5adb3484d58f93e4995262d78df"
+    },
+    {
+      "net": 0,
+      "v": 7,
+      "r": 0,
+      "i": 3,
+      "secret": "47ddd932d497ec0a108ed395d9cb35830f1a984e",
+      "commitment": "e7e455fde8b2a8e66143447aa166e72a1010c603"
+    },
+    {
+      "net": 1,
+      "v": 2147483647,
+      "r": 1,
+      "i": 42,
+      "secret": "e6af8e17907e54ca6d210d39042ed0575ba6bab4",
+      "commitment": "2171b247eacdb5dcb343450fbb22987a4f2a8f92"
+    }
+  ],
+  "roots": [
+    {
+      "net": 0,
+      "v": 0,
+      "root": "9b257b6acd00017b1488ed9d73d05bc8a5dbdd43c8aa54d1d37c7e807d65c515"
+    },
+    {
+      "net": 0,
+      "v": 7,
+      "root": "8ea0f0b0ac0db4db0405bedf47bd3c54fe946e5d1ed3a158fb11a72580940e11"
+    },
+    {
+      "net": 1,
+      "v": 0,
+      "root": "c52a15a77671c33d5fa9ff29df301e92cf3e84d7523cab182f3bd38a34975682"
+    }
+  ],
+  "disclosure": {
+    "round0": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "round1": [
+      140,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146
+    ],
+    "binding": "abababababababababababababababababababababababababababababababab",
+    "digest": "498b1ea9b6c381e78fc76f0a9c2003b1d29ef25caf92d5a3b6a1d7dbc90f7d2c"
+  },
+  "binding_encoding": {
+    "transaction": "020000000111111111111111111111111111111111111111111111111111111111111111110000000000ffffffff01e803000000000000015100000000",
+    "binding": "d50c25f740af092cc115965a317beae0d72397eabd2b0495148de1c5e6bd2c4e",
+    "round0": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "round1": [
+      140,
+      141,
+      142,
+      143,
+      144,
+      145,
+      146
+    ],
+    "digest": "eb9907c687e2a86336eb342d649b7c41e030f4eafe4129072377828e0eb57405"
+  }
+}

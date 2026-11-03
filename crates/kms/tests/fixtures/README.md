@@ -29,3 +29,7 @@ generated outside this repository with `@noble/curves` 1.9.7, an independent
 RFC 6979 implementation, by repeating Bitcoin Core's low-R grinding loop around
 its `extraEntropy` option; its `_source` records the package integrity hash
 and the inputs.
+
+`qsb_hors_v1_vectors.json` is a byte-identical copy of `vectors.json` from the
+draft BIP "QSB Wallet Secret Management" (commit `7def99c`); regenerate it
+with that BIP's `reference.py`, not by hand.

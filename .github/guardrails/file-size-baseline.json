@@ -182,7 +182,7 @@
     },
     {
       "path": "crates/wasm/src/lib.rs",
-      "lines": 400
+      "lines": 401
     },
     {
       "path": "crates/wasm/src/proof.rs",
