@@ -161,6 +161,21 @@ fn global_xpubs_follow_bip32_depth_rules() {
 }
 
 #[test]
+fn proof_of_reserves_commitments_are_refused_on_any_input() {
+    // BIP-127's commitment needs a transaction-level check this signer does
+    // not make, so it refuses the PSBT whether or not the input is listed.
+    for input in [0, 1] {
+        let mut psbt = fixture();
+        psbt.inputs[input].push(pair(&[0x09], b"Proof of reserves"));
+        let reason = malformed_reason(&psbt);
+        assert!(
+            reason.contains("BIP-127 POR_COMMITMENT is not supported"),
+            "input {input}: {reason}"
+        );
+    }
+}
+
+#[test]
 fn global_xpubs_need_a_bip32_public_version() {
     let versions: [([u8; 4], bool); 6] = [
         ([0x04, 0x88, 0xb2, 0x1e], true),  // xpub

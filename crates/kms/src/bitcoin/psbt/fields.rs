@@ -4,8 +4,8 @@
 //! so a malformed PSBT is refused before anything is signed.
 //!
 //! Types the table does not name (later BIPs such as Taproot's, and unknown
-//! types) pass through as opaque once their key type has been read. Types
-//! that only exist in PSBT version 2 (BIP-370) are refused.
+//! types) pass through as opaque once their key type has been read. PSBT v2
+//! (BIP-370) fields and BIP-127 proof-of-reserves commitments are refused.
 
 use super::super::tx::{double_sha256, malformed, Reader, Transaction, TxOut};
 use super::Scope::{self, Global, Input, Output as Out};
@@ -135,6 +135,10 @@ pub(super) fn check_pair(scope: Scope, key_type: u64, key_data: &[u8], value: &[
             "PSBT key type {key_type:#04x} is a PSBT version 2 field, not allowed in version 0"
         )));
     }
+    // BIP-127 proof of reserves needs transaction-level checks this signer does not make.
+    if (scope, key_type) == (Input, 0x09) {
+        return Err(malformed("BIP-127 POR_COMMITMENT is not supported"));
+    }
     let Some(field) = lookup(scope, key_type) else {
         return Ok(());
     };
@@ -163,10 +167,14 @@ fn key_is_valid(key: KeyData, key_data: &[u8]) -> bool {
         KeyData::None => key_data.is_empty(),
         KeyData::Hash(len) => key_data.len() == len,
         KeyData::PublicKey => is_public_key(key_data),
-        // version(4) depth(1) parent fingerprint(4) child(4) chain code(32) key(33).
+        // version(4) depth(1) parent fingerprint(4) child(4) chain code(32) key(33);
+        // the version is BIP-32's public xpub or tpub, never xprv, SLIP-132 or unknown.
         KeyData::ExtendedPublicKey => {
             key_data.len() == 78
-                && has_public_version(key_data)
+                && matches!(
+                    key_data.get(..4),
+                    Some([0x04, 0x88, 0xb2, 0x1e] | [0x04, 0x35, 0x87, 0xcf])
+                )
                 && is_master_consistent(key_data)
                 && key_data.get(45..).is_some_and(|public_key| {
                     matches!(public_key.first(), Some(0x02 | 0x03)) && is_public_key(public_key)
@@ -231,16 +239,6 @@ fn within<T>(field: &Field, parsed: Result<T>) -> Result<T> {
         }
         other => other,
     })
-}
-
-/// BIP-32's extended public key versions: mainnet `xpub` and testnet `tpub`.
-const PUBLIC_VERSIONS: [[u8; 4]; 2] = [[0x04, 0x88, 0xb2, 0x1e], [0x04, 0x35, 0x87, 0xcf]];
-
-/// BIP-174 carries a BIP-32 extended public key, so its version bytes must
-/// be `xpub` or `tpub`; a private-key, SLIP-132 or unknown version is invalid.
-fn has_public_version(xpub: &[u8]) -> bool {
-    xpub.get(..4)
-        .is_some_and(|version| PUBLIC_VERSIONS.iter().any(|known| known == version))
 }
 
 /// BIP-32: a depth-0 (master) extended key has a zero parent fingerprint
