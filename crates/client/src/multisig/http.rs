@@ -21,7 +21,7 @@ use url::Url;
 const COORDINATOR_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const COORDINATOR_READ_TIMEOUT: Duration = Duration::from_secs(15);
 const COORDINATOR_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_COORDINATOR_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_COORDINATOR_RESPONSE_BYTES: usize = super::MAX_COORDINATOR_PAYLOAD_BYTES;
 const MAX_COORDINATOR_ENVELOPES: usize = 1_024;
 
 /// HTTP implementation of the coordinator protocol.

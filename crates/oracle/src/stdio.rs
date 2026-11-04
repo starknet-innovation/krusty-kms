@@ -226,14 +226,31 @@ where
     }
 }
 
+/// Whether a `KRUSTY_ORACLE_REQUIRE_CONFIRM` value turns the confirm gate on.
+///
+/// The value is trimmed and compared case-insensitively. Only an explicit
+/// opt-out (`0`, `false`, `no`, `off`, `n`, `disabled`) or an empty value
+/// leaves the gate off; every other value, including spellings this function
+/// does not know, turns it on. A security control that an operator believes
+/// is set must fail closed, not silently off (audit 2026-11-04, M-4).
+pub(crate) fn confirm_gate_enabled(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    !matches!(
+        normalized.as_str(),
+        "" | "0" | "false" | "no" | "off" | "n" | "disabled"
+    )
+}
+
 fn require_confirm_env_enabled() -> bool {
-    match std::env::var("KRUSTY_ORACLE_REQUIRE_CONFIRM") {
-        Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"),
-        Err(_) => false,
+    match std::env::var_os("KRUSTY_ORACLE_REQUIRE_CONFIRM") {
+        None => false,
+        // A value that is not UTF-8 is set but unrecognised: enabled.
+        Some(value) => value.to_str().is_none_or(confirm_gate_enabled),
     }
 }
 
-/// When `KRUSTY_ORACLE_REQUIRE_CONFIRM=1`, privileged sign/deploy require `"confirm": true`.
+/// When `KRUSTY_ORACLE_REQUIRE_CONFIRM` is set (see [`confirm_gate_enabled`]),
+/// privileged sign/deploy require `"confirm": true`.
 fn require_confirm_if_enabled(request: &OracleRequest) -> Option<GatewayError> {
     if !require_confirm_env_enabled() {
         return None;

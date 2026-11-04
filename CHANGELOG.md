@@ -40,6 +40,23 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- `krusty-kms` native (v1) keystores are now subject to the same 256 MiB
+  scrypt memory ceiling as v3 keystores: `decrypt_keystore` rejects a
+  crafted `n` (up to 2^20, a 1 GiB allocation with the format's fixed
+  `r = 8`) before any KDF work, and both `decrypt_keystore` and
+  `decrypt_ethers_keystore` reject a `kdfparams.salt` longer than 128 bytes.
+  Keystores written by `encrypt_keystore`, ethers.js and geth are unaffected.
+- `krusty-kms-client` (`nats` feature): `NatsMultisigCoordinator::subscribe`
+  rejects a message payload above 1 MiB, the HTTP coordinator's existing
+  response cap, before parsing it. The transport buffer of one oversized
+  frame is still allocated by `async-nats`, which has no receive-side cap.
+- `krusty-kms-oracle` reads `KRUSTY_ORACLE_REQUIRE_CONFIRM` trimmed and
+  case-insensitively and fails closed: only `0`, `false`, `no`, `off`, `n`,
+  `disabled` or an empty value leave the confirm gate off, and any other
+  value (`True`, `Yes`, `on`, `enabled`, `y`, a padded `1`, or an
+  unrecognised spelling) turns it on. Previously only the exact literals
+  `1`, `true`, `TRUE`, `yes` and `YES` enabled it and everything else
+  silently disabled a control the operator believed was set.
 - `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,
   chain codes, and intermediates in wiped fixed-size types (`k256` scalars,
   `crypto-bigint` integers, `Zeroizing` arrays) instead of `BigUint` and

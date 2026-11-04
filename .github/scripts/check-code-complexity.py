@@ -11,17 +11,13 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+from lib.rust_scanner import RustBraceScanner
+
 
 SOFT_LIMIT = 80
 FUNCTION = re.compile(
     r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:const\s+)?(?:unsafe\s+)?(?:extern(?:\s+\"[^\"]+\")?\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)"
 )
-RAW_STRING_START = re.compile(r'(?:br|rb|r)(?P<hashes>#{0,})"')
-CHAR_LITERAL = re.compile(
-    r"'(?:\\(?:x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]+\}|.)|[^\\'\r\n])'"
-)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -36,84 +32,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--write-baseline", action="store_true")
     return parser.parse_args()
-
-
-class RustBraceScanner:
-    """Count structural braces while preserving lexical state across source lines."""
-
-    def __init__(self) -> None:
-        self.block_comment_depth = 0
-        self.in_string = False
-        self.string_escape = False
-        self.raw_string_hashes: int | None = None
-
-    def scan_line(self, line: str) -> tuple[int, list[str]]:
-        delta = 0
-        structural_tokens: list[str] = []
-        index = 0
-        while index < len(line):
-            if self.block_comment_depth:
-                if line.startswith("/*", index):
-                    self.block_comment_depth += 1
-                    index += 2
-                elif line.startswith("*/", index):
-                    self.block_comment_depth -= 1
-                    index += 2
-                else:
-                    index += 1
-                continue
-
-            if self.raw_string_hashes is not None:
-                terminator = '"' + "#" * self.raw_string_hashes
-                if line.startswith(terminator, index):
-                    self.raw_string_hashes = None
-                    index += len(terminator)
-                else:
-                    index += 1
-                continue
-
-            if self.in_string:
-                char = line[index]
-                if self.string_escape:
-                    self.string_escape = False
-                elif char == "\\":
-                    self.string_escape = True
-                elif char == '"':
-                    self.in_string = False
-                index += 1
-                continue
-
-            if line.startswith("//", index):
-                break
-            if line.startswith("/*", index):
-                self.block_comment_depth = 1
-                index += 2
-                continue
-
-            raw_string = RAW_STRING_START.match(line, index)
-            if raw_string:
-                self.raw_string_hashes = len(raw_string.group("hashes"))
-                index = raw_string.end()
-                continue
-
-            char = line[index]
-            if char == '"':
-                self.in_string = True
-                index += 1
-                continue
-            if char == "'":
-                char_literal = CHAR_LITERAL.match(line, index)
-                if char_literal:
-                    index = char_literal.end()
-                    continue
-            if char in "{}()[]<>":
-                structural_tokens.append(char)
-            if char == "{":
-                delta += 1
-            elif char == "}":
-                delta -= 1
-            index += 1
-        return delta, structural_tokens
 
 
 def is_rust_source(relative: str) -> bool:

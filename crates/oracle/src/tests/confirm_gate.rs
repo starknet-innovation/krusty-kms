@@ -4,6 +4,7 @@ use super::fixtures::{
     sample_derivation_request, sample_raw_nostr_sign_request, sample_sign_request,
     sample_stark_sign_request, FakeHandler,
 };
+use crate::stdio::confirm_gate_enabled;
 use crate::StdioOracle;
 use krusty_kms_domain::{
     DeployAccountRequest, DeployMode, GatewayErrorCode, OracleCommand, OracleOutcome,
@@ -28,8 +29,12 @@ impl ConfirmEnvGuard {
     }
 
     fn require_confirm() -> Self {
+        Self::require_confirm_with("1")
+    }
+
+    fn require_confirm_with(value: &str) -> Self {
         let guard = Self::acquire();
-        std::env::set_var("KRUSTY_ORACLE_REQUIRE_CONFIRM", "1");
+        std::env::set_var("KRUSTY_ORACLE_REQUIRE_CONFIRM", value);
         guard
     }
 }
@@ -213,4 +218,88 @@ async fn confirm_gate_allows_privileged_ops_with_confirm() {
         })
         .await;
     assert!(matches!(response.outcome, OracleOutcome::Ok { .. }));
+}
+
+/// Every truthy spelling an operator is likely to write turns the gate on,
+/// and so does anything unrecognised: the gate fails closed (audit M-4).
+#[test]
+fn confirm_gate_value_parsing_fails_closed() {
+    for value in [
+        "1", "true", "TRUE", "True", "yes", "YES", "Yes", "on", "ON", "On", "enabled", "Enabled",
+        "y", "Y", " true ", "\t1\n", "yes ", "maybe", "2", "enable", "required",
+    ] {
+        assert!(
+            confirm_gate_enabled(value),
+            "{value:?} must enable the gate"
+        );
+    }
+    for value in [
+        "",
+        " ",
+        "0",
+        "false",
+        "FALSE",
+        "False",
+        "no",
+        "No",
+        "off",
+        "OFF",
+        "Off",
+        "n",
+        "N",
+        "disabled",
+        "Disabled",
+        " off ",
+        "\tfalse\n",
+    ] {
+        assert!(
+            !confirm_gate_enabled(value),
+            "{value:?} must leave the gate off"
+        );
+    }
+}
+
+/// A padded, mixed-case value reaches the request path as "enabled": a
+/// privileged request without `confirm` is rejected before the handler.
+#[tokio::test]
+async fn confirm_gate_enabled_by_padded_mixed_case_value() {
+    for value in [" True ", "Yes", "on", "enabled", "y"] {
+        let _env = ConfirmEnvGuard::require_confirm_with(value);
+        let oracle = StdioOracle::new(FakeHandler::new());
+        let response = oracle
+            .handle_request(OracleRequest {
+                version: ProtocolVersion::V1_0,
+                id: RequestId::new("req-confirm-spelling").unwrap(),
+                confirm: false,
+                command: OracleCommand::Sign(sample_stark_sign_request()),
+            })
+            .await;
+        match response.outcome {
+            OracleOutcome::Error { error } => {
+                assert_eq!(error.code, GatewayErrorCode::InvalidRequest, "{value:?}");
+            }
+            other => panic!("{value:?} must enable the gate, got {other:?}"),
+        }
+    }
+}
+
+/// An explicit opt-out keeps the gate off, matching the unset behaviour.
+#[tokio::test]
+async fn confirm_gate_explicit_opt_out_stays_off() {
+    for value in ["0", "false", "off", "no", ""] {
+        let _env = ConfirmEnvGuard::require_confirm_with(value);
+        let oracle = StdioOracle::new(FakeHandler::new());
+        let response = oracle
+            .handle_request(OracleRequest {
+                version: ProtocolVersion::V1_0,
+                id: RequestId::new("req-confirm-opt-out").unwrap(),
+                confirm: false,
+                command: OracleCommand::Sign(sample_stark_sign_request()),
+            })
+            .await;
+        assert!(
+            matches!(response.outcome, OracleOutcome::Ok { .. }),
+            "{value:?} must leave the gate off"
+        );
+    }
 }

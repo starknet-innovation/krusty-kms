@@ -28,6 +28,12 @@ mod tests;
 
 pub(crate) type StarknetRsFelt = starknet_rust_core::types::Felt;
 
+/// Largest coordinator payload a receiver will parse, for every transport.
+///
+/// The coordinator is untrusted on the receive path, so a single response or
+/// message must not be able to exhaust the signer's memory before validation.
+pub(crate) const MAX_COORDINATOR_PAYLOAD_BYTES: usize = 1024 * 1024;
+
 pub use codec::{coordination_message_hash, hash_transaction, hash_transaction_batch};
 pub use contract::Multisig;
 pub use http::HttpMultisigCoordinator;

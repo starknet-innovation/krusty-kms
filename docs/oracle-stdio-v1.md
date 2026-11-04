@@ -14,7 +14,11 @@ Optional hardening:
 
 - Request lines longer than 256 KiB are rejected.
 - Set `KRUSTY_ORACLE_REQUIRE_CONFIRM=1` to require `"confirm": true` on privileged
-  `sign` / `deploy_account` requests.
+  `sign` / `deploy_account` requests. The value is trimmed and compared
+  case-insensitively. Only `0`, `false`, `no`, `off`, `n`, `disabled` or an
+  empty value leaves the gate off; any other value (`1`, `true`, `yes`, `on`,
+  `enabled`, `y`, and anything unrecognised) turns it on, so a misspelled
+  value fails closed rather than silently disabling the control.
 - `secret` values must be opaque IDs (hex-looking private keys and mnemonic-like
   phrases are rejected).
 - Hosts can cap the fees `deploy_account` may sign by constructing the gateway
