@@ -32,6 +32,11 @@ unchanged; every accepted input stays accepted except the ones listed.
   formats write 16 or 32). Rejections are `DeserializationError`, a property
   of the file, not `CryptoError`, which would tell a caller to retry the
   password.
+- Review follow-up: `encrypt_keystore` (and so WASM `encryptKeystore`) now
+  applies the same ceiling before deriving, so `scrypt_n = 2^19` or `2^20`
+  is refused at write time instead of producing a keystore the same SDK can
+  no longer read. 2^18 (exactly 256 MiB with `r = 8`) stays the largest
+  accepted cost. Pinned by `encrypt_keystore_rejects_n_above_the_decrypt_ceiling`.
 - Invariants pinned by `keystore/tests/limits.rs`: `n = 2^20` is rejected
   with the memory-ceiling message (so before `derive_scrypt_key`); a
   129-byte salt is rejected on both formats; a 128-byte salt still reaches
@@ -39,7 +44,10 @@ unchanged; every accepted input stays accepted except the ones listed.
 - File layout: `keystore.rs` sits on the file-size baseline and cannot grow,
   so the malformed-metadata and resource-limit tests moved from its inline
   test module to `crates/kms/src/keystore/tests/limits.rs` (a child of that
-  module), and the new tests live there. No baseline changed.
+  module), and the new tests live there. The baselines were regenerated
+  because CI requires them in sync: the only changes are the lowered
+  entries for `keystore.rs` and `decrypt_ethers_keystore`, so the ratchet
+  tightened; nothing was raised.
 
 ### M-3: NATS coordinator payload cap (`krusty-kms-client`, `nats` feature)
 
@@ -54,6 +62,13 @@ unchanged; every accepted input stays accepted except the ones listed.
   subscribe closure now calls `decode_subscribed_payload`, which rejects
   `payload.len()` above the cap before `serde_json` sees a byte, then parses
   and runs the existing receive-side validation.
+- Review follow-up: the cap is applied on the send side too.
+  `encode_coordinator_payload` serializes an envelope and refuses one above
+  the cap, and both `NatsMultisigCoordinator::publish` and
+  `HttpMultisigCoordinator::publish` use it, so a publish never succeeds for
+  an envelope every receiver running this SDK would drop. Pinned by
+  `test_oversized_envelope_is_refused_before_publish`, which also shows the
+  HTTP coordinator fails before any request is sent.
 - Not fixed here: the transport-level buffer. The module docs say so; the
   allocation of one oversized frame needs a receive-side cap upstream in
   `async-nats`.

@@ -62,9 +62,14 @@ All notable changes to the published Rust crates are documented here.
   `r = 8`) before any KDF work, and both `decrypt_keystore` and
   `decrypt_ethers_keystore` reject a `kdfparams.salt` longer than 128 bytes.
   Keystores written by `encrypt_keystore`, ethers.js and geth are unaffected.
+  **Behaviour change:** `encrypt_keystore` and WASM `encryptKeystore` reject
+  `scrypt_n` above 2^18 (the ceiling with the format's `r = 8`) instead of
+  writing a keystore that `decrypt_keystore` would then refuse.
 - `krusty-kms-client` (`nats` feature): `NatsMultisigCoordinator::subscribe`
   rejects a message payload above 1 MiB, the HTTP coordinator's existing
-  response cap, before parsing it. The transport buffer of one oversized
+  response cap, before parsing it, and both the NATS and HTTP `publish`
+  refuse an envelope that serializes above that cap, since no receiver
+  running this SDK would accept it. The transport buffer of one oversized
   frame is still allocated by `async-nats`, which has no receive-side cap.
 - `krusty-kms-oracle` reads `KRUSTY_ORACLE_REQUIRE_CONFIRM` trimmed and
   case-insensitively and fails closed: only `0`, `false`, `no`, `off`, `n`,

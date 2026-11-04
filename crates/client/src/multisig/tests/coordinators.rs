@@ -5,6 +5,7 @@ use super::{address, call, test_signing_key};
 use crate::multisig::types::validate_incoming_envelope;
 #[cfg(feature = "nats")]
 use crate::multisig::NatsMultisigCoordinator;
+use crate::multisig::{encode_coordinator_payload, MAX_COORDINATOR_PAYLOAD_BYTES};
 use crate::multisig::{
     HttpMultisigCoordinator, InMemoryMultisigCoordinator, MultisigCoordinationEnvelope,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigProposal, MultisigSignerNotice,
@@ -229,4 +230,50 @@ fn test_nats_subject_is_deterministic() {
         NatsMultisigCoordinator::subject_for("krusty.multisig.", &topic),
         "krusty.multisig.SN_SEPOLIA.0000000000000000000000000000000000000000000000000000000000000001.0000000000000000000000000000000000000000000000000000000000000002"
     );
+}
+
+/// A publish must never succeed for an envelope every receiver drops: the
+/// send side applies the same byte cap as `subscribe` and `messages`, and
+/// the HTTP coordinator fails before any request is made.
+#[tokio::test]
+async fn test_oversized_envelope_is_refused_before_publish() {
+    let oversized = MultisigProposal::new(
+        address(1),
+        ChainId::Sepolia,
+        vec![call()],
+        Felt::from(99u64),
+        address(2),
+        Some("m".repeat(MAX_COORDINATOR_PAYLOAD_BYTES)),
+    );
+    let envelope =
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(oversized));
+    let err = encode_coordinator_payload(&envelope).expect_err("must be refused");
+    assert!(
+        matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+        "got {err:?}"
+    );
+
+    // Port 9 (discard) with no listener: a request would fail with a
+    // connection error, so the byte-limit error proves nothing was sent.
+    let coordinator = HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1:9/").unwrap();
+    let err = coordinator
+        .publish(envelope)
+        .await
+        .expect_err("must be refused");
+    assert!(
+        matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+        "got {err:?}"
+    );
+
+    let small = MultisigProposal::new(
+        address(1),
+        ChainId::Sepolia,
+        vec![call()],
+        Felt::from(99u64),
+        address(2),
+        None,
+    );
+    let envelope =
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(small));
+    assert!(encode_coordinator_payload(&envelope).unwrap().len() < MAX_COORDINATOR_PAYLOAD_BYTES);
 }

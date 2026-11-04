@@ -210,7 +210,8 @@ fn decrypt_keystore_rejects_oversized_scrypt_n_before_kdf() {
     // failed decryption after the allocation.
     let n = 1u64 << 20;
     assert!(scrypt_log_n(n as u32).is_ok());
-    let err = decrypt_keystore(&keystore_v1_with(n, &[0xab; 16]), &test_password(0))
+    let salt = krusty_kms_crypto::random_bytes::<16>();
+    let err = decrypt_keystore(&keystore_v1_with(n, &salt), &test_password(0))
         .expect_err("must be rejected");
     assert!(
         matches!(err, KmsError::DeserializationError(ref m) if m.contains("ceiling")),
@@ -220,7 +221,9 @@ fn decrypt_keystore_rejects_oversized_scrypt_n_before_kdf() {
 
 #[test]
 fn decrypt_keystore_rejects_oversized_salt_on_both_formats() {
-    let salt = vec![0xab; MAX_KEYSTORE_SALT_BYTES + 1];
+    // Only the length matters; the bytes come from the OS so no fixed salt
+    // is checked in.
+    let salt = krusty_kms_crypto::random_bytes::<{ MAX_KEYSTORE_SALT_BYTES + 1 }>();
     let v1 = decrypt_keystore(
         &keystore_v1_with(TEST_SCRYPT_N.into(), &salt),
         &test_password(0),
@@ -242,7 +245,7 @@ fn decrypt_keystore_rejects_oversized_salt_on_both_formats() {
 fn maximum_salt_still_reaches_the_kdf() {
     // Guards against over-tightening: a salt at the cap passes the length
     // check and fails on the password-dependent step instead.
-    let salt = vec![0xab; MAX_KEYSTORE_SALT_BYTES];
+    let salt = krusty_kms_crypto::random_bytes::<MAX_KEYSTORE_SALT_BYTES>();
     let v1 = decrypt_keystore(
         &keystore_v1_with(TEST_SCRYPT_N.into(), &salt),
         &test_password(0),
@@ -255,4 +258,21 @@ fn maximum_salt_still_reaches_the_kdf() {
         format!("{v3}").contains("MAC verification failed"),
         "v3 got {v3}"
     );
+}
+
+/// `encrypt_keystore` accepts exactly the `n` values `decrypt_keystore`
+/// accepts, so the SDK never writes a keystore it cannot read back.
+#[test]
+fn encrypt_keystore_rejects_n_above_the_decrypt_ceiling() {
+    let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    for n in [1u32 << 19, 1 << 20] {
+        assert!(scrypt_log_n(n).is_ok(), "n={n} is a valid scrypt parameter");
+        let err = encrypt_keystore(mnemonic, &test_password(0), n).expect_err("must be rejected");
+        assert!(
+            matches!(err, KmsError::DeserializationError(ref m) if m.contains("ceiling")),
+            "n={n}, got {err:?}"
+        );
+    }
+    // 2^18 · 8 · 128 bytes is exactly the ceiling: the largest accepted cost.
+    assert!(validate_scrypt_resource_params(1 << 18, 8, 1, 32).is_ok());
 }

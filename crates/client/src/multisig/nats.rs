@@ -1,7 +1,8 @@
 //! NATS-backed coordinator transport.
 //!
-//! Inbound payloads are capped at [`MAX_COORDINATOR_PAYLOAD_BYTES`] before
-//! they are parsed, matching the HTTP coordinator. This bounds the parse and
+//! Payloads are capped at [`MAX_COORDINATOR_PAYLOAD_BYTES`] in both directions,
+//! matching the HTTP coordinator: `publish` refuses an envelope no peer would
+//! accept, and `subscribe` rejects an oversized message before parsing it. This bounds the parse and
 //! validation work only: `async-nats` enforces the server's `max_payload` on
 //! publish but buffers whatever length a `MSG` frame declares on receive, so
 //! a hostile server can still make the client allocate one oversized frame.
@@ -12,7 +13,7 @@ use super::types::{
     validate_envelope_payload, validate_incoming_envelope, MultisigCoordinationEnvelope,
     MultisigCoordinator, MultisigMessageStream, MultisigTopic,
 };
-use super::MAX_COORDINATOR_PAYLOAD_BYTES;
+use super::{encode_coordinator_payload, MAX_COORDINATOR_PAYLOAD_BYTES};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -80,8 +81,7 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
         validate_envelope_payload(&envelope)?;
 
         let subject = self.subject(&envelope.topic());
-        let payload = serde_json::to_vec(&envelope)
-            .map_err(|error| KmsError::MultisigError(error.to_string()))?;
+        let payload = encode_coordinator_payload(&envelope)?;
         self.client
             .publish(subject, Bytes::from(payload))
             .await

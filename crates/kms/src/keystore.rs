@@ -126,8 +126,13 @@ fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Resu
 /// # Arguments
 /// * `mnemonic` - The mnemonic phrase to encrypt
 /// * `password` - User-supplied password
-/// * `scrypt_n` - Scrypt cost parameter N (must be a power of 2)
+/// * `scrypt_n` - Scrypt cost parameter N (a power of 2 up to 2^18; larger
+///   values would exceed the 256 MiB memory ceiling `decrypt_keystore` enforces)
 pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result<String> {
+    // The same ceiling `decrypt_keystore` applies, so every keystore this
+    // function writes can be read back by the same SDK.
+    validate_scrypt_resource_params(scrypt_n, 8, 1, 32)?;
+
     // Generate 16-byte salt
     let salt = krusty_kms_crypto::random_bytes::<16>();
 
