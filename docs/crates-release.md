@@ -22,9 +22,13 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
   and the publishing workflow checks it again before authentication.
 - Normal feature and fix PRs must not bump the root workspace version. Keep their
   notes under `## [Unreleased]`; create the dated entry and bump the version only in a
-  focused release PR. CI compares the release PR's base version with the latest
-  published `krusty-kms` version on crates.io, so a second release bump cannot merge
-  while the previous version is still unpublished.
+  focused release PR. Read every `## [Unreleased]` bullet before choosing the
+  increment: a bullet marked **Breaking** forces a pre-1.0 minor bump even when the
+  `cargo-semver-checks` job passed. That job has no lint for a changed return type on
+  an inherent method or free function, so a type change that breaks callers can reach
+  a release PR with a green semver check. CI compares the release PR's base version
+  with the latest published `krusty-kms` version on crates.io, so a second release
+  bump cannot merge while the previous version is still unpublished.
 - Release tags are immutable. Never delete, move, recreate, or force-push one.
 
 The workflow publishes these crates in dependency order:

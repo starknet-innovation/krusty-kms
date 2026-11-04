@@ -6,11 +6,15 @@ All notable changes to the published Rust crates are documented here.
 
 ### Changed
 
-- **Breaking Rust API:** `EthSigner::public_key_xy()` now returns two
-  `krusty_kms::eth_signer::EthCoordinate` values with the exact secp256k1
-  coordinates instead of reduced `Felt` values. Use `to_bytes_be()` for raw
-  bytes or `to_u256_pair()` for `(low, high)` calldata limbs.
-  `public_key_calldata()` remains available with unchanged behavior.
+- **Breaking Rust API:** `EthSigner::public_key_xy()`, deprecated in 0.15.0
+  because it reduced each coordinate modulo the Stark prime, is no longer
+  deprecated and now returns two `krusty_kms::EthCoordinate` values holding
+  the exact secp256k1 coordinates instead of reduced `Felt` values. Use
+  `to_bytes_be()` for raw bytes or `to_u256_pair()` for `(low, high)` calldata
+  limbs. `public_key_calldata()` remains available with unchanged behavior and
+  now delegates to `public_key_xy()`. The next release containing this change
+  is a pre-1.0 minor bump (0.16.0); `cargo-semver-checks` does not flag a
+  changed return type on an inherent method, so the bump is a reviewer decision.
 
 ### Fixed
 

@@ -51,7 +51,7 @@ pub use encryption::{
     decrypt_private_key, decrypt_with_key, encrypt_private_key, encrypt_with_key, EncryptedKey,
     EncryptedPayload,
 };
-pub use eth_signer::EthSigner;
+pub use eth_signer::{EthCoordinate, EthSigner};
 pub use keystore::{decrypt_ethers_keystore, decrypt_keystore, encrypt_keystore};
 pub use mnemonic::{generate_mnemonic, mnemonic_to_seed, validate_mnemonic};
 pub use multisig::{OpenZeppelinMultisig, OzMultisigDeploymentDescriptor};
