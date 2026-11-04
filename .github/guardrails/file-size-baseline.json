@@ -134,7 +134,7 @@
     },
     {
       "path": "crates/kms/src/derivation.rs",
-      "lines": 703
+      "lines": 688
     },
     {
       "path": "crates/kms/src/encryption.rs",
@@ -194,7 +194,7 @@
     },
     {
       "path": "crates/wasm/src/types.rs",
-      "lines": 502
+      "lines": 506
     }
   ]
 }

@@ -28,11 +28,11 @@ starknet-rust-core.workspace = true
 bip39.workspace = true
 # RIPEMD-160 for P2WPKH key hashes; already in the graph through bip39.
 bitcoin_hashes = { version = "0.14.1", default-features = false }
-hmac.workspace = true
-# `zeroize` makes SHA-2 hashers wipe their state on drop; qsb_hors requires it.
+# `zeroize` makes SHA-2 hashers wipe their state on drop; zeroizing_hmac requires it.
 sha2 = { workspace = true, features = ["zeroize"] }
 sha3 = "0.12"
 num-bigint.workspace = true
+crypto-bigint.workspace = true
 num-traits.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -50,7 +50,10 @@ aes.workspace = true
 ctr.workspace = true
 base64.workspace = true
 chacha20.workspace = true
-hkdf.workspace = true
+
+[dev-dependencies]
+# Differential oracle for zeroizing_hmac; production HMACs do not use it.
+hmac.workspace = true
 
 [lints]
 workspace = true

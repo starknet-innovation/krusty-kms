@@ -3,21 +3,17 @@
 //!
 //! The shared `crate::derivation` helpers compute child keys with `BigUint`
 //! and a `Vec`, whose heap copies are never wiped. Here the key is a `k256`
-//! scalar inside `Zeroizing`, and the key bytes, chain code and HMAC output
-//! live in `Zeroizing` arrays. Two copies stay outside this module's reach:
-//! stack temporaries the compiler makes during scalar arithmetic, and the
-//! HMAC-SHA512 state, which the `hmac` crate does not wipe without its
-//! `zeroize` feature.
+//! scalar inside `Zeroizing`, the key bytes, chain code and HMAC output live
+//! in `Zeroizing` arrays, and the HMAC-SHA512 is the crate's wiped
+//! `zeroizing_hmac`. Stack temporaries the compiler makes during scalar
+//! arithmetic stay outside this module's reach.
 
-use hmac::{Hmac, KeyInit, Mac};
 use k256::elliptic_curve::ff::PrimeField;
 use k256::elliptic_curve::sec1::ToSec1Point;
 use k256::{NonZeroScalar, PublicKey, Scalar};
 use krusty_kms_common::{KmsError, Result};
 use sha2::Sha512;
 use zeroize::{Zeroize, Zeroizing};
-
-type HmacSha512 = Hmac<Sha512>;
 
 const HARDENED: u32 = 0x8000_0000;
 
@@ -55,18 +51,10 @@ pub(super) fn derive_private_key(seed: &[u8], path: &[u32]) -> Result<Zeroizing<
     Ok(scalar_bytes(&key))
 }
 
-/// HMAC-SHA512 of `parts`, returned in a wiped buffer.
+/// HMAC-SHA512 of `parts` through the crate's wiped HMAC, whose padded key and
+/// SHA-2 states are cleared, returned in a wiped buffer.
 fn hmac_sha512(key: &[u8], parts: &[&[u8]]) -> Result<Zeroizing<[u8; 64]>> {
-    let mut mac =
-        HmacSha512::new_from_slice(key).map_err(|e| KmsError::CryptoError(e.to_string()))?;
-    for part in parts {
-        mac.update(part);
-    }
-    let mut tag = mac.finalize().into_bytes();
-    let mut output = Zeroizing::new([0u8; 64]);
-    output.copy_from_slice(&tag);
-    tag.as_mut_slice().zeroize();
-    Ok(output)
+    crate::zeroizing_hmac::hmac::<Sha512, 64>(key, parts)
 }
 
 enum Half {

@@ -1,15 +1,14 @@
 //! Minimal NIP-44 v2 encryption used by NIP-59 application envelopes.
 
+use crate::zeroizing_hmac::{hkdf_sha256_expand, hmac};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chacha20::cipher::{KeyIvInit, StreamCipher};
 use chacha20::ChaCha20;
-use hkdf::Hkdf;
-use hmac::digest::KeyInit;
-use hmac::{Hmac, Mac};
 use k256::{PublicKey, SecretKey};
 use krusty_kms_common::KmsError;
 use sha2::Sha256;
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, Zeroizing};
 
 const VERSION: u8 = 2;
@@ -33,22 +32,15 @@ fn conversation_key(
     let public = PublicKey::from_sec1_bytes(&compressed)
         .map_err(|error| KmsError::InvalidPublicKey(error.to_string()))?;
     let shared = secret.diffie_hellman(&public);
-    let (prk, _) = Hkdf::<Sha256>::extract(Some(b"nip44-v2"), shared.raw_secret_bytes());
-    let mut result = Zeroizing::new([0u8; 32]);
-    result.copy_from_slice(prk.as_slice());
-    Ok(result)
+    // HKDF-Extract (RFC 5869 section 2.2): HMAC keyed by the salt.
+    hmac::<Sha256, 32>(b"nip44-v2", &[shared.raw_secret_bytes()])
 }
 
 fn message_keys(
     conversation_key: &[u8; 32],
     nonce: &[u8; 32],
 ) -> Result<Zeroizing<[u8; 76]>, KmsError> {
-    let hkdf = Hkdf::<Sha256>::from_prk(conversation_key)
-        .map_err(|_| KmsError::CryptoError("Invalid NIP-44 conversation key".to_string()))?;
-    let mut result = Zeroizing::new([0u8; 76]);
-    hkdf.expand(nonce, result.as_mut())
-        .map_err(|_| KmsError::CryptoError("Invalid NIP-44 message key".to_string()))?;
-    Ok(result)
+    hkdf_sha256_expand(conversation_key, nonce)
 }
 
 const fn padded_length(length: usize) -> usize {
@@ -93,17 +85,13 @@ fn encrypt_with_nonce(
         .map_err(|_| KmsError::CryptoError("Invalid NIP-44 cipher nonce".to_string()))?;
     let mut cipher = ChaCha20::new(key.into(), iv.into());
     cipher.apply_keystream(&mut ciphertext);
-    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&keys[44..])
-        .map_err(|_| KmsError::CryptoError("Invalid NIP-44 HMAC key".to_string()))?;
-    mac.update(nonce);
-    mac.update(&ciphertext);
-    let tag = mac.finalize().into_bytes();
+    let tag = hmac::<Sha256, 32>(&keys[44..], &[nonce, &ciphertext])?;
 
     let mut payload = Vec::with_capacity(65 + ciphertext.len());
     payload.push(VERSION);
     payload.extend_from_slice(nonce);
     payload.extend_from_slice(&ciphertext);
-    payload.extend_from_slice(&tag);
+    payload.extend_from_slice(tag.as_ref());
     Ok(BASE64.encode(payload))
 }
 
@@ -146,12 +134,12 @@ pub(crate) fn decrypt(
     let mut ciphertext = Zeroizing::new(decoded[33..tag_at].to_vec());
     let conversation = conversation_key(private_key, peer_public_key)?;
     let keys = message_keys(&conversation, nonce)?;
-    let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&keys[44..])
-        .map_err(|_| KmsError::CryptoError("Invalid NIP-44 HMAC key".to_string()))?;
-    mac.update(nonce);
-    mac.update(&ciphertext);
-    mac.verify_slice(&decoded[tag_at..])
-        .map_err(|_| KmsError::CryptoError("NIP-44 authentication failed".to_string()))?;
+    let tag = hmac::<Sha256, 32>(&keys[44..], &[nonce, &ciphertext])?;
+    if !bool::from(tag.as_slice().ct_eq(&decoded[tag_at..])) {
+        return Err(KmsError::CryptoError(
+            "NIP-44 authentication failed".to_string(),
+        ));
+    }
 
     let key: &[u8; 32] = keys[..32]
         .try_into()

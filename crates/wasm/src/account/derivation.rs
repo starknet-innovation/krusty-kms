@@ -5,6 +5,7 @@ use crate::error::from_sdk_result;
 use crate::types::{WasmKeypair, WasmPublicKey, WasmStarkXOnlyKeypair, WasmStarkXOnlyPublicKey};
 use krusty_kms_common::SecretFelt;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 /// Generate a new random mnemonic phrase.
 ///
@@ -41,11 +42,12 @@ pub fn derive_keypair(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair(
         mnemonic,
         address_index,
         account_index,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)?;
 
@@ -73,11 +75,12 @@ pub fn derive_public_key(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmPublicKey, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair(
         mnemonic,
         address_index,
         account_index,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)?;
 
@@ -117,12 +120,13 @@ pub fn derive_starknet_keypair(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
         mnemonic,
         address_index,
         account_index,
         krusty_kms::STARKNET_COIN_TYPE,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)?;
 
@@ -151,12 +155,13 @@ pub fn derive_starknet_public_key(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmPublicKey, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
         mnemonic,
         address_index,
         account_index,
         krusty_kms::STARKNET_COIN_TYPE,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)?;
 

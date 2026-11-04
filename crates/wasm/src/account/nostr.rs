@@ -3,6 +3,7 @@
 use crate::error::from_sdk_result;
 use crate::types::{WasmNostrKeypair, WasmNostrPublicKey};
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 /// Derive a Nostr keypair from mnemonic (coin type 1237).
 ///
@@ -31,11 +32,12 @@ pub fn derive_nostr_keypair(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmNostrKeypair, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
         mnemonic,
         address_index,
         account_index,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)?;
 
@@ -59,11 +61,12 @@ pub fn derive_nostr_public_key(
     account_index: u32,
     passphrase: Option<String>,
 ) -> Result<WasmNostrPublicKey, JsValue> {
+    let passphrase = passphrase.map(Zeroizing::new);
     let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
         mnemonic,
         address_index,
         account_index,
-        passphrase.as_deref(),
+        passphrase.as_deref().map(String::as_str),
     ))
     .map_err(JsValue::from)?;
 

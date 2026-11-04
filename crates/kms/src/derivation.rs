@@ -2,19 +2,28 @@
 //!
 //! Derives keys using BIP-32 with secp256k1, then grinds the result
 //! to produce a valid Stark curve scalar.
+//!
+//! # Memory
+//!
+//! Seeds, private keys, chain codes, and HMAC outputs live only in
+//! `Zeroizing` arrays, `k256` scalars and `crypto-bigint` integers held in
+//! `Zeroizing`, and the crate's internal wiped HMAC (`zeroizing_hmac`). Not wiped:
+//! copies the compiler makes when it moves a value, register spills, and
+//! temporaries inside `k256`, `crypto-bigint`, and the SHA-2 functions. The
+//! keys these functions return (`Felt`, `[u8; 32]`) are the caller's to wipe.
 
 use crate::mnemonic::mnemonic_to_seed;
-use hmac::{Hmac, KeyInit, Mac};
+use crate::zeroizing_hmac::hmac;
+use crypto_bigint::{CtLt, NonZero, U256};
 use k256::ecdsa::SigningKey;
+use k256::elliptic_curve::{ops::Reduce, Curve};
+use k256::{FieldBytes, Scalar, Secp256k1};
 use krusty_kms_common::{KmsError, Result, SecretFelt};
-use num_bigint::BigUint;
-use num_traits::Num;
 use sha2::{Digest, Sha256, Sha512};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-type HmacSha512 = Hmac<Sha512>;
 type DerivedKeyPair = (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>);
 
 /// Tongo coin type for BIP-44 derivation path.
@@ -29,8 +38,14 @@ pub const STARKNET_COIN_TYPE: u32 = 9004;
 /// Derivation path: `m/44'/1237'/account'/0/index`
 pub const NOSTR_COIN_TYPE: u32 = 1237;
 
-/// Starknet curve order (from starknet-crypto).
-const CURVE_ORDER: &str = "0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
+/// Starknet curve order n, the modulus of a ground key.
+const STARK_ORDER: NonZero<U256> = NonZero::<U256>::new_unwrap(U256::from_be_hex(
+    "0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f",
+));
+
+/// Grinding's rejection bound `2^256 - (2^256 mod n)`. As n is odd,
+/// `2^256 mod n = ((2^256 - 1) mod n) + 1`, so the bound is computed in 256 bits.
+const GRIND_LIMIT: U256 = U256::MAX.wrapping_sub(&U256::MAX.rem(&STARK_ORDER));
 
 /// A Tongo keypair (private key + public key).
 ///
@@ -363,17 +378,17 @@ pub fn derive_argent_legacy_private_key(
 ///
 /// # Cyclomatic Complexity: 1
 fn derive_master_key(seed: &[u8]) -> Result<DerivedKeyPair> {
-    let mut mac = HmacSha512::new_from_slice(b"Bitcoin seed")
-        .map_err(|e| KmsError::CryptoError(e.to_string()))?;
-    mac.update(seed);
-    let result = mac.finalize().into_bytes();
+    let output = hmac::<Sha512, 64>(b"Bitcoin seed", &[seed])?;
+    Ok(split_key_and_chain(&output))
+}
 
+/// Split a BIP-32 HMAC output `I` into `(IL, IR)`.
+fn split_key_and_chain(output: &[u8; 64]) -> DerivedKeyPair {
     let mut key = Zeroizing::new([0u8; 32]);
     let mut chain_code = Zeroizing::new([0u8; 32]);
-    key.copy_from_slice(&result[..32]);
-    chain_code.copy_from_slice(&result[32..64]);
-
-    Ok((key, chain_code))
+    key.copy_from_slice(&output[..32]);
+    chain_code.copy_from_slice(&output[32..]);
+    (key, chain_code)
 }
 
 /// Derive a child key using BIP-32 derivation with secp256k1.
@@ -401,69 +416,48 @@ pub(crate) fn require_unhardened_component(value: u32, field: &str) -> Result<()
 }
 
 fn derive_child(key: &[u8; 32], chain_code: &[u8; 32], index: u32) -> Result<DerivedKeyPair> {
-    let mut mac =
-        HmacSha512::new_from_slice(chain_code).map_err(|e| KmsError::CryptoError(e.to_string()))?;
-
-    let hardened = (index & 0x8000_0000) != 0;
-
-    if hardened {
+    let index_bytes = index.to_be_bytes();
+    let output = if (index & 0x8000_0000) != 0 {
         // Hardened derivation: 0x00 || priv || index
-        mac.update(&[0x00]);
-        mac.update(key);
+        hmac::<Sha512, 64>(chain_code, &[&[0x00][..], key, &index_bytes])?
     } else {
         // Non-hardened: compressed secp256k1 public key || index
         let signing_key = SigningKey::from_bytes(key.into())
             .map_err(|e| KmsError::CryptoError(format!("Invalid secp256k1 key: {}", e)))?;
-        let verifying_key = signing_key.verifying_key();
-        let compressed_pubkey = verifying_key.to_sec1_point(true); // compressed = true
-        mac.update(compressed_pubkey.as_bytes()); // 33 bytes: 0x02/0x03 + x
+        let compressed_pubkey = signing_key.verifying_key().to_sec1_point(true);
+        hmac::<Sha512, 64>(chain_code, &[compressed_pubkey.as_bytes(), &index_bytes])?
+    };
+    let (mut derived_key, derived_chain) = split_key_and_chain(&output);
+    let child = child_scalar(&derived_key, key)?;
+    let mut child_bytes = child.to_bytes();
+    derived_key.copy_from_slice(&child_bytes);
+    child_bytes.as_mut_slice().zeroize();
+    Ok((derived_key, derived_chain))
+}
+
+/// BIP-32's `parse256(IL) + k_par (mod n)`, rejecting `IL >= n` and a zero
+/// child. Spec says try the next index; for a fixed path we return an error.
+///
+/// The parent is reduced mod n rather than rejected, as the earlier
+/// big-integer code did, so an out-of-range master key (never validated)
+/// still derives the same child. `IL` is range-checked in constant time as a
+/// wiped `U256`, and both operands are reduced through borrows, so neither
+/// leaves an owned, unwiped `FieldBytes` copy.
+fn child_scalar(il: &[u8; 32], parent: &[u8; 32]) -> Result<Zeroizing<Scalar>> {
+    let il = Zeroizing::new(U256::from_be_slice(il));
+    if !il.ct_lt(Secp256k1::ORDER.as_ref()).to_bool() {
+        let reason = "BIP-32 child derivation failed: IL >= curve order n";
+        return Err(KmsError::CryptoError(reason.to_string()));
     }
-
-    mac.update(&index.to_be_bytes());
-    let result = mac.finalize().into_bytes();
-
-    // Split I into IL (left 32 bytes) and IR (right 32 bytes)
-    let il = &result[..32];
-    let ir = &result[32..64];
-
-    // secp256k1 curve order
-    let secp256k1_n = BigUint::from_bytes_be(&[
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFE, 0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B, 0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36,
-        0x41, 0x41,
-    ]);
-
-    // BIP-32: reject IL >= n. Spec says try the next index; for a fixed path we
-    // return an error (hardened failure) rather than silently advancing.
-    let il_num = BigUint::from_bytes_be(il);
-    if il_num >= secp256k1_n {
-        return Err(KmsError::CryptoError(
-            "BIP-32 child derivation failed: IL >= curve order n".to_string(),
-        ));
-    }
-
-    // BIP-32: child_key = (parse256(IL) + parent_key) mod n
-    let parent_num = BigUint::from_bytes_be(key);
-    let child_num = (il_num + parent_num) % &secp256k1_n;
-
-    // BIP-32: reject ki == 0 (invalid private key). Spec says try next index;
-    // for a fixed path we return an error.
-    if child_num == BigUint::from(0u32) {
+    let il = Zeroizing::new(<Scalar as Reduce<U256>>::reduce(&il));
+    let parent = Zeroizing::new(<Scalar as Reduce<FieldBytes>>::reduce(parent.into()));
+    let child = Zeroizing::new(*il + *parent);
+    if bool::from(child.is_zero()) {
         return Err(KmsError::CryptoError(
             "BIP-32 child derivation failed: derived key is zero".to_string(),
         ));
     }
-
-    // Convert back to bytes (big-endian, padded to 32 bytes)
-    let child_bytes = child_num.to_bytes_be();
-    let mut derived_key = Zeroizing::new([0u8; 32]);
-    let start = 32 - child_bytes.len().min(32);
-    derived_key[start..].copy_from_slice(&child_bytes[..child_bytes.len().min(32)]);
-
-    let mut derived_chain = Zeroizing::new([0u8; 32]);
-    derived_chain.copy_from_slice(ir);
-
-    Ok((derived_key, derived_chain))
+    Ok(child)
 }
 
 /// Derive a key along a BIP-44 path.
@@ -498,44 +492,32 @@ fn derive_path(
 ///
 /// # Cyclomatic Complexity: 2
 pub fn grind_key(key_seed: &[u8; 32]) -> Result<Felt> {
-    // Stark curve order
-    let stark_order = BigUint::from_str_radix(CURVE_ORDER, 16)
-        .map_err(|e| KmsError::CryptoError(e.to_string()))?;
-
-    // sha256mask = 2^256
-    let two256 = BigUint::from(1u32) << 256;
-
-    // Rejection upper bound: 2^256 - (2^256 mod stark_order)
-    let max_allowed = &two256 - (&two256 % &stark_order);
-
     // Use u8 counter like Swift implementation
     for i in 0u8..=255 {
         // Hash keySeed || i (single byte)
-        let mut hasher = Sha256::new();
-        hasher.update(key_seed);
-        hasher.update([i]);
-        let digest = hasher.finalize();
+        let mut digest = Sha256::new_with_prefix(key_seed)
+            .chain_update([i])
+            .finalize();
+        let candidate = Zeroizing::new(U256::from_be_slice(&digest));
+        digest.as_mut_slice().zeroize();
 
-        let candidate = BigUint::from_bytes_be(&digest);
-
-        // Check if candidate < max_allowed (avoids bias)
-        if candidate < max_allowed {
-            // Take modulo to get final Stark private key
-            let k = candidate % &stark_order;
-
-            // Reject the zero scalar (invalid private key); try the next counter.
-            if k == BigUint::from(0u32) {
-                continue;
-            }
-
-            // Convert to 32-byte array (big-endian)
-            let k_bytes = k.to_bytes_be();
-            let mut padded = [0u8; 32];
-            let start = 32 - k_bytes.len().min(32);
-            padded[start..].copy_from_slice(&k_bytes[..k_bytes.len().min(32)]);
-
-            return Ok(Felt::from_bytes_be_slice(&padded));
+        // Check if candidate < GRIND_LIMIT (avoids bias)
+        if *candidate >= GRIND_LIMIT {
+            continue;
         }
+        // Take modulo to get final Stark private key
+        let k = Zeroizing::new(candidate.rem(&STARK_ORDER));
+
+        // Reject the zero scalar (invalid private key); try the next counter.
+        if *k == U256::ZERO {
+            continue;
+        }
+
+        // Convert to 32-byte array (big-endian)
+        let mut k_bytes: [u8; 32] = k.to_be_bytes().into();
+        let key = Felt::from_bytes_be(&k_bytes);
+        k_bytes.zeroize();
+        return Ok(key);
     }
 
     Err(KmsError::CryptoError(
@@ -556,6 +538,9 @@ fn compute_public_key(private_key: &Felt) -> Result<ProjectivePoint> {
     // This avoids duplicating constants and eliminates unwrap() calls
     Ok(krusty_kms_crypto::StarkCurve::mul_generator(private_key))
 }
+
+#[cfg(test)]
+mod reference_test;
 
 #[cfg(test)]
 mod tests {
