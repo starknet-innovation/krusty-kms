@@ -422,12 +422,23 @@ pub unsafe extern "C" fn kms_encode_rollover_calls(
 // Transfer calls
 // ---------------------------------------------------------------------------
 
+/// Input for [`kms_encode_transfer_calls`].
+///
+/// `sender_public_key` and `recipient_public_key` use the same
+/// `0x` + 64-hex `x` + 64-hex `y` form as `recipient_public_key` in the
+/// transfer proof parameters. `hint_ciphertext_hex` / `hint_nonce_hex` carry
+/// the recipient's `hintTransfer`; `hint_leftover_*` carry the sender's
+/// `hintLeftover`. Every field is required.
 #[derive(Deserialize)]
 struct EncodeTransferParams {
     tongo_address: String,
+    sender_public_key: String,
+    recipient_public_key: String,
     proof_result_json: String,
     hint_ciphertext_hex: String,
     hint_nonce_hex: String,
+    hint_leftover_ciphertext_hex: String,
+    hint_leftover_nonce_hex: String,
 }
 
 #[derive(Deserialize)]
@@ -457,6 +468,85 @@ struct TransferProofData {
     audit_transfer_json: Option<String>,
 }
 
+/// Append a Tongo public key (`0x` + 64-hex `x` + 64-hex `y`) as `PubKey`
+/// calldata: two felts, `x` then `y`.
+fn append_public_key_felts(calldata: &mut Vec<String>, public_key_hex: &str) -> Result<(), i32> {
+    let point = crate::proof::parse_public_key(public_key_hex)?;
+    let (x, y) =
+        serialization::serialize_projective_point(&point).map_err(|_| KMS_ERR_INVALID_INPUT)?;
+    calldata.push(felt_hex(&x));
+    calldata.push(felt_hex(&y));
+    Ok(())
+}
+
+/// Serialize the Cairo `Transfer` struct in the contract's field order:
+/// `from`, `to`, `transferBalance`, `transferBalanceSelf`, `hintTransfer`,
+/// `hintLeftover`, `auxiliarCipher`, `auxiliarCipher2`, `proof`, `auditPart`,
+/// `auditPartTransfer`.
+///
+/// This is the layout `krusty_kms_client::build_transfer_call` emits; the two
+/// must not drift.
+fn transfer_calldata(
+    params: &EncodeTransferParams,
+    proof_data: &TransferProofData,
+) -> Result<Vec<String>, i32> {
+    let mut calldata = Vec::new();
+
+    // 1-2. from, to
+    append_public_key_felts(&mut calldata, &params.sender_public_key)?;
+    append_public_key_felts(&mut calldata, &params.recipient_public_key)?;
+
+    // 3-4. transferBalance, transferBalanceSelf: L, R each
+    for (x, y) in [
+        (&proof_data.transfer_l_x, &proof_data.transfer_l_y),
+        (&proof_data.transfer_r_x, &proof_data.transfer_r_y),
+        (&proof_data.self_l_x, &proof_data.self_l_y),
+        (&proof_data.self_r_x, &proof_data.self_r_y),
+    ] {
+        calldata.push(felt_hex(&parse_felt(x)?));
+        calldata.push(felt_hex(&parse_felt(y)?));
+    }
+
+    // 5-6. hintTransfer, hintLeftover
+    append_hint_felts(
+        &mut calldata,
+        &params.hint_ciphertext_hex,
+        &params.hint_nonce_hex,
+    )?;
+    append_hint_felts(
+        &mut calldata,
+        &params.hint_leftover_ciphertext_hex,
+        &params.hint_leftover_nonce_hex,
+    )?;
+
+    // 7-8. auxiliarCipher (V, R_aux for transfer amount), auxiliarCipher2 (leftover)
+    for hex_val in [
+        &proof_data.aux_v_x,
+        &proof_data.aux_v_y,
+        &proof_data.aux_r_x,
+        &proof_data.aux_r_y,
+        &proof_data.aux2_v_x,
+        &proof_data.aux2_v_y,
+        &proof_data.aux2_r_x,
+        &proof_data.aux2_r_y,
+    ] {
+        calldata.push(hex_val.clone());
+    }
+
+    // 9. proof (serialized as JSON, contains all commitments and range proofs)
+    let transfer_proof: ProofOfTransfer =
+        serde_json::from_str(&proof_data.proof_json).map_err(|_| KMS_ERR_JSON)?;
+    let proof_felts =
+        serialization::serialize_proof_of_transfer(&transfer_proof).map_err(|_| KMS_ERR_CRYPTO)?;
+    calldata.extend(felts_to_hex_vec(&proof_felts));
+
+    // 10-11. auditPart, auditPartTransfer
+    append_audit_option(&mut calldata, proof_data.audit_balance_json.as_deref())?;
+    append_audit_option(&mut calldata, proof_data.audit_transfer_json.as_deref())?;
+
+    Ok(calldata)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn kms_encode_transfer_calls(
     params_json: *const c_char,
@@ -478,77 +568,10 @@ pub unsafe extern "C" fn kms_encode_transfer_calls(
             Err(_) => return KMS_ERR_JSON,
         };
 
-        let mut calldata = Vec::new();
-
-        // Transfer balance for recipient: L, R
-        for (x, y) in [
-            (&proof_data.transfer_l_x, &proof_data.transfer_l_y),
-            (&proof_data.transfer_r_x, &proof_data.transfer_r_y),
-            (&proof_data.self_l_x, &proof_data.self_l_y),
-            (&proof_data.self_r_x, &proof_data.self_r_y),
-        ] {
-            let fx = match parse_felt(x) {
-                Ok(f) => f,
-                Err(e) => return e,
-            };
-            let fy = match parse_felt(y) {
-                Ok(f) => f,
-                Err(e) => return e,
-            };
-            calldata.push(felt_hex(&fx));
-            calldata.push(felt_hex(&fy));
-        }
-
-        // Hint
-        if let Err(e) = append_hint_felts(
-            &mut calldata,
-            &params.hint_ciphertext_hex,
-            &params.hint_nonce_hex,
-        ) {
-            return e;
-        }
-
-        // Auxiliary ciphers (V, R_aux for transfer amount; V2, R_aux2 for leftover)
-        for hex_val in [
-            &proof_data.aux_v_x,
-            &proof_data.aux_v_y,
-            &proof_data.aux_r_x,
-            &proof_data.aux_r_y,
-        ] {
-            calldata.push(hex_val.clone());
-        }
-        for hex_val in [
-            &proof_data.aux2_v_x,
-            &proof_data.aux2_v_y,
-            &proof_data.aux2_r_x,
-            &proof_data.aux2_r_y,
-        ] {
-            calldata.push(hex_val.clone());
-        }
-
-        // Transfer proof (serialized as JSON, contains all commitments and range proofs)
-        let transfer_proof: ProofOfTransfer = match serde_json::from_str(&proof_data.proof_json) {
-            Ok(p) => p,
-            Err(_) => return KMS_ERR_JSON,
-        };
-        let proof_felts = match serialization::serialize_proof_of_transfer(&transfer_proof)
-            .map_err(|_| KMS_ERR_CRYPTO)
-        {
-            Ok(f) => f,
+        let calldata = match transfer_calldata(&params, &proof_data) {
+            Ok(c) => c,
             Err(e) => return e,
         };
-        calldata.extend(felts_to_hex_vec(&proof_felts));
-
-        // Audit for balance and transfer ciphers
-        if let Err(e) = append_audit_option(&mut calldata, proof_data.audit_balance_json.as_deref())
-        {
-            return e;
-        }
-        if let Err(e) =
-            append_audit_option(&mut calldata, proof_data.audit_transfer_json.as_deref())
-        {
-            return e;
-        }
 
         let call = CallJson {
             to: params.tongo_address,
@@ -789,413 +812,4 @@ pub unsafe extern "C" fn kms_encode_ragequit_calls(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::account::{
-        kms_account_create_from_private_key, kms_account_destroy, kms_account_update_state,
-    };
-    use crate::error::KMS_OK;
-    use crate::helpers::{felt_hex_fixed, felt_to_kms};
-    use crate::json_types::JsonCiphertext;
-    use crate::proof::{
-        kms_generate_ragequit_proof, kms_generate_transfer_proof, kms_generate_withdraw_proof,
-    };
-    use crate::types::{KmsAccountHandle, KmsAccountState};
-    use krusty_kms_common::{ProofOfTransfer, Range};
-    use krusty_kms_crypto::StarkCurve;
-    use serde::Deserialize;
-    use serde_json::json;
-    use starknet_types_core::felt::Felt;
-    use std::ffi::{c_char, CString};
-
-    struct TestAccount {
-        handle: KmsAccountHandle,
-        contract_address: Felt,
-        chain_id: Felt,
-        current_cipher: JsonCiphertext,
-        auditor_public_key: String,
-        recipient_public_key: String,
-    }
-
-    impl Drop for TestAccount {
-        fn drop(&mut self) {
-            let _ = unsafe { kms_account_destroy(self.handle) };
-        }
-    }
-
-    #[derive(Deserialize)]
-    struct EncodedCall {
-        calldata: Vec<String>,
-    }
-
-    #[derive(Deserialize)]
-    struct EncodedCalls {
-        calls: Vec<EncodedCall>,
-    }
-
-    fn u128_to_pair(v: u128) -> (u64, u64) {
-        (v as u64, (v >> 64) as u64)
-    }
-
-    fn point_hex_xy(p: &starknet_types_core::curve::ProjectivePoint) -> (String, String) {
-        let a = StarkCurve::projective_to_affine(p).unwrap();
-        (felt_hex_fixed(&a.x()), felt_hex_fixed(&a.y()))
-    }
-
-    fn point_hex_concat_xy(p: &starknet_types_core::curve::ProjectivePoint) -> String {
-        let a = StarkCurve::projective_to_affine(p).unwrap();
-        format!("0x{:064x}{:064x}", a.x(), a.y())
-    }
-
-    fn make_cipher(
-        balance: u128,
-        owner_public_key: &starknet_types_core::curve::ProjectivePoint,
-    ) -> JsonCiphertext {
-        let g = StarkCurve::generator();
-        let random = Felt::from(42u64);
-        let g_m = StarkCurve::mul(&Felt::from(balance), Some(&g));
-        let pk_r = StarkCurve::mul(&random, Some(owner_public_key));
-        let l = StarkCurve::add(&g_m, &pk_r);
-        let r = StarkCurve::mul(&random, Some(&g));
-        let (l_x, l_y) = point_hex_xy(&l);
-        let (r_x, r_y) = point_hex_xy(&r);
-        JsonCiphertext { l_x, l_y, r_x, r_y }
-    }
-
-    fn create_test_account(balance: u128) -> TestAccount {
-        let contract_address = Felt::from(123456u64);
-        let chain_id = Felt::from_hex("0x534e5f5345504f4c4941").unwrap(); // SN_SEPOLIA
-        let contract_addr_kms = felt_to_kms(&contract_address);
-        let owner_private_key = Felt::from(42u64);
-        let owner_key_kms = felt_to_kms(&owner_private_key);
-
-        let mut handle: KmsAccountHandle = 0;
-        let rc = unsafe {
-            kms_account_create_from_private_key(&owner_key_kms, &contract_addr_kms, &mut handle)
-        };
-        assert_eq!(rc, KMS_OK);
-
-        let (balance_low, balance_high) = u128_to_pair(balance);
-        let state = KmsAccountState {
-            balance_low,
-            balance_high,
-            pending_balance_low: 0,
-            pending_balance_high: 0,
-            nonce: 0,
-        };
-        let rc = unsafe { kms_account_update_state(handle, &state) };
-        assert_eq!(rc, KMS_OK);
-
-        let owner_public_key = StarkCurve::mul_generator(&owner_private_key);
-        let current_cipher = make_cipher(balance, &owner_public_key);
-
-        let auditor_public_key =
-            point_hex_concat_xy(&StarkCurve::mul_generator(&Felt::from(777u64)));
-        let recipient_public_key =
-            point_hex_concat_xy(&StarkCurve::mul_generator(&Felt::from(99u64)));
-
-        TestAccount {
-            handle,
-            contract_address,
-            chain_id,
-            current_cipher,
-            auditor_public_key,
-            recipient_public_key,
-        }
-    }
-
-    unsafe fn call_proof_endpoint(
-        f: unsafe extern "C" fn(
-            KmsAccountHandle,
-            *const c_char,
-            *mut c_char,
-            usize,
-            *mut usize,
-        ) -> i32,
-        handle: KmsAccountHandle,
-        params_json: &str,
-    ) -> String {
-        let params = CString::new(params_json).unwrap();
-
-        let mut needed = 0usize;
-        let rc = f(
-            handle,
-            params.as_ptr(),
-            std::ptr::null_mut(),
-            0,
-            &mut needed,
-        );
-        assert_eq!(rc, KMS_OK);
-        assert!(needed > 0);
-
-        let mut buf = vec![0u8; needed + 1];
-        let mut written = 0usize;
-        let rc = f(
-            handle,
-            params.as_ptr(),
-            buf.as_mut_ptr() as *mut c_char,
-            buf.len(),
-            &mut written,
-        );
-        assert_eq!(rc, KMS_OK);
-        assert_eq!(written, needed);
-        String::from_utf8(buf[..written].to_vec()).unwrap()
-    }
-
-    unsafe fn call_encode_endpoint(
-        f: unsafe extern "C" fn(*const c_char, *mut c_char, usize, *mut usize) -> i32,
-        params_json: &str,
-    ) -> String {
-        let params = CString::new(params_json).unwrap();
-
-        let mut needed = 0usize;
-        let rc = f(params.as_ptr(), std::ptr::null_mut(), 0, &mut needed);
-        assert_eq!(rc, KMS_OK);
-        assert!(needed > 0);
-
-        let mut buf = vec![0u8; needed + 1];
-        let mut written = 0usize;
-        let rc = f(
-            params.as_ptr(),
-            buf.as_mut_ptr() as *mut c_char,
-            buf.len(),
-            &mut written,
-        );
-        assert_eq!(rc, KMS_OK);
-        assert_eq!(written, needed);
-
-        String::from_utf8(buf[..written].to_vec()).unwrap()
-    }
-
-    fn generator_xy_hex() -> (String, String) {
-        let g = StarkCurve::generator();
-        let affine = StarkCurve::projective_to_affine(&g).unwrap();
-        (format!("{:#x}", affine.x()), format!("{:#x}", affine.y()))
-    }
-
-    fn test_bytes<const N: usize>() -> [u8; N] {
-        std::array::from_fn(|index| index as u8)
-    }
-
-    fn sample_audit_json() -> String {
-        let (x, y) = generator_xy_hex();
-        serde_json::json!({
-            "audited_balance": {
-                "l": {"x": x.clone(), "y": y.clone()},
-                "r": {"x": x.clone(), "y": y.clone()}
-            },
-            "hint_ciphertext": hex::encode(test_bytes::<64>()),
-            "hint_nonce": hex::encode(test_bytes::<24>()),
-            "proof": {
-                "Ax": {"x": x.clone(), "y": y.clone()},
-                "AL0": {"x": x.clone(), "y": y.clone()},
-                "AL1": {"x": x.clone(), "y": y.clone()},
-                "AR1": {"x": x, "y": y},
-                "sx": "0x1",
-                "sb": "0x2",
-                "sr": "0x3",
-                "c": "0x4"
-            }
-        })
-        .to_string()
-    }
-
-    #[test]
-    fn append_audit_none_writes_option_tag_only() {
-        let mut calldata = Vec::new();
-        append_audit_option(&mut calldata, None).unwrap();
-        assert_eq!(calldata, vec!["0x1"]);
-    }
-
-    #[test]
-    fn append_audit_some_serializes_payload() {
-        let mut calldata = Vec::new();
-        let audit_json = sample_audit_json();
-        append_audit_option(&mut calldata, Some(&audit_json)).unwrap();
-
-        assert_eq!(calldata[0], "0x0");
-        assert_eq!(calldata.len(), 1 + 4 + 6 + 11); // Option tag + balance + hint + proof
-    }
-
-    #[test]
-    fn fund_calls_overflow_returns_invalid_input() {
-        let (x, y) = generator_xy_hex();
-        let proof_json = serde_json::json!({
-            "A": {"x": x, "y": y},
-            "s": "0x1",
-            "c": "0x2"
-        })
-        .to_string();
-
-        let proof_result_json = serde_json::json!({
-            "y_x": "0x1",
-            "y_y": "0x2",
-            "proof_json": proof_json,
-            "amount": u128::MAX.to_string(),
-            "audit_json": null
-        })
-        .to_string();
-
-        let params_json = serde_json::json!({
-            "tongo_address": "0x1",
-            "erc20_address": "0x2",
-            "rate": "2",
-            "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
-            "hint_nonce_hex": hex::encode(test_bytes::<24>())
-        })
-        .to_string();
-
-        let params_c = CString::new(params_json).unwrap();
-        let rc = unsafe {
-            kms_encode_fund_calls(
-                params_c.as_ptr(),
-                std::ptr::null_mut(),
-                0,
-                std::ptr::null_mut(),
-            )
-        };
-        assert_eq!(rc, KMS_ERR_INVALID_INPUT);
-    }
-
-    #[test]
-    fn transfer_calldata_encodes_both_audit_some_variants() {
-        let account = create_test_account(1000);
-
-        let proof_params = json!({
-            "recipient_public_key": account.recipient_public_key,
-            "amount": "100",
-            "nonce": felt_hex_fixed(&Felt::from(2u64)),
-            "chain_id": felt_hex_fixed(&account.chain_id),
-            "tongo_address": felt_hex_fixed(&account.contract_address),
-            "sender_address": felt_hex_fixed(&account.contract_address),
-            "current_cipher": &account.current_cipher,
-            "bit_size": 16,
-            "auditor_public_key": account.auditor_public_key,
-        })
-        .to_string();
-
-        let proof_result_json = unsafe {
-            call_proof_endpoint(kms_generate_transfer_proof, account.handle, &proof_params)
-        };
-        let proof_result: serde_json::Value = serde_json::from_str(&proof_result_json).unwrap();
-        assert!(proof_result["audit_balance_json"].is_string());
-        assert!(proof_result["audit_transfer_json"].is_string());
-
-        let encode_params = json!({
-            "tongo_address": felt_hex_fixed(&account.contract_address),
-            "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
-            "hint_nonce_hex": hex::encode(test_bytes::<24>()),
-        })
-        .to_string();
-        let encoded_json =
-            unsafe { call_encode_endpoint(kms_encode_transfer_calls, &encode_params) };
-        let encoded: EncodedCalls = serde_json::from_str(&encoded_json).unwrap();
-
-        assert_eq!(encoded.calls.len(), 1);
-        let calldata = &encoded.calls[0].calldata;
-
-        let proof_json = proof_result["proof_json"].as_str().unwrap();
-        let proof: ProofOfTransfer = serde_json::from_str(proof_json).unwrap();
-        let proof_len = krusty_kms_sdk::serialization::serialize_proof_of_transfer(&proof)
-            .unwrap()
-            .len();
-
-        // 8 cipher points + 6 hint + 8 auxiliary ciphers (4+4) + proof
-        let base_len = 8 + 6 + 8 + proof_len;
-        let audit_some_len = 1 + 4 + 6 + 11;
-        assert_eq!(calldata[base_len], "0x0");
-        assert_eq!(calldata[base_len + audit_some_len], "0x0");
-        assert_eq!(calldata.len(), base_len + audit_some_len + audit_some_len);
-    }
-
-    #[test]
-    fn withdraw_calldata_encodes_audit_some_variant() {
-        let account = create_test_account(1000);
-
-        let proof_params = json!({
-            "recipient_address": felt_hex_fixed(&Felt::from(999u64)),
-            "amount": "100",
-            "nonce": felt_hex_fixed(&Felt::from(4u64)),
-            "chain_id": felt_hex_fixed(&account.chain_id),
-            "tongo_address": felt_hex_fixed(&account.contract_address),
-            "sender_address": felt_hex_fixed(&account.contract_address),
-            "current_cipher": &account.current_cipher,
-            "bit_size": 16,
-            "auditor_public_key": account.auditor_public_key,
-        })
-        .to_string();
-        let proof_result_json = unsafe {
-            call_proof_endpoint(kms_generate_withdraw_proof, account.handle, &proof_params)
-        };
-        let proof_result: serde_json::Value = serde_json::from_str(&proof_result_json).unwrap();
-        assert!(proof_result["audit_json"].is_string());
-
-        let encode_params = json!({
-            "tongo_address": felt_hex_fixed(&account.contract_address),
-            "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
-            "hint_nonce_hex": hex::encode(test_bytes::<24>()),
-        })
-        .to_string();
-        let encoded_json =
-            unsafe { call_encode_endpoint(kms_encode_withdraw_calls, &encode_params) };
-        let encoded: EncodedCalls = serde_json::from_str(&encoded_json).unwrap();
-
-        assert_eq!(encoded.calls.len(), 1);
-        let calldata = &encoded.calls[0].calldata;
-
-        let range_json = proof_result["range_json"].as_str().unwrap();
-        let range: Range = serde_json::from_str(range_json).unwrap();
-        let range_len = krusty_kms_sdk::serialization::serialize_range(&range)
-            .unwrap()
-            .len();
-
-        // y(2) + recipient(1) + amount(1) + hint(6) + aux_cipher(4) + commitments(8) + scalars(3) + range
-        let base_len = 25 + range_len;
-        let audit_some_len = 1 + 4 + 6 + 11;
-        assert_eq!(calldata[base_len], "0x0");
-        assert_eq!(calldata.len(), base_len + audit_some_len);
-    }
-
-    #[test]
-    fn ragequit_calldata_encodes_audit_some_variant() {
-        let account = create_test_account(1000);
-
-        let proof_params = json!({
-            "recipient_address": felt_hex_fixed(&Felt::from(999u64)),
-            "nonce": felt_hex_fixed(&Felt::from(5u64)),
-            "chain_id": felt_hex_fixed(&account.chain_id),
-            "tongo_address": felt_hex_fixed(&account.contract_address),
-            "sender_address": felt_hex_fixed(&account.contract_address),
-            "current_cipher": &account.current_cipher,
-            "auditor_public_key": account.auditor_public_key,
-        })
-        .to_string();
-        let proof_result_json = unsafe {
-            call_proof_endpoint(kms_generate_ragequit_proof, account.handle, &proof_params)
-        };
-        let proof_result: serde_json::Value = serde_json::from_str(&proof_result_json).unwrap();
-        assert!(proof_result["audit_json"].is_string());
-
-        let encode_params = json!({
-            "tongo_address": felt_hex_fixed(&account.contract_address),
-            "proof_result_json": proof_result_json,
-            "hint_ciphertext_hex": hex::encode(test_bytes::<64>()),
-            "hint_nonce_hex": hex::encode(test_bytes::<24>()),
-        })
-        .to_string();
-        let encoded_json =
-            unsafe { call_encode_endpoint(kms_encode_ragequit_calls, &encode_params) };
-        let encoded: EncodedCalls = serde_json::from_str(&encoded_json).unwrap();
-
-        assert_eq!(encoded.calls.len(), 1);
-        let calldata = &encoded.calls[0].calldata;
-
-        let base_len = 15;
-        let audit_some_len = 1 + 4 + 6 + 11;
-        assert_eq!(calldata[base_len], "0x0");
-        assert_eq!(calldata.len(), base_len + audit_some_len);
-    }
-}
+mod tests;

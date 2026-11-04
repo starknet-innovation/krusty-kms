@@ -121,8 +121,12 @@
       "lines": 401
     },
     {
+      "path": "crates/ffi/src/calldata/tests.rs",
+      "lines": 476
+    },
+    {
       "path": "crates/ffi/src/calldata.rs",
-      "lines": 1201
+      "lines": 815
     },
     {
       "path": "crates/ffi/src/proof.rs",

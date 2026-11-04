@@ -35,7 +35,7 @@ fn parse_felt(hex: &str) -> Result<Felt, i32> {
     Felt::from_hex(hex).map_err(|_| KMS_ERR_INVALID_INPUT)
 }
 
-fn parse_public_key(hex: &str) -> Result<ProjectivePoint, i32> {
+pub(crate) fn parse_public_key(hex: &str) -> Result<ProjectivePoint, i32> {
     let hex = hex.trim();
     if (hex.starts_with("0x") || hex.starts_with("0X")) && hex.len() == 130 {
         let hex_data = &hex[2..];

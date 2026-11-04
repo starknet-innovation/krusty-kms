@@ -40,6 +40,22 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- `krusty-kms`: `EthSigner::public_key_calldata` returns the OZ Ethereum
+  account constructor calldata `[x_low, x_high, y_low, y_high]` straight from
+  the SEC1 public key. `EthSigner::public_key_xy` and `felt_to_u256_pair`
+  are deprecated: a secp256k1 coordinate is 256 bits, and both reduced it
+  modulo the Stark prime, so the calldata they produced was wrong for almost
+  every key and the address derived from it undeployable. They are unchanged
+  and will be removed in the next minor release.
+- `krusty-kms-cabi`: `kms_encode_transfer_calls` now emits the Cairo
+  `Transfer` struct in the contract's order, starting with `from` and `to`
+  and carrying both `hintTransfer` and `hintLeftover`, the layout
+  `krusty-kms-client` already used. The previous calldata started at
+  `transferBalance` with one hint, so every transfer built through the C ABI
+  (and the Swift, JVM, Dart and C wrappers) reverted on chain. **Parameter
+  change:** the JSON now requires `sender_public_key`, `recipient_public_key`,
+  `hint_leftover_ciphertext_hex` and `hint_leftover_nonce_hex`; the old
+  shape is rejected with `KMS_ERR_JSON` instead of encoding a bad call.
 - `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,
   chain codes, and intermediates in wiped fixed-size types (`k256` scalars,
   `crypto-bigint` integers, `Zeroizing` arrays) instead of `BigUint` and
