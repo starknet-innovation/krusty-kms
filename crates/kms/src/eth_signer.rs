@@ -61,33 +61,26 @@ impl EthSigner {
     /// `[x_low, x_high, y_low, y_high]`, taken straight from the 65-byte
     /// SEC1 encoding. No value passes through a `Felt` before it is split.
     pub fn public_key_calldata(&self) -> [Felt; 4] {
-        let uncompressed = self.public_key_uncompressed();
-        let mut x = [0u8; 32];
-        let mut y = [0u8; 32];
-        // Skip the 0x04 prefix byte
-        x.copy_from_slice(&uncompressed[1..33]);
-        y.copy_from_slice(&uncompressed[33..65]);
-        let (x_low, x_high) = bytes32_to_u256_pair(&x);
-        let (y_low, y_high) = bytes32_to_u256_pair(&y);
+        let (x, y) = self.public_key_xy();
+        let (x_low, x_high) = x.to_u256_pair();
+        let (y_low, y_high) = y.to_u256_pair();
         [x_low, x_high, y_low, y_high]
     }
 
-    /// Get the public key coordinates **reduced modulo the Stark prime**.
+    /// Get the public key as its `(x, y)` secp256k1 coordinates.
     ///
-    /// A secp256k1 coordinate is 256 bits and the Stark field is about 2^251,
-    /// so for almost every key the returned values are not the coordinates
-    /// and must not be used for constructor calldata or address derivation.
-    /// Use [`EthSigner::public_key_calldata`] instead.
-    #[deprecated(
-        since = "0.15.0",
-        note = "reduces each coordinate modulo the Stark prime; use public_key_calldata"
-    )]
-    pub fn public_key_xy(&self) -> (Felt, Felt) {
+    /// These are used in the OZ Eth account constructor calldata. Each
+    /// coordinate is a full 256-bit value and is kept as 32 big-endian bytes:
+    /// a `Felt` would reduce it modulo the Stark prime and change the key.
+    /// Use [`EthCoordinate::to_u256_pair`] to encode it as calldata.
+    pub fn public_key_xy(&self) -> (EthCoordinate, EthCoordinate) {
         let uncompressed = self.public_key_uncompressed();
         // Skip the 0x04 prefix byte
-        let x = Felt::from_bytes_be_slice(&uncompressed[1..33]);
-        let y = Felt::from_bytes_be_slice(&uncompressed[33..65]);
-        (x, y)
+        let mut x = [0u8; 32];
+        let mut y = [0u8; 32];
+        x.copy_from_slice(&uncompressed[1..33]);
+        y.copy_from_slice(&uncompressed[33..65]);
+        (EthCoordinate(x), EthCoordinate(y))
     }
 
     /// Sign a Starknet transaction hash, producing the 5-Felt signature
@@ -113,6 +106,25 @@ impl EthSigner {
         let (s_low, s_high) = bytes32_to_u256_pair(&s_bytes);
 
         Ok([r_low, r_high, s_low, s_high, Felt::from(v as u64)])
+    }
+}
+
+/// A secp256k1 public key coordinate as 32 big-endian bytes.
+///
+/// secp256k1 coordinates range up to ~2^256, beyond the Stark prime, so they
+/// cannot be held in a single `Felt` without being reduced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EthCoordinate([u8; 32]);
+
+impl EthCoordinate {
+    /// The coordinate as 32 big-endian bytes.
+    pub fn to_bytes_be(&self) -> [u8; 32] {
+        self.0
+    }
+
+    /// The coordinate as a `(low, high)` u256 Felt pair for calldata.
+    pub fn to_u256_pair(&self) -> (Felt, Felt) {
+        bytes32_to_u256_pair(&self.0)
     }
 }
 
@@ -147,184 +159,4 @@ pub fn felt_to_u256_pair(felt: &Felt) -> (Felt, Felt) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // A well-known test private key (DO NOT use in production).
-    const TEST_KEY_HEX: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-
-    #[test]
-    fn test_from_private_key() {
-        let bytes = hex::decode("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-            .unwrap();
-        let mut arr = [0u8; 32];
-        arr.copy_from_slice(&bytes);
-        let signer = EthSigner::from_private_key(&arr);
-        assert!(signer.is_ok());
-    }
-
-    #[test]
-    fn test_from_hex() {
-        let signer = EthSigner::from_hex(TEST_KEY_HEX);
-        assert!(signer.is_ok());
-    }
-
-    #[test]
-    fn test_from_hex_no_prefix() {
-        let signer =
-            EthSigner::from_hex("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
-        assert!(signer.is_ok());
-    }
-
-    #[test]
-    fn test_from_hex_invalid_length() {
-        let result = EthSigner::from_hex("0xDEADBEEF");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_public_key_uncompressed() {
-        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let pubkey = signer.public_key_uncompressed();
-        // Uncompressed key starts with 0x04
-        assert_eq!(pubkey[0], 0x04);
-        assert_eq!(pubkey.len(), 65);
-    }
-
-    /// Known answers: the Hardhat development accounts 0 and 1, whose
-    /// uncompressed public keys are published with the keys. Limbs were
-    /// computed outside this crate (pure-integer secp256k1 scalar
-    /// multiplication), so the test does not compare the code with itself.
-    /// Regression test for audit finding H-1 (2026-11-04): coordinates were
-    /// reduced modulo the Stark prime before being split.
-    #[test]
-    fn public_key_calldata_known_answers() {
-        let cases = [
-            (
-                TEST_KEY_HEX,
-                [
-                    "0x87181b4fdfc625bd1a753fa7397fed75",
-                    "0x8318535b54105d4a7aae60c08fc45f96",
-                    "0xfac23e630c5d11f59f61fef57b0d2aa5",
-                    "0x3547f11ca8696646f2f3acb08e31016a",
-                ],
-            ),
-            (
-                "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-                [
-                    "0x0dc70cc661ca05e688601ad984f068b0",
-                    "0xba5734d8f7091719471e7f7ed6b9df17",
-                    "0xa521afd334e53807205fa2f08eec74f4",
-                    "0xd67351e5f06073092499336ab0839ef8",
-                ],
-            ),
-        ];
-        for (key, expected) in cases {
-            let signer = EthSigner::from_hex(key).unwrap();
-            let expected = expected.map(|limb| Felt::from_hex(limb).unwrap());
-            assert_eq!(signer.public_key_calldata(), expected, "{key}");
-        }
-    }
-
-    #[test]
-    fn public_key_calldata_splits_sec1_coordinates() {
-        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let sec1 = signer.public_key_uncompressed();
-        let limb = |range: std::ops::Range<usize>| {
-            let mut buf = [0u8; 16];
-            buf.copy_from_slice(&sec1[range]);
-            Felt::from(u128::from_be_bytes(buf))
-        };
-        assert_eq!(
-            signer.public_key_calldata(),
-            [limb(17..33), limb(1..17), limb(49..65), limb(33..49)]
-        );
-    }
-
-    /// Documents the defect the deprecated helper keeps: the x coordinate of
-    /// Hardhat account 0 exceeds the Stark prime, so the "coordinate" it
-    /// returns is not the coordinate.
-    #[test]
-    #[allow(deprecated)]
-    fn public_key_xy_is_reduced_modulo_the_stark_prime() {
-        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let (x, _) = signer.public_key_xy();
-        let [x_low, x_high, _, _] = signer.public_key_calldata();
-        let true_x = x_high * Felt::from(1u128 << 64) * Felt::from(1u128 << 64) + x_low;
-        // The true x needs 256 bits and so wraps in the field as well; the
-        // point is that the deprecated value is not what callers expect.
-        assert_eq!(x, true_x);
-        assert_ne!(
-            x.to_bytes_be()[0..16],
-            signer.public_key_uncompressed()[1..17]
-        );
-    }
-
-    #[test]
-    fn test_sign_hash() {
-        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let hash = Felt::from(0x1234567890ABCDEFu64);
-        let sig = signer.sign_hash(&hash).unwrap();
-
-        // Should return 5 Felts
-        assert_eq!(sig.len(), 5);
-        // r_low, r_high, s_low, s_high should be non-zero
-        // (statistically impossible for both halves to be zero)
-        assert!(sig[0] != Felt::ZERO || sig[1] != Felt::ZERO); // r
-        assert!(sig[2] != Felt::ZERO || sig[3] != Felt::ZERO); // s
-                                                               // v should be 0 or 1
-        assert!(sig[4] == Felt::ZERO || sig[4] == Felt::ONE);
-    }
-
-    #[test]
-    fn test_sign_hash_deterministic() {
-        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let hash = Felt::from(42u64);
-        let sig1 = signer.sign_hash(&hash).unwrap();
-        let sig2 = signer.sign_hash(&hash).unwrap();
-        assert_eq!(sig1, sig2);
-    }
-
-    #[test]
-    fn test_u256_split_correctness() {
-        // A known 32-byte value
-        let mut bytes = [0u8; 32];
-        // Set low bytes to 1
-        bytes[31] = 1;
-        let (low, high) = bytes32_to_u256_pair(&bytes);
-        assert_eq!(low, Felt::ONE);
-        assert_eq!(high, Felt::ZERO);
-
-        // Set high bytes
-        let mut bytes2 = [0u8; 32];
-        bytes2[0] = 1; // highest byte
-        let (low2, high2) = bytes32_to_u256_pair(&bytes2);
-        assert_eq!(low2, Felt::ZERO);
-        assert_ne!(high2, Felt::ZERO);
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn test_felt_to_u256_pair() {
-        let felt = Felt::from(0xDEADBEEFu64);
-        let (low, high) = felt_to_u256_pair(&felt);
-        assert_eq!(low, Felt::from(0xDEADBEEFu64));
-        assert_eq!(high, Felt::ZERO);
-    }
-
-    #[test]
-    fn test_different_keys_different_signatures() {
-        let signer1 = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let signer2 = EthSigner::from_hex(
-            "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
-        )
-        .unwrap();
-
-        let hash = Felt::from(42u64);
-        let sig1 = signer1.sign_hash(&hash).unwrap();
-        let sig2 = signer2.sign_hash(&hash).unwrap();
-
-        // Different keys produce different signatures
-        assert_ne!(sig1, sig2);
-    }
-}
+mod tests;
