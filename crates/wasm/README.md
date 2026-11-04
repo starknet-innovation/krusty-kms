@@ -40,6 +40,15 @@ import init from "@starknetfoundation/krusty-kms-wasm";
 export const krustyReady = init();
 ```
 
+## Secrets
+
+Exports that take a secret (mnemonic, passphrase, password, private key,
+seed, symmetric key, plaintext) wipe their WASM copy of it when the call
+returns. They cannot wipe your JavaScript string, and a non-ASCII string can
+leave a partial copy in freed WASM memory. Secrets an export returns (derived
+or decrypted keys, mnemonics, plaintexts, viewing keys) are plain JavaScript
+strings: keep them out of logs and persistent storage.
+
 This package is generated with `wasm-pack --target web` and is intended for
 browser-oriented ESM toolchains that support loading WebAssembly modules.
 

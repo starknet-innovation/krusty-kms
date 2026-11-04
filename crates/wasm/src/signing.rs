@@ -3,10 +3,15 @@
 //! Provides JavaScript-accessible APIs for:
 //! - Stark ECDSA signing (Category A)
 //! - Nostr BIP-340 Schnorr signing (Category F)
+//!
+//! Private keys are taken as owned strings and wiped when the call returns,
+//! and so are the parsed keys (see [`crate`] for what this does not cover).
 
+use crate::secret_input::{decode_secret_hex, parse_secret_felt, SecretHexError};
 use crate::types::{WasmNostrSignature, WasmStarkSignature};
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 // ============================================================================
 // Stark Signing (Category A)
@@ -20,11 +25,10 @@ use wasm_bindgen::prelude::*;
 /// # Returns
 /// The public key as a hex string (0x-prefixed)
 #[wasm_bindgen(js_name = "starkPublicKey")]
-pub fn stark_public_key(private_key: &str) -> Result<String, JsValue> {
-    let sk = Felt::from_hex(private_key)
-        .map_err(|e| JsValue::from_str(&format!("Invalid private key hex: {e}")))?;
+pub fn stark_public_key(private_key: String) -> Result<String, JsValue> {
+    let sk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key hex")?;
 
-    let pk = krusty_kms::stark_public_key(&sk)
+    let pk = krusty_kms::stark_public_key(sk.expose_secret())
         .map_err(|e| JsValue::from_str(&format!("Invalid private key: {e}")))?;
     Ok(format!("{:#x}", pk))
 }
@@ -40,13 +44,12 @@ pub fn stark_public_key(private_key: &str) -> Result<String, JsValue> {
 /// # Returns
 /// Signature with r, s components and public key (all 0x-prefixed hex)
 #[wasm_bindgen(js_name = "signStarkHash")]
-pub fn sign_stark_hash(private_key: &str, msg_hash: &str) -> Result<WasmStarkSignature, JsValue> {
-    let sk = Felt::from_hex(private_key)
-        .map_err(|e| JsValue::from_str(&format!("Invalid private key hex: {e}")))?;
+pub fn sign_stark_hash(private_key: String, msg_hash: &str) -> Result<WasmStarkSignature, JsValue> {
+    let sk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key hex")?;
     let hash = Felt::from_hex(msg_hash)
         .map_err(|e| JsValue::from_str(&format!("Invalid message hash hex: {e}")))?;
 
-    let sig = krusty_kms::sign_stark_hash(&sk, &hash)
+    let sig = krusty_kms::sign_stark_hash(sk.expose_secret(), &hash)
         .map_err(|e| JsValue::from_str(&format!("Stark signing failed: {e}")))?;
 
     Ok(WasmStarkSignature {
@@ -60,20 +63,20 @@ pub fn sign_stark_hash(private_key: &str, msg_hash: &str) -> Result<WasmStarkSig
 // Nostr Signing (Category F)
 // ============================================================================
 
-/// Parse a 64 hex-char Nostr private key (no 0x prefix) into [u8; 32].
-fn parse_nostr_private_key(hex_str: &str) -> Result<[u8; 32], JsValue> {
+/// Parse a 64 hex-char Nostr private key (no 0x prefix) into a wiped buffer.
+fn parse_nostr_private_key(hex_str: &str) -> Result<Zeroizing<[u8; 32]>, JsValue> {
     let hex_str = hex_str.trim();
     if hex_str.starts_with("0x") || hex_str.starts_with("0X") {
         return Err(JsValue::from_str(
             "Nostr private key must not have 0x prefix",
         ));
     }
-    let bytes = hex::decode(hex_str)
-        .map_err(|e| JsValue::from_str(&format!("Invalid Nostr private key hex: {e}")))?;
-    let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-        JsValue::from_str("Nostr private key must be exactly 32 bytes (64 hex chars)")
-    })?;
-    Ok(arr)
+    decode_secret_hex(hex_str).map_err(|error| match error {
+        SecretHexError::Hex(e) => JsValue::from_str(&format!("Invalid Nostr private key hex: {e}")),
+        SecretHexError::Length(_) => {
+            JsValue::from_str("Nostr private key must be exactly 32 bytes (64 hex chars)")
+        }
+    })
 }
 
 /// Parse a 64 hex-char Nostr event id (no 0x prefix) into [u8; 32].
@@ -116,8 +119,8 @@ fn nostr_sig_to_wasm(sig: krusty_kms::NostrSignature) -> WasmNostrSignature {
 /// # Returns
 /// x-only public key as 64 hex chars (no 0x prefix)
 #[wasm_bindgen(js_name = "nostrPublicKey")]
-pub fn nostr_public_key(private_key: &str) -> Result<String, JsValue> {
-    let sk = parse_nostr_private_key(private_key)?;
+pub fn nostr_public_key(private_key: String) -> Result<String, JsValue> {
+    let sk = parse_nostr_private_key(&Zeroizing::new(private_key))?;
     let pk = krusty_kms::nostr_public_key(&sk)
         .map_err(|e| JsValue::from_str(&format!("Nostr public key derivation failed: {e}")))?;
     Ok(hex::encode(pk))
@@ -133,10 +136,10 @@ pub fn nostr_public_key(private_key: &str) -> Result<String, JsValue> {
 /// Signature result with public key and signature (both hex, no 0x prefix)
 #[wasm_bindgen(js_name = "signNostrEventId")]
 pub fn sign_nostr_event_id(
-    private_key: &str,
+    private_key: String,
     event_id: &str,
 ) -> Result<WasmNostrSignature, JsValue> {
-    let sk = parse_nostr_private_key(private_key)?;
+    let sk = parse_nostr_private_key(&Zeroizing::new(private_key))?;
     let eid = parse_nostr_event_id(event_id)?;
 
     let sig = krusty_kms::sign_nostr_event_id(&sk, &eid)
@@ -154,8 +157,11 @@ pub fn sign_nostr_event_id(
 /// # Returns
 /// Signature result with public key and signature (both hex, no 0x prefix)
 #[wasm_bindgen(js_name = "signNostrMessage")]
-pub fn sign_nostr_message(private_key: &str, message: &str) -> Result<WasmNostrSignature, JsValue> {
-    let sk = parse_nostr_private_key(private_key)?;
+pub fn sign_nostr_message(
+    private_key: String,
+    message: &str,
+) -> Result<WasmNostrSignature, JsValue> {
+    let sk = parse_nostr_private_key(&Zeroizing::new(private_key))?;
     let msg = parse_hex_message(message)?;
 
     let sig = krusty_kms::sign_nostr_message(&sk, &msg)

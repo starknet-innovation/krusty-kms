@@ -1,27 +1,46 @@
 //! WASM bindings for STRK20 privacy-pool key derivation.
+//!
+//! Private keys and the signature folded into a viewing key are taken as
+//! owned strings and wiped when the call returns, and so are the parsed felts.
+//! The returned viewing keys are secret and stay in the JS heap (see
+//! [`crate`]).
 
+use crate::secret_input::parse_secret_felt;
+use krusty_kms_common::SecretFelt;
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
-fn parse_felt_without_reduction(value: &str, label: &str) -> Result<Felt, JsValue> {
-    let felt = Felt::from_hex(value)
-        .map_err(|error| JsValue::from_str(&format!("Invalid {label} hex: {error}")))?;
+/// Parse a felt that must not be reduced. It comes back as a [`SecretFelt`]
+/// because most callers parse secrets; a public input is wiped harmlessly.
+fn parse_felt_without_reduction(value: &str, label: &str) -> Result<SecretFelt, JsValue> {
+    let felt = parse_secret_felt(value, &format!("Invalid {label} hex"))?;
     let digits = value
         .strip_prefix("0x")
         .or_else(|| value.strip_prefix("0X"))
         .unwrap_or(value);
-    let round_trip = !digits.is_empty()
-        && digits.len() <= 64
-        && digits
-            .chars()
-            .all(|character| character.is_ascii_hexdigit())
-        && format!("{:0>64}", digits.to_ascii_lowercase()) == format!("{felt:064x}");
-    if !round_trip {
+    if !is_unreduced_hex(digits, felt.expose_secret()) {
         return Err(JsValue::from_str(&format!(
             "Invalid {label}: value is not a field element"
         )));
     }
     Ok(felt)
+}
+
+/// Whether `digits` (no prefix, either case) spell exactly `felt`, so parsing
+/// did not reduce them. Compared in wiped stack buffers: formatting either side
+/// into a `String` would leave a copy of a private key behind.
+fn is_unreduced_hex(digits: &str, felt: &Felt) -> bool {
+    if digits.is_empty() || digits.len() > 64 || !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return false;
+    }
+    let mut canonical = Zeroizing::new([0u8; 64]);
+    let bytes = Zeroizing::new(felt.to_bytes_be());
+    if hex::encode_to_slice(bytes.as_slice(), canonical.as_mut_slice()).is_err() {
+        return false;
+    }
+    let (padding, tail) = canonical.split_at(64 - digits.len());
+    padding.iter().all(|&byte| byte == b'0') && tail.eq_ignore_ascii_case(digits.as_bytes())
 }
 
 /// Derive the STRK20 viewing key from a Stark private key.
@@ -35,24 +54,26 @@ fn parse_felt_without_reduction(value: &str, label: &str) -> Result<Felt, JsValu
 /// # Returns
 /// The viewing key as a `0x`-prefixed hex string.
 #[wasm_bindgen(js_name = "deriveStrk20ViewingKey")]
-pub fn derive_strk20_viewing_key(private_key: &str) -> Result<String, JsValue> {
-    let pk = Felt::from_hex(private_key)
-        .map_err(|e| JsValue::from_str(&format!("Invalid private key hex: {e}")))?;
-    let viewing_key = krusty_kms::strk20::derive_strk20_viewing_key(&pk);
+pub fn derive_strk20_viewing_key(private_key: String) -> Result<String, JsValue> {
+    let pk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key hex")?;
+    let viewing_key = krusty_kms::strk20::derive_strk20_viewing_key(pk.expose_secret());
     Ok(format!("{:#x}", viewing_key))
 }
 
 /// Derive a chain- and pool-scoped STRK20 viewing key.
 #[wasm_bindgen(js_name = "deriveScopedStrk20ViewingKey")]
 pub fn derive_scoped_strk20_viewing_key(
-    private_key: &str,
+    private_key: String,
     chain_id: &str,
     pool_address: &str,
 ) -> Result<String, JsValue> {
-    let private_key = parse_felt_without_reduction(private_key, "private key")?;
-    let viewing_key =
-        krusty_kms::strk20::derive_scoped_strk20_viewing_key(&private_key, chain_id, pool_address)
-            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let private_key = parse_felt_without_reduction(&Zeroizing::new(private_key), "private key")?;
+    let viewing_key = krusty_kms::strk20::derive_scoped_strk20_viewing_key(
+        private_key.expose_secret(),
+        chain_id,
+        pool_address,
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
     Ok(format!("{viewing_key:#x}"))
 }
 
@@ -74,16 +95,22 @@ pub fn strk20_viewing_key_message_hash(
 pub fn fold_strk20_viewing_key(
     public_key: &str,
     message_hash: &str,
-    r: &str,
-    s: &str,
+    r: String,
+    s: String,
 ) -> Result<String, JsValue> {
+    // The viewing key is a function of `(r, s)` alone: both are secret.
+    let (r, s) = (Zeroizing::new(r), Zeroizing::new(s));
     let public_key = parse_felt_without_reduction(public_key, "public key")?;
     let message_hash = parse_felt_without_reduction(message_hash, "message hash")?;
-    let r = parse_felt_without_reduction(r, "signature r")?;
-    let s = parse_felt_without_reduction(s, "signature s")?;
-    let viewing_key =
-        krusty_kms::strk20::fold_strk20_viewing_key(&public_key, &message_hash, &r, &s)
-            .map_err(|error| JsValue::from_str(&error.to_string()))?;
+    let r = parse_felt_without_reduction(&r, "signature r")?;
+    let s = parse_felt_without_reduction(&s, "signature s")?;
+    let viewing_key = krusty_kms::strk20::fold_strk20_viewing_key(
+        public_key.expose_secret(),
+        message_hash.expose_secret(),
+        r.expose_secret(),
+        s.expose_secret(),
+    )
+    .map_err(|error| JsValue::from_str(&error.to_string()))?;
     Ok(format!("{viewing_key:#x}"))
 }
 
@@ -96,14 +123,14 @@ mod tests {
     fn derive_viewing_key_known_answer() {
         // Anchored to starknet@10.0.2 (see krusty_kms::strk20 tests).
         assert_eq!(
-            derive_strk20_viewing_key("0x1").unwrap(),
+            derive_strk20_viewing_key("0x1".into()).unwrap(),
             "0x18c6e892dbe125696102d8c69a3adc9ca0c73d92bcb35fa166c2cb92914ba05",
         );
     }
 
     #[wasm_bindgen_test]
     fn derive_viewing_key_rejects_bad_hex() {
-        assert!(derive_strk20_viewing_key("not-hex").is_err());
+        assert!(derive_strk20_viewing_key("not-hex".into()).is_err());
     }
 
     #[wasm_bindgen_test]
@@ -117,14 +144,14 @@ mod tests {
         let folded = fold_strk20_viewing_key(
             &format!("{:#x}", signature.public_key),
             &message_hash,
-            &format!("{:#x}", signature.r),
-            &format!("{:#x}", signature.s),
+            format!("{:#x}", signature.r),
+            format!("{:#x}", signature.s),
         )
         .unwrap();
 
         assert_eq!(
             folded,
-            derive_scoped_strk20_viewing_key("0x1", chain_id, pool_address).unwrap(),
+            derive_scoped_strk20_viewing_key("0x1".into(), chain_id, pool_address).unwrap(),
         );
     }
 
@@ -133,8 +160,8 @@ mod tests {
         const FIELD_PRIME: &str =
             "0x0800000000000011000000000000000000000000000000000000000000000001";
         assert!(strk20_viewing_key_message_hash("0x01", "0x2").is_err());
-        assert!(derive_scoped_strk20_viewing_key(FIELD_PRIME, "0x1", "0x2").is_err());
-        assert!(fold_strk20_viewing_key("0x1", "0x2", "0x0", "0x1").is_err());
-        assert!(fold_strk20_viewing_key(FIELD_PRIME, "0x2", "0x1", "0x1").is_err());
+        assert!(derive_scoped_strk20_viewing_key(FIELD_PRIME.into(), "0x1", "0x2").is_err());
+        assert!(fold_strk20_viewing_key("0x1", "0x2", "0x0".into(), "0x1".into()).is_err());
+        assert!(fold_strk20_viewing_key(FIELD_PRIME, "0x2", "0x1".into(), "0x1".into()).is_err());
     }
 }

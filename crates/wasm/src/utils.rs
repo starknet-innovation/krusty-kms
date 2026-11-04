@@ -2,9 +2,15 @@
 //!
 //! Provides key grinding, random byte generation, and felt validation
 //! accessible from JavaScript/TypeScript.
+//!
+//! Seeds and private keys are taken as owned strings and wiped when the call
+//! returns, and so are their decoded forms (see [`crate`]).
 
+use crate::secret_input::{decode_secret_hex, SecretHexError};
+use krusty_kms_common::SecretFelt;
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroizing;
 
 /// Grind a 32-byte seed into a valid Stark private key.
 ///
@@ -17,24 +23,19 @@ use wasm_bindgen::prelude::*;
 /// # Returns
 /// The ground key as a hex string
 #[wasm_bindgen(js_name = "grindKey")]
-pub fn grind_key(seed_hex: &str) -> Result<String, JsValue> {
+pub fn grind_key(seed_hex: String) -> Result<String, JsValue> {
+    let seed_hex = Zeroizing::new(seed_hex);
     let stripped = seed_hex
         .strip_prefix("0x")
         .or_else(|| seed_hex.strip_prefix("0X"))
-        .unwrap_or(seed_hex);
+        .unwrap_or(&seed_hex);
 
-    let bytes =
-        hex::decode(stripped).map_err(|e| JsValue::from_str(&format!("Invalid hex seed: {e}")))?;
-
-    if bytes.len() != 32 {
-        return Err(JsValue::from_str(&format!(
-            "Seed must be exactly 32 bytes, got {}",
-            bytes.len()
-        )));
-    }
-
-    let mut arr = [0u8; 32];
-    arr.copy_from_slice(&bytes);
+    let arr = decode_secret_hex::<32>(stripped).map_err(|error| match error {
+        SecretHexError::Hex(e) => JsValue::from_str(&format!("Invalid hex seed: {e}")),
+        SecretHexError::Length(length) => {
+            JsValue::from_str(&format!("Seed must be exactly 32 bytes, got {length}"))
+        }
+    })?;
 
     let felt = krusty_kms::grind_key(&arr)
         .map_err(|e| JsValue::from_str(&format!("grind_key failed: {e}")))?;
@@ -95,13 +96,13 @@ pub fn is_valid_felt(hex_str: &str) -> bool {
 /// # Returns
 /// `true` if the string is a valid in-range private key, `false` otherwise
 #[wasm_bindgen(js_name = "isValidStarkPrivateKey")]
-pub fn is_valid_stark_private_key(hex_str: &str) -> bool {
+pub fn is_valid_stark_private_key(hex_str: String) -> bool {
     /// Stark curve order (the order of the generator point).
     const CURVE_ORDER_HEX: &str =
         "0x0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
     let curve_order = Felt::from_hex_unchecked(CURVE_ORDER_HEX);
-    match Felt::from_hex(hex_str) {
-        Ok(felt) => felt != Felt::ZERO && felt < curve_order,
+    match Felt::from_hex(&Zeroizing::new(hex_str)).map(SecretFelt::new) {
+        Ok(felt) => *felt.expose_secret() != Felt::ZERO && *felt.expose_secret() < curve_order,
         Err(_) => false,
     }
 }
@@ -115,7 +116,7 @@ mod tests {
     fn test_grind_key() {
         // Known 32-byte seed
         let seed = "86F3E7293141F20A8BAFF320E8EE4ACCB9D4A4BF2B4D295E8CEE784DB46E0519";
-        let result = grind_key(seed).unwrap();
+        let result = grind_key(seed.into()).unwrap();
         assert!(result.starts_with("0x"));
         assert_ne!(result, "0x0");
         // Output should be a valid felt
@@ -142,7 +143,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_is_valid_stark_private_key() {
-        assert!(!is_valid_stark_private_key("0x0"));
-        assert!(is_valid_stark_private_key("0x1"));
+        assert!(!is_valid_stark_private_key("0x0".into()));
+        assert!(is_valid_stark_private_key("0x1".into()));
     }
 }

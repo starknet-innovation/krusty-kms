@@ -178,11 +178,11 @@
     },
     {
       "path": "crates/wasm/src/discovery.rs",
-      "lines": 420
+      "lines": 430
     },
     {
       "path": "crates/wasm/src/lib.rs",
-      "lines": 401
+      "lines": 416
     },
     {
       "path": "crates/wasm/src/proof.rs",

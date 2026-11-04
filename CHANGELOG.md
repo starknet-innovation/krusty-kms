@@ -52,6 +52,14 @@ All notable changes to the published Rust crates are documented here.
   scrypt, RFC 6979), and JS strings are not wiped.
 - `krusty-kms-wasm` wipes owned passphrases when a call returns, and a private
   key rejected by the `WasmKeypair` or `WasmStarkXOnlyKeypair` constructor.
+- `krusty-kms-wasm` takes every other secret argument (mnemonics, private
+  keys, passwords, seeds, symmetric keys, plaintexts, scalars, and STRK20
+  viewing-key signatures; 39 exports) as an owned string and wipes it when the
+  call returns, as well as the key parsed from it. Hex keys and seeds are
+  decoded into fixed, wiped buffers instead of a growing `Vec`. The TypeScript
+  API, accepted inputs, and error messages are unchanged. The JS strings, a
+  partial copy left when a non-ASCII string is re-allocated, and returned
+  secrets are not wiped.
 
 ## [0.14.0] - 2026-10-28
 
