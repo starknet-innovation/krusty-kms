@@ -85,7 +85,9 @@ jobs:
         run: bash .github/scripts/check-dependency-layers.sh
 
       - name: Unsafe policy
-        run: bash .github/scripts/check-unsafe-allowlist.sh
+        run: |
+          bash .github/scripts/check-unsafe-allowlist.sh
+          bash .github/scripts/test-check-unsafe-allowlist.sh
 
       - name: Surface parser self-checks
         run: python3 .github/scripts/lib/surfaces.py

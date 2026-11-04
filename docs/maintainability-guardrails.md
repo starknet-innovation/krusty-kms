@@ -13,7 +13,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Scoped coverage floors | `.github/scripts/check-coverage-floors.sh` | Client crate and RPC-adapter directory coverage must meet committed line floors, which cannot decrease from the base revision |
 | PR size | `.github/scripts/check-pr-size.sh` | >400 changed lines or >10 production Rust files without justification |
 | Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
-| `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny`/`allow(unsafe_code)`; stray `unsafe` |
+| `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny(unsafe_code)`; `allow(unsafe_code)` on any crate root but `crates/ffi`; stray `unsafe` (tokenised scan, self-tested by `test-check-unsafe-allowlist.sh`) |
 | Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / missing Debug redaction |
 | Workflow action pinning | `.github/scripts/check-workflow-actions-pinned.sh` | Mutable refs, local actions, aliases, digest-less images, or invalid YAML in any workflow |
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |

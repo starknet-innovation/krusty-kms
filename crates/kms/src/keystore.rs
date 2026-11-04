@@ -54,6 +54,27 @@ const SCRYPT_P_MAX: u32 = 16;
 const SCRYPT_DKLEN_MIN: usize = 32;
 const SCRYPT_DKLEN_MAX: usize = 64;
 const SCRYPT_MEMORY_CEILING_BYTES: u64 = 256 * 1024 * 1024;
+/// Largest accepted KDF salt. Both keystore formats write 16- or 32-byte
+/// salts; scrypt's PBKDF2 stage re-hashes the salt `4·r·p` times, so an
+/// attacker-sized salt is work done before the password is checked.
+const MAX_KEYSTORE_SALT_BYTES: usize = 128;
+
+/// Decode `kdfparams.salt` and bound its length before any KDF work.
+fn decode_salt(value: &serde_json::Value) -> Result<Vec<u8>> {
+    let salt = hex::decode(
+        value
+            .as_str()
+            .ok_or_else(|| KmsError::DeserializationError("Missing salt".to_string()))?,
+    )
+    .map_err(|e| KmsError::DeserializationError(format!("Invalid salt hex: {e}")))?;
+    if salt.len() > MAX_KEYSTORE_SALT_BYTES {
+        return Err(KmsError::DeserializationError(format!(
+            "kdfparams.salt is {} bytes (limit {MAX_KEYSTORE_SALT_BYTES})",
+            salt.len()
+        )));
+    }
+    Ok(salt)
+}
 
 fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Result<()> {
     let _log_n = scrypt_log_n(n)?;
@@ -105,8 +126,13 @@ fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Resu
 /// # Arguments
 /// * `mnemonic` - The mnemonic phrase to encrypt
 /// * `password` - User-supplied password
-/// * `scrypt_n` - Scrypt cost parameter N (must be a power of 2)
+/// * `scrypt_n` - Scrypt cost parameter N (a power of 2 up to 2^18; larger
+///   values would exceed the 256 MiB memory ceiling `decrypt_keystore` enforces)
 pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result<String> {
+    // The same ceiling `decrypt_keystore` applies, so every keystore this
+    // function writes can be read back by the same SDK.
+    validate_scrypt_resource_params(scrypt_n, 8, 1, 32)?;
+
     // Generate 16-byte salt
     let salt = krusty_kms_crypto::random_bytes::<16>();
 
@@ -158,14 +184,12 @@ pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String> {
 
     let crypto = &v["crypto"];
 
-    let salt = hex::decode(
-        crypto["kdfparams"]["salt"]
-            .as_str()
-            .ok_or_else(|| KmsError::DeserializationError("Missing salt".to_string()))?,
-    )
-    .map_err(|e| KmsError::DeserializationError(format!("Invalid salt hex: {e}")))?;
+    let salt = decode_salt(&crypto["kdfparams"]["salt"])?;
 
     let n = parse_u32_kdf_param(crypto["kdfparams"]["n"].as_u64(), "n")?;
+    // The native format fixes r = 8, p = 1 and a 32-byte key, so only `n` is
+    // attacker-controlled; the same 256 MiB ceiling as the v3 path applies.
+    validate_scrypt_resource_params(n, 8, 1, 32)?;
 
     let nonce = hex::decode(
         crypto["nonce"]
@@ -245,12 +269,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     }
 
     // Parse kdfparams
-    let salt = hex::decode(
-        crypto["kdfparams"]["salt"]
-            .as_str()
-            .ok_or_else(|| KmsError::DeserializationError("Missing salt".to_string()))?,
-    )
-    .map_err(|e| KmsError::DeserializationError(format!("Invalid salt hex: {e}")))?;
+    let salt = decode_salt(&crypto["kdfparams"]["salt"])?;
 
     let n = parse_u32_kdf_param(crypto["kdfparams"]["n"].as_u64(), "n")?;
 
@@ -331,6 +350,8 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 mod tests {
     use super::*;
 
+    mod limits;
+
     const TEST_SCRYPT_N: u32 = 1024;
 
     fn test_password(offset: u8) -> String {
@@ -367,115 +388,6 @@ mod tests {
         let wrong_password = test_password(1);
         let result = decrypt_keystore(&keystore_json, &wrong_password);
         assert!(result.is_err());
-    }
-
-    // Malformed keystore metadata must not panic.
-
-    /// Build a v1 keystore with an arbitrary `nonce`, bypassing `encrypt_keystore`.
-    fn keystore_v1_with_nonce_hex(nonce_hex: &str) -> String {
-        serde_json::json!({
-            "version": 1,
-            "crypto": {
-                "cipher": "xchacha20-poly1305",
-                "kdf": "scrypt",
-                "kdfparams": {
-                    "n": TEST_SCRYPT_N, "r": 8, "p": 1, "dklen": 32,
-                    "salt": hex::encode([0xabu8; 16]),
-                },
-                "nonce": nonce_hex,
-                "ciphertext": hex::encode([0x11u8; 48]),
-            }
-        })
-        .to_string()
-    }
-
-    /// Build a v3 keystore with an arbitrary `dklen` and IV length.
-    fn ethers_keystore_with(dklen: u64, iv_len: usize) -> String {
-        serde_json::json!({
-            "version": 3,
-            "crypto": {
-                "cipher": "aes-128-ctr",
-                "kdf": "scrypt",
-                "kdfparams": {
-                    "n": TEST_SCRYPT_N, "r": 8, "p": 1, "dklen": dklen,
-                    "salt": hex::encode([0xabu8; 32]),
-                },
-                "cipherparams": { "iv": hex::encode(vec![0xcdu8; iv_len]) },
-                "ciphertext": hex::encode([0x11u8; 32]),
-                "mac": "00",
-            }
-        })
-        .to_string()
-    }
-
-    #[test]
-    fn decrypt_keystore_rejects_bad_nonce_length_without_panicking() {
-        // 4 bytes instead of 24 used to hit an assert inside `generic-array`.
-        for nonce_hex in ["", "deadbeef", &hex::encode([0u8; 25])] {
-            let err = decrypt_keystore(&keystore_v1_with_nonce_hex(nonce_hex), &test_password(0))
-                .expect_err("must be rejected");
-            // The variant matters as much as the message: a wrong-length nonce is a
-            // property of the file, and `CryptoError` would tell a caller to retry the
-            // password. Same variant as every other malformed-field rejection here.
-            assert!(
-                matches!(err, KmsError::DeserializationError(ref m) if m.contains("Invalid nonce length")),
-                "nonce {nonce_hex:?}, got {err:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn decrypt_ethers_keystore_rejects_short_dklen_without_panicking() {
-        // 10..=31 is the exact panic window: scrypt allows 10..=64, but anything
-        // under 32 makes `derived_key[16..32]` go out of bounds.
-        for dklen in [10u64, 15, 16, 17, 31] {
-            let err = decrypt_ethers_keystore(&ethers_keystore_with(dklen, 16), &test_password(0))
-                .expect_err("must be rejected");
-            assert!(
-                matches!(err, KmsError::DeserializationError(_)),
-                "dklen={dklen}, got {err:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn decrypt_ethers_keystore_rejects_bad_iv_length_without_panicking() {
-        // IV length is validated before KDF/cipher init. Assert on the message, not
-        // just `is_err`, so the case cannot pass for an unrelated reason.
-        for iv_len in [0usize, 8, 15, 17, 32] {
-            let err = decrypt_ethers_keystore(&ethers_keystore_with(32, iv_len), &test_password(0))
-                .expect_err("must be rejected");
-            assert!(
-                format!("{err}").contains("Invalid cipherparams.iv length"),
-                "iv_len={iv_len}, got {err}"
-            );
-        }
-    }
-
-    #[test]
-    fn well_formed_dklen_and_iv_reach_mac_verification() {
-        // Guards against over-tightening: dklen=32 with a 16-byte IV must get
-        // past the new length checks and fail on the MAC instead.
-        let err = decrypt_ethers_keystore(&ethers_keystore_with(32, 16), &test_password(0))
-            .expect_err("MAC must fail");
-        assert!(
-            format!("{err}").contains("MAC verification failed"),
-            "got {err}"
-        );
-    }
-
-    #[test]
-    fn decrypt_ethers_keystore_accepts_oversized_dklen() {
-        // 33..=64 never panicked -- the slices stay in bounds and the extra bytes
-        // are ignored, which is what geth and ethers do. Still accepted.
-        for dklen in [33u64, 48, 64] {
-            let err = decrypt_ethers_keystore(&ethers_keystore_with(dklen, 16), &test_password(0))
-                .expect_err("MAC must fail");
-            assert!(
-                format!("{err}").contains("MAC verification failed"),
-                "dklen={dklen}, got {err}"
-            );
-        }
     }
 
     #[test]
@@ -582,64 +494,5 @@ mod tests {
         assert!(result.is_err());
         let err_msg = format!("{}", result.unwrap_err());
         assert!(err_msg.contains("MAC verification failed"));
-    }
-
-    #[test]
-    fn decrypt_ethers_keystore_rejects_resource_exhausting_params() {
-        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, 32).is_ok());
-        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, SCRYPT_R_MAX + 1, 1, 32).is_err());
-        assert!(validate_scrypt_resource_params(TEST_SCRYPT_N, 8, SCRYPT_P_MAX + 1, 32).is_err());
-        assert!(
-            validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MAX + 1).is_err()
-        );
-        // dklen < 32 must be rejected: decryption indexes derived_key[16..32].
-        assert!(
-            validate_scrypt_resource_params(TEST_SCRYPT_N, 8, 1, SCRYPT_DKLEN_MIN - 1).is_err()
-        );
-        // N=2^20 with r=32 exceeds the 256 MiB memory ceiling.
-        assert!(validate_scrypt_resource_params(1 << 20, 32, 1, 32).is_err());
-    }
-
-    fn ethers_keystore_with_dklen(dklen: u64) -> String {
-        let keystore = serde_json::json!({
-            "version": 3,
-            "crypto": {
-                "cipher": "aes-128-ctr",
-                "kdf": "scrypt",
-                "kdfparams": {
-                    "n": TEST_SCRYPT_N,
-                    "r": 8,
-                    "p": 1,
-                    "dklen": dklen,
-                    "salt": hex::encode([0xab; 32]),
-                },
-                "cipherparams": { "iv": hex::encode([0xcd; 16]) },
-                "ciphertext": hex::encode([0u8; 32]),
-                "mac": hex::encode([0u8; 32]),
-            }
-        });
-        serde_json::to_string(&keystore).unwrap()
-    }
-
-    #[test]
-    fn decrypt_ethers_keystore_rejects_dklen_below_32() {
-        // A crafted keystore with dklen < 32 must return an error instead of
-        // panicking on derived_key[16..32].
-        let keystore_json = ethers_keystore_with_dklen(16);
-        let result = decrypt_ethers_keystore(&keystore_json, &test_password(0));
-        assert!(result.is_err());
-        let err_msg = format!("{}", result.unwrap_err());
-        assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
-    }
-
-    #[test]
-    fn decrypt_ethers_keystore_rejects_truncating_dklen() {
-        // 2^32 + 32 truncates to 32 under `as usize` on wasm32; the checked
-        // conversion must reject it before the range validation runs.
-        let keystore_json = ethers_keystore_with_dklen((1u64 << 32) + 32);
-        let result = decrypt_ethers_keystore(&keystore_json, &test_password(0));
-        assert!(result.is_err());
-        let err_msg = format!("{}", result.unwrap_err());
-        assert!(err_msg.contains("dklen"), "unexpected error: {err_msg}");
     }
 }

@@ -1,85 +1,103 @@
 #!/usr/bin/env bash
-# Fail if production crates lack a crate-level unsafe policy, or if `unsafe`
+# Fail if production crates lack a crate-level unsafe policy, if any crate root
+# other than the FFI boundary allows unsafe at the crate level, or if `unsafe`
 # appears outside modules that explicitly allow it.
 #
 # Prefer compiler enforcement:
 #   #![forbid(unsafe_code)]  — crates with no unsafe
 #   #![deny(unsafe_code)] + #[allow(unsafe_code)] on specific modules — rare exceptions
-#   #![allow(unsafe_code)]   — FFI boundary crate only
+#   #![allow(unsafe_code)]   — crates/ffi/src/lib.rs only
+#
+# The textual scan is a backstop for the compiler policy. It tokenises each
+# file with the shared Rust scanner (comments, strings, raw strings and char
+# literals are tracked across lines) instead of stripping them with regexes,
+# which a `'"'` char literal or a `"/*"` string literal could defeat.
+#
+# Usage: check-unsafe-allowlist.sh [repository-root]
 set -euo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-failed=0
+scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+root="${1:-$(cd "$scripts_dir/../.." && pwd)}"
 
-# Discover production crate roots (exclude experimental trees).
-mapfile -t production_libs < <(
-  find "$root/crates" -mindepth 3 -maxdepth 3 -type f -path '*/src/lib.rs' \
-    ! -path '*/experimental/*' | sort | while read -r path; do
-      printf '%s\n' "${path#"$root"/}"
-    done
-)
-
-if ((${#production_libs[@]} == 0)); then
-  echo "::error::no production crate roots discovered under crates/*/src/lib.rs"
-  exit 1
-fi
-
-for lib in "${production_libs[@]}"; do
-  path="$root/$lib"
-  if [[ ! -f "$path" ]]; then
-    echo "::error::missing $lib"
-    failed=1
-    continue
-  fi
-  if ! grep -qE '#!\[(forbid|deny|allow)\(unsafe_code\)\]' "$path"; then
-    echo "::error file=$lib::$lib must declare #![forbid|deny|allow(unsafe_code)]"
-    failed=1
-  fi
-done
-
-# Textual fallback only for files that do not inherit an allow(unsafe_code) path.
-# Strip line comments and simple block comments before matching to avoid doc hits.
-python3 - "$root" <<'PY' || failed=1
-import re, sys
+python3 - "$root" "$scripts_dir" <<'PY'
+import re
+import sys
 from pathlib import Path
 
-root = Path(sys.argv[1])
+root = Path(sys.argv[1]).resolve()
+sys.path.insert(0, sys.argv[2])
+from lib.rust_scanner import RustBraceScanner  # noqa: E402
+
+FFI_ROOT = "crates/ffi/src/lib.rs"
 # Modules explicitly allowed to contain unsafe (must match crate attributes).
-allowed = {
-    "crates/common/src/secret_felt.rs",
-    # Entire FFI crate is the raw-pointer boundary.
-}
-for path in (root / "crates/ffi/src").rglob("*.rs"):
-    allowed.add(str(path.relative_to(root)))
+ALLOWED_MODULES = {"crates/common/src/secret_felt.rs"}
+POLICY_ATTR = re.compile(r"#!\[(forbid|deny|allow)\(unsafe_code\)\]")
+UNSAFE = re.compile(r"\bunsafe\b")
 
-comment_line = re.compile(r"//.*?$", re.M)
-block_comment = re.compile(r"/\*.*?\*/", re.S)
-string_lit = re.compile(r'"(?:\\.|[^"\\])*"')
 
-failed = 0
-for path in sorted((root / "crates").rglob("*.rs")):
-    if "target" in path.parts or "experimental" in path.parts:
-        continue
-    rel = str(path.relative_to(root))
-    if rel in allowed:
-        continue
-    # Skip crate roots that allow unsafe at the crate level (ffi handled above).
+def code_lines(path: Path):
+    """Yield (line_number, code_only_text) with comments and literals blanked."""
+    scanner = RustBraceScanner()
     text = path.read_text(encoding="utf-8", errors="ignore")
-    stripped = block_comment.sub("", text)
-    stripped = comment_line.sub("", stripped)
-    stripped = string_lit.sub('""', stripped)
-    if re.search(r"\bunsafe\b", stripped):
-        print(f"::error file={rel}::{rel} contains `unsafe` outside an allowlisted module")
-        for i, line in enumerate(stripped.splitlines(), 1):
-            if re.search(r"\bunsafe\b", line):
-                print(f"  {rel}:{i}:{line.strip()}")
-                break
-        failed = 1
+    for number, line in enumerate(text.splitlines(), 1):
+        yield number, scanner.strip_line(line)
 
-sys.exit(failed)
+
+def production_crate_roots():
+    roots = []
+    for path in sorted(root.glob("crates/*/src/lib.rs")):
+        rel = path.relative_to(root).as_posix()
+        if "/experimental/" in f"/{rel}":
+            continue
+        roots.append(rel)
+    return roots
+
+
+def check_crate_root(rel: str) -> bool:
+    policies = set()
+    for _, code in code_lines(root / rel):
+        policies.update(match.group(1) for match in POLICY_ATTR.finditer(code))
+    if not policies:
+        print(f"::error file={rel}::{rel} must declare #![forbid|deny(unsafe_code)]")
+        return False
+    if "allow" in policies and rel != FFI_ROOT:
+        print(
+            f"::error file={rel}::{rel} allows unsafe at the crate level; "
+            f"only {FFI_ROOT} may (use #![deny(unsafe_code)] with a module allowlist)"
+        )
+        return False
+    return True
+
+
+def is_allowlisted(rel: str) -> bool:
+    return rel in ALLOWED_MODULES or rel.startswith("crates/ffi/src/")
+
+
+def check_unsafe_free(rel: str) -> bool:
+    for number, code in code_lines(root / rel):
+        if UNSAFE.search(code):
+            print(f"::error file={rel},line={number}::{rel} contains `unsafe` outside an allowlisted module")
+            print(f"  {rel}:{number}:{code.strip()}")
+            return False
+    return True
+
+
+roots = production_crate_roots()
+if not roots:
+    print("::error::no production crate roots discovered under crates/*/src/lib.rs")
+    sys.exit(1)
+
+ok = all([check_crate_root(rel) for rel in roots])
+for path in sorted(root.glob("crates/**/*.rs")):
+    parts = path.relative_to(root).parts
+    if "target" in parts or "experimental" in parts:
+        continue
+    rel = path.relative_to(root).as_posix()
+    if is_allowlisted(rel):
+        continue
+    ok = check_unsafe_free(rel) and ok
+
+sys.exit(0 if ok else 1)
 PY
 
-if (( failed == 1 )); then
-  exit 1
-fi
 echo "unsafe policy ok"

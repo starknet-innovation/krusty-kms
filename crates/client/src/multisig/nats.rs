@@ -1,10 +1,19 @@
 //! NATS-backed coordinator transport.
+//!
+//! Payloads are capped at [`MAX_COORDINATOR_PAYLOAD_BYTES`] in both directions,
+//! matching the HTTP coordinator: `publish` refuses an envelope no peer would
+//! accept, and `subscribe` rejects an oversized message before parsing it. This bounds the parse and
+//! validation work only: `async-nats` enforces the server's `max_payload` on
+//! publish but buffers whatever length a `MSG` frame declares on receive, so
+//! a hostile server can still make the client allocate one oversized frame.
+//! Bounding that allocation needs a receive-side cap upstream in `async-nats`.
 
 use super::encoding::{address_subject_token, felt_subject_token};
 use super::types::{
     validate_envelope_payload, validate_incoming_envelope, MultisigCoordinationEnvelope,
     MultisigCoordinator, MultisigMessageStream, MultisigTopic,
 };
+use super::{encode_coordinator_payload, MAX_COORDINATOR_PAYLOAD_BYTES};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -72,8 +81,7 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
         validate_envelope_payload(&envelope)?;
 
         let subject = self.subject(&envelope.topic());
-        let payload = serde_json::to_vec(&envelope)
-            .map_err(|error| KmsError::MultisigError(error.to_string()))?;
+        let payload = encode_coordinator_payload(&envelope)?;
         self.client
             .publish(subject, Bytes::from(payload))
             .await
@@ -95,13 +103,68 @@ impl MultisigCoordinator for NatsMultisigCoordinator {
 
         let topic = topic.clone();
         Ok(Box::pin(subscriber.map(move |message| {
-            let parsed = serde_json::from_slice::<MultisigCoordinationEnvelope>(&message.payload)
-                .map_err(|error| KmsError::MultisigError(error.to_string()))?;
-            // The coordinator is untrusted on the receive path: reject
-            // misrouted topics, unsupported schema versions, and proposals
-            // whose id does not recompute.
-            validate_incoming_envelope(&topic, &parsed)?;
-            Ok(parsed)
+            decode_subscribed_payload(&topic, &message.payload)
         })))
+    }
+}
+
+/// Parse and validate one inbound payload for `topic`.
+///
+/// The coordinator is untrusted on the receive path: the size cap runs before
+/// any parsing, and the parsed envelope is rejected on a misrouted topic, an
+/// unsupported schema version, or a proposal whose id does not recompute.
+fn decode_subscribed_payload(
+    topic: &MultisigTopic,
+    payload: &[u8],
+) -> Result<MultisigCoordinationEnvelope> {
+    if payload.len() > MAX_COORDINATOR_PAYLOAD_BYTES {
+        return Err(KmsError::MultisigError(format!(
+            "coordinator message exceeds the {MAX_COORDINATOR_PAYLOAD_BYTES} byte limit"
+        )));
+    }
+    let parsed = serde_json::from_slice::<MultisigCoordinationEnvelope>(payload)
+        .map_err(|error| KmsError::MultisigError(error.to_string()))?;
+    validate_incoming_envelope(topic, &parsed)?;
+    Ok(parsed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use krusty_kms_common::{Address, ChainId};
+    use starknet_types_core::felt::Felt;
+
+    fn topic() -> MultisigTopic {
+        MultisigTopic {
+            multisig: Address::from(Felt::from(0x401u64)),
+            chain_id: ChainId::Sepolia,
+            transaction_id: Felt::from(0x55u64),
+        }
+    }
+
+    /// Audit 2026-11-04, M-3: an oversized payload is refused by its length
+    /// alone, before any byte of it is parsed.
+    #[test]
+    fn oversized_payload_is_rejected_before_parsing() {
+        // Starts like JSON, so a parser that ran would report a JSON error.
+        let mut payload = vec![b' '; MAX_COORDINATOR_PAYLOAD_BYTES + 1];
+        payload[0] = b'{';
+        let err = decode_subscribed_payload(&topic(), &payload).expect_err("must be rejected");
+        assert!(
+            matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+            "got {err:?}"
+        );
+    }
+
+    /// A payload at the cap reaches the parser, so the bound is exact and
+    /// the HTTP coordinator's limit still fits through this transport.
+    #[test]
+    fn payload_at_the_cap_reaches_the_parser() {
+        let payload = vec![b' '; MAX_COORDINATOR_PAYLOAD_BYTES];
+        let err = decode_subscribed_payload(&topic(), &payload).expect_err("blank JSON");
+        assert!(
+            matches!(err, KmsError::MultisigError(ref m) if !m.contains("byte limit")),
+            "got {err:?}"
+        );
     }
 }

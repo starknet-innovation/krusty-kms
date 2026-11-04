@@ -6,6 +6,9 @@ use crate::multisig::types::validate_incoming_envelope;
 #[cfg(feature = "nats")]
 use crate::multisig::NatsMultisigCoordinator;
 use crate::multisig::{
+    encode_coordinator_payload, MAX_COORDINATOR_ENVELOPE_BYTES, MAX_COORDINATOR_PAYLOAD_BYTES,
+};
+use crate::multisig::{
     HttpMultisigCoordinator, InMemoryMultisigCoordinator, MultisigCoordinationEnvelope,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigProposal, MultisigSignerNotice,
     MultisigTopic, SignedMultisigCoordinationMessage,
@@ -228,5 +231,94 @@ fn test_nats_subject_is_deterministic() {
     assert_eq!(
         NatsMultisigCoordinator::subject_for("krusty.multisig.", &topic),
         "krusty.multisig.SN_SEPOLIA.0000000000000000000000000000000000000000000000000000000000000001.0000000000000000000000000000000000000000000000000000000000000002"
+    );
+}
+
+/// A publish must never succeed for an envelope every receiver drops: the
+/// send side applies the same byte cap as `subscribe` and `messages`, and
+/// the HTTP coordinator fails before any request is made.
+/// A fresh proposal salt from OS entropy. The value is a public
+/// transaction-id nonce, not a secret; it is random only so no fixed value
+/// is checked in.
+fn random_proposal_salt() -> Felt {
+    Felt::from_bytes_be_slice(&krusty_kms_crypto::random_bytes::<31>())
+}
+
+#[tokio::test]
+async fn test_oversized_envelope_is_refused_before_publish() {
+    let salt = random_proposal_salt();
+    let oversized = MultisigProposal::new(
+        address(1),
+        ChainId::Sepolia,
+        vec![call()],
+        salt,
+        address(2),
+        Some("m".repeat(MAX_COORDINATOR_PAYLOAD_BYTES)),
+    );
+    let envelope =
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(oversized));
+    let err = encode_coordinator_payload(&envelope).expect_err("must be refused");
+    assert!(
+        matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+        "got {err:?}"
+    );
+
+    // Port 9 (discard) with no listener: a request would fail with a
+    // connection error, so the byte-limit error proves nothing was sent.
+    let coordinator = HttpMultisigCoordinator::from_url_unchecked("http://127.0.0.1:9/").unwrap();
+    let err = coordinator
+        .publish(envelope)
+        .await
+        .expect_err("must be refused");
+    assert!(
+        matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+        "got {err:?}"
+    );
+
+    let small = MultisigProposal::new(
+        address(1),
+        ChainId::Sepolia,
+        vec![call()],
+        salt,
+        address(2),
+        None,
+    );
+    let envelope =
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(small));
+    assert!(encode_coordinator_payload(&envelope).unwrap().len() < MAX_COORDINATOR_PAYLOAD_BYTES);
+}
+
+/// The largest envelope `publish` accepts still fits through the HTTP
+/// `messages` endpoint, which wraps a lone envelope in `[` and `]` before
+/// the receive cap applies; one byte more is refused on the send side.
+#[test]
+fn test_send_cap_reserves_http_array_framing() {
+    let salt = random_proposal_salt();
+    // Each memo character serializes to exactly one byte, so the memo length
+    // sets the envelope size exactly.
+    let with_memo = |memo_len: usize| {
+        let proposal = MultisigProposal::new(
+            address(1),
+            ChainId::Sepolia,
+            vec![call()],
+            salt,
+            address(2),
+            Some("m".repeat(memo_len)),
+        );
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(proposal))
+    };
+    let base = serde_json::to_vec(&with_memo(0)).unwrap().len();
+
+    let largest = encode_coordinator_payload(&with_memo(MAX_COORDINATOR_ENVELOPE_BYTES - base))
+        .expect("largest accepted envelope");
+    assert_eq!(largest.len(), MAX_COORDINATOR_ENVELOPE_BYTES);
+    let framed = [b"[", largest.as_slice(), b"]"].concat();
+    assert!(framed.len() <= MAX_COORDINATOR_PAYLOAD_BYTES);
+
+    let err = encode_coordinator_payload(&with_memo(MAX_COORDINATOR_ENVELOPE_BYTES - base + 1))
+        .expect_err("one byte over the send cap");
+    assert!(
+        matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+        "got {err:?}"
     );
 }
