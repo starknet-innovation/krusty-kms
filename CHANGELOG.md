@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-04
+
 ### Added
 
 - Add Bitcoin mainnet P2WPKH support to `krusty-kms`:
@@ -46,7 +48,7 @@ All notable changes to the published Rust crates are documented here.
   are deprecated: a secp256k1 coordinate is 256 bits, and both reduced it
   modulo the Stark prime, so the calldata they produced was wrong for almost
   every key and the address derived from it undeployable. They are unchanged
-  and will be removed in the next minor release.
+  and will be removed in 0.16.0.
 - `krusty-kms-cabi`: `kms_encode_transfer_calls` now emits the Cairo
   `Transfer` struct in the contract's order, starting with `from` and `to`
   and carrying both `hintTransfer` and `hintLeftover`, the layout
@@ -80,7 +82,7 @@ All notable changes to the published Rust crates are documented here.
   silently disabled a control the operator believed was set.
 - Deferred from the same audit (M-2): `krusty-kms-client` RPC response
   bodies remain bounded by timeout only (10 s connect, 15 s read, 30 s
-  total), not by size, until the next minor release, where a bounded
+  total), not by size, until 0.16.0, where a bounded
   `JsonRpcTransport` can change the public `JsonRpcClient<HttpTransport>`
   type. See `docs/design/2026-11-04-audit-medium-input-bounds.md`.
 - `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,
