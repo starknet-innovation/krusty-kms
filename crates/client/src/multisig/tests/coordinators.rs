@@ -5,7 +5,9 @@ use super::{address, call, test_signing_key};
 use crate::multisig::types::validate_incoming_envelope;
 #[cfg(feature = "nats")]
 use crate::multisig::NatsMultisigCoordinator;
-use crate::multisig::{encode_coordinator_payload, MAX_COORDINATOR_PAYLOAD_BYTES};
+use crate::multisig::{
+    encode_coordinator_payload, MAX_COORDINATOR_ENVELOPE_BYTES, MAX_COORDINATOR_PAYLOAD_BYTES,
+};
 use crate::multisig::{
     HttpMultisigCoordinator, InMemoryMultisigCoordinator, MultisigCoordinationEnvelope,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigProposal, MultisigSignerNotice,
@@ -276,4 +278,38 @@ async fn test_oversized_envelope_is_refused_before_publish() {
     let envelope =
         MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(small));
     assert!(encode_coordinator_payload(&envelope).unwrap().len() < MAX_COORDINATOR_PAYLOAD_BYTES);
+}
+
+/// The largest envelope `publish` accepts still fits through the HTTP
+/// `messages` endpoint, which wraps a lone envelope in `[` and `]` before
+/// the receive cap applies; one byte more is refused on the send side.
+#[test]
+fn test_send_cap_reserves_http_array_framing() {
+    // Each memo character serializes to exactly one byte, so the memo length
+    // sets the envelope size exactly.
+    let with_memo = |memo_len: usize| {
+        let proposal = MultisigProposal::new(
+            address(1),
+            ChainId::Sepolia,
+            vec![call()],
+            Felt::from(99u64),
+            address(2),
+            Some("m".repeat(memo_len)),
+        );
+        MultisigCoordinationEnvelope::Unsigned(MultisigCoordinationMessage::Proposal(proposal))
+    };
+    let base = serde_json::to_vec(&with_memo(0)).unwrap().len();
+
+    let largest = encode_coordinator_payload(&with_memo(MAX_COORDINATOR_ENVELOPE_BYTES - base))
+        .expect("largest accepted envelope");
+    assert_eq!(largest.len(), MAX_COORDINATOR_ENVELOPE_BYTES);
+    let framed = [b"[", largest.as_slice(), b"]"].concat();
+    assert!(framed.len() <= MAX_COORDINATOR_PAYLOAD_BYTES);
+
+    let err = encode_coordinator_payload(&with_memo(MAX_COORDINATOR_ENVELOPE_BYTES - base + 1))
+        .expect_err("one byte over the send cap");
+    assert!(
+        matches!(err, KmsError::MultisigError(ref m) if m.contains("byte limit")),
+        "got {err:?}"
+    );
 }

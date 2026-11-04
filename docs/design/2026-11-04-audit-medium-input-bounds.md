@@ -64,7 +64,10 @@ unchanged; every accepted input stays accepted except the ones listed.
   and runs the existing receive-side validation.
 - Review follow-up: the cap is applied on the send side too.
   `encode_coordinator_payload` serializes an envelope and refuses one above
-  the cap, and both `NatsMultisigCoordinator::publish` and
+  the cap less the two bytes of JSON array framing the HTTP `messages`
+  endpoint adds, so the largest accepted envelope is still receivable when
+  it comes back alone (an HTTP history page shares the response cap among
+  its envelopes, which the send-side bound does not try to cover), and both `NatsMultisigCoordinator::publish` and
   `HttpMultisigCoordinator::publish` use it, so a publish never succeeds for
   an envelope every receiver running this SDK would drop. Pinned by
   `test_oversized_envelope_is_refused_before_publish`, which also shows the

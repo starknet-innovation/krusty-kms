@@ -36,6 +36,16 @@ pub(crate) type StarknetRsFelt = starknet_rust_core::types::Felt;
 /// message must not be able to exhaust the signer's memory before validation.
 pub(crate) const MAX_COORDINATOR_PAYLOAD_BYTES: usize = 1024 * 1024;
 
+/// Largest envelope `publish` will send on any transport.
+///
+/// Two bytes below the receive cap: the HTTP `messages` endpoint returns a
+/// JSON array, so a lone envelope comes back wrapped in `[` and `]` and
+/// must still fit under [`MAX_COORDINATOR_PAYLOAD_BYTES`]. An HTTP history
+/// page shares that cap among all of its envelopes, so several large ones
+/// may still not fit on one page; the send-side bound only promises that an
+/// envelope published alone is receivable.
+pub(crate) const MAX_COORDINATOR_ENVELOPE_BYTES: usize = MAX_COORDINATOR_PAYLOAD_BYTES - 2;
+
 /// Serialize an envelope for sending, refusing one no receiver would accept.
 ///
 /// Both transports apply [`MAX_COORDINATOR_PAYLOAD_BYTES`] on receive, so a
@@ -47,9 +57,9 @@ pub(crate) fn encode_coordinator_payload(
 ) -> Result<Vec<u8>> {
     let payload =
         serde_json::to_vec(envelope).map_err(|error| KmsError::MultisigError(error.to_string()))?;
-    if payload.len() > MAX_COORDINATOR_PAYLOAD_BYTES {
+    if payload.len() > MAX_COORDINATOR_ENVELOPE_BYTES {
         return Err(KmsError::MultisigError(format!(
-            "coordination envelope serializes to {} bytes, above the {MAX_COORDINATOR_PAYLOAD_BYTES} byte limit every receiver applies",
+            "coordination envelope serializes to {} bytes, above the {MAX_COORDINATOR_ENVELOPE_BYTES} byte limit every receiver applies",
             payload.len()
         )));
     }
