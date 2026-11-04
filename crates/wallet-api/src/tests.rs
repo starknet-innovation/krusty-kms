@@ -113,3 +113,123 @@ fn zero_timeout_is_raised_to_the_floor() {
         (floor.interval_secs, floor.timeout_secs)
     );
 }
+
+mod provider_errors {
+    use super::super::{provider_error_message, rpc_error, Tx, WaitOptions};
+    use krusty_kms_common::network::NetworkPreset;
+    use krusty_kms_common::KmsError;
+    use starknet_rust_core::types::{Felt, StarknetError};
+    use starknet_rust_providers::jsonrpc::{
+        HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError, JsonRpcError,
+    };
+    use starknet_rust_providers::{Provider, ProviderError, ProviderImplError};
+    use std::sync::Arc;
+
+    /// Stand-in for a transport error whose `Display` leaks the request URL,
+    /// the way `reqwest::Error` does.
+    #[derive(Debug)]
+    struct LeakyTransportError;
+
+    impl std::fmt::Display for LeakyTransportError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("error sending request for url (https://rpc.example.com/v0_9/SECRET_TOKEN)")
+        }
+    }
+
+    impl std::error::Error for LeakyTransportError {}
+
+    impl ProviderImplError for LeakyTransportError {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[test]
+    fn transport_errors_are_classified_without_the_endpoint_url() {
+        let leaky = || ProviderError::Other(Box::new(LeakyTransportError));
+        assert!(leaky().to_string().contains("SECRET_TOKEN"));
+        let redacted = "provider transport error: other";
+        assert!(matches!(rpc_error(leaky()), KmsError::RpcError(m) if m == redacted));
+
+        let rpc = JsonRpcError {
+            code: -32000,
+            message: "invalid api key SECRET_TOKEN".to_string(),
+            data: None,
+        };
+        let rpc: ProviderError = JsonRpcClientError::<HttpTransportError>::JsonRpcError(rpc).into();
+        assert_eq!(
+            provider_error_message(&rpc),
+            "provider transport error: json-rpc code -32000"
+        );
+        let batch = HttpTransportError::BatchError(JsonRpcError {
+            code: -32001,
+            message: "SECRET_TOKEN".to_string(),
+            data: None,
+        });
+        let batch: ProviderError =
+            JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+        assert_eq!(
+            provider_error_message(&batch),
+            "provider transport error: json-rpc code -32001"
+        );
+        let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
+            HttpTransportError::InvalidNumericResponseId,
+        )
+        .into();
+        assert_eq!(
+            provider_error_message(&invalid),
+            "provider transport error: other"
+        );
+
+        let typed = ProviderError::StarknetError(StarknetError::ContractNotFound);
+        assert_eq!(
+            provider_error_message(&typed),
+            StarknetError::ContractNotFound.to_string()
+        );
+    }
+
+    /// A provider whose every request is refused: the loopback port was
+    /// bound and released, and the fake API key sits in the path the way
+    /// hosted RPC providers carry it.
+    async fn refused_provider() -> (Arc<JsonRpcClient<HttpTransport>>, u16) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let url = url::Url::parse(&format!("http://127.0.0.1:{port}/v0_9/SECRET_TOKEN")).unwrap();
+        (Arc::new(JsonRpcClient::new(HttpTransport::new(url))), port)
+    }
+
+    /// Regression for the audit finding: `Tx::wait`, `Tx::receipt` and
+    /// `Tx::raw_receipt` used to format the raw `reqwest` error, whose text
+    /// names the endpoint URL and so the key.
+    #[tokio::test]
+    async fn tx_errors_never_contain_the_endpoint_url() {
+        let (provider, port) = refused_provider().await;
+        let upstream = provider
+            .get_transaction_receipt(Felt::ONE)
+            .await
+            .unwrap_err();
+        assert!(upstream.to_string().contains("SECRET_TOKEN"));
+
+        let tx = Tx::new(Felt::ONE, provider, NetworkPreset::devnet());
+        let wait = tx
+            .wait(Some(WaitOptions::new(1, 1).unwrap()))
+            .await
+            .unwrap_err();
+        let receipt = tx.receipt().await.unwrap_err();
+        let raw_receipt = tx.raw_receipt().await.unwrap_err();
+
+        for error in [&wait, &receipt, &raw_receipt] {
+            let message = error.to_string();
+            assert!(!message.contains("SECRET_TOKEN"), "{message}");
+            assert!(!message.contains(&port.to_string()), "{message}");
+            assert!(
+                message.contains("provider transport error: connect"),
+                "{message}"
+            );
+        }
+        assert!(matches!(wait, KmsError::RpcError(_)));
+        assert!(matches!(receipt, KmsError::RpcError(_)));
+        assert!(matches!(raw_receipt, KmsError::TransactionError(_)));
+    }
+}

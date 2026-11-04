@@ -4,11 +4,13 @@ use krusty_kms_common::{is_already_deployed_validation_failure, KmsError, Result
 use starknet_rust_accounts::AccountFactoryError;
 use starknet_rust_core::types::StarknetError;
 use starknet_rust_core::types::{BlockId, BlockTag};
-use starknet_rust_providers::jsonrpc::{
-    HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError,
-};
-use starknet_rust_providers::{Provider, ProviderError, ProviderImplError};
+use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
+
+/// Endpoint-safe provider error text, shared with `krusty-kms-wallet-api` so
+/// `Tx` and the client describe the same transport failure the same way.
+pub(crate) use krusty_kms_wallet_api::{provider_error_message, rpc_error};
 
 /// Type alias for starknet-rs Felt.
 pub type StarknetRsFelt = starknet_rust_core::types::Felt;
@@ -63,65 +65,6 @@ async fn check_deployed_with_provider<P: DeploymentProvider>(
         Ok(_) => Ok(true),
         Err(error) if is_contract_not_found(&error) => Ok(false),
         Err(error) => Err(rpc_error(error)),
-    }
-}
-
-/// Map a provider failure to [`KmsError::RpcError`] without the endpoint URL
-/// (see [`provider_error_message`]).
-pub(crate) fn rpc_error(error: ProviderError) -> KmsError {
-    KmsError::RpcError(provider_error_message(&error))
-}
-
-/// Describe a provider failure without the endpoint URL.
-///
-/// Typed JSON-RPC failures keep their upstream message. Transport failures
-/// are reduced to a fixed kind: `reqwest::Error`'s `Display` embeds the full
-/// request URL, whose path or query usually carries the provider API key.
-pub(crate) fn provider_error_message(error: &ProviderError) -> String {
-    match error {
-        ProviderError::Other(inner) => format!(
-            "provider transport error: {}",
-            transport_error_kind(inner.as_ref())
-        ),
-        typed => typed.to_string(),
-    }
-}
-
-fn transport_error_kind(error: &dyn ProviderImplError) -> String {
-    let Some(error) = error
-        .as_any()
-        .downcast_ref::<JsonRpcClientError<HttpTransportError>>()
-    else {
-        return "other".to_string();
-    };
-    match error {
-        JsonRpcClientError::JsonError(_)
-        | JsonRpcClientError::TransportError(HttpTransportError::Json(_)) => "decode".to_string(),
-        JsonRpcClientError::JsonRpcError(rpc)
-        | JsonRpcClientError::TransportError(HttpTransportError::BatchError(rpc)) => {
-            format!("json-rpc code {}", rpc.code)
-        }
-        JsonRpcClientError::TransportError(HttpTransportError::Reqwest(http)) => {
-            http_error_kind(http)
-        }
-        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_))
-        | JsonRpcClientError::TransportError(HttpTransportError::InvalidNumericResponseId) => {
-            "other".to_string()
-        }
-    }
-}
-
-fn http_error_kind(error: &reqwest::Error) -> String {
-    if error.is_timeout() {
-        "timeout".to_string()
-    } else if error.is_connect() {
-        "connect".to_string()
-    } else if let Some(status) = error.status() {
-        format!("status {}", status.as_u16())
-    } else if error.is_decode() {
-        "decode".to_string()
-    } else {
-        "other".to_string()
     }
 }
 
@@ -190,6 +133,8 @@ pub(crate) fn felt_to_u16(felt: &StarknetRsFelt) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use starknet_rust_providers::jsonrpc::{HttpTransportError, JsonRpcClientError};
+    use starknet_rust_providers::ProviderImplError;
     use std::collections::VecDeque;
     use std::sync::Mutex;
 

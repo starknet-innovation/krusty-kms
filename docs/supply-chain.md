@@ -33,9 +33,13 @@ Verified 2026-08-10 against the crates.io API (audit finding M-19 in #46):
   `crates-release.md`.
 - Every `uses:` in every workflow is pinned to a commit SHA and checked by
   `.github/scripts/check-workflow-actions-pinned.sh`; release tooling
-  (`wasm-pack`, `cargo-audit`, `cargo-deny`) is built from crates.io with
-  `cargo install --version <exact> --locked`; and `cargo publish --locked`
-  ships the dependency graph CI verified.
+  (`wasm-pack`, the `wasm-bindgen` CLI, `cargo-audit`, `cargo-deny`) is built
+  from crates.io with `cargo install --version <exact> --locked`; and
+  `cargo publish --locked` ships the dependency graph CI verified. The
+  `wasm-bindgen` CLI is pinned to the `wasm-bindgen` version in `Cargo.lock`
+  by `.github/scripts/install-wasm-bindgen-cli.sh`, and `wasm-pack` runs
+  with `--mode no-install`, so it uses that binary instead of downloading an
+  unverified prebuilt tarball from GitHub releases (2026-11-04).
 
 ## Duplicate dependency versions (`cargo deny check bans`)
 

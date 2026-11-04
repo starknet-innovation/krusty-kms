@@ -21,10 +21,6 @@
       "lines": 511
     },
     {
-      "path": "crates/client/src/wallet/utils.rs",
-      "lines": 395
-    },
-    {
       "path": "crates/client/tests/oz_multisig_devnet.rs",
       "lines": 504
     },
@@ -35,10 +31,6 @@
     {
       "path": "crates/common/src/serialization.rs",
       "lines": 355
-    },
-    {
-      "path": "crates/common/src/utils.rs",
-      "lines": 378
     },
     {
       "path": "crates/crypto/src/audit.rs",
@@ -186,11 +178,11 @@
     },
     {
       "path": "crates/wasm/src/lib.rs",
-      "lines": 416
+      "lines": 398
     },
     {
       "path": "crates/wasm/src/proof.rs",
-      "lines": 977
+      "lines": 958
     },
     {
       "path": "crates/wasm/src/tx_hash.rs",

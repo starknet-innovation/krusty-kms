@@ -51,19 +51,45 @@ pub fn parse_public_key_hex(hex: &str) -> Result<(Felt, Felt)> {
         None => hex,
     };
 
-    if cleaned.len() != 128 {
+    parse_public_key_digits(cleaned)
+}
+
+/// Parse a public key given as `0x` (or `0X`) followed by exactly 128 hex
+/// digits.
+///
+/// This is the format the WASM and C ABI boundaries accept for recipient and
+/// auditor keys: unlike [`parse_public_key_hex`], the prefix is required and
+/// the SEC1 `04` tag is not stripped.
+pub fn parse_prefixed_public_key_hex(hex: &str) -> Result<(Felt, Felt)> {
+    let digits = hex
+        .strip_prefix("0x")
+        .or_else(|| hex.strip_prefix("0X"))
+        .ok_or_else(|| KmsError::InvalidPublicKey("Public key must start with 0x".to_string()))?;
+    parse_public_key_digits(digits)
+}
+
+/// Split 128 hex digits into the x and y coordinates.
+///
+/// Both checks run before the split. `len()` counts bytes, so 128 bytes that
+/// hold a multi-byte character would otherwise pass the length check and
+/// panic on the byte-offset slice, which on wasm32 traps the whole module.
+fn parse_public_key_digits(digits: &str) -> Result<(Felt, Felt)> {
+    if !digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(KmsError::InvalidPublicKey(
+            "Public key must contain only hex digits".to_string(),
+        ));
+    }
+    if digits.len() != 128 {
         return Err(KmsError::InvalidPublicKey(format!(
             "Expected 128 hex chars, got {}",
-            cleaned.len()
+            digits.len()
         )));
     }
 
-    let x_hex = &cleaned[..64];
-    let y_hex = &cleaned[64..];
-
-    let x = Felt::from_hex(&format!("0x{}", x_hex))
+    let (x_hex, y_hex) = digits.split_at(64);
+    let x = Felt::from_hex(&format!("0x{x_hex}"))
         .map_err(|e| KmsError::InvalidPublicKey(e.to_string()))?;
-    let y = Felt::from_hex(&format!("0x{}", y_hex))
+    let y = Felt::from_hex(&format!("0x{y_hex}"))
         .map_err(|e| KmsError::InvalidPublicKey(e.to_string()))?;
 
     Ok((x, y))
@@ -193,186 +219,4 @@ fn ten_pow(exp: u8) -> Result<u128> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_hex_to_felt() {
-        let felt = parse_hex_to_felt("0x123").unwrap();
-        assert_eq!(felt, Felt::from(0x123u64));
-
-        let felt2 = parse_hex_to_felt("0xabcdef").unwrap();
-        assert_eq!(felt2, Felt::from(0xabcdefu64));
-
-        // Invalid hex should error
-        assert!(parse_hex_to_felt("not_hex").is_err());
-    }
-
-    #[test]
-    fn test_felt_to_hex() {
-        let felt = Felt::from(0x123u64);
-        let hex = felt_to_hex(&felt);
-        assert_eq!(hex, "0x123");
-
-        let felt_zero = Felt::ZERO;
-        let hex_zero = felt_to_hex(&felt_zero);
-        assert_eq!(hex_zero, "0x0");
-    }
-
-    #[test]
-    fn test_left_pad_hex() {
-        assert_eq!(left_pad_hex("abc", 6), "000abc");
-        assert_eq!(left_pad_hex("0xabc", 6), "000abc");
-        assert_eq!(left_pad_hex("abcdef", 6), "abcdef");
-        assert_eq!(left_pad_hex("abcdefgh", 6), "abcdefgh");
-    }
-
-    #[test]
-    fn test_serialize_public_key_hex() {
-        let x = Felt::from(0x1u64);
-        let y = Felt::from(0x2u64);
-        let hex = serialize_public_key_hex(&x, &y);
-        // Should be 0x + 64 chars for x + 64 chars for y
-        assert!(hex.starts_with("0x"));
-        assert_eq!(hex.len(), 2 + 128); // "0x" + 128 hex chars
-    }
-
-    #[test]
-    fn test_parse_public_key_hex() {
-        // Create a valid 128-char hex string
-        let x_hex = "0".repeat(63) + "1"; // 64 chars representing x=1
-        let y_hex = "0".repeat(63) + "2"; // 64 chars representing y=2
-        let full_hex = format!("0x{}{}", x_hex, y_hex);
-
-        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
-        assert_eq!(x, Felt::from(1u64));
-        assert_eq!(y, Felt::from(2u64));
-
-        // Test with "04" prefix (uncompressed point format)
-        let with_prefix = format!("04{}{}", x_hex, y_hex);
-        let (x2, y2) = parse_public_key_hex(&with_prefix).unwrap();
-        assert_eq!(x2, Felt::from(1u64));
-        assert_eq!(y2, Felt::from(2u64));
-    }
-
-    #[test]
-    fn test_parse_public_key_hex_x_starts_with_04() {
-        // Regression: x-coordinate legitimately starts with "04".
-        // The old code incorrectly stripped this as a SEC1 prefix.
-        let x_hex = "04".to_string() + &"0".repeat(62); // 64 chars, starts with 04
-        let y_hex = "0".repeat(63) + "2";
-        let full_hex = format!("0x{}{}", x_hex, y_hex);
-
-        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
-        assert_eq!(
-            x,
-            Felt::from_hex(&format!("0x{}", x_hex)).unwrap(),
-            "x-coordinate starting with 04 must not be stripped"
-        );
-        assert_eq!(y, Felt::from(2u64));
-    }
-
-    #[test]
-    fn test_parse_public_key_hex_0x04_prefix() {
-        // SEC1 uncompressed with 0x prefix: 0x04 + 128 hex chars
-        let x_hex = "0".repeat(63) + "1";
-        let y_hex = "0".repeat(63) + "2";
-        let full_hex = format!("0x04{}{}", x_hex, y_hex);
-
-        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
-        assert_eq!(x, Felt::from(1u64));
-        assert_eq!(y, Felt::from(2u64));
-    }
-
-    #[test]
-    fn test_parse_public_key_hex_bare() {
-        // Bare 128 hex chars, no prefix
-        let x_hex = "0".repeat(63) + "1";
-        let y_hex = "0".repeat(63) + "2";
-        let full_hex = format!("{}{}", x_hex, y_hex);
-
-        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
-        assert_eq!(x, Felt::from(1u64));
-        assert_eq!(y, Felt::from(2u64));
-    }
-
-    #[test]
-    fn test_parse_public_key_hex_bare_x_starts_with_04() {
-        // Bare 128 hex chars, no prefix, with x-coordinate starting with "04"
-        let x_hex = "04".to_string() + &"0".repeat(62); // 64 chars total, starts with "04"
-        let y_hex = "0".repeat(63) + "2"; // 64 chars total
-        let full_hex = format!("{}{}", x_hex, y_hex);
-
-        let (x, y) = parse_public_key_hex(&full_hex).unwrap();
-        assert_eq!(x, Felt::from_hex(&x_hex).unwrap());
-        assert_eq!(y, Felt::from(2u64));
-    }
-
-    #[test]
-    fn test_parse_public_key_hex_invalid_length() {
-        // Too short
-        let result = parse_public_key_hex("0x123");
-        assert!(result.is_err());
-        if let Err(KmsError::InvalidPublicKey(msg)) = result {
-            assert!(msg.contains("Expected 128 hex chars"));
-        }
-    }
-
-    #[test]
-    fn test_strk_conversion() {
-        assert_eq!(strk_to_fri("1.5").unwrap(), 1_500_000_000_000_000_000);
-        assert_eq!(strk_to_fri("1.5 STRK").unwrap(), 1_500_000_000_000_000_000);
-        assert_eq!(fri_to_strk(1_500_000_000_000_000_000).to_human(), "1.5");
-    }
-
-    #[test]
-    fn test_strk_to_fri_negative() {
-        let result = strk_to_fri("-1.0");
-        assert!(result.is_err());
-        if let Err(KmsError::InvalidAmount(msg)) = result {
-            assert!(msg.contains("negative"));
-        }
-    }
-
-    #[test]
-    fn test_strk_to_fri_invalid() {
-        let result = strk_to_fri("not_a_number");
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_tongo_conversion() {
-        let rate = 1_000_000_000_000_000_000; // 1e18
-        assert_eq!(tongo_to_strk(100, rate).unwrap().to_human(), "100.0");
-        assert_eq!(strk_to_tongo("100 STRK", rate).unwrap(), 100);
-    }
-
-    #[test]
-    fn test_format_tongo_balance() {
-        let rate = 1_000_000_000_000_000_000u128; // 1e18
-        let formatted = format_tongo_balance(100, rate).unwrap();
-        assert_eq!(formatted, "100.00 STRK");
-
-        let formatted_small = format_tongo_balance(1, rate).unwrap();
-        assert_eq!(formatted_small, "1.00 STRK");
-    }
-
-    #[test]
-    fn test_strk_to_tongo_zero_rate() {
-        let result = strk_to_tongo("1 STRK", 0);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_tongo_to_strk_zero_rate() {
-        let result = tongo_to_strk(1, 0);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_format_tongo_balance_rounds_exactly() {
-        let rate = 333_333_333_333_333_333u128;
-        let formatted = format_tongo_balance(1, rate).unwrap();
-        assert_eq!(formatted, "0.33 STRK");
-    }
-}
+mod tests;

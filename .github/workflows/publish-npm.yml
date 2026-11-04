@@ -34,9 +34,12 @@ jobs:
         with:
           node-version: 20
       - run: rustup target add wasm32-unknown-unknown
-      # Build wasm-pack from its crates.io release rather than downloading a
-      # prebuilt binary: the version and its lockfile are both content-addressed.
+      # Build wasm-pack and the wasm-bindgen CLI it drives from their crates.io
+      # releases rather than downloading prebuilt binaries: the versions and
+      # their lockfiles are content-addressed. `--mode no-install` below makes
+      # any download attempt by wasm-pack a hard failure.
       - run: cargo install wasm-pack --version 0.15.0 --locked
+      - run: bash .github/scripts/install-wasm-bindgen-cli.sh
       # krusty-kms-wasm is excluded from the native run because its tests only
       # execute under wasm-pack (see rust.yml).
       - run: cargo test --workspace --locked --exclude krusty-kms-wasm
@@ -45,7 +48,7 @@ jobs:
       # workflow_dispatch bypasses rust.yml's parallel wasm job entirely, so
       # without this a wasm-only regression could reach npm untested. Building
       # and `npm pack --dry-run` in the publish job are not a substitute.
-      - run: wasm-pack test --node crates/wasm
+      - run: wasm-pack test --node --mode no-install crates/wasm
       - run: cargo install cargo-audit --version 0.22.1 --locked
       - run: cargo audit --deny warnings
       - run: cargo install cargo-deny --version 0.19.8 --locked
@@ -66,11 +69,14 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - run: rustup target add wasm32-unknown-unknown
+      # Same toolchain policy as `verify`: both tools from crates.io, no
+      # downloads during the build that produces the published package.
       - run: cargo install wasm-pack --version 0.15.0 --locked
+      - run: bash .github/scripts/install-wasm-bindgen-cli.sh
       - name: Build @starknetfoundation/krusty-kms-wasm
         run: >
-          wasm-pack build --release --target web --scope starknetfoundation
-          --out-dir pkg
+          wasm-pack build --release --target web --mode no-install
+          --scope starknetfoundation --out-dir pkg
         working-directory: crates/wasm
       - name: Reject npm lifecycle scripts
         run: |

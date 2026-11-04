@@ -287,29 +287,11 @@ pub fn serialize_public_key(x: &str, y: &str) -> Result<String, JsValue> {
 #[wasm_bindgen(js_name = "deserializePublicKey")]
 pub fn deserialize_public_key(hex: &str) -> Result<types::WasmPoint, JsValue> {
     use starknet_types_core::curve::ProjectivePoint;
-    use starknet_types_core::felt::Felt;
 
-    let hex = hex.trim();
-
-    // Validate format
-    if !hex.starts_with("0x") && !hex.starts_with("0X") {
-        return Err(JsValue::from_str("Public key must start with 0x"));
-    }
-
-    let hex_data = &hex[2..];
-    if hex_data.len() != 128 {
-        return Err(JsValue::from_str(
-            "Public key must be 128 hex characters after 0x (64 for x, 64 for y)",
-        ));
-    }
-
-    let x_hex = format!("0x{}", &hex_data[..64]);
-    let y_hex = format!("0x{}", &hex_data[64..]);
-
-    let x = Felt::from_hex(&x_hex)
-        .map_err(|e| JsValue::from_str(&format!("Invalid X coordinate: {e}")))?;
-    let y = Felt::from_hex(&y_hex)
-        .map_err(|e| JsValue::from_str(&format!("Invalid Y coordinate: {e}")))?;
+    // Validated as 128 ASCII hex digits before it is split: the string is
+    // untrusted and a panic here traps the module.
+    let (x, y) = krusty_kms_common::utils::parse_prefixed_public_key_hex(hex.trim())
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
     ProjectivePoint::from_affine(x, y)
         .map_err(|_| JsValue::from_str("Invalid public key point"))?;
 

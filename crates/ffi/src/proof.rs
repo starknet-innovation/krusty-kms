@@ -10,6 +10,7 @@
 use std::ffi::c_char;
 use std::panic::catch_unwind;
 
+use krusty_kms_common::utils::parse_prefixed_public_key_hex;
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_sdk::operations::{
     fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
@@ -35,18 +36,10 @@ fn parse_felt(hex: &str) -> Result<Felt, i32> {
     Felt::from_hex(hex).map_err(|_| KMS_ERR_INVALID_INPUT)
 }
 
+/// `0x` + 128 hex digits, validated before any slicing (no panic to catch).
 pub(crate) fn parse_public_key(hex: &str) -> Result<ProjectivePoint, i32> {
-    let hex = hex.trim();
-    if (hex.starts_with("0x") || hex.starts_with("0X")) && hex.len() == 130 {
-        let hex_data = &hex[2..];
-        let x_hex = format!("0x{}", &hex_data[..64]);
-        let y_hex = format!("0x{}", &hex_data[64..]);
-        let x = Felt::from_hex(&x_hex).map_err(|_| KMS_ERR_INVALID_INPUT)?;
-        let y = Felt::from_hex(&y_hex).map_err(|_| KMS_ERR_INVALID_INPUT)?;
-        ProjectivePoint::from_affine(x, y).map_err(|_| KMS_ERR_INVALID_INPUT)
-    } else {
-        Err(KMS_ERR_INVALID_INPUT)
-    }
+    let (x, y) = parse_prefixed_public_key_hex(hex.trim()).map_err(|_| KMS_ERR_INVALID_INPUT)?;
+    ProjectivePoint::from_affine(x, y).map_err(|_| KMS_ERR_INVALID_INPUT)
 }
 
 fn parse_ciphertext(c: &JsonCiphertext) -> Result<ElGamalCiphertext, i32> {
@@ -958,5 +951,12 @@ mod tests {
                 &ragequit_params,
             )
         };
+    }
+
+    /// 130 bytes but 129 chars: used to panic on the byte-offset split (`KMS_ERR_INTERNAL`).
+    #[test]
+    fn parse_public_key_rejects_non_ascii_as_invalid_input() {
+        let key = format!("0x{}\u{e9}{}", "a".repeat(63), "a".repeat(63));
+        assert!(matches!(parse_public_key(&key), Err(KMS_ERR_INVALID_INPUT)));
     }
 }
