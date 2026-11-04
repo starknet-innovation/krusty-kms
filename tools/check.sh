@@ -85,19 +85,36 @@ check_guardrails() {
   run python3 .github/scripts/check-code-complexity.py
 }
 
+# The `wasm-bindgen` version Cargo.lock resolves; wasm-pack needs a CLI of
+# exactly that version.
+locked_wasm_bindgen_version() {
+  awk '
+    /^name = "wasm-bindgen"$/ { want = 1; next }
+    want && /^version = / { gsub(/^version = "|"$/, ""); print; exit }
+  ' Cargo.lock
+}
+
 check_wasm() {
-  # With the wasm-bindgen CLI on PATH (built from crates.io by
-  # .github/scripts/install-wasm-bindgen-cli.sh), forbid wasm-pack from
-  # downloading any tool. CI always installs it first; locally, fall back to
-  # wasm-pack's own download so the mode keeps working out of the box.
+  # With a wasm-bindgen CLI of the locked version on PATH (built from
+  # crates.io by .github/scripts/install-wasm-bindgen-cli.sh), forbid
+  # wasm-pack from downloading any tool. CI always installs it first;
+  # locally, fall back to wasm-pack's own download so the mode keeps working
+  # out of the box, including right after a lockfile bump.
+  local wanted installed=""
+  wanted="$(locked_wasm_bindgen_version)"
   if command -v wasm-bindgen >/dev/null 2>&1; then
+    installed="$(wasm-bindgen --version 2>/dev/null | awk '{ print $2 }')"
+  fi
+  if [[ -n "$installed" && "$installed" == "$wanted" ]]; then
     run wasm-pack test --node --mode no-install crates/wasm
   elif [[ -n "${CI:-}" ]]; then
-    echo "wasm-bindgen is not on PATH; run .github/scripts/install-wasm-bindgen-cli.sh first" >&2
+    echo "wasm-bindgen ${wanted} is not on PATH (found '${installed:-none}');" >&2
+    echo "run bash .github/scripts/install-wasm-bindgen-cli.sh first" >&2
     exit 1
   else
-    echo "note: wasm-bindgen is not on PATH, so wasm-pack will download a prebuilt one;" >&2
-    echo "      run bash .github/scripts/install-wasm-bindgen-cli.sh to build it from crates.io" >&2
+    echo "note: wasm-bindgen ${wanted} is not on PATH (found '${installed:-none}'), so" >&2
+    echo "      wasm-pack will download a prebuilt one; run" >&2
+    echo "      bash .github/scripts/install-wasm-bindgen-cli.sh to build it from crates.io" >&2
     run wasm-pack test --node crates/wasm
   fi
 }

@@ -76,9 +76,11 @@ Both `publish-npm.yml` jobs and the `rust.yml` wasm job run it after
 `cargo install wasm-pack`, and `wasm-pack build` / `wasm-pack test` run with
 `--mode no-install`, so any attempt to download a tool fails the job instead
 of silently falling back. `tools/check.sh wasm` uses `--mode no-install`
-whenever `wasm-bindgen` is on `PATH`, requires it when `CI` is set, and
-otherwise prints a note and lets wasm-pack download, so the local mode keeps
-working out of the box. `wasm-opt` is already disabled in
+when the `wasm-bindgen` on `PATH` reports the `Cargo.lock` version, fails
+when `CI` is set and it does not, and otherwise prints a note and lets
+wasm-pack download, so the local mode keeps working out of the box, including
+right after a lockfile bump. `rust.yml` triggers on the installer script so a
+change to it runs the wasm job. `wasm-opt` is already disabled in
 `crates/wasm/Cargo.toml`, so no other prebuilt tool is involved. Both docs
 that claimed release tooling is never downloaded prebuilt now describe this.
 
