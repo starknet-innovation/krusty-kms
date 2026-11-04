@@ -15,7 +15,6 @@
     "crates/crypto/src/range.rs::prove_with_randomness#1": 89,
     "crates/crypto/tests/fund_audit_test_vector.rs::test_fund_with_audit_typescript_vector#1": 217,
     "crates/ffi/src/calldata.rs::kms_encode_fund_calls#1": 99,
-    "crates/ffi/src/calldata.rs::kms_encode_transfer_calls#1": 105,
     "crates/ffi/src/calldata.rs::kms_encode_withdraw_calls#1": 89,
     "crates/ffi/src/elgamal_ffi/tests.rs::test_elgamal_encrypt_decrypt_roundtrip#1": 98,
     "crates/ffi/src/proof.rs::kms_generate_fund_proof#1": 99,
