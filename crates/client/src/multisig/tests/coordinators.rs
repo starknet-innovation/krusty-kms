@@ -237,13 +237,21 @@ fn test_nats_subject_is_deterministic() {
 /// A publish must never succeed for an envelope every receiver drops: the
 /// send side applies the same byte cap as `subscribe` and `messages`, and
 /// the HTTP coordinator fails before any request is made.
+/// A fresh proposal salt from OS entropy. The value is a public
+/// transaction-id nonce, not a secret; it is random only so no fixed value
+/// is checked in.
+fn random_proposal_salt() -> Felt {
+    Felt::from_bytes_be_slice(&krusty_kms_crypto::random_bytes::<31>())
+}
+
 #[tokio::test]
 async fn test_oversized_envelope_is_refused_before_publish() {
+    let salt = random_proposal_salt();
     let oversized = MultisigProposal::new(
         address(1),
         ChainId::Sepolia,
         vec![call()],
-        Felt::from(99u64),
+        salt,
         address(2),
         Some("m".repeat(MAX_COORDINATOR_PAYLOAD_BYTES)),
     );
@@ -271,7 +279,7 @@ async fn test_oversized_envelope_is_refused_before_publish() {
         address(1),
         ChainId::Sepolia,
         vec![call()],
-        Felt::from(99u64),
+        salt,
         address(2),
         None,
     );
@@ -285,6 +293,7 @@ async fn test_oversized_envelope_is_refused_before_publish() {
 /// the receive cap applies; one byte more is refused on the send side.
 #[test]
 fn test_send_cap_reserves_http_array_framing() {
+    let salt = random_proposal_salt();
     // Each memo character serializes to exactly one byte, so the memo length
     // sets the envelope size exactly.
     let with_memo = |memo_len: usize| {
@@ -292,7 +301,7 @@ fn test_send_cap_reserves_http_array_framing() {
             address(1),
             ChainId::Sepolia,
             vec![call()],
-            Felt::from(99u64),
+            salt,
             address(2),
             Some("m".repeat(memo_len)),
         );
