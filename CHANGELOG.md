@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking Rust API:** `EthSigner::public_key_xy()` now returns two
+  `krusty_kms::eth_signer::EthCoordinate` values with the exact secp256k1
+  coordinates instead of reduced `Felt` values. Use `to_bytes_be()` for raw
+  bytes or `to_u256_pair()` for `(low, high)` calldata limbs.
+  `public_key_calldata()` remains available with unchanged behavior.
+
 ### Fixed
 
 - `Tx::wait`, `Tx::receipt` and `Tx::raw_receipt` in `krusty-kms-wallet-api`

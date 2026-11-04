@@ -72,22 +72,20 @@ impl EthSigner {
         [x_low, x_high, y_low, y_high]
     }
 
-    /// Get the public key coordinates **reduced modulo the Stark prime**.
+    /// Get the public key as its `(x, y)` secp256k1 coordinates.
     ///
-    /// A secp256k1 coordinate is 256 bits and the Stark field is about 2^251,
-    /// so for almost every key the returned values are not the coordinates
-    /// and must not be used for constructor calldata or address derivation.
-    /// Use [`EthSigner::public_key_calldata`] instead.
-    #[deprecated(
-        since = "0.15.0",
-        note = "reduces each coordinate modulo the Stark prime; use public_key_calldata"
-    )]
-    pub fn public_key_xy(&self) -> (Felt, Felt) {
+    /// These are used in the OZ Eth account constructor calldata. Each
+    /// coordinate is a full 256-bit value and is kept as 32 big-endian bytes:
+    /// a `Felt` would reduce it modulo the Stark prime and change the key.
+    /// Use [`EthCoordinate::to_u256_pair`] to encode it as calldata.
+    pub fn public_key_xy(&self) -> (EthCoordinate, EthCoordinate) {
         let uncompressed = self.public_key_uncompressed();
         // Skip the 0x04 prefix byte
-        let x = Felt::from_bytes_be_slice(&uncompressed[1..33]);
-        let y = Felt::from_bytes_be_slice(&uncompressed[33..65]);
-        (x, y)
+        let mut x = [0u8; 32];
+        let mut y = [0u8; 32];
+        x.copy_from_slice(&uncompressed[1..33]);
+        y.copy_from_slice(&uncompressed[33..65]);
+        (EthCoordinate(x), EthCoordinate(y))
     }
 
     /// Sign a Starknet transaction hash, producing the 5-Felt signature
@@ -113,6 +111,32 @@ impl EthSigner {
         let (s_low, s_high) = bytes32_to_u256_pair(&s_bytes);
 
         Ok([r_low, r_high, s_low, s_high, Felt::from(v as u64)])
+    }
+}
+
+/// A secp256k1 public key coordinate as 32 big-endian bytes.
+///
+/// secp256k1 coordinates range up to ~2^256, beyond the Stark prime, so they
+/// cannot be held in a single `Felt` without being reduced.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct EthCoordinate([u8; 32]);
+
+impl EthCoordinate {
+    /// The coordinate as 32 big-endian bytes.
+    pub fn to_bytes_be(&self) -> [u8; 32] {
+        self.0
+    }
+
+    /// The coordinate as a `(low, high)` u256 Felt pair for calldata.
+    pub fn to_u256_pair(&self) -> (Felt, Felt) {
+        bytes32_to_u256_pair(&self.0)
+    }
+}
+
+impl PartialEq<Felt> for EthCoordinate {
+    /// Equal only when the coordinate's exact value equals the felt.
+    fn eq(&self, other: &Felt) -> bool {
+        self.0 == other.to_bytes_be()
     }
 }
 
@@ -241,23 +265,50 @@ mod tests {
         );
     }
 
-    /// Documents the defect the deprecated helper keeps: the x coordinate of
-    /// Hardhat account 0 exceeds the Stark prime, so the "coordinate" it
-    /// returns is not the coordinate.
     #[test]
-    #[allow(deprecated)]
-    fn public_key_xy_is_reduced_modulo_the_stark_prime() {
+    fn test_public_key_xy() {
         let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
-        let (x, _) = signer.public_key_xy();
-        let [x_low, x_high, _, _] = signer.public_key_calldata();
-        let true_x = x_high * Felt::from(1u128 << 64) * Felt::from(1u128 << 64) + x_low;
-        // The true x needs 256 bits and so wraps in the field as well; the
-        // point is that the deprecated value is not what callers expect.
-        assert_eq!(x, true_x);
-        assert_ne!(
-            x.to_bytes_be()[0..16],
-            signer.public_key_uncompressed()[1..17]
-        );
+        let (x, y) = signer.public_key_xy();
+        // Both coordinates should be non-zero
+        assert_ne!(x, Felt::ZERO);
+        assert_ne!(y, Felt::ZERO);
+    }
+
+    #[test]
+    fn test_public_key_xy_matches_uncompressed() {
+        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
+        let (x, y) = signer.public_key_xy();
+        let uncompressed = signer.public_key_uncompressed();
+
+        assert_eq!(x.to_bytes_be()[..], uncompressed[1..33]);
+        assert_eq!(y.to_bytes_be()[..], uncompressed[33..65]);
+    }
+
+    #[test]
+    fn test_public_key_coordinates_round_trip_through_u256() {
+        let signer = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
+        let (x, y) = signer.public_key_xy();
+        let uncompressed = signer.public_key_uncompressed();
+
+        for (coordinate, expected) in [(x, &uncompressed[1..33]), (y, &uncompressed[33..65])] {
+            // This fixture exercises coordinates that the old Felt conversion reduced.
+            let reduced = Felt::from_bytes_be_slice(expected);
+            assert_ne!(coordinate.to_bytes_be(), reduced.to_bytes_be());
+            assert_ne!(coordinate, reduced);
+
+            let (low, high) = coordinate.to_u256_pair();
+            let low_bytes = low.to_bytes_be();
+            let high_bytes = high.to_bytes_be();
+            assert_eq!(&low_bytes[..16], &[0u8; 16]);
+            assert_eq!(&high_bytes[..16], &[0u8; 16]);
+            assert_eq!(&low_bytes[16..], &expected[16..]);
+            assert_eq!(&high_bytes[16..], &expected[..16]);
+
+            let mut reconstructed = [0u8; 32];
+            reconstructed[..16].copy_from_slice(&high_bytes[16..]);
+            reconstructed[16..].copy_from_slice(&low_bytes[16..]);
+            assert_eq!(reconstructed.as_slice(), expected);
+        }
     }
 
     #[test]
