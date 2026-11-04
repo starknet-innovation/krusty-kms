@@ -73,6 +73,11 @@ All notable changes to the published Rust crates are documented here.
   unrecognised spelling) turns it on. Previously only the exact literals
   `1`, `true`, `TRUE`, `yes` and `YES` enabled it and everything else
   silently disabled a control the operator believed was set.
+- Deferred from the same audit (M-2): `krusty-kms-client` RPC response
+  bodies remain bounded by timeout only (10 s connect, 15 s read, 30 s
+  total), not by size, until the next minor release, where a bounded
+  `JsonRpcTransport` can change the public `JsonRpcClient<HttpTransport>`
+  type. See `docs/design/2026-11-04-audit-medium-input-bounds.md`.
 - `krusty-kms` BIP-32 derivation and Stark key grinding keep private keys,
   chain codes, and intermediates in wiped fixed-size types (`k256` scalars,
   `crypto-bigint` integers, `Zeroizing` arrays) instead of `BigUint` and

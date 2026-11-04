@@ -114,20 +114,22 @@ unchanged; every accepted input stays accepted except the ones listed.
   passes; the allowlisted `secret_felt.rs` and FFI crate pass; experimental
   trees are ignored; the real repository passes.
 
-## M-2: RPC response bodies, not included
+## Deferred: M-2, RPC response bodies
 
-The audit asks for a byte cap on JSON-RPC response bodies. `create_provider`
-returns `JsonRpcClient<HttpTransport>`, and that exact type is a public field
-or parameter of `Wallet`, `TongoContract`, `Erc20Client`, `StakingClient`,
-`EventScanner`, `Multisig`, the wallet-api adapter and
-`StarknetGatewayBackend`. A `JsonRpcTransport` wrapper changes the type
-parameter, which `cargo-semver-checks` rejects at the current version, and
-`reqwest` 0.13 offers no response-size setting (its `connector_layer` hook
-cannot wrap the connection because `Conn` is private), so the cap cannot be
-pushed into the `reqwest::Client` that `HttpTransport` holds. The options
-are a generic `T: JsonRpcTransport` parameter with `HttpTransport` as the
-default across those types, or an API break at the next minor release; both
-are a change of their own and are left to a follow-up decision.
+The audit asks for a byte cap on JSON-RPC response bodies. It is deferred to
+the next minor release because it needs a breaking transport type change:
+`create_provider` returns `JsonRpcClient<HttpTransport>`, and that exact
+type is a public field or parameter of `Wallet`, `TongoContract`,
+`Erc20Client`, `StakingClient`, `EventScanner`, `Multisig`, the wallet-api
+adapter and `StarknetGatewayBackend`, so a `JsonRpcTransport` wrapper
+changes a type parameter that `cargo-semver-checks` rejects at 0.14.
+`reqwest` 0.13 offers no body-size setting, and its `connector_layer` hook
+cannot wrap the connection because `Conn` is private, so the cap cannot be
+hidden inside the `reqwest::Client` that `HttpTransport` holds. Until then
+the 10 s connect, 15 s read and 30 s total timeouts in `provider.rs` bound
+the download by time only, not by bytes. A generic transport parameter
+across those types was considered and rejected for a fix PR; the wrapper
+lands with the minor bump that may change the public type.
 
 ## Verification
 
