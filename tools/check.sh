@@ -86,7 +86,20 @@ check_guardrails() {
 }
 
 check_wasm() {
-  run wasm-pack test --node crates/wasm
+  # With the wasm-bindgen CLI on PATH (built from crates.io by
+  # .github/scripts/install-wasm-bindgen-cli.sh), forbid wasm-pack from
+  # downloading any tool. CI always installs it first; locally, fall back to
+  # wasm-pack's own download so the mode keeps working out of the box.
+  if command -v wasm-bindgen >/dev/null 2>&1; then
+    run wasm-pack test --node --mode no-install crates/wasm
+  elif [[ -n "${CI:-}" ]]; then
+    echo "wasm-bindgen is not on PATH; run .github/scripts/install-wasm-bindgen-cli.sh first" >&2
+    exit 1
+  else
+    echo "note: wasm-bindgen is not on PATH, so wasm-pack will download a prebuilt one;" >&2
+    echo "      run bash .github/scripts/install-wasm-bindgen-cli.sh to build it from crates.io" >&2
+    run wasm-pack test --node crates/wasm
+  fi
 }
 
 check_rust() {

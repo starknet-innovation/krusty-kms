@@ -32,7 +32,10 @@ never the input. Hand-rolled so `common` gains no dependency.
 **Provider errors** are described by one helper per crate
 (`gateway::backend::rpc::provider_error_message`,
 `client::wallet::utils::provider_error_message`; the dependency layering
-forbids sharing starknet-rs-typed logic through `common`). Typed
+forbids sharing starknet-rs-typed logic through `common`). Update 2026-11-04:
+the client helper moved to `krusty_kms_wallet_api::provider_error_message`,
+which `Tx` and the client both use; see
+`2026-11-04-audit-medium-tx-errors-pubkey-parse-wasm-bindgen.md`. Typed
 `StarknetError` / `RateLimited` / `ArrayLengthMismatch` keep their upstream
 text. `ProviderError::Other` is downcast to
 `JsonRpcClientError<HttpTransportError>` and mapped to

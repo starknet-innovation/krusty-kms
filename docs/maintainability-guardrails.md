@@ -56,9 +56,12 @@ also use immutable SHA-256 digests.
 
 Release tooling is built from crates.io with `cargo install --version <exact> --locked`
 rather than downloaded as prebuilt binaries: `wasm-pack` 0.15.0 produces the npm
-package, and `cargo-audit` 0.22.1 (`--deny warnings`) plus `cargo-deny` 0.19.8 gate
-both publishing workflows before any token is minted. `cargo publish --locked` then
-ships exactly the dependency graph those checks verified.
+package, the `wasm-bindgen` CLI it drives is installed at the `wasm-bindgen` version
+in `Cargo.lock` by `.github/scripts/install-wasm-bindgen-cli.sh` (so the two cannot
+drift) and `wasm-pack` runs with `--mode no-install`, which turns any attempt to
+download a tool into a hard failure. `cargo-audit` 0.22.1 (`--deny warnings`) plus
+`cargo-deny` 0.19.8 gate both publishing workflows before any token is minted.
+`cargo publish --locked` then ships exactly the dependency graph those checks verified.
 
 ## Baselines
 

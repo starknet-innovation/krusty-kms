@@ -2,7 +2,9 @@
 
 use crate::abi;
 use crate::tx::Tx;
-use crate::wallet::utils::{core_felt_to_rs, is_entrypoint_not_found, rs_felt_to_core};
+use crate::wallet::utils::{
+    core_felt_to_rs, is_entrypoint_not_found, provider_error_message, rpc_error, rs_felt_to_core,
+};
 use crate::wallet::WalletExecutor;
 use krusty_kms_common::address::Address;
 use krusty_kms_common::amount::Amount;
@@ -128,7 +130,7 @@ impl Erc20 {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| KmsError::RpcError(e.to_string()))?;
+            .map_err(rpc_error)?;
 
         if result.is_empty() {
             return Err(KmsError::RpcError("Empty string response".into()));
@@ -151,7 +153,7 @@ impl Erc20 {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| KmsError::RpcError(e.to_string()))?;
+            .map_err(rpc_error)?;
 
         if result.is_empty() {
             return Err(KmsError::RpcError("Empty decimals response".into()));
@@ -191,7 +193,7 @@ impl Erc20 {
                         selector_fallback_error("balance_of", primary_error, fallback_error)
                     })
             }
-            Err(error) => Err(KmsError::RpcError(error.to_string())),
+            Err(error) => Err(rpc_error(error)),
         }
     }
 }
@@ -250,7 +252,9 @@ fn selector_fallback_error(
     fallback_error: ProviderError,
 ) -> KmsError {
     KmsError::RpcError(format!(
-        "failed calling {selector} after typed entrypoint-not-found fallback: primary={primary_error}; fallback={fallback_error}"
+        "failed calling {selector} after typed entrypoint-not-found fallback: primary={}; fallback={}",
+        provider_error_message(&primary_error),
+        provider_error_message(&fallback_error)
     ))
 }
 

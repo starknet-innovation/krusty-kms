@@ -96,9 +96,12 @@ jobs:
         with:
           node-version: 20
       - run: rustup target add wasm32-unknown-unknown
-      # Build wasm-pack from its crates.io release rather than downloading a
-      # prebuilt binary: the version and its lockfile are both content-addressed.
+      # Build wasm-pack and the wasm-bindgen CLI it drives from their crates.io
+      # releases rather than downloading prebuilt binaries: the versions and
+      # their lockfiles are content-addressed. With the CLI on PATH,
+      # check.sh runs wasm-pack in `--mode no-install`.
       - run: cargo install wasm-pack --version 0.15.0 --locked
+      - run: bash .github/scripts/install-wasm-bindgen-cli.sh
       - run: bash tools/check.sh wasm
 
   version-bump:

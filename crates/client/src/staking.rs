@@ -156,7 +156,7 @@ impl Staking {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| KmsError::StakingError(e.to_string()))?;
+            .map_err(|e| KmsError::StakingError(utils::provider_error_message(&e)))?;
 
         // Parse pool_member_info response
         // Expected: reward_address, amount (u256), unclaimed_rewards (u256), commission (u16), ...
@@ -198,7 +198,7 @@ impl Staking {
                 BlockId::Tag(BlockTag::Latest),
             )
             .await
-            .map_err(|e| KmsError::StakingError(e.to_string()))?;
+            .map_err(|e| KmsError::StakingError(utils::provider_error_message(&e)))?;
 
         if result.is_empty() {
             return Err(KmsError::StakingError(

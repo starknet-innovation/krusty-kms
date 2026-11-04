@@ -20,6 +20,10 @@ use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
 
+mod provider_error;
+
+pub use provider_error::{provider_error_message, rpc_error};
+
 type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 /// A submitted transaction that can be polled for acceptance.
@@ -212,7 +216,7 @@ impl Tx {
             .provider
             .get_transaction_receipt(self.hash)
             .await
-            .map_err(|error| KmsError::TransactionError(error.to_string()))?;
+            .map_err(|error| KmsError::TransactionError(provider_error_message(&error)))?;
         Ok(receipt.receipt)
     }
 
@@ -272,7 +276,9 @@ async fn observe_transaction(
                     Ok(ReceiptObservation::Pending)
                 } else {
                     Err(KmsError::RpcError(format!(
-                        "failed to query transaction {tx_hash:#x}: receipt error: {receipt_error}; status error: {status_error}"
+                        "failed to query transaction {tx_hash:#x}: receipt error: {}; status error: {}",
+                        provider_error_message(&receipt_error),
+                        provider_error_message(&status_error)
                     )))
                 }
             }

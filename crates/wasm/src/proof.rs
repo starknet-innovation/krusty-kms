@@ -5,6 +5,7 @@
 
 use crate::account::WasmAccount;
 use crate::error::{from_sdk_result, WasmError, WasmResult};
+use krusty_kms_common::utils::parse_prefixed_public_key_hex;
 use krusty_kms_common::ElGamalCiphertext;
 use krusty_kms_sdk::operations::{
     fund, ragequit, rollover, transfer, withdraw, FundParams, RagequitParams, RolloverParams,
@@ -770,36 +771,16 @@ fn parse_felt(hex: &str) -> WasmResult<Felt> {
     Felt::from_hex(hex).map_err(|e| WasmError::SerializationError(e.to_string()))
 }
 
-/// Parse a public key hex string to ProjectivePoint.
+/// Parse a public key in the concatenated `0x{x_hex}{y_hex}` format (128 hex
+/// digits after the prefix) to a `ProjectivePoint`.
 ///
-/// Accepts either:
-/// - Concatenated format: "0x{x_hex}{y_hex}" (128 hex chars after 0x)
-/// - Two-field JSON: {"x": "0x...", "y": "0x..."}
+/// The string comes from an untrusted counterparty (a Tongo recipient or
+/// auditor key), and a panic here traps the module, so every check happens
+/// in `parse_prefixed_public_key_hex` before anything is sliced.
 fn parse_public_key(hex: &str) -> WasmResult<ProjectivePoint> {
-    let hex = hex.trim();
-
-    // Try to parse as concatenated hex (0x + 64 chars for x + 64 chars for y)
-    if hex.starts_with("0x") || hex.starts_with("0X") {
-        let hex_data = &hex[2..];
-        if hex_data.len() == 128 {
-            // Split into x and y (64 hex chars each = 32 bytes each)
-            let x_hex = format!("0x{}", &hex_data[..64]);
-            let y_hex = format!("0x{}", &hex_data[64..]);
-
-            let x = Felt::from_hex(&x_hex)
-                .map_err(|e| WasmError::InvalidPublicKey(format!("Invalid X coordinate: {e}")))?;
-            let y = Felt::from_hex(&y_hex)
-                .map_err(|e| WasmError::InvalidPublicKey(format!("Invalid Y coordinate: {e}")))?;
-
-            return ProjectivePoint::from_affine(x, y)
-                .map_err(|e| WasmError::InvalidPublicKey(format!("Invalid point: {e:?}")));
-        }
-    }
-
-    // Fallback: try parsing as a single felt (x coordinate only) - not supported
-    Err(WasmError::InvalidPublicKey(
-        "Public key must be in format 0x{x}{y} (128 hex chars after 0x)".to_string(),
-    ))
+    let (x, y) = parse_prefixed_public_key_hex(hex.trim()).map_err(WasmError::from)?;
+    ProjectivePoint::from_affine(x, y)
+        .map_err(|e| WasmError::InvalidPublicKey(format!("Invalid point: {e:?}")))
 }
 
 /// Parse ciphertext coordinates to ElGamalCiphertext.
