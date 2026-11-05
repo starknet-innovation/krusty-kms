@@ -70,7 +70,8 @@ impl From<FeltHex> for String {
 /// Canonical lowercase hex bytes without a `0x` prefix.
 ///
 /// Values are normalized to lowercase and must contain an even number of hex
-/// digits so they round-trip exactly as bytes.
+/// digits so they round-trip exactly as bytes. The empty string is the
+/// canonical encoding of zero bytes, so `from_bytes(&[])` round-trips too.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct HexBytes(String);
@@ -83,12 +84,6 @@ impl HexBytes {
             .strip_prefix("0x")
             .or_else(|| trimmed.strip_prefix("0X"))
             .unwrap_or(trimmed);
-
-        if normalized.is_empty() {
-            return Err(DomainError::InvalidHexBytes(
-                "value must not be empty".to_string(),
-            ));
-        }
 
         if !normalized.len().is_multiple_of(2) {
             return Err(DomainError::InvalidHexBytes(

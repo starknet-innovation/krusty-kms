@@ -57,6 +57,10 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
+- `krusty-kms-domain::HexBytes::parse` now accepts the empty string (and a
+  bare `0x`) as the canonical encoding of zero bytes, so values built with
+  `HexBytes::from_bytes(&[])` round-trip through `parse` and serde instead of
+  failing to deserialize.
 - `Tx::wait`, `Tx::receipt` and `Tx::raw_receipt` in `krusty-kms-wallet-api`
   (re-exported by `krusty-kms-client`) no longer embed the RPC endpoint URL,
   and so any API key in its path or query, in their error text when a
