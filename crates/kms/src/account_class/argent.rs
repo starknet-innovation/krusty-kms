@@ -164,23 +164,6 @@ impl ArgentAccount {
         )
     }
 
-    /// Create with a custom class hash.
-    ///
-    /// Known Argent class hashes select their constructor layout automatically.
-    /// An unknown class hash assumes the current (v0.4.0) layout, which yields
-    /// an undeployable address if that class takes a different constructor
-    /// (unverifiable from the hash alone);
-    /// prefer [`Self::try_with_class_hash`], or state the layout explicitly
-    /// with [`Self::with_class_hash_and_layout`].
-    #[deprecated(
-        note = "unknown class hashes silently assume the v0.4.0 layout; use try_with_class_hash"
-    )]
-    pub fn with_class_hash(class_hash: Felt) -> Self {
-        let layout = Self::layout_for_class_hash(&class_hash)
-            .unwrap_or(ArgentConstructorLayout::SignerWithOptionalGuardian);
-        Self::with_class_hash_and_layout(class_hash, layout)
-    }
-
     /// Create with a class hash whose constructor layout is known.
     ///
     /// Returns [`KmsError::InvalidClassHash`] for a class hash that is not a
@@ -317,18 +300,6 @@ mod tests {
             let argent = ArgentAccount::try_with_class_hash(Felt::from_hex(hash).unwrap()).unwrap();
             assert_eq!(argent.constructor_layout(), expected);
         }
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn test_argent_deprecated_with_class_hash_still_guesses_latest_layout() {
-        // Pins the documented behaviour of the deprecated constructor: it
-        // still assumes v0.4.0 for an unknown class. Remove with the function.
-        let argent = ArgentAccount::with_class_hash(Felt::from(0xabcdu64));
-        assert_eq!(
-            argent.constructor_layout(),
-            ArgentConstructorLayout::SignerWithOptionalGuardian
-        );
     }
 
     #[test]
