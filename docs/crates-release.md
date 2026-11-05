@@ -28,13 +28,21 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
   - **minor**: any `Added`, `Deprecated` or non-breaking `Changed` bullet;
   - **major**: any bullet marked **Breaking**.
 
-  CI runs `cargo-semver-checks` with `--release-type minor`
-  (`.github/scripts/check-semver.sh`), so feature and deprecation PRs fail only on
-  breaking changes and the release PR picks minor vs patch from `## [Unreleased]`. A
-  breaking change is not merged past a red semver check in 1.x; it waits for a 2.0.0
-  plan. The job has no lint for a changed return type on an inherent method or free
-  function, so a type change that breaks callers can still pass it: treat such a
-  change as **Breaking** regardless of the check. CI compares the release PR's base version
+  The release PR picks the bump from `## [Unreleased]`, and `cargo-semver-checks`
+  (`.github/scripts/check-semver.sh`) enforces it on two paths:
+  - **Workspace version unchanged (feature PR):** compares against the base branch
+    with `--release-type minor`. Additions and deprecations pass; breaking changes
+    fail.
+  - **Version changed (release PR):** compares against the previous release tag
+    `v<base version>` with no release-type override, so CI checks the actual
+    increment against everything merged since that release. A patch bump over pending
+    `Added` or `Deprecated` changes fails ("requires new minor version"). A missing
+    tag fails closed.
+
+  A breaking change is not merged past a red semver check in 1.x; it waits for a
+  2.0.0 plan. The job has no lint for a changed return type on an inherent method or
+  free function, so a type change that breaks callers can still pass it: treat such a
+  change as **Breaking** by hand. CI compares the release PR's base version
   with the latest published `krusty-kms` version on crates.io, so a second release
   bump cannot merge while the previous version is still unpublished.
 - Release tags are immutable. Never delete, move, recreate, or force-push one.
