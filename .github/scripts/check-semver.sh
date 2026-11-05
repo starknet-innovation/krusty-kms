@@ -85,7 +85,12 @@ for crate in "${crates[@]}"; do
   echo "::group::semver-checks $crate"
   current_json="$(rustdoc_json "$root" "$crate" "$current_dir")"
   baseline_json="$(rustdoc_json "$baseline_root" "$crate" "$baseline_dir")"
+  # Feature PRs never bump the workspace version (the release PR does), so
+  # compare as if this change shipped in the next minor release: additions
+  # and deprecations pass, and only breaking changes fail. From 1.0.0 on, a
+  # breaking change needs a major release.
   if ! cargo semver-checks check-release -p "$crate" \
+    --release-type minor \
     --current-rustdoc "$current_json" \
     --baseline-rustdoc "$baseline_json"; then
     echo "::error::semver-checks failed for $crate"

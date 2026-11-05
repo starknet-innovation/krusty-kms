@@ -36,11 +36,28 @@ to `0`, would break that pairing.
 
 - Rust: additive (`with_ttl`, the constant) plus deprecations, so this is a
   minor release (1.1.0). Struct-literal construction still compiles, with a
-  deprecation warning. `cargo-semver-checks` treats deprecation and newly
-  accepted inputs as non-breaking.
+  deprecation warning. `cargo-semver-checks` classifies the two deprecations
+  as minor-level (`struct_field_marked_deprecated`,
+  `type_method_marked_deprecated`), not breaking.
 - Wire: every oracle v1.0 message stays valid in both directions, so the
   protocol version stays 1.0. The only new behaviour is that messages without
   `max_entries` are accepted, as are messages with `max_entries: 0`.
+
+## Semver guardrail
+
+This is the first feature PR since 1.0.0 to make a minor-level API change.
+`check-semver.sh` ran `check-release` with no release type, so it compared
+the branch as if it shipped at the unchanged workspace version 1.0.0. It
+therefore failed with "requires new minor version" (exit 100). Feature PRs
+never bump the version; the release PR does. Before 1.0 this never came up,
+because the minor-level lints map to a patch bump at 0.y and no feature PR
+had tripped them.
+
+The script now passes `--release-type minor`. Additions and deprecations
+pass, and breaking changes still fail, which is what the guardrail is for
+from 1.0.0 on. Choosing between a minor and a patch release stays with the
+release PR, which reads `## [Unreleased]`: an `Added` or `Deprecated`
+section means a minor release.
 
 ## Removal
 
