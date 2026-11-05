@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-05
+
+First stable release. From 1.0.0 on, the published crates follow semantic
+versioning: a breaking change to a public Rust API requires a new major
+version. This release removes every `#[deprecated]` Rust API, so none of
+them is carried into the stable line.
+
 ### Changed
 
 - **Breaking Rust API (audit M-2):** JSON-RPC response bodies are now capped
@@ -46,6 +53,9 @@ All notable changes to the published Rust crates are documented here.
 - Tongo event parsing now restores all 24 nonce bytes from serialized audit
   hints, so auditors can decrypt hints emitted by `Transfer`,
   `BalanceDeclared`, and `TransferDeclared` events.
+- `krusty_kms_domain::HexBytes` accepts the empty string (and a bare `0x`)
+  as the encoding of zero bytes, so `HexBytes::from_bytes(&[])` now
+  round-trips through `parse` and serde instead of failing to deserialize.
 
 ## [0.16.0] - 2026-11-05
 
