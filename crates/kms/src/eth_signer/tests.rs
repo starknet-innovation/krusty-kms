@@ -182,15 +182,6 @@ fn test_u256_split_correctness() {
 }
 
 #[test]
-#[allow(deprecated)]
-fn test_felt_to_u256_pair() {
-    let felt = Felt::from(0xDEADBEEFu64);
-    let (low, high) = felt_to_u256_pair(&felt);
-    assert_eq!(low, Felt::from(0xDEADBEEFu64));
-    assert_eq!(high, Felt::ZERO);
-}
-
-#[test]
 fn test_different_keys_different_signatures() {
     let signer1 = EthSigner::from_hex(TEST_KEY_HEX).unwrap();
     let signer2 =

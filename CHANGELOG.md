@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking Rust API:** `krusty_kms::eth_signer::felt_to_u256_pair`, deprecated
+  in 0.15.0, is removed. A `Felt` cannot hold a 256-bit secp256k1 coordinate.
+  Use `EthSigner::public_key_calldata()` for account calldata, or
+  `EthCoordinate::to_u256_pair()` on the values `EthSigner::public_key_xy()`
+  returns.
+
 ### Fixed
 
 - Tongo event parsing now restores all 24 nonce bytes from serialized audit
