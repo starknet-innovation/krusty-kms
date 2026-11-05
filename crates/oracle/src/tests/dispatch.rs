@@ -161,7 +161,7 @@ async fn query_snapshot_command_roundtrips_domain_payloads() {
                     }],
                     block: krusty_kms_domain::BlockSelector::Latest,
                     mode: QueryMode::ActiveView,
-                    cache_policy: CachePolicy::new(1_000, 500, 8).unwrap(),
+                    cache_policy: CachePolicy::with_ttl(1_000, 500).unwrap(),
                 },
             ),
         })

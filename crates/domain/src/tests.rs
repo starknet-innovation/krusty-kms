@@ -54,10 +54,37 @@ fn secret_ref_rejects_blank_values() {
 }
 
 #[test]
-fn cache_policy_requires_positive_ttl_and_capacity() {
-    assert!(CachePolicy::new(0, 0, 10).is_err());
-    assert!(CachePolicy::new(1_000, 0, 0).is_err());
-    assert!(CachePolicy::new(1_000, 250, 64).is_ok());
+fn cache_policy_requires_positive_ttl() {
+    assert!(CachePolicy::with_ttl(0, 0).is_err());
+    assert!(CachePolicy::with_ttl(1_000, 0).is_ok());
+    assert!(CachePolicy::with_ttl(1_000, 250).is_ok());
+}
+
+#[test]
+#[allow(deprecated)]
+fn cache_policy_max_entries_is_optional_and_unvalidated() {
+    // `with_ttl` writes 1, which gateways older than 1.1.0 still accept.
+    let policy = CachePolicy::with_ttl(1_000, 250).unwrap();
+    assert_eq!(policy.max_entries, CachePolicy::DEFAULT_MAX_ENTRIES);
+    assert_eq!(CachePolicy::DEFAULT_MAX_ENTRIES, 1);
+
+    // The deprecated constructor stores the ignored value as given, even 0.
+    assert_eq!(CachePolicy::new(1_000, 0, 0).unwrap().max_entries, 0);
+    assert_eq!(CachePolicy::new(1_000, 0, 64).unwrap().max_entries, 64);
+    assert!(CachePolicy::new(0, 0, 64).is_err());
+
+    // Old wire shape still parses; the field may now be omitted.
+    let old: CachePolicy =
+        serde_json::from_str(r#"{"ttl_ms":1000,"stale_while_revalidate_ms":250,"max_entries":8}"#)
+            .unwrap();
+    assert_eq!(old.max_entries, 8);
+    let new: CachePolicy =
+        serde_json::from_str(r#"{"ttl_ms":1000,"stale_while_revalidate_ms":250}"#).unwrap();
+    assert_eq!(new, policy);
+
+    // It is still serialized, so older gateways that require it accept it.
+    let wire = serde_json::to_value(policy).unwrap();
+    assert_eq!(wire["max_entries"], 1);
 }
 
 #[test]
@@ -295,7 +322,7 @@ fn account_snapshot_request_serializes_canonical_addresses() {
         }],
         block: BlockSelector::Latest,
         mode: QueryMode::ActiveView,
-        cache_policy: CachePolicy::new(2_500, 500, 32).unwrap(),
+        cache_policy: CachePolicy::with_ttl(2_500, 500).unwrap(),
     };
 
     let json = serde_json::to_string(&request).unwrap();

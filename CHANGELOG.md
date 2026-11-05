@@ -4,6 +4,26 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `krusty_kms_domain::CachePolicy::with_ttl(ttl_ms, stale_while_revalidate_ms)`
+  and `CachePolicy::DEFAULT_MAX_ENTRIES`.
+
+### Deprecated
+
+- `CachePolicy::max_entries` and `CachePolicy::new`. The gateway's snapshot
+  cache ignores per-request `max_entries` and uses a process-global ceiling,
+  so the field had no effect. Build policies with `CachePolicy::with_ttl`.
+  Both items will be removed in 2.0.0.
+
+### Changed
+
+- `max_entries` is no longer validated: `CachePolicy::new` and the gateway
+  accept `0`. On the wire the field may be omitted and then deserializes to
+  `1`. It is still serialized, so gateways older than 1.1.0, which require
+  `max_entries > 0`, keep accepting requests built with `with_ttl`. The
+  oracle protocol version stays 1.0, because every 1.0 message remains valid.
+
 ## [1.0.0] - 2026-11-05
 
 First stable release. From 1.0.0 on, the published crates follow semantic

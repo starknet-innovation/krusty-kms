@@ -188,7 +188,7 @@ async fn snapshot_ttl_is_clamped_to_server_ceiling() {
     let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
 
     let mut request = snapshot_request(QueryMode::ActiveView);
-    request.cache_policy = CachePolicy::new(u64::MAX, u64::MAX, 8).unwrap();
+    request.cache_policy = CachePolicy::with_ttl(u64::MAX, u64::MAX).unwrap();
 
     let first = gateway
         .query_account_snapshot(request.clone())
@@ -206,6 +206,17 @@ async fn snapshot_ttl_is_clamped_to_server_ceiling() {
         2,
         "clamped TTL must force a re-fetch instead of a fresh Hit"
     );
+}
+
+#[tokio::test]
+#[allow(deprecated)]
+async fn snapshot_accepts_zero_max_entries_because_it_is_ignored() {
+    let gateway = gateway(TestClock::default(), DeployExecution::AlreadyDeployed);
+    let mut request = snapshot_request(QueryMode::ActiveView);
+    request.cache_policy = CachePolicy::new(1_000, 0, 0).unwrap();
+
+    let snapshot = gateway.query_account_snapshot(request).await.unwrap();
+    assert_eq!(snapshot.value.cache.status, CacheStatus::Miss);
 }
 
 #[tokio::test]
