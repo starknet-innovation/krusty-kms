@@ -35,15 +35,8 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// HTTPS clients also disable ambient proxies and redirects. This keeps RPC
 /// request bodies and query metadata bound to the configured origin.
 ///
-/// # Response size
-///
-/// Each response body is capped at
-/// [`DEFAULT_MAX_RPC_RESPONSE_BYTES`](krusty_kms_wallet_api::DEFAULT_MAX_RPC_RESPONSE_BYTES)
-/// (16 MiB) in addition to the timeouts, so a hostile endpoint cannot
-/// exhaust memory with one oversized reply. Build a
-/// [`BoundedHttpTransport`] with
-/// [`with_max_response_bytes`](BoundedHttpTransport::with_max_response_bytes)
-/// for a different cap.
+/// Response bodies are capped at 16 MiB ([`BoundedHttpTransport`]), so a
+/// hostile endpoint cannot exhaust memory within the timeouts.
 ///
 /// Everything this provider reports (nonces, balances, deployment state,
 /// contract parameters) feeds signing decisions, so a cleartext remote
