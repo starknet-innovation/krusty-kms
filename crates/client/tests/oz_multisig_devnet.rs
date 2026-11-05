@@ -14,9 +14,9 @@ use krusty_kms_client::{
     MultisigSignerNotice, MultisigTransactionState, SignedMultisigCoordinationMessage, WaitOptions,
     Wallet,
 };
+use krusty_kms_client::{BoundedHttpTransport, StarknetRpcClient};
 use krusty_kms_common::{Address, ChainId, NetworkPreset};
 use serde_json::Value;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::felt::Felt;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -71,7 +71,7 @@ async fn openzeppelin_multisig_flow_on_devnet() {
         descriptor.salt,
     );
 
-    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+    let provider = Arc::new(StarknetRpcClient::new(BoundedHttpTransport::new(
         Url::parse(&rpc_url).unwrap(),
     )));
     let network = NetworkPreset {
@@ -303,7 +303,7 @@ fn signing_key(private_key: &str) -> starknet_rust_signers::SigningKey {
 }
 
 fn devnet_wallet(
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     private_key: &str,
     address: Address,
     network: NetworkPreset,

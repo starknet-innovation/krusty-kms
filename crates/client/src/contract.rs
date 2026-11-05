@@ -5,9 +5,9 @@
 
 use crate::types::{AccountState, CipherBalance};
 use krusty_kms_common::Result;
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_core::types::{BlockId, BlockTag, FunctionCall};
 use starknet_rust_core::utils::get_selector_from_name;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::Provider;
 use starknet_types_core::curve::ProjectivePoint;
 use std::sync::Arc;
@@ -26,7 +26,7 @@ trait TongoProvider: Send + Sync {
 }
 
 #[async_trait::async_trait]
-impl TongoProvider for JsonRpcClient<HttpTransport> {
+impl TongoProvider for StarknetRpcClient {
     async fn call(
         &self,
         request: FunctionCall,
@@ -58,7 +58,7 @@ impl TongoContract {
     /// # Arguments
     /// * `provider` - JSON-RPC provider for Starknet
     /// * `address` - Tongo contract address (from starknet-types-core)
-    pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, address: CoreFelt) -> Self {
+    pub fn new(provider: Arc<StarknetRpcClient>, address: CoreFelt) -> Self {
         Self {
             provider,
             address: core_felt_to_rs(address),

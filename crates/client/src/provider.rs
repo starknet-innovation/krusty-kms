@@ -2,7 +2,8 @@
 
 use krusty_kms_common::error::redact_url;
 use krusty_kms_common::Result;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use krusty_kms_wallet_api::{BoundedHttpTransport, StarknetRpcClient};
+use starknet_rust_providers::jsonrpc::JsonRpcClient;
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 use url::Url;
@@ -26,7 +27,7 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// hostname, every DNS answer is required to be loopback — a poisoned
 /// `/etc/hosts` or resolver that maps `localhost` to metadata/RFC1918 is
 /// rejected. The HTTP client is then pinned to **every** address in that
-/// RRset so `HttpTransport` cannot re-resolve the name (DNS rebinding) and
+/// RRset so the transport cannot re-resolve the name (DNS rebinding) and
 /// dual-stack loopback listeners still have a fallback. Cleartext clients
 /// also disable proxies and redirects so a 307 or `http_proxy` cannot send
 /// the JSON-RPC POST off-loopback.
@@ -34,28 +35,38 @@ const RPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// HTTPS clients also disable ambient proxies and redirects. This keeps RPC
 /// request bodies and query metadata bound to the configured origin.
 ///
+/// # Response size
+///
+/// Each response body is capped at
+/// [`DEFAULT_MAX_RPC_RESPONSE_BYTES`](krusty_kms_wallet_api::DEFAULT_MAX_RPC_RESPONSE_BYTES)
+/// (16 MiB) in addition to the timeouts, so a hostile endpoint cannot
+/// exhaust memory with one oversized reply. Build a
+/// [`BoundedHttpTransport`] with
+/// [`with_max_response_bytes`](BoundedHttpTransport::with_max_response_bytes)
+/// for a different cap.
+///
 /// Everything this provider reports (nonces, balances, deployment state,
 /// contract parameters) feeds signing decisions, so a cleartext remote
 /// transport would hand a network attacker that influence.
 ///
 /// # Returns
 /// A configured `JsonRpcClient` that can be used to interact with Starknet.
-pub fn create_provider(rpc_url: &str) -> Result<JsonRpcClient<HttpTransport>> {
+pub fn create_provider(rpc_url: &str) -> Result<StarknetRpcClient> {
     let url = Url::parse(rpc_url)
         .map_err(|e| krusty_kms_common::KmsError::RpcError(format!("Invalid RPC URL: {}", e)))?;
 
     Ok(JsonRpcClient::new(rpc_http_transport(url)?))
 }
 
-fn rpc_http_transport(url: Url) -> Result<HttpTransport> {
+fn rpc_http_transport(url: Url) -> Result<BoundedHttpTransport> {
     match url.scheme() {
-        "https" => Ok(HttpTransport::new_with_client(
+        "https" => Ok(BoundedHttpTransport::new_with_client(
             url,
             bounded_rpc_http_client()?,
         )),
         "http" => {
             let client = cleartext_loopback_http_client(&url)?;
-            Ok(HttpTransport::new_with_client(url, client))
+            Ok(BoundedHttpTransport::new_with_client(url, client))
         }
         other => Err(krusty_kms_common::KmsError::RpcError(format!(
             "unsupported RPC URL scheme '{other}' (expected https)"

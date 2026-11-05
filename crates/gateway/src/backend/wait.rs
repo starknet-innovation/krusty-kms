@@ -4,11 +4,11 @@
 use super::rpc::provider_error_message;
 use super::StarknetRsFelt;
 use krusty_kms_common::KmsError;
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_core::types::{
     ExecutionResult, StarknetError, TransactionFinalityStatus, TransactionReceiptWithBlockInfo,
     TransactionStatus,
 };
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::{Provider, ProviderError};
 use std::future::Future;
 use std::sync::Arc;
@@ -23,7 +23,7 @@ pub(super) enum TransactionObservation {
 }
 
 pub(super) async fn wait_for_acceptance(
-    provider: &Arc<JsonRpcClient<HttpTransport>>,
+    provider: &Arc<StarknetRpcClient>,
     tx_hash: StarknetRsFelt,
     poll_interval_ms: u64,
     timeout_ms: u64,
@@ -90,7 +90,7 @@ where
 }
 
 async fn observe_transaction(
-    provider: &Arc<JsonRpcClient<HttpTransport>>,
+    provider: &Arc<StarknetRpcClient>,
     tx_hash: StarknetRsFelt,
 ) -> Result<TransactionObservation, KmsError> {
     match provider.get_transaction_receipt(tx_hash).await {

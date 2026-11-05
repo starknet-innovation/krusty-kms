@@ -5,9 +5,10 @@ use super::super::deploy::{bound_deployment, pin_deployment_tip};
 use super::super::StarknetRsFelt;
 use krusty_kms_common::fee::{MaxBound, ResourceBoundsCeiling, DEFAULT_TIP};
 use krusty_kms_domain::GatewayErrorCode;
+use krusty_kms_wallet_api::{BoundedHttpTransport, StarknetRpcClient};
 use starknet_rust_accounts::{AccountFactory, OpenZeppelinAccountFactory};
 use starknet_rust_core::types::FeeEstimate;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::JsonRpcClient;
 use starknet_rust_providers::Url;
 use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
@@ -37,14 +38,13 @@ fn deploy_ceiling(l1_data_gas_price: u128) -> ResourceBoundsCeiling {
 }
 
 /// A provider that is never contacted: request building is local.
-fn offline_provider() -> Arc<JsonRpcClient<HttpTransport>> {
-    Arc::new(JsonRpcClient::new(HttpTransport::new(
+fn offline_provider() -> Arc<StarknetRpcClient> {
+    Arc::new(JsonRpcClient::new(BoundedHttpTransport::new(
         Url::parse("http://127.0.0.1:0").unwrap(),
     )))
 }
 
-async fn offline_factory(
-) -> OpenZeppelinAccountFactory<LocalWallet, Arc<JsonRpcClient<HttpTransport>>> {
+async fn offline_factory() -> OpenZeppelinAccountFactory<LocalWallet, Arc<StarknetRpcClient>> {
     OpenZeppelinAccountFactory::new(
         StarknetRsFelt::from(0x1234u64),
         StarknetRsFelt::from(1u64),

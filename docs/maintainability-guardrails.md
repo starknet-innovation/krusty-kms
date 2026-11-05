@@ -132,7 +132,7 @@ Allowed production edges:
 
 ```text
 common
- ├── wallet-api
+ ├── wallet-api ──► client, gateway
  ├── domain ──► gateway ──► oracle
  ├── crypto ──► kms ──► sdk ──► client
 │                │       └──► wasm

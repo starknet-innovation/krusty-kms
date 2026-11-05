@@ -11,7 +11,7 @@ use crate::types::{
 };
 use krusty_kms_common::{Result, SecretFelt};
 use krusty_kms_crypto::StarkCurve;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
@@ -32,7 +32,7 @@ impl Account {
     pub fn new(
         private_key: Felt,
         contract_address: CoreFelt,
-        provider: Arc<JsonRpcClient<HttpTransport>>,
+        provider: Arc<StarknetRpcClient>,
     ) -> Self {
         let public_key = StarkCurve::mul_generator(&private_key);
         let contract = TongoContract::new(provider.clone(), contract_address);

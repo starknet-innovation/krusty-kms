@@ -13,15 +13,15 @@ use super::StarknetRsFelt;
 use crate::abi;
 use crate::wallet::utils::{core_felt_to_rs, rpc_error};
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_core::types::{BlockId, BlockTag, Call, FunctionCall};
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::Provider;
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
 
 /// Client handle for an OpenZeppelin Cairo multisig contract.
 pub struct Multisig {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     pub(super) address: Address,
     pub(super) chain_id: ChainId,
 }
@@ -34,11 +34,7 @@ impl Multisig {
     /// replayed across networks (the transaction id hash does not bind a chain)
     /// cannot collect confirmations there.
     #[must_use]
-    pub fn new(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
-        address: Address,
-        chain_id: ChainId,
-    ) -> Self {
+    pub fn new(provider: Arc<StarknetRpcClient>, address: Address, chain_id: ChainId) -> Self {
         Self {
             provider,
             address,

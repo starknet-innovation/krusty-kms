@@ -16,20 +16,24 @@ use starknet_rust_core::types::{
     Call, ExecutionResult, FeeEstimate, TransactionFinalityStatus, TransactionReceipt,
     TransactionReceiptWithBlockInfo, TransactionStatus,
 };
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
 
 mod provider_error;
+mod rpc_transport;
 
 pub use provider_error::{provider_error_message, rpc_error};
+pub use rpc_transport::{
+    BoundedHttpTransport, BoundedHttpTransportError, StarknetRpcClient,
+    DEFAULT_MAX_RPC_RESPONSE_BYTES,
+};
 
 type StarknetRsFelt = starknet_rust_core::types::Felt;
 
 /// A submitted transaction that can be polled for acceptance.
 pub struct Tx {
     hash: StarknetRsFelt,
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     network: NetworkPreset,
 }
 
@@ -115,7 +119,7 @@ impl Tx {
     #[must_use]
     pub fn new(
         hash: StarknetRsFelt,
-        provider: Arc<JsonRpcClient<HttpTransport>>,
+        provider: Arc<StarknetRpcClient>,
         network: NetworkPreset,
     ) -> Self {
         Self {
@@ -262,7 +266,7 @@ enum ReceiptObservation {
 }
 
 async fn observe_transaction(
-    provider: &Arc<JsonRpcClient<HttpTransport>>,
+    provider: &Arc<StarknetRpcClient>,
     tx_hash: StarknetRsFelt,
 ) -> Result<ReceiptObservation> {
     match provider.get_transaction_receipt(tx_hash).await {

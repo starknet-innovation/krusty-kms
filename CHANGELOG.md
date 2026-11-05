@@ -4,6 +4,25 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking Rust API (audit M-2):** JSON-RPC response bodies are now capped
+  at 16 MiB (`DEFAULT_MAX_RPC_RESPONSE_BYTES`), so a hostile or compromised
+  RPC endpoint can no longer exhaust memory with one oversized reply within
+  the timeouts. `krusty-kms-wallet-api` adds `BoundedHttpTransport`, which
+  streams each body and stops at the cap, and the alias
+  `StarknetRpcClient = JsonRpcClient<BoundedHttpTransport>`.
+  `krusty_kms_client::create_provider` returns `StarknetRpcClient`, and every
+  public field, constructor and parameter that took
+  `JsonRpcClient<HttpTransport>` now takes `StarknetRpcClient`: `Tx`,
+  `Wallet`, `TongoContract`, `Erc20`, `Staking`, `TongoEventReader`,
+  `Multisig`, `Account` and `StarknetGatewayBackend`. Build
+  providers with `create_provider`, or with
+  `JsonRpcClient::new(BoundedHttpTransport::new(url))`; raise the cap with
+  `with_max_response_bytes`. A refused body is described as
+  `provider transport error: response exceeds <limit> bytes`.
+  `krusty-kms-client` re-exports the new types.
+
 ### Fixed
 
 - Tongo event parsing now restores all 24 nonce bytes from serialized audit

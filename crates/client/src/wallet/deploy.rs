@@ -10,10 +10,10 @@ use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_accounts::AccountFactory;
 use starknet_rust_accounts::OpenZeppelinAccountFactory;
 use starknet_rust_core::types::FeeEstimate;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ pub struct DeployResult {
 /// Provider errors are mapped to typed [`KmsError`] variants. Resource bounds
 /// are RPC-estimated and unbounded; see [`deploy_oz_account_with_fee_ceiling`].
 pub async fn deploy_oz_account(
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     signing_key: &SigningKey,
     account_class: &OpenZeppelinAccount,
     salt_policy: SaltPolicy,
@@ -70,7 +70,7 @@ pub async fn deploy_oz_account(
 /// RPC-estimated gas bounds of [`deploy_oz_account`]. The V3 tip is pinned on
 /// both paths (the ceiling's `max_tip`, or zero) and never taken from the RPC.
 pub async fn deploy_oz_account_with_fee_ceiling(
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     signing_key: &SigningKey,
     account_class: &OpenZeppelinAccount,
     salt_policy: SaltPolicy,
@@ -134,7 +134,7 @@ pub async fn deploy_oz_account_with_fee_ceiling(
 /// estimate; [`deploy_oz_account_with_fee_ceiling`] signs the ceiling's
 /// `max_tip`, which adds `l2_gas_consumed × max_tip` when prefunding.
 pub async fn estimate_deploy_fee(
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     signing_key: &SigningKey,
     account_class: &OpenZeppelinAccount,
     salt_policy: SaltPolicy,

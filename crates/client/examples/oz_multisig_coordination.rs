@@ -1,4 +1,5 @@
 use futures_util::StreamExt;
+use krusty_kms_client::BoundedHttpTransport;
 use krusty_kms_client::{
     hash_transaction_batch, InMemoryMultisigCoordinator, Multisig, MultisigCall,
     MultisigCoordinationMessage, MultisigCoordinator, MultisigExecutionNotice,
@@ -6,7 +7,7 @@ use krusty_kms_client::{
 };
 use krusty_kms_common::{Address, ChainId};
 use starknet_rust_core::utils::get_selector_from_name;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::JsonRpcClient;
 use starknet_rust_signers::SigningKey;
 use starknet_types_core::felt::Felt;
 use std::io::{Error, ErrorKind};
@@ -19,7 +20,7 @@ fn demo_signing_key(secret: u64) -> SigningKey {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(Url::parse(
+    let provider = Arc::new(JsonRpcClient::new(BoundedHttpTransport::new(Url::parse(
         "http://127.0.0.1:5050",
     )?)));
 
