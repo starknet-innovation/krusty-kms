@@ -66,14 +66,18 @@ Release steps (commands are in the playbook; do not copy them here):
 
 1. **Pick the version.** Start from current `main`. Confirm its workspace version is the
    latest published `krusty-kms` on crates.io and that the last `publish.yml` run
-   succeeded. Read `## [Unreleased]` and `git log v<last>..origin/main`. Use a patch
-   bump for fixes and a minor bump for behavior or API changes (the crates are pre-1.0).
-   If `## [Unreleased]` is empty, there is nothing to release.
+   succeeded. Read `## [Unreleased]` and `git log v<last>..origin/main`. The crates are
+   1.x and follow semver: a patch bump when every bullet is `Fixed` or `Security`; a
+   minor bump when any bullet is `Added`, `Deprecated` or a non-breaking `Changed`; a
+   major bump only for a **Breaking** bullet. CI runs `cargo-semver-checks` with
+   `--release-type minor`, so a green check rules out breakage but does not pick minor
+   vs patch; `## [Unreleased]` does. A breaking change is not merged past a red semver
+   check in 1.x; it waits for a 2.0.0 plan. If `## [Unreleased]` is empty, there is
+   nothing to release.
 2. **Branch and bump.** On a focused release branch, change only the root
-   `[workspace.package].version`. For a minor bump, also move every internal
-   `krusty-kms-*` path dependency requirement in `crates/*/Cargo.toml` to the new
-   version, because pre-1.0 caret ranges exclude the next minor. A patch bump leaves
-   them alone.
+   `[workspace.package].version`. Internal `krusty-kms-*` path dependency requirements
+   in `crates/*/Cargo.toml` stay at `1.0.0` for patch and minor bumps, because `^1.0.0`
+   covers every 1.x; move them only on a major bump.
 3. **Changelog.** Rename the pending notes into `## [<version>] - YYYY-MM-DD` and keep
    an empty `## [Unreleased]` above it. Run `.github/scripts/verify-release-changelog.sh`.
 4. **Design note.** Add `docs/design/<date>-release-<version>.md`, following the

@@ -23,10 +23,18 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
 - Normal feature and fix PRs must not bump the root workspace version. Keep their
   notes under `## [Unreleased]`; create the dated entry and bump the version only in a
   focused release PR. Read every `## [Unreleased]` bullet before choosing the
-  increment: a bullet marked **Breaking** forces a pre-1.0 minor bump even when the
-  `cargo-semver-checks` job passed. That job has no lint for a changed return type on
-  an inherent method or free function, so a type change that breaks callers can reach
-  a release PR with a green semver check. CI compares the release PR's base version
+  increment. The crates are 1.x and follow semver:
+  - **patch**: every bullet is `Fixed` or `Security`;
+  - **minor**: any `Added`, `Deprecated` or non-breaking `Changed` bullet;
+  - **major**: any bullet marked **Breaking**.
+
+  CI runs `cargo-semver-checks` with `--release-type minor`
+  (`.github/scripts/check-semver.sh`), so feature and deprecation PRs fail only on
+  breaking changes and the release PR picks minor vs patch from `## [Unreleased]`. A
+  breaking change is not merged past a red semver check in 1.x; it waits for a 2.0.0
+  plan. The job has no lint for a changed return type on an inherent method or free
+  function, so a type change that breaks callers can still pass it: treat such a
+  change as **Breaking** regardless of the check. CI compares the release PR's base version
   with the latest published `krusty-kms` version on crates.io, so a second release
   bump cannot merge while the previous version is still unpublished.
 - Release tags are immutable. Never delete, move, recreate, or force-push one.
@@ -146,13 +154,14 @@ instead.
    version bump while a previous release version is pending publication.
 2. Change the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
    inherit this version; do not assign a one-off version to an individual published crate.
-   For a pre-1.0 minor release, update any internal path dependency requirements whose
-   caret range does not include the new workspace version.
+   Internal `krusty-kms-*` path dependency requirements (currently `1.0.0`) stay put on
+   patch and minor releases, because `^1.0.0` covers every 1.x. Move them to the new
+   version only on a major release.
 3. Create the release entry in `CHANGELOG.md` using the workspace version and release
    date. Include at least one concise bullet describing the user-visible change:
 
    ```md
-   ## [0.5.5] - 2026-08-10
+   ## [1.0.1] - 2026-11-10
 
    ### Changed
 
