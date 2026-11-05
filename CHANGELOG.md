@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-05
+
 ### Changed
 
 - **Breaking Rust API:** `EthSigner::public_key_xy()`, deprecated in 0.15.0
@@ -12,9 +14,13 @@ All notable changes to the published Rust crates are documented here.
   the exact secp256k1 coordinates instead of reduced `Felt` values. Use
   `to_bytes_be()` for raw bytes or `to_u256_pair()` for `(low, high)` calldata
   limbs. `public_key_calldata()` remains available with unchanged behavior and
-  now delegates to `public_key_xy()`. The next release containing this change
-  is a pre-1.0 minor bump (0.16.0); `cargo-semver-checks` does not flag a
-  changed return type on an inherent method, so the bump is a reviewer decision.
+  now delegates to `public_key_xy()`. This is why 0.16.0 is a minor release:
+  `cargo-semver-checks` does not flag a changed return type on an inherent
+  method.
+- Still deferred from 0.15.0: the deprecated `felt_to_u256_pair` is not
+  removed yet, and `krusty-kms-client` RPC response bodies are still bounded
+  by timeout only (audit M-2). The 0.15.0 notes said both would land in
+  0.16.0. Both are breaking changes and are planned before 1.0.0.
 
 ### Fixed
 
