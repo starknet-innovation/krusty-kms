@@ -7,8 +7,9 @@
 //! into text goes through [`provider_error_message`] instead. See
 //! `docs/design/2026-09-02-provider-error-redaction.md`.
 
+use crate::rpc_transport::BoundedHttpTransportError as TransportError;
 use krusty_kms_common::KmsError;
-use starknet_rust_providers::jsonrpc::{HttpTransportError, JsonRpcClientError};
+use starknet_rust_providers::jsonrpc::JsonRpcClientError;
 use starknet_rust_providers::{ProviderError, ProviderImplError};
 
 /// Map a provider failure to [`KmsError::RpcError`] without the endpoint URL
@@ -22,7 +23,8 @@ pub fn rpc_error(error: ProviderError) -> KmsError {
 ///
 /// Typed JSON-RPC failures keep their upstream message. Transport failures
 /// are reduced to `provider transport error: <kind>` with kind in
-/// `timeout | connect | status <code> | decode | json-rpc code <n> | other`,
+/// `timeout | connect | status <code> | decode | json-rpc code <n> |
+/// response exceeds <limit> bytes | other`,
 /// because `reqwest::Error`'s `Display` embeds the full request URL.
 #[must_use]
 pub fn provider_error_message(error: &ProviderError) -> String {
@@ -38,20 +40,18 @@ pub fn provider_error_message(error: &ProviderError) -> String {
 fn transport_error_kind(error: &dyn ProviderImplError) -> String {
     let Some(error) = error
         .as_any()
-        .downcast_ref::<JsonRpcClientError<HttpTransportError>>()
+        .downcast_ref::<JsonRpcClientError<TransportError>>()
     else {
         return "other".to_string();
     };
     match error {
         JsonRpcClientError::JsonError(_)
-        | JsonRpcClientError::TransportError(HttpTransportError::Json(_)) => "decode".to_string(),
+        | JsonRpcClientError::TransportError(TransportError::Json(_)) => "decode".to_string(),
         JsonRpcClientError::JsonRpcError(rpc)
-        | JsonRpcClientError::TransportError(HttpTransportError::BatchError(rpc)) => {
+        | JsonRpcClientError::TransportError(TransportError::BatchError(rpc)) => {
             format!("json-rpc code {}", rpc.code)
         }
-        JsonRpcClientError::TransportError(HttpTransportError::Reqwest(http)) => {
-            // Method calls only: naming `reqwest::Error` would make the crate
-            // depend on `reqwest` for a type it never constructs.
+        JsonRpcClientError::TransportError(TransportError::Reqwest(http)) => {
             if http.is_timeout() {
                 "timeout".to_string()
             } else if http.is_connect() {
@@ -64,8 +64,11 @@ fn transport_error_kind(error: &dyn ProviderImplError) -> String {
                 "other".to_string()
             }
         }
-        JsonRpcClientError::TransportError(HttpTransportError::UnexpectedResponseId(_))
-        | JsonRpcClientError::TransportError(HttpTransportError::InvalidNumericResponseId) => {
+        JsonRpcClientError::TransportError(TransportError::ResponseTooLarge { limit }) => {
+            format!("response exceeds {limit} bytes")
+        }
+        JsonRpcClientError::TransportError(TransportError::UnexpectedResponseId(_))
+        | JsonRpcClientError::TransportError(TransportError::InvalidNumericResponseId) => {
             "other".to_string()
         }
     }

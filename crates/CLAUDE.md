@@ -28,7 +28,8 @@ crates/
 ## Production Dependency Graph
 
 ```
-common ──► wallet-api ───────────────────────────────► client
+common ──► wallet-api ──┬────────────────────────────► client
+   │                    ▼
    ├────► domain ──► gateway ──► oracle
    └────► crypto ──► kms ──► sdk ──┬───────────────► client
                             ├───────┼───────────────► wasm

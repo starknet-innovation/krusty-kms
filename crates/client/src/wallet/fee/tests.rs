@@ -3,11 +3,12 @@
 
 use super::*;
 use krusty_kms_common::fee::{MaxBound, DEFAULT_TIP};
+use krusty_kms_wallet_api::{BoundedHttpTransport, StarknetRpcClient};
 use starknet_rust_accounts::{
     Account, AccountFactory, ExecutionEncoding, OpenZeppelinAccountFactory, SingleOwnerAccount,
 };
 use starknet_rust_core::types::{Felt, ResourceBoundsMapping};
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::JsonRpcClient;
 use starknet_rust_providers::Url;
 use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
@@ -44,8 +45,8 @@ fn scaled() -> ProposedResourceBounds {
 }
 
 /// A provider that is never contacted: signing and request building are local.
-fn offline_provider() -> Arc<JsonRpcClient<HttpTransport>> {
-    Arc::new(JsonRpcClient::new(HttpTransport::new(
+fn offline_provider() -> Arc<StarknetRpcClient> {
+    Arc::new(JsonRpcClient::new(BoundedHttpTransport::new(
         Url::parse("http://127.0.0.1:0").unwrap(),
     )))
 }
@@ -92,7 +93,7 @@ fn out_of_range_price_is_rejected_before_admission() {
     ));
 }
 
-fn offline_account() -> SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, LocalWallet> {
+fn offline_account() -> SingleOwnerAccount<Arc<StarknetRpcClient>, LocalWallet> {
     SingleOwnerAccount::new(
         offline_provider(),
         signer(),
@@ -102,8 +103,7 @@ fn offline_account() -> SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, Lo
     )
 }
 
-async fn offline_factory(
-) -> OpenZeppelinAccountFactory<LocalWallet, Arc<JsonRpcClient<HttpTransport>>> {
+async fn offline_factory() -> OpenZeppelinAccountFactory<LocalWallet, Arc<StarknetRpcClient>> {
     OpenZeppelinAccountFactory::new(
         Felt::from(0x1234u64),
         Felt::from(1u64),

@@ -31,7 +31,10 @@ pub use events::{
 };
 pub use krusty_kms_common::fee::{MaxBound, ResourceBoundsCeiling};
 pub use krusty_kms_common::{KmsError, Result};
-pub use krusty_kms_wallet_api::{Tx, WaitOptions, WalletExecutor};
+pub use krusty_kms_wallet_api::{
+    BoundedHttpTransport, BoundedHttpTransportError, StarknetRpcClient, Tx, WaitOptions,
+    WalletExecutor, DEFAULT_MAX_RPC_RESPONSE_BYTES,
+};
 #[cfg(feature = "nats")]
 pub use multisig::NatsMultisigCoordinator;
 pub use multisig::{

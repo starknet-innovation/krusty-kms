@@ -21,23 +21,23 @@ use krusty_kms_domain::{
     AccountDescriptor, BlockSelector, DeployMode, FeltHex, GatewayError, GatewayErrorCode,
     SnapshotBlockMetadata, TrackedToken,
 };
+use krusty_kms_wallet_api::StarknetRpcClient;
 use num_bigint::BigUint;
 use starknet_rust_accounts::{AccountFactory, OpenZeppelinAccountFactory};
 use starknet_rust_core::types::{FunctionCall, MaybePreConfirmedBlockWithTxHashes};
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::Provider;
 use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 
 /// Default Starknet JSON-RPC backend backed directly by Starknet JSON-RPC primitives.
 pub struct StarknetGatewayBackend {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     network: NetworkPreset,
     deploy_fee_ceiling: Option<ResourceBoundsCeiling>,
 }
 
 impl StarknetGatewayBackend {
-    pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, network: NetworkPreset) -> Self {
+    pub fn new(provider: Arc<StarknetRpcClient>, network: NetworkPreset) -> Self {
         Self {
             provider,
             network,
@@ -59,7 +59,7 @@ impl StarknetGatewayBackend {
         self
     }
 
-    pub fn provider(&self) -> &Arc<JsonRpcClient<HttpTransport>> {
+    pub fn provider(&self) -> &Arc<StarknetRpcClient> {
         &self.provider
     }
 

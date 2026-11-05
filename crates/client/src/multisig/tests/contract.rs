@@ -9,8 +9,9 @@ use crate::tx::Tx;
 use crate::wallet::WalletExecutor;
 use async_trait::async_trait;
 use krusty_kms_common::{Address, ChainId, KmsError, Result};
+use krusty_kms_wallet_api::BoundedHttpTransport;
 use starknet_rust_core::types::Call;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
+use starknet_rust_providers::jsonrpc::JsonRpcClient;
 use starknet_types_core::felt::Felt;
 use std::sync::Arc;
 use url::Url;
@@ -69,7 +70,7 @@ impl WalletExecutor for RecordingExecutor {
 }
 
 fn test_multisig_handle(address_value: u64) -> Multisig {
-    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+    let provider = Arc::new(JsonRpcClient::new(BoundedHttpTransport::new(
         Url::parse("http://127.0.0.1:0").unwrap(),
     )));
     Multisig::new(provider, address(address_value), ChainId::Sepolia)
@@ -101,7 +102,7 @@ async fn test_verify_signed_message_prevalidation() {
     ));
 
     // Message bound to a different chain.
-    let provider = Arc::new(JsonRpcClient::new(HttpTransport::new(
+    let provider = Arc::new(JsonRpcClient::new(BoundedHttpTransport::new(
         Url::parse("http://127.0.0.1:0").unwrap(),
     )));
     let mainnet_handle = Multisig::new(provider, address(1), ChainId::Mainnet);

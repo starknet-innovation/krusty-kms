@@ -32,6 +32,7 @@ ALLOWED = {
     "gateway": {
         "krusty-kms-domain",
         "krusty-kms-common",
+        "krusty-kms-wallet-api",
         "krusty-kms",
         "krusty-kms-crypto",
     },

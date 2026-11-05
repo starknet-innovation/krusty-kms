@@ -10,8 +10,8 @@ use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::u256_to_u128;
 use krusty_kms_common::{KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_core::types::{BlockId, BlockTag, Call, FunctionCall};
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::Provider;
 use std::sync::Arc;
 
@@ -32,7 +32,7 @@ pub fn staking_contract_address(chain_id: ChainId) -> Address {
 
 /// A handle for interacting with a staking delegation pool.
 pub struct Staking {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     pool_address: Address,
     token: Token,
 }
@@ -48,11 +48,7 @@ pub struct PoolPosition {
 
 impl Staking {
     /// Create a staking handle from a known pool address and token.
-    pub fn new(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
-        pool_address: Address,
-        token: Token,
-    ) -> Self {
+    pub fn new(provider: Arc<StarknetRpcClient>, pool_address: Address, token: Token) -> Self {
         Self {
             provider,
             pool_address,
@@ -264,8 +260,8 @@ mod tests {
 
     #[test]
     fn test_populate_enter() {
-        let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust_providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(starknet_rust_providers::jsonrpc::JsonRpcClient::new(
+            krusty_kms_wallet_api::BoundedHttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -283,8 +279,8 @@ mod tests {
 
     #[test]
     fn test_populate_add() {
-        let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust_providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(starknet_rust_providers::jsonrpc::JsonRpcClient::new(
+            krusty_kms_wallet_api::BoundedHttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -300,8 +296,8 @@ mod tests {
 
     #[test]
     fn test_populate_exit() {
-        let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust_providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(starknet_rust_providers::jsonrpc::JsonRpcClient::new(
+            krusty_kms_wallet_api::BoundedHttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));

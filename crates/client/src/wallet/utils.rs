@@ -1,10 +1,10 @@
 //! Wallet utility functions for Felt conversion and deployment checking.
 
 use krusty_kms_common::{is_already_deployed_validation_failure, KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_accounts::AccountFactoryError;
 use starknet_rust_core::types::StarknetError;
 use starknet_rust_core::types::{BlockId, BlockTag};
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ trait DeploymentProvider: Send + Sync {
 }
 
 #[async_trait::async_trait]
-impl DeploymentProvider for JsonRpcClient<HttpTransport> {
+impl DeploymentProvider for StarknetRpcClient {
     async fn get_class_hash_at(
         &self,
         address: StarknetRsFelt,
@@ -51,7 +51,7 @@ pub fn rs_felt_to_core(felt: StarknetRsFelt) -> CoreFelt {
 ///
 /// Queries `getClassHashAt` — if the call succeeds, the address is deployed.
 pub async fn check_deployed(
-    provider: &Arc<JsonRpcClient<HttpTransport>>,
+    provider: &Arc<StarknetRpcClient>,
     address: StarknetRsFelt,
 ) -> Result<bool> {
     check_deployed_with_provider(provider.as_ref(), address).await
@@ -133,7 +133,8 @@ pub(crate) fn felt_to_u16(felt: &StarknetRsFelt) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use starknet_rust_providers::jsonrpc::{HttpTransportError, JsonRpcClientError};
+    use krusty_kms_wallet_api::BoundedHttpTransportError;
+    use starknet_rust_providers::jsonrpc::JsonRpcClientError;
     use starknet_rust_providers::ProviderImplError;
     use std::collections::VecDeque;
     use std::sync::Mutex;
@@ -276,14 +277,15 @@ mod tests {
             message: "invalid api key SECRET_TOKEN".to_string(),
             data: None,
         };
-        let rpc: ProviderError = JsonRpcClientError::<HttpTransportError>::JsonRpcError(rpc).into();
+        let rpc: ProviderError =
+            JsonRpcClientError::<BoundedHttpTransportError>::JsonRpcError(rpc).into();
         assert_eq!(
             provider_error_message(&rpc),
             "provider transport error: json-rpc code -32000"
         );
         let json = serde_json::from_str::<u8>("not json").unwrap_err();
         let decode: ProviderError =
-            JsonRpcClientError::<HttpTransportError>::JsonError(json).into();
+            JsonRpcClientError::<BoundedHttpTransportError>::JsonError(json).into();
         assert_eq!(
             provider_error_message(&decode),
             "provider transport error: decode"
@@ -317,21 +319,22 @@ mod tests {
     #[test]
     fn new_transport_errors_do_not_expose_server_messages() {
         let batch =
-            HttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
+            BoundedHttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
                 code: -32000,
                 message: "SECRET_TOKEN".to_string(),
                 data: Some(serde_json::json!({"url": "https://rpc.example/SECRET_TOKEN"})),
             });
         let batch: ProviderError =
-            JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+            JsonRpcClientError::<BoundedHttpTransportError>::TransportError(batch).into();
         assert_eq!(
             provider_error_message(&batch),
             "provider transport error: json-rpc code -32000"
         );
-        let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
-            HttpTransportError::InvalidNumericResponseId,
-        )
-        .into();
+        let invalid: ProviderError =
+            JsonRpcClientError::<BoundedHttpTransportError>::TransportError(
+                BoundedHttpTransportError::InvalidNumericResponseId,
+            )
+            .into();
         assert_eq!(
             provider_error_message(&invalid),
             "provider transport error: other"

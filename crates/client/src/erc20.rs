@@ -11,30 +11,27 @@ use krusty_kms_common::amount::Amount;
 use krusty_kms_common::token::Token;
 use krusty_kms_common::u256_to_u128;
 use krusty_kms_common::{KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_core::codec::Decode;
 use starknet_rust_core::types::ByteArray;
 use starknet_rust_core::types::{BlockId, BlockTag, Call, FunctionCall};
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_providers::{Provider, ProviderError};
 use std::sync::Arc;
 
 /// An ERC-20 contract handle.
 pub struct Erc20 {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     token: Token,
 }
 
 impl Erc20 {
     /// Create from a known `Token` (address + metadata).
-    pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, token: Token) -> Self {
+    pub fn new(provider: Arc<StarknetRpcClient>, token: Token) -> Self {
         Self { provider, token }
     }
 
     /// Resolve token metadata from an on-chain address.
-    pub async fn from_address(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
-        address: Address,
-    ) -> Result<Self> {
+    pub async fn from_address(provider: Arc<StarknetRpcClient>, address: Address) -> Result<Self> {
         let addr_rs = core_felt_to_rs(address.as_felt());
 
         let name = Self::read_string(&provider, addr_rs, *abi::erc20::NAME).await?;
@@ -116,7 +113,7 @@ impl Erc20 {
     // ------------------------------------------------------------------
 
     async fn read_string(
-        provider: &Arc<JsonRpcClient<HttpTransport>>,
+        provider: &Arc<StarknetRpcClient>,
         address: starknet_rust_core::types::Felt,
         selector: starknet_rust_core::types::Felt,
     ) -> Result<String> {
@@ -140,7 +137,7 @@ impl Erc20 {
     }
 
     async fn read_decimals(
-        provider: &Arc<JsonRpcClient<HttpTransport>>,
+        provider: &Arc<StarknetRpcClient>,
         address: starknet_rust_core::types::Felt,
     ) -> Result<u8> {
         let result = provider
@@ -269,8 +266,8 @@ mod tests {
 
     #[test]
     fn test_populate_transfer() {
-        let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust_providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(starknet_rust_providers::jsonrpc::JsonRpcClient::new(
+            krusty_kms_wallet_api::BoundedHttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));
@@ -287,8 +284,8 @@ mod tests {
 
     #[test]
     fn test_populate_approve() {
-        let provider = Arc::new(JsonRpcClient::new(
-            starknet_rust_providers::jsonrpc::HttpTransport::new(
+        let provider = Arc::new(starknet_rust_providers::jsonrpc::JsonRpcClient::new(
+            krusty_kms_wallet_api::BoundedHttpTransport::new(
                 url::Url::parse("http://localhost:5050").unwrap(),
             ),
         ));

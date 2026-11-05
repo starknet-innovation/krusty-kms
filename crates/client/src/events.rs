@@ -5,8 +5,8 @@ mod pagination;
 use crate::abi::tongo_events;
 use crate::types::{AEBalance, CipherBalance};
 use krusty_kms_common::{KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use starknet_rust_core::types::EmittedEvent;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt as CoreFelt;
 use std::sync::Arc;
@@ -215,12 +215,12 @@ fn parse_ae_balance(felts: &[StarknetRsFelt], offset: usize) -> Result<AEBalance
 
 /// Reads and parses Tongo events from Starknet.
 pub struct TongoEventReader {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
+    provider: Arc<StarknetRpcClient>,
     contract_address: StarknetRsFelt,
 }
 
 impl TongoEventReader {
-    pub fn new(provider: Arc<JsonRpcClient<HttpTransport>>, contract_address: CoreFelt) -> Self {
+    pub fn new(provider: Arc<StarknetRpcClient>, contract_address: CoreFelt) -> Self {
         Self {
             provider,
             contract_address: core_felt_to_rs(contract_address),

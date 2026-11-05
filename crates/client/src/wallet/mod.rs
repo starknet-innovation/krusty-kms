@@ -10,11 +10,11 @@ use krusty_kms_common::chain::ChainId;
 use krusty_kms_common::fee::ResourceBoundsCeiling;
 use krusty_kms_common::network::NetworkPreset;
 use krusty_kms_common::{KmsError, Result};
+use krusty_kms_wallet_api::StarknetRpcClient;
 use krusty_kms_wallet_api::Tx;
 pub use krusty_kms_wallet_api::WalletExecutor;
 use starknet_rust_accounts::{AccountError, ExecutionEncoding, SingleOwnerAccount};
 use starknet_rust_core::types::Call;
-use starknet_rust_providers::jsonrpc::{HttpTransport, JsonRpcClient};
 use starknet_rust_signers::{LocalWallet, SigningKey};
 use std::sync::Arc;
 use std::time::Instant;
@@ -24,8 +24,8 @@ use self::utils::{check_deployed, core_felt_to_rs, provider_error_message};
 
 /// A Starknet wallet that can sign and submit transactions.
 pub struct Wallet {
-    provider: Arc<JsonRpcClient<HttpTransport>>,
-    account: SingleOwnerAccount<Arc<JsonRpcClient<HttpTransport>>, LocalWallet>,
+    provider: Arc<StarknetRpcClient>,
+    account: SingleOwnerAccount<Arc<StarknetRpcClient>, LocalWallet>,
     address: Address,
     chain_id: ChainId,
     network: NetworkPreset,
@@ -56,7 +56,7 @@ impl Wallet {
     /// the expected deployment address from the signing key's public key and the
     /// explicit `salt_policy`.
     pub fn from_signing_key(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
+        provider: Arc<StarknetRpcClient>,
         signing_key: SigningKey,
         account_class: &dyn AccountClass,
         salt_policy: SaltPolicy,
@@ -98,7 +98,7 @@ impl Wallet {
     /// accounts, and external deployment flows where the account address is
     /// known and should not be recomputed from a local [`AccountClass`].
     pub fn from_signing_key_at_address(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
+        provider: Arc<StarknetRpcClient>,
         signing_key: SigningKey,
         address: Address,
         chain_id: ChainId,
@@ -138,7 +138,7 @@ impl Wallet {
 
     /// Convenience: create from a private key Felt.
     pub fn from_private_key(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
+        provider: Arc<StarknetRpcClient>,
         private_key: starknet_types_core::felt::Felt,
         account_class: &dyn AccountClass,
         salt_policy: SaltPolicy,
@@ -159,7 +159,7 @@ impl Wallet {
 
     /// Convenience: create from a private key and known account address.
     pub fn from_private_key_at_address(
-        provider: Arc<JsonRpcClient<HttpTransport>>,
+        provider: Arc<StarknetRpcClient>,
         private_key: starknet_types_core::felt::Felt,
         address: Address,
         chain_id: ChainId,

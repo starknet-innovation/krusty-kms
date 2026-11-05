@@ -116,12 +116,11 @@ fn zero_timeout_is_raised_to_the_floor() {
 
 mod provider_errors {
     use super::super::{provider_error_message, rpc_error, Tx, WaitOptions};
+    use crate::{BoundedHttpTransport, BoundedHttpTransportError, StarknetRpcClient};
     use krusty_kms_common::network::NetworkPreset;
     use krusty_kms_common::KmsError;
     use starknet_rust_core::types::{Felt, StarknetError};
-    use starknet_rust_providers::jsonrpc::{
-        HttpTransport, HttpTransportError, JsonRpcClient, JsonRpcClientError, JsonRpcError,
-    };
+    use starknet_rust_providers::jsonrpc::{JsonRpcClient, JsonRpcClientError, JsonRpcError};
     use starknet_rust_providers::{Provider, ProviderError, ProviderImplError};
     use std::sync::Arc;
 
@@ -156,26 +155,28 @@ mod provider_errors {
             message: "invalid api key SECRET_TOKEN".to_string(),
             data: None,
         };
-        let rpc: ProviderError = JsonRpcClientError::<HttpTransportError>::JsonRpcError(rpc).into();
+        let rpc: ProviderError =
+            JsonRpcClientError::<BoundedHttpTransportError>::JsonRpcError(rpc).into();
         assert_eq!(
             provider_error_message(&rpc),
             "provider transport error: json-rpc code -32000"
         );
-        let batch = HttpTransportError::BatchError(JsonRpcError {
+        let batch = BoundedHttpTransportError::BatchError(JsonRpcError {
             code: -32001,
             message: "SECRET_TOKEN".to_string(),
             data: None,
         });
         let batch: ProviderError =
-            JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+            JsonRpcClientError::<BoundedHttpTransportError>::TransportError(batch).into();
         assert_eq!(
             provider_error_message(&batch),
             "provider transport error: json-rpc code -32001"
         );
-        let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
-            HttpTransportError::InvalidNumericResponseId,
-        )
-        .into();
+        let invalid: ProviderError =
+            JsonRpcClientError::<BoundedHttpTransportError>::TransportError(
+                BoundedHttpTransportError::InvalidNumericResponseId,
+            )
+            .into();
         assert_eq!(
             provider_error_message(&invalid),
             "provider transport error: other"
@@ -191,12 +192,15 @@ mod provider_errors {
     /// A provider whose every request is refused: the loopback port was
     /// bound and released, and the fake API key sits in the path the way
     /// hosted RPC providers carry it.
-    async fn refused_provider() -> (Arc<JsonRpcClient<HttpTransport>>, u16) {
+    async fn refused_provider() -> (Arc<StarknetRpcClient>, u16) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         drop(listener);
         let url = url::Url::parse(&format!("http://127.0.0.1:{port}/v0_9/SECRET_TOKEN")).unwrap();
-        (Arc::new(JsonRpcClient::new(HttpTransport::new(url))), port)
+        (
+            Arc::new(JsonRpcClient::new(BoundedHttpTransport::new(url))),
+            port,
+        )
     }
 
     /// Regression for the audit finding: `Tx::wait`, `Tx::receipt` and

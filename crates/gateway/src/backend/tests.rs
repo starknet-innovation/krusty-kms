@@ -15,10 +15,11 @@ use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
     AccountDescriptor, DerivationPath, FeltHex, GatewayErrorCode, KeyDomain, Provenance,
 };
+use krusty_kms_wallet_api::BoundedHttpTransportError;
 use starknet_rust_core::types::{
     ExecutionResult, StarknetError, TransactionFinalityStatus, TransactionStatus,
 };
-use starknet_rust_providers::jsonrpc::{HttpTransportError, JsonRpcClientError, JsonRpcError};
+use starknet_rust_providers::jsonrpc::{JsonRpcClientError, JsonRpcError};
 use starknet_rust_providers::{ProviderError, ProviderImplError};
 use starknet_types_core::felt::Felt;
 
@@ -65,7 +66,7 @@ fn transport_errors_are_classified_without_the_endpoint_url() {
 #[test]
 fn json_rpc_transport_errors_keep_only_the_numeric_code() {
     let error: ProviderError =
-        JsonRpcClientError::<HttpTransportError>::JsonRpcError(JsonRpcError {
+        JsonRpcClientError::<BoundedHttpTransportError>::JsonRpcError(JsonRpcError {
             code: -32000,
             message: "invalid api key SECRET_TOKEN".to_string(),
             data: None,
@@ -258,19 +259,20 @@ fn selector_fallback_error_keeps_primary_and_fallback_context() {
 
 #[test]
 fn new_transport_errors_do_not_expose_server_messages() {
-    let batch = HttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
-        code: -32000,
-        message: "SECRET_TOKEN".to_string(),
-        data: None,
-    });
+    let batch =
+        BoundedHttpTransportError::BatchError(starknet_rust_providers::jsonrpc::JsonRpcError {
+            code: -32000,
+            message: "SECRET_TOKEN".to_string(),
+            data: None,
+        });
     let batch: ProviderError =
-        JsonRpcClientError::<HttpTransportError>::TransportError(batch).into();
+        JsonRpcClientError::<BoundedHttpTransportError>::TransportError(batch).into();
     assert_eq!(
         provider_error_message(&batch),
         "provider transport error: json-rpc code -32000"
     );
-    let invalid: ProviderError = JsonRpcClientError::<HttpTransportError>::TransportError(
-        HttpTransportError::InvalidNumericResponseId,
+    let invalid: ProviderError = JsonRpcClientError::<BoundedHttpTransportError>::TransportError(
+        BoundedHttpTransportError::InvalidNumericResponseId,
     )
     .into();
     assert_eq!(
