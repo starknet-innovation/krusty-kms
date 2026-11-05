@@ -31,6 +31,19 @@ fn hex_bytes_normalizes_prefix_and_case() {
 }
 
 #[test]
+fn hex_bytes_empty_roundtrips() {
+    let empty = HexBytes::from_bytes(&[]);
+
+    assert_eq!(empty.as_str(), "");
+    assert_eq!(HexBytes::parse(empty.as_str()).unwrap(), empty);
+    assert_eq!(HexBytes::parse("0x").unwrap(), empty);
+    assert!(empty.to_vec().is_empty());
+
+    let json = serde_json::to_string(&empty).unwrap();
+    assert_eq!(serde_json::from_str::<HexBytes>(&json).unwrap(), empty);
+}
+
+#[test]
 fn secret_ref_rejects_blank_values() {
     assert_eq!(
         SecretRef::new("   ").unwrap_err(),
