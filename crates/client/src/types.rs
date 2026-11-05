@@ -60,18 +60,6 @@ pub fn decrypt_cipher_balance_with_limit(
     ElGamal::decrypt_balance_with_limit(&ciphertext, private_key, max_balance)
 }
 
-/// Decrypt a cipher balance using a conservative default search bound.
-#[deprecated(
-    since = "0.3.0",
-    note = "Use decrypt_cipher_balance_with_limit to make the discrete-log search bound explicit"
-)]
-pub fn decrypt_cipher_balance_with_default_limit(
-    private_key: &Felt,
-    cipher: &CipherBalance,
-) -> Result<u128> {
-    decrypt_cipher_balance_with_limit(private_key, cipher, DEFAULT_DECRYPT_SEARCH_LIMIT)
-}
-
 /// Convert ERC-20 amount to Tongo units (ceiling division by rate).
 pub fn erc20_to_tongo(erc20_amount: u128, rate: u128) -> Result<u128> {
     utils::base_units_to_tongo(erc20_amount, rate)

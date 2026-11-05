@@ -30,6 +30,16 @@ All notable changes to the published Rust crates are documented here.
   Use `EthSigner::public_key_calldata()` for account calldata, or
   `EthCoordinate::to_u256_pair()` on the values `EthSigner::public_key_xy()`
   returns.
+- **Breaking Rust API:** `ArgentAccount::with_class_hash` is removed. For a
+  class hash it did not recognise, it silently assumed the v0.4.0
+  constructor layout, which can produce an address that can never be
+  deployed. Use `ArgentAccount::try_with_class_hash`, which rejects unknown
+  class hashes, or `ArgentAccount::with_class_hash_and_layout` to state the
+  layout.
+- **Breaking Rust API:** `krusty_kms_client::decrypt_cipher_balance_with_default_limit`,
+  deprecated since 0.3.0, is removed. Call
+  `decrypt_cipher_balance_with_limit(key, cipher, DEFAULT_DECRYPT_SEARCH_LIMIT)`
+  for the same behaviour.
 
 ### Fixed
 
