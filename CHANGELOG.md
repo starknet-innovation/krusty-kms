@@ -4,6 +4,12 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Tongo event parsing now restores all 24 nonce bytes from serialized audit
+  hints, so auditors can decrypt hints emitted by `Transfer`,
+  `BalanceDeclared`, and `TransferDeclared` events.
+
 ## [0.16.0] - 2026-11-05
 
 ### Changed

@@ -203,12 +203,10 @@ fn parse_ae_balance(felts: &[StarknetRsFelt], offset: usize) -> Result<AEBalance
         ciphertext[i * 16..(i + 1) * 16].copy_from_slice(&bytes[16..32]);
     }
 
-    // Nonce: 2 felts → 24 bytes (12 bytes from each felt's low portion)
+    // Nonce: u256 (low, high) stores the 24 bytes followed by 8 zero bytes.
     let mut nonce = [0u8; 24];
-    let n0 = felts[offset + 4].to_bytes_be();
-    nonce[0..12].copy_from_slice(&n0[20..32]);
-    let n1 = felts[offset + 5].to_bytes_be();
-    nonce[12..24].copy_from_slice(&n1[20..32]);
+    nonce[..16].copy_from_slice(&felts[offset + 5].to_bytes_be()[16..32]);
+    nonce[16..].copy_from_slice(&felts[offset + 4].to_bytes_be()[16..24]);
 
     Ok(AEBalance { ciphertext, nonce })
 }
@@ -577,6 +575,8 @@ fn parse_transfer_declared_event(e: &EmittedEvent) -> Result<TransferDeclaredEve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod ae_balance_roundtrip;
 
     fn make_felt(v: u64) -> StarknetRsFelt {
         StarknetRsFelt::from(v)
