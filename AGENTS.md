@@ -69,7 +69,8 @@ Release steps (commands are in the playbook; do not copy them here):
    succeeded. Read `## [Unreleased]` and `git log v<last>..origin/main`. The crates are
    1.x and follow semver: a patch bump when every bullet is `Fixed` or `Security`; a
    minor bump when any bullet is `Added`, `Deprecated` or a non-breaking `Changed`; a
-   major bump only for a **Breaking** bullet. Pick the bump from `## [Unreleased]`.
+   major bump only for a **Breaking** bullet or any `Removed` entry (removing public
+   API is breaking). Pick the bump from `## [Unreleased]`.
    `cargo-semver-checks` (`.github/scripts/check-semver.sh`) checks feature PRs against
    the base branch with `--release-type minor`, so only breaking changes fail them. On
    the release PR it compares against the previous tag `v<base version>` with no

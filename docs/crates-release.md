@@ -26,7 +26,8 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
   increment. The crates are 1.x and follow semver:
   - **patch**: every bullet is `Fixed` or `Security`;
   - **minor**: any `Added`, `Deprecated` or non-breaking `Changed` bullet;
-  - **major**: any bullet marked **Breaking**.
+  - **major**: any bullet marked **Breaking**, or any `Removed` entry (removing public
+    API is breaking even without the marker).
 
   The release PR picks the bump from `## [Unreleased]`, and `cargo-semver-checks`
   (`.github/scripts/check-semver.sh`) enforces it on two paths:
