@@ -188,7 +188,7 @@ async fn snapshot_ttl_is_clamped_to_server_ceiling() {
     let gateway = gateway(clock, DeployExecution::AlreadyDeployed);
 
     let mut request = snapshot_request(QueryMode::ActiveView);
-    request.cache_policy = CachePolicy::new(u64::MAX, u64::MAX, 8).unwrap();
+    request.cache_policy = CachePolicy::with_ttl(u64::MAX, u64::MAX).unwrap();
 
     let first = gateway
         .query_account_snapshot(request.clone())

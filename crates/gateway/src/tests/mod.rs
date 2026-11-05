@@ -204,7 +204,7 @@ fn snapshot_request(mode: QueryMode) -> AccountSnapshotRequest {
         }],
         block: BlockSelector::Latest,
         mode,
-        cache_policy: CachePolicy::new(1_000, 5_000, 8).unwrap(),
+        cache_policy: CachePolicy::with_ttl(1_000, 5_000).unwrap(),
     }
 }
 

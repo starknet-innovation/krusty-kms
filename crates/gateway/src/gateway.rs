@@ -181,15 +181,7 @@ where
                 Some("cache ttl_ms must be greater than zero".to_string()),
             ));
         }
-        // max_entries is deprecated for shared snapshot eviction but still
-        // validated (> 0) for wire/API compatibility with CachePolicy::new.
-        if cache_policy.max_entries == 0 {
-            return Err(GatewayError::new(
-                GatewayErrorCode::InvalidCachePolicy,
-                false,
-                Some("cache max_entries must be greater than zero".to_string()),
-            ));
-        }
+        // `max_entries` is deprecated and ignored, so it is not validated.
         Ok(())
     }
 
