@@ -162,16 +162,19 @@ instead.
    version bump while a previous release version is pending publication.
 2. Change the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
    inherit this version; do not assign a one-off version to an individual published crate.
-   Internal `krusty-kms-*` path dependency requirements (currently `1.0.0`) stay put on
-   patch and minor releases, because `^1.0.0` covers every 1.x. Move them to the new
-   version only on a major release.
+   Internal `krusty-kms-*` path dependency requirements (currently `1.0.0`) need no move
+   for compatibility on patch and minor releases, because `^1.0.0` covers every 1.x.
+   Raise a requirement's lower bound when the dependent crate starts using an API added
+   in a later 1.x of that dependency (for example `1.1.0`); otherwise a downstream
+   lockfile that still holds the older version satisfies the range and fails to
+   compile. On a major release, move every requirement to the new version.
 3. Create the release entry in `CHANGELOG.md` using the workspace version and release
    date. Include at least one concise bullet describing the user-visible change:
 
    ```md
    ## [1.0.1] - 2026-11-10
 
-   ### Changed
+   ### Fixed
 
    - Describe the release.
    ```

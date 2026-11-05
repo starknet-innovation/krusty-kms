@@ -79,10 +79,14 @@ Release steps (commands are in the playbook; do not copy them here):
    function: treat that as **Breaking** by hand. A breaking change is not merged past a
    red semver check in 1.x; it waits for a 2.0.0 plan. If `## [Unreleased]` is empty, there is
    nothing to release.
-2. **Branch and bump.** On a focused release branch, change only the root
+2. **Branch and bump.** On a focused release branch, change the root
    `[workspace.package].version`. Internal `krusty-kms-*` path dependency requirements
-   in `crates/*/Cargo.toml` stay at `1.0.0` for patch and minor bumps, because `^1.0.0`
-   covers every 1.x; move them only on a major bump.
+   in `crates/*/Cargo.toml` (currently `1.0.0`) need no move for compatibility on patch
+   and minor bumps, because `^1.0.0` covers every 1.x. Raise a requirement's lower
+   bound when the dependent crate starts using an API added in a later 1.x of that
+   dependency; otherwise a lockfile still on the older version satisfies the range and
+   fails to compile. Move every
+   requirement to the new major on a major bump.
 3. **Changelog.** Rename the pending notes into `## [<version>] - YYYY-MM-DD` and keep
    an empty `## [Unreleased]` above it. Run `.github/scripts/verify-release-changelog.sh`.
 4. **Design note.** Add `docs/design/<date>-release-<version>.md`, following the
