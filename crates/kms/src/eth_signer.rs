@@ -143,20 +143,5 @@ fn bytes32_to_u256_pair(bytes: &[u8; 32]) -> (Felt, Felt) {
     (Felt::from(low), Felt::from(high))
 }
 
-/// Split a Felt (interpreted as a 32-byte big-endian value) into `(low, high)` Felt pair.
-///
-/// A `Felt` cannot hold a 256-bit secp256k1 coordinate, so this cannot encode
-/// public key coordinates; use [`EthSigner::public_key_calldata`].
-#[deprecated(
-    since = "0.15.0",
-    note = "a Felt cannot hold a 256-bit coordinate; use EthSigner::public_key_calldata"
-)]
-pub fn felt_to_u256_pair(felt: &Felt) -> (Felt, Felt) {
-    let bytes = felt.to_bytes_be();
-    let mut arr = [0u8; 32];
-    arr.copy_from_slice(&bytes);
-    bytes32_to_u256_pair(&arr)
-}
-
 #[cfg(test)]
 mod tests;
