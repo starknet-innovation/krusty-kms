@@ -209,17 +209,6 @@ async fn snapshot_ttl_is_clamped_to_server_ceiling() {
 }
 
 #[tokio::test]
-#[allow(deprecated)]
-async fn snapshot_accepts_zero_max_entries_because_it_is_ignored() {
-    let gateway = gateway(TestClock::default(), DeployExecution::AlreadyDeployed);
-    let mut request = snapshot_request(QueryMode::ActiveView);
-    request.cache_policy = CachePolicy::new(1_000, 0, 0).unwrap();
-
-    let snapshot = gateway.query_account_snapshot(request).await.unwrap();
-    assert_eq!(snapshot.value.cache.status, CacheStatus::Miss);
-}
-
-#[tokio::test]
 async fn sign_returns_nostr_signature_and_tracks_completion() {
     let clock = TestClock::default();
     let gateway = gateway(clock, DeployExecution::AlreadyDeployed);

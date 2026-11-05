@@ -1,13 +1,16 @@
-//! Operation retention and class-hash allowlist policies.
+//! Operation retention, cache and class-hash allowlist policies.
 
-use super::{derivation_request, gateway_with_retention, nostr_sign_request, TestClock};
+use super::{
+    derivation_request, gateway, gateway_with_retention, nostr_sign_request, snapshot_request,
+    TestClock,
+};
 use crate::account_class::{enforce_class_hash_allowlist, resolve_account_class};
 use crate::{DeployExecution, OperationRetentionError, OperationRetentionPolicy};
 use krusty_kms::{AccountClass, ArgentAccount, BraavosAccount, OpenZeppelinAccount};
 use krusty_kms_common::ChainId;
 use krusty_kms_domain::{
-    AccountClassKind, AccountClassSpec, FeltHex, GatewayErrorCode, OperationLookupResult,
-    OperationState, OperationStatus,
+    AccountClassKind, AccountClassSpec, CachePolicy, CacheStatus, FeltHex, GatewayErrorCode,
+    OperationLookupResult, OperationState, OperationStatus, QueryMode,
 };
 use starknet_types_core::felt::Felt;
 
@@ -277,4 +280,15 @@ fn allowlist_refuses_braavos_implementation_classes_on_its_own() {
         true,
     )
     .is_ok());
+}
+
+#[tokio::test]
+#[allow(deprecated)]
+async fn snapshot_accepts_zero_max_entries_because_it_is_ignored() {
+    let gateway = gateway(TestClock::default(), DeployExecution::AlreadyDeployed);
+    let mut request = snapshot_request(QueryMode::ActiveView);
+    request.cache_policy = CachePolicy::new(1_000, 0, 0).unwrap();
+
+    let snapshot = gateway.query_account_snapshot(request).await.unwrap();
+    assert_eq!(snapshot.value.cache.status, CacheStatus::Miss);
 }

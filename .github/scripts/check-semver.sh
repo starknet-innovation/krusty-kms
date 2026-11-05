@@ -76,21 +76,51 @@ rustdoc_json() {
   )
 }
 
+workspace_version() {
+  sed -n 's/^[[:space:]]*version[[:space:]]*=[[:space:]]*"\([^"]*\)"/\1/p' "$1/Cargo.toml" | head -n1
+}
+
 current_dir="$(mktemp -d)"
 baseline_dir="$(mktemp -d)"
-trap 'rm -rf "$current_dir" "$baseline_dir"' EXIT
+release_root=""
+cleanup() {
+  rm -rf "$current_dir" "$baseline_dir"
+  if [[ -n "$release_root" ]]; then
+    git -C "$root" worktree remove --force "$release_root" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+# Feature PRs never bump the workspace version (the release PR does), so
+# compare them as if they shipped in the next minor release: additions and
+# deprecations pass, and only breaking changes fail. A release PR changes the
+# version but has no API diff against its base branch, so compare it against
+# the previous release tag instead, using its actual increment. That catches
+# a bump that is too small for everything merged since that release.
+current_version="$(workspace_version "$root")"
+baseline_version="$(workspace_version "$baseline_root")"
+release_type_args=(--release-type minor)
+if [[ -n "$current_version" && "$current_version" != "$baseline_version" ]]; then
+  release_tag="v${baseline_version}"
+  if ! git -C "$root" rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null; then
+    echo "::error::workspace version ${baseline_version} -> ${current_version}, but tag ${release_tag} is missing; cannot check the release increment"
+    exit 1
+  fi
+  release_root="$(mktemp -d)"
+  rmdir "$release_root"
+  git -C "$root" worktree add --detach --quiet "$release_root" "$release_tag"
+  baseline_root="$release_root"
+  release_type_args=()
+  echo "Release PR: checking ${baseline_version} -> ${current_version} against ${release_tag}"
+fi
 
 failed=0
 for crate in "${crates[@]}"; do
   echo "::group::semver-checks $crate"
   current_json="$(rustdoc_json "$root" "$crate" "$current_dir")"
   baseline_json="$(rustdoc_json "$baseline_root" "$crate" "$baseline_dir")"
-  # Feature PRs never bump the workspace version (the release PR does), so
-  # compare as if this change shipped in the next minor release: additions
-  # and deprecations pass, and only breaking changes fail. From 1.0.0 on, a
-  # breaking change needs a major release.
   if ! cargo semver-checks check-release -p "$crate" \
-    --release-type minor \
+    ${release_type_args[@]+"${release_type_args[@]}"} \
     --current-rustdoc "$current_json" \
     --baseline-rustdoc "$baseline_json"; then
     echo "::error::semver-checks failed for $crate"

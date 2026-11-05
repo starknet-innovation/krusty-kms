@@ -21,7 +21,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | Design note | `.github/scripts/check-design-note.sh` | Public API / dep / surface changes without design note |
 | Licenses & advisories | `deny.toml` + `cargo-deny` | Disallowed licenses, yanked crates, unknown sources; also weekly on `main` |
 | rustdoc links | `cargo doc` + `RUSTDOCFLAGS` | Broken intra-doc links on publishable crates |
-| Semver | `cargo-semver-checks --release-type minor` via locked rustdoc JSON | Breaking API changes vs PR base / `main`; additions and deprecations pass because the release PR chooses the minor bump |
+| Semver | `cargo-semver-checks` via locked rustdoc JSON | Feature PRs: breaking changes vs PR base, with `--release-type minor` so additions and deprecations pass. Release PRs (version changed): the actual increment vs the previous `v<version>` tag |
 | Cross-compat vectors | `.github/workflows/cross-compat.yml` | Rust↔TS proof drift on touched crates |
 | Ignored-test bitrot | `.github/workflows/ignored-integration.yml` | Weekly compile of `--ignored` harnesses |
 

@@ -53,11 +53,19 @@ never bump the version; the release PR does. Before 1.0 this never came up,
 because the minor-level lints map to a patch bump at 0.y and no feature PR
 had tripped them.
 
-The script now passes `--release-type minor`. Additions and deprecations
-pass, and breaking changes still fail, which is what the guardrail is for
-from 1.0.0 on. Choosing between a minor and a patch release stays with the
-release PR, which reads `## [Unreleased]`: an `Added` or `Deprecated`
-section means a minor release.
+The script now picks the comparison from the workspace version:
+
+- **Version unchanged (feature PR):** compare against the base branch with
+  `--release-type minor`. Additions and deprecations pass, and breaking
+  changes fail, which is what the guardrail is for from 1.0.0 on.
+- **Version changed (release PR):** a release PR has no API diff against its
+  base branch, so comparing it there proves nothing. Instead, compare against
+  the previous release tag (`v<base version>`) with no release-type override,
+  so the actual increment is checked against everything merged since that
+  release. A patch bump over a pending deprecation fails. Checked locally
+  against `v1.0.0` with this branch: 1.0.1 fails
+  (`requires new minor version`), and 1.1.0 passes. A missing tag fails
+  closed.
 
 ## Removal
 
