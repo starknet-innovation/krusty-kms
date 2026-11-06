@@ -57,8 +57,8 @@ impl WasmAccount {
 
     /// Create a new account from a private key.
     /// # Arguments
-    /// * `private_key` - Private key as hex string (0x-prefixed)
-    /// * `contract_address` - Tongo contract address (hex string)
+    /// * `private_key` - Private key as decimal or prefixed hexadecimal
+    /// * `contract_address` - Tongo contract address in the same format
     #[wasm_bindgen(js_name = "fromPrivateKey")]
     pub fn from_private_key(
         private_key: String,

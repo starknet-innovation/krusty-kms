@@ -43,6 +43,41 @@ fn parse_felt_rejects_invalid_input() {
 }
 
 #[wasm_bindgen_test]
+fn invoke_v3_uses_decimal_nonce_and_calldata() {
+    let compute = |calldata: &str, nonce: &str| {
+        compute_invoke_transaction_hash_v3(
+            "0x1234",
+            vec![calldata.to_string()],
+            "0x534e5f5345504f4c4941",
+            nonce,
+            "0",
+            resource_bounds(),
+            vec![],
+            0,
+            0,
+            vec![],
+            None,
+        )
+        .unwrap()
+    };
+    assert_eq!(compute("1000", "10"), compute("0x3e8", "0xa"));
+    assert_ne!(compute("1000", "10"), compute("0x1000", "0x10"));
+}
+
+#[wasm_bindgen_test]
+fn typed_data_account_address_uses_decimal() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../kms/tests/fixtures/snip12_typed_data_vectors.json"
+    ))
+    .unwrap();
+    let json = fixture["vectors"][0]["typed_data"].to_string();
+    assert_eq!(
+        compute_typed_data_message_hash(&json, "4660").unwrap(),
+        compute_typed_data_message_hash(&json, "0x1234").unwrap()
+    );
+}
+
+#[wasm_bindgen_test]
 fn da_mode_from_u8_rejects_out_of_range() {
     assert!(da_mode_from_u8(2).is_err());
     assert!(da_mode_from_u8(255).is_err());

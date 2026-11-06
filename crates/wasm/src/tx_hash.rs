@@ -13,14 +13,14 @@ use wasm_bindgen::prelude::*;
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/// Parse a hex-encoded string into a `Felt`.
-fn parse_felt(hex: &str) -> Result<Felt, JsValue> {
-    Felt::from_hex(hex).map_err(|e| JsValue::from_str(&format!("Invalid hex: {e}")))
+/// Parse a felt in the same format as the other WASM exports.
+fn parse_felt(value: &str) -> Result<Felt, JsValue> {
+    crate::felt_input::parse_felt(value).map_err(|e| JsValue::from_str(&e))
 }
 
-/// Parse a slice of hex strings into a `Vec<Felt>`.
-fn parse_felts(hexes: &[String]) -> Result<Vec<Felt>, JsValue> {
-    hexes.iter().map(|s| parse_felt(s)).collect()
+/// Parse a slice of decimal or prefixed hexadecimal strings into a `Vec<Felt>`.
+fn parse_felts(values: &[String]) -> Result<Vec<Felt>, JsValue> {
+    values.iter().map(|s| parse_felt(s)).collect()
 }
 
 /// Map a `u8` to the `DaMode` enum used by the KMS crate.
@@ -86,7 +86,7 @@ fn parse_tip(tip: &str) -> Result<u64, JsValue> {
 
 /// Compute the hash of an invoke transaction (v1).
 ///
-/// All felt arguments are hex strings (e.g. `"0x1234"`).
+/// Felt arguments are decimal digits or `0x`-prefixed hexadecimal strings.
 #[wasm_bindgen(js_name = "computeInvokeTransactionHashV1")]
 pub fn compute_invoke_transaction_hash_v1(
     sender_address: &str,
@@ -333,7 +333,7 @@ pub fn compute_declare_transaction_hash_v3(
 ///
 /// # Arguments
 /// * `typed_data_json` - JSON string conforming to the SNIP-12 typed data schema.
-/// * `account_address` - Hex-encoded Starknet account address.
+/// * `account_address` - Decimal or prefixed hexadecimal Starknet account address.
 ///
 /// # Returns
 /// The message hash as a hex string.

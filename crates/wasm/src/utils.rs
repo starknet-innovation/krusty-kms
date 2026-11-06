@@ -71,19 +71,19 @@ pub fn random_bytes_hex(length: usize) -> Result<String, JsValue> {
     Ok(format!("0x{}", hex::encode(&bytes)))
 }
 
-/// Check whether a hex string is a valid Stark field element.
+/// Check whether a decimal or prefixed hexadecimal string is a valid Stark field element.
 ///
 /// # Arguments
-/// * `hex_str` - Hex string to validate (with or without `0x` prefix)
+/// * `hex_str` - Decimal digits or a `0x`-prefixed hex string
 ///
 /// # Returns
 /// `true` if the string parses as a valid felt, `false` otherwise
 #[wasm_bindgen(js_name = "isValidFelt")]
 pub fn is_valid_felt(hex_str: &str) -> bool {
-    Felt::from_hex(hex_str).is_ok()
+    crate::felt_input::parse_felt(hex_str).is_ok()
 }
 
-/// Check whether a hex string is a valid Stark private key.
+/// Check whether a decimal or prefixed hexadecimal string is a valid Stark private key.
 ///
 /// A valid private key must parse as a felt, must not be zero, and must be
 /// strictly below the Stark curve order `n`. Values in `[n, p)` parse as
@@ -91,7 +91,7 @@ pub fn is_valid_felt(hex_str: &str) -> bool {
 /// to a *different* key — so they are rejected here.
 ///
 /// # Arguments
-/// * `hex_str` - Hex string to validate (with or without `0x` prefix)
+/// * `hex_str` - Decimal digits or a `0x`-prefixed hex string
 ///
 /// # Returns
 /// `true` if the string is a valid in-range private key, `false` otherwise
@@ -101,7 +101,7 @@ pub fn is_valid_stark_private_key(hex_str: String) -> bool {
     const CURVE_ORDER_HEX: &str =
         "0x0800000000000010ffffffffffffffffb781126dcae7b2321e66a241adc64d2f";
     let curve_order = Felt::from_hex_unchecked(CURVE_ORDER_HEX);
-    match Felt::from_hex(&Zeroizing::new(hex_str)).map(SecretFelt::new) {
+    match crate::felt_input::parse_felt(&Zeroizing::new(hex_str)).map(SecretFelt::new) {
         Ok(felt) => *felt.expose_secret() != Felt::ZERO && *felt.expose_secret() < curve_order,
         Err(_) => false,
     }

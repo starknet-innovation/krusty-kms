@@ -7,7 +7,6 @@
 mod tests;
 
 use krusty_kms_common::SecretFelt;
-use starknet_types_core::felt::Felt;
 use wasm_bindgen::JsValue;
 use zeroize::Zeroizing;
 
@@ -47,12 +46,12 @@ pub(crate) fn decode_secret_hex<const N: usize>(
     }
 }
 
-/// Parse a hex felt (reduced, as `Felt::from_hex` does) into a [`SecretFelt`].
+/// Parse a decimal or prefixed hexadecimal felt into a [`SecretFelt`].
 ///
 /// A refusal is reported as `"{context}: {error}"`; the error never contains
 /// the input.
-pub(crate) fn parse_secret_felt(hex_str: &str, context: &str) -> Result<SecretFelt, JsValue> {
-    Felt::from_hex(hex_str)
+pub(crate) fn parse_secret_felt(value: &str, context: &str) -> Result<SecretFelt, JsValue> {
+    crate::felt_input::parse_felt(value)
         .map(SecretFelt::new)
         .map_err(|error| JsValue::from_str(&format!("{context}: {error}")))
 }

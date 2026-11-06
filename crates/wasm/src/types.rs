@@ -11,32 +11,32 @@ use wasm_bindgen::prelude::*;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 fn padded_public_key_hex(public_key_x: &str, public_key_y: &str) -> Result<String, JsValue> {
-    let x = Felt::from_hex(public_key_x)
-        .map_err(|_| JsValue::from_str("invalid public_key_x: expected felt hex"))?;
-    let y = Felt::from_hex(public_key_y)
-        .map_err(|_| JsValue::from_str("invalid public_key_y: expected felt hex"))?;
+    let x = crate::felt_input::parse_felt(public_key_x)
+        .map_err(|_| JsValue::from_str("invalid public_key_x: expected felt"))?;
+    let y = crate::felt_input::parse_felt(public_key_y)
+        .map_err(|_| JsValue::from_str("invalid public_key_y: expected felt"))?;
     Ok(krusty_kms_common::utils::serialize_public_key_hex(&x, &y))
 }
 
 fn padded_felt_hex(value: &str) -> Result<String, JsValue> {
-    let felt = Felt::from_hex(value)
-        .map_err(|_| JsValue::from_str("invalid public key felt: expected felt hex"))?;
+    let felt = crate::felt_input::parse_felt(value)
+        .map_err(|_| JsValue::from_str("invalid public key felt: expected felt"))?;
     Ok(format!("{:#066x}", felt))
 }
 
-fn require_felt_hex(value: &str, field: &str) -> Result<(), JsValue> {
-    Felt::from_hex(value)
+fn require_felt(value: &str, field: &str) -> Result<(), JsValue> {
+    crate::felt_input::parse_felt(value)
         .map(|_| ())
-        .map_err(|_| JsValue::from_str(&format!("invalid {field}: expected felt hex")))
+        .map_err(|_| JsValue::from_str(&format!("invalid {field}: expected felt")))
 }
 
 fn validate_affine_public_key(public_key_x: &str, public_key_y: &str) -> Result<(), String> {
     use starknet_types_core::curve::ProjectivePoint;
 
-    let x = Felt::from_hex(public_key_x)
-        .map_err(|_| "invalid public_key_x: expected felt hex".to_string())?;
-    let y = Felt::from_hex(public_key_y)
-        .map_err(|_| "invalid public_key_y: expected felt hex".to_string())?;
+    let x = crate::felt_input::parse_felt(public_key_x)
+        .map_err(|_| "invalid public_key_x: expected felt".to_string())?;
+    let y = crate::felt_input::parse_felt(public_key_y)
+        .map_err(|_| "invalid public_key_y: expected felt".to_string())?;
     ProjectivePoint::from_affine(x, y)
         .map(|_| ())
         .map_err(|_| "invalid public key: coordinates are not on the Stark curve".to_string())
@@ -179,10 +179,8 @@ impl TryFrom<WasmPoint> for krusty_kms_common::SerializablePoint {
 }
 
 fn parse_point_coordinate(label: &str, value: &str) -> WasmResult<Felt> {
-    krusty_kms_common::utils::parse_hex_to_felt(value).map_err(|error| {
-        WasmError::SerializationError(format!(
-            "point {label} must be a valid felt hex string: {error}"
-        ))
+    crate::felt_input::parse_felt(value).map_err(|error| {
+        WasmError::SerializationError(format!("point {label} must be a valid felt: {error}"))
     })
 }
 
@@ -346,7 +344,7 @@ impl WasmStarkXOnlyKeypair {
             private_key,
             public_key_x,
         };
-        require_felt_hex(&keypair.public_key_x, "public_key_x")?;
+        require_felt(&keypair.public_key_x, "public_key_x")?;
         Ok(keypair)
     }
 
@@ -371,7 +369,7 @@ pub struct WasmStarkXOnlyPublicKey {
 impl WasmStarkXOnlyPublicKey {
     #[wasm_bindgen(constructor)]
     pub fn new(public_key_x: String) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
-        require_felt_hex(&public_key_x, "public_key_x")?;
+        require_felt(&public_key_x, "public_key_x")?;
         Ok(Self { public_key_x })
     }
 

@@ -48,7 +48,7 @@ fn test_sign_stark_hash_public_key_matches() {
 fn test_stark_public_key_rejects_invalid_hex() {
     let err = stark_public_key("not-hex".into()).unwrap_err();
     let msg = js_error_message(err);
-    assert!(msg.contains("Invalid private key hex"));
+    assert!(msg.contains("Invalid private key"));
 }
 
 #[wasm_bindgen_test]
@@ -71,14 +71,14 @@ fn test_stark_public_key_rejects_curve_order_key() {
 fn test_sign_stark_hash_rejects_invalid_private_key() {
     let err = sign_stark_hash("not-hex".into(), TEST_STARK_HASH).unwrap_err();
     let msg = js_error_message(err);
-    assert!(msg.contains("Invalid private key hex"));
+    assert!(msg.contains("Invalid private key"));
 }
 
 #[wasm_bindgen_test]
 fn test_sign_stark_hash_rejects_invalid_hash() {
     let err = sign_stark_hash(TEST_STARK_SK.into(), "zzz").unwrap_err();
     let msg = js_error_message(err);
-    assert!(msg.contains("Invalid message hash hex"));
+    assert!(msg.contains("Invalid message hash"));
 }
 
 // ========================================================================

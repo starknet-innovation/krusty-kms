@@ -5,9 +5,9 @@ use crate::types::{WasmCiphertext, WasmDecryptedPoint};
 use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 
-/// Parse a hex string to Felt.
-pub(super) fn parse_felt(hex: &str) -> WasmResult<Felt> {
-    Felt::from_hex(hex).map_err(|e| WasmError::SerializationError(e.to_string()))
+/// Parse a decimal or prefixed hexadecimal felt.
+pub(super) fn parse_felt(value: &str) -> WasmResult<Felt> {
+    crate::felt_input::parse_felt(value).map_err(WasmError::SerializationError)
 }
 
 pub(super) fn parse_u128_decimal(value: &str) -> WasmResult<u128> {

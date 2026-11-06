@@ -25,6 +25,20 @@ console.log(getVersion());
 console.log(poseidonHash("0x1", "0x2"));
 ```
 
+## Felt inputs
+
+Felt arguments accept decimal digit strings (`"1000"` means one thousand) or
+`0x`/`0X`-prefixed hexadecimal strings (`"0x1000"` means 4096). This applies
+to felt values in `compileCalls`, transaction hashes, account addresses,
+signing, hashing, point coordinates, and proof inputs. Unprefixed hexadecimal
+text such as `"abcd"`, whitespace, and values outside the Stark field are
+rejected. `encodeFelt` also accepts booleans and surrounding whitespace.
+Byte strings and Nostr identifiers have their own documented formats.
+
+**Behavior change:** Earlier versions silently read unprefixed digit strings
+as hexadecimal in most exports. Callers that intended hexadecimal must add
+`0x`; callers that intended decimal can keep their digit strings.
+
 Run `init()` once and share its promise. Once `init()` has resolved, calling
 it again returns the same instance, but two calls that overlap (the second
 starting while the first is still loading) each instantiate the module. The

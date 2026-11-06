@@ -14,12 +14,11 @@ use zeroize::Zeroizing;
 /// Parse a felt that must not be reduced. It comes back as a [`SecretFelt`]
 /// because most callers parse secrets; a public input is wiped harmlessly.
 fn parse_felt_without_reduction(value: &str, label: &str) -> Result<SecretFelt, JsValue> {
-    let felt = parse_secret_felt(value, &format!("Invalid {label} hex"))?;
-    let digits = value
+    let felt = parse_secret_felt(value, &format!("Invalid {label}"))?;
+    let hex_digits = value
         .strip_prefix("0x")
-        .or_else(|| value.strip_prefix("0X"))
-        .unwrap_or(value);
-    if !is_unreduced_hex(digits, felt.expose_secret()) {
+        .or_else(|| value.strip_prefix("0X"));
+    if hex_digits.is_some_and(|digits| !is_unreduced_hex(digits, felt.expose_secret())) {
         return Err(JsValue::from_str(&format!(
             "Invalid {label}: value is not a field element"
         )));
@@ -49,13 +48,13 @@ fn is_unreduced_hex(digits: &str, felt: &Felt) -> bool {
 /// matching the Starknet Privacy SDK's expected `[1, n/2]` range.
 ///
 /// # Arguments
-/// * `private_key` - The Stark private key as a hex string.
+/// * `private_key` - The Stark private key as decimal or prefixed hexadecimal.
 ///
 /// # Returns
 /// The viewing key as a `0x`-prefixed hex string.
 #[wasm_bindgen(js_name = "deriveStrk20ViewingKey")]
 pub fn derive_strk20_viewing_key(private_key: String) -> Result<String, JsValue> {
-    let pk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key hex")?;
+    let pk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key")?;
     let viewing_key = krusty_kms::strk20::derive_strk20_viewing_key(pk.expose_secret());
     Ok(format!("{:#x}", viewing_key))
 }

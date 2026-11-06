@@ -8,17 +8,17 @@ use wasm_bindgen::prelude::*;
 /// Compute the Pedersen hash of two field elements.
 ///
 /// # Arguments
-/// * `a` - First element as a hex string
-/// * `b` - Second element as a hex string
+/// * `a` - First element as decimal or prefixed hexadecimal
+/// * `b` - Second element as decimal or prefixed hexadecimal
 ///
 /// # Returns
 /// The Pedersen hash as a hex string
 #[wasm_bindgen(js_name = "pedersenHash")]
 pub fn pedersen_hash(a: &str, b: &str) -> Result<String, JsValue> {
-    let a = Felt::from_hex(a)
-        .map_err(|e| JsValue::from_str(&format!("Invalid hex input for a: {e}")))?;
-    let b = Felt::from_hex(b)
-        .map_err(|e| JsValue::from_str(&format!("Invalid hex input for b: {e}")))?;
+    let a = crate::felt_input::parse_felt(a)
+        .map_err(|e| JsValue::from_str(&format!("Invalid felt input for a: {e}")))?;
+    let b = crate::felt_input::parse_felt(b)
+        .map_err(|e| JsValue::from_str(&format!("Invalid felt input for b: {e}")))?;
 
     let hash = Pedersen::hash(&a, &b);
     Ok(format!("{:#x}", hash))
@@ -30,7 +30,7 @@ pub fn pedersen_hash(a: &str, b: &str) -> Result<String, JsValue> {
 /// `pedersen(pedersen(pedersen(0, e0), e1), ..., len)`
 ///
 /// # Arguments
-/// * `felts` - Array of hex strings (felt values)
+/// * `felts` - Array of decimal or prefixed hexadecimal felt strings
 ///
 /// # Returns
 /// The hash as a hex string
@@ -39,7 +39,8 @@ pub fn pedersen_hash_many(felts: Vec<String>) -> Result<String, JsValue> {
     let felt_vec: Vec<Felt> = felts
         .iter()
         .map(|s| {
-            Felt::from_hex(s).map_err(|e| JsValue::from_str(&format!("Invalid hex input: {e}")))
+            crate::felt_input::parse_felt(s)
+                .map_err(|e| JsValue::from_str(&format!("Invalid felt input: {e}")))
         })
         .collect::<Result<Vec<_>, _>>()?;
 

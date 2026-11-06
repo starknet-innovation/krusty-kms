@@ -7,6 +7,18 @@ use wasm_bindgen_test::*;
 const TEST_MNEMONIC: &str =
     "habit hope tip crystal because grunt nation idea electric witness alert like";
 
+#[wasm_bindgen_test]
+fn oz_address_uses_decimal_public_key() {
+    assert_eq!(
+        derive_oz_account_address("1234", "0x1", None).unwrap(),
+        derive_oz_account_address("0x4d2", "0x1", None).unwrap()
+    );
+    assert_ne!(
+        derive_oz_account_address("1234", "0x1", None).unwrap(),
+        derive_oz_account_address("0x1234", "0x1", None).unwrap()
+    );
+}
+
 fn js_error_message(error: JsValue) -> String {
     error
         .as_string()

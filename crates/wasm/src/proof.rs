@@ -766,9 +766,9 @@ pub fn generate_ragequit_proof(
 // Helper Functions
 // ============================================================================
 
-/// Parse a hex string to Felt.
-fn parse_felt(hex: &str) -> WasmResult<Felt> {
-    Felt::from_hex(hex).map_err(|e| WasmError::SerializationError(e.to_string()))
+/// Parse a decimal or prefixed hexadecimal felt.
+fn parse_felt(value: &str) -> WasmResult<Felt> {
+    crate::felt_input::parse_felt(value).map_err(WasmError::SerializationError)
 }
 
 /// Parse a public key in the concatenated `0x{x_hex}{y_hex}` format (128 hex

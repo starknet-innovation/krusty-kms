@@ -1,9 +1,9 @@
-//! Secret inputs are accepted and refused exactly as before they were taken
-//! as owned, wiped strings: the same outputs, and the same error messages.
+//! Secret inputs remain owned and wiped. Felt strings use decimal digits or
+//! prefixed hexadecimal; byte strings retain their own formats.
 //!
 //! Every secret argument is passed with `.into()`, so this file compiles
 //! against both the borrowed (`&str`) and the owned (`String`) signature, and
-//! it was run unchanged against both.
+//! it originally ran against both.
 
 use krusty_kms_wasm::{account, encryption, signing, strk20, utils, WasmAccount};
 use starknet_types_core::felt::Felt;
@@ -183,7 +183,7 @@ fn symmetric_key_and_plaintext_are_handled_as_before() {
 }
 
 #[wasm_bindgen_test]
-fn strk20_private_key_felts_are_parsed_as_before() {
+fn strk20_private_key_felts_use_decimal_or_prefixed_hex() {
     let scope = ("0x534e5f5345504f4c4941", "0x123");
     let derive = |key: &str| {
         strk20::derive_scoped_strk20_viewing_key(key.into(), scope.0, scope.1).map_err(message)
@@ -193,26 +193,21 @@ fn strk20_private_key_felts_are_parsed_as_before() {
         assert_eq!(derive(accepted).unwrap(), expected, "{accepted:?}");
     }
     assert_eq!(derive("0xAbC").unwrap(), derive("0xabc").unwrap());
+    assert_eq!(derive("10").unwrap(), derive("0xa").unwrap());
+    assert_ne!(derive("10").unwrap(), derive("0x10").unwrap());
+    assert_eq!(derive("0X1").unwrap(), expected);
 
-    let not_a_felt = "Invalid private key: value is not a field element";
-    let hex_error = "Invalid private key hex: failed to create Felt from string: ";
-    for (input, error) in [
-        (FIELD_PRIME.to_string(), not_a_felt.to_string()),
-        (
-            format!("0x{}", "f".repeat(64)),
-            format!("{hex_error}representative out of range"),
-        ),
-        (
-            format!("0x{}", "1".repeat(65)),
-            format!("{hex_error}hex string too big"),
-        ),
-        ("0X1".to_string(), format!("{hex_error}invalid hex string")),
-        ("0x".to_string(), format!("{hex_error}invalid hex string")),
-        ("0x1 ".to_string(), format!("{hex_error}invalid hex string")),
-        ("0x1é".to_string(), format!("{hex_error}invalid hex string")),
-        (String::new(), format!("{hex_error}empty string")),
+    let out_of_range = "Invalid private key: hex felt exceeds the field modulus";
+    assert_eq!(derive(FIELD_PRIME).unwrap_err(), out_of_range);
+    for input in [
+        format!("0x{}", "f".repeat(64)),
+        format!("0x{}", "1".repeat(65)),
+        "0x".to_string(),
+        "0x1 ".to_string(),
+        "0x1é".to_string(),
+        String::new(),
     ] {
-        assert_eq!(derive(&input).unwrap_err(), error, "{input:?}");
+        assert!(derive(&input).is_err(), "{input:?}");
     }
 
     let hash = strk20::strk20_viewing_key_message_hash(scope.0, scope.1).unwrap();
@@ -230,20 +225,23 @@ fn strk20_private_key_felts_are_parsed_as_before() {
         strk20::fold_strk20_viewing_key(&public_key, &hash, FIELD_PRIME.into(), s.as_str().into());
     assert_eq!(
         message(error.unwrap_err()),
-        "Invalid signature r: value is not a field element"
+        "Invalid signature r: hex felt exceeds the field modulus"
     );
 }
 
 #[wasm_bindgen_test]
-fn stark_private_key_felts_are_parsed_as_before() {
+fn stark_private_key_felts_use_decimal_or_prefixed_hex() {
     let expected = format!(
         "{:#x}",
         krusty_kms::stark_public_key(&Felt::from_hex("0x1").unwrap()).unwrap()
     );
     assert_eq!(signing::stark_public_key("0x1".into()).unwrap(), expected);
     assert_eq!(signing::stark_public_key("1".into()).unwrap(), expected);
-    let hex_error =
-        "Invalid private key hex: failed to create Felt from string: invalid hex string";
+    let decimal_signature = signing::sign_stark_hash("1".into(), "10").unwrap();
+    let hex_signature = signing::sign_stark_hash("0x1".into(), "0xa").unwrap();
+    assert_eq!(decimal_signature.r, hex_signature.r);
+    assert_eq!(decimal_signature.s, hex_signature.s);
+    let hex_error = "Invalid private key: expected decimal digits or a 0x-prefixed hex felt";
     let error = signing::sign_stark_hash("zz".into(), "0x2").unwrap_err();
     assert_eq!(message(error), hex_error);
     assert!(
@@ -271,14 +269,14 @@ fn stark_private_key_felts_are_parsed_as_before() {
     let error = krusty_kms_wasm::scalar_mul_generator("zz".into()).unwrap_err();
     assert_eq!(
         message(error),
-        "Invalid scalar: failed to create Felt from string: invalid hex string"
+        "Invalid scalar: expected decimal digits or a 0x-prefixed hex felt"
     );
 
     assert!(WasmAccount::from_private_key("0x1".into(), "0x123").is_ok());
     let error = WasmAccount::from_private_key("zz".into(), "0x123")
         .err()
         .unwrap();
-    assert!(message(error).contains("invalid hex string"));
+    assert!(message(error).contains("expected decimal digits or a 0x-prefixed hex felt"));
 }
 
 #[wasm_bindgen_test]
