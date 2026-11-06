@@ -247,6 +247,16 @@ fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u
     if find(map, IN_SIGHASH_TYPE).is_some_and(|value| value != sighash_all) {
         return Err(refuse("requests a sighash type other than SIGHASH_ALL"));
     }
+    // Every partial signature already on the input must also end in the
+    // SIGHASH_ALL byte, declared type or not (the parser has already proved
+    // the byte is a defined type). A P2WPKH input has one key and this signer
+    // only signs SIGHASH_ALL, so anything else came from elsewhere; refuse
+    // rather than add a signature next to it.
+    if map.iter().any(|pair| {
+        pair.key.first() == Some(&IN_PARTIAL_SIG) && pair.value.last() != Some(&SIGHASH_ALL)
+    }) {
+        return Err(refuse("carries a partial signature other than SIGHASH_ALL"));
+    }
 
     let witness_utxo = TxOut::parse_exact(
         find(map, IN_WITNESS_UTXO).ok_or_else(|| refuse("has no witness_utxo"))?,
