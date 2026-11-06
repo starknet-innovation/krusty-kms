@@ -11,7 +11,8 @@ use crate::bitcoin::tx::{OutPoint, TxIn};
 /// m/84'/0'/0'/0/0 of the BIP-84 test mnemonic (public, never fund it).
 pub(super) const KEY: &str = "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3";
 /// m/84'/0'/0'/0/1 of the same mnemonic.
-const OTHER_KEY: &str = "2fd0affa51529f940a358ec0c50de81267d0bf5158ca61887347676946362c5b";
+pub(super) const OTHER_KEY: &str =
+    "2fd0affa51529f940a358ec0c50de81267d0bf5158ca61887347676946362c5b";
 const AMOUNT: u64 = 100_000;
 
 pub(super) fn key(hex_value: &str) -> [u8; 32] {
@@ -280,49 +281,6 @@ fn refuses_every_sighash_type_but_all() {
     let mut explicit_all = fixture();
     explicit_all.inputs[0].push(pair(&[IN_SIGHASH_TYPE], &[0x01, 0, 0, 0]));
     assert_signed(&sign(&explicit_all, &[0]).unwrap(), 0);
-}
-
-#[test]
-fn refuses_an_existing_partial_signature_other_than_sighash_all() {
-    // With no declared PSBT_IN_SIGHASH_TYPE, the parser accepts any defined
-    // sighash byte; a listed input still refuses every one but SIGHASH_ALL,
-    // whichever key the signature is under.
-    let der = signer(OTHER_KEY).sign_sighash_all(&[1; 32]).unwrap();
-    let body = &der[..der.len() - 1];
-    for flag in [0x02, 0x03, 0x81, 0x82, 0x83] {
-        for public_key in [signer(KEY).public_key, signer(OTHER_KEY).public_key] {
-            let mut psbt = fixture();
-            put_partial_signature(&mut psbt.inputs[0], &public_key, [body, &[flag]].concat());
-            let reason = refusal(&psbt, &[0]);
-            assert!(
-                reason.contains("PSBT input 0: carries a partial signature other than SIGHASH_ALL"),
-                "flag {flag:#x}: {reason}"
-            );
-        }
-    }
-
-    // A SIGHASH_ALL co-signature is kept, and this key's signature is added.
-    let mut co_signed = fixture();
-    put_partial_signature(
-        &mut co_signed.inputs[0],
-        &signer(OTHER_KEY).public_key,
-        der.clone(),
-    );
-    let signed = sign(&co_signed, &[0]).unwrap();
-    assert_signed(&signed, 0);
-    assert!(signed.inputs[0].iter().any(|pair| pair.value == der));
-
-    // Only listed inputs are checked: a weaker signature on an unlisted input stays.
-    let mut unlisted = fixture();
-    let weak = [body, &[0x82]].concat();
-    put_partial_signature(
-        &mut unlisted.inputs[1],
-        &signer(OTHER_KEY).public_key,
-        weak.clone(),
-    );
-    let signed = sign(&unlisted, &[0]).unwrap();
-    assert_signed(&signed, 0);
-    assert!(signed.inputs[1].iter().any(|pair| pair.value == weak));
 }
 
 #[test]

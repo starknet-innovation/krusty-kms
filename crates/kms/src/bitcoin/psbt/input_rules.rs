@@ -2,7 +2,7 @@
 //! whole map has been read and each pair has passed the field table.
 
 use super::super::tx::malformed;
-use super::{find, Map, IN_PARTIAL_SIG, IN_SIGHASH_TYPE};
+use super::{find, Map, IN_PARTIAL_SIG, IN_SIGHASH_TYPE, SIGHASH_ALL};
 use krusty_kms_common::Result;
 
 /// BIP-174: when an input declares `PSBT_IN_SIGHASH_TYPE`, every partial
@@ -25,4 +25,15 @@ pub(super) fn require_declared_sighash(index: usize, map: &Map) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+/// Whether any partial signature on the input ends in a sighash byte other
+/// than SIGHASH_ALL, declared type or not (the field table has already proved
+/// the byte is a defined type). A P2WPKH input has one key and this signer
+/// only signs SIGHASH_ALL, so anything else came from elsewhere, and a listed
+/// input carrying one is refused rather than signed next to it.
+pub(super) fn has_partial_signature_other_than_all(map: &Map) -> bool {
+    map.iter().any(|pair| {
+        pair.key.first() == Some(&IN_PARTIAL_SIG) && pair.value.last() != Some(&SIGHASH_ALL)
+    })
 }
