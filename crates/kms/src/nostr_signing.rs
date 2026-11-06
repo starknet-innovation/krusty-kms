@@ -2,7 +2,7 @@
 //!
 //! Inputs:
 //! - a 32-byte secp256k1 private key derived for the Nostr domain
-//! - a 32-byte event id digest
+//! - a 32-byte event id digest or raw message bytes
 //!
 //! Outputs:
 //! - x-only public key bytes
@@ -13,7 +13,6 @@
 //! - the returned public key is the x-only BIP-340 verifying key
 //! - invalid secret scalars are rejected before signing
 
-use k256::schnorr::signature::Signer;
 use k256::schnorr::SigningKey;
 use krusty_kms_common::KmsError;
 
@@ -41,16 +40,19 @@ pub fn sign_nostr_event_id(
     sign_nostr_event_id_with_aux_rand(private_key, event_id, &[0u8; 32])
 }
 
-/// Sign a raw message using the standard BIP-340 byte-message API.
+/// Sign raw message bytes using BIP-340, without hashing them first.
 ///
 /// This does not promise Nostr event semantics. Callers that already have a
 /// canonical 32-byte event id should use [`sign_nostr_event_id`] instead.
+/// The deterministic auxiliary randomness is 32 zero bytes.
 pub fn sign_nostr_message(
     private_key: &[u8; 32],
     message: &[u8],
 ) -> Result<NostrSignature, KmsError> {
     let signing_key = parse_signing_key(private_key)?;
-    let signature: k256::schnorr::Signature = signing_key.sign(message);
+    let signature = signing_key
+        .sign_raw(message, &[0u8; 32])
+        .map_err(|error| KmsError::CryptoError(format!("nostr signing failed: {error}")))?;
 
     Ok(NostrSignature {
         public_key: signing_key.verifying_key().to_bytes().into(),
@@ -150,7 +152,24 @@ mod tests {
         let verifying_key = VerifyingKey::from_slice(&signed.public_key).unwrap();
         let signature = Signature::try_from(signed.signature.as_slice()).unwrap();
 
-        verifying_key.verify(message, &signature).unwrap();
+        verifying_key.verify_raw(message, &signature).unwrap();
+        assert!(verifying_key.verify(message, &signature).is_err());
+    }
+
+    #[test]
+    fn raw_message_signing_matches_event_id_and_bip340_vector() {
+        let private_key =
+            decode_array::<32>("0000000000000000000000000000000000000000000000000000000000000003");
+        let message =
+            decode_array::<32>("0000000000000000000000000000000000000000000000000000000000000000");
+
+        let raw = sign_nostr_message(&private_key, &message).unwrap();
+        let event = sign_nostr_event_id(&private_key, &message).unwrap();
+        assert_eq!(raw, event);
+        assert_eq!(
+            hex::encode(raw.signature),
+            "e907831f80848d1069a5371b402410364bdf1c5f8307b0084c55f1ce2dca821525f66a4a85ea8b71e482a74f382d2ce5ebeee8fdb2172f477df4900d310536c0"
+        );
     }
 
     #[test]

@@ -40,6 +40,11 @@ import init from "@starknetfoundation/krusty-kms-wasm";
 export const krustyReady = init();
 ```
 
+`signNostrMessage(privateKey, messageHex)` signs the decoded message bytes
+directly with deterministic BIP-340 (`aux_rand = 0`); it does not hash the
+message first. For Nostr events, compute the canonical 32-byte event id and
+pass it to `signNostrEventId`.
+
 ## Secrets
 
 Exports that take a secret (mnemonic, passphrase, password, private key,

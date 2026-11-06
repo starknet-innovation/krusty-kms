@@ -148,7 +148,9 @@ pub fn sign_nostr_event_id(
     Ok(nostr_sig_to_wasm(sig))
 }
 
-/// Sign an arbitrary message using BIP-340 Schnorr.
+/// Sign decoded message bytes using BIP-340 Schnorr without pre-hashing.
+/// For a Nostr event, hash its canonical serialization to a 32-byte event id
+/// and use `signNostrEventId` instead.
 ///
 /// # Arguments
 /// * `private_key` - 64 hex chars (no 0x prefix), secp256k1 private key

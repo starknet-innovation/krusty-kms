@@ -142,6 +142,16 @@ fn test_sign_nostr_message_with_0x_prefix() {
 }
 
 #[wasm_bindgen_test]
+fn test_sign_nostr_message_matches_event_id_for_32_bytes() {
+    let sk = test_nostr_private_key();
+    let message = "00".repeat(32);
+    let raw = sign_nostr_message(sk.clone(), &message).unwrap();
+    let event = sign_nostr_event_id(sk, &message).unwrap();
+    assert_eq!(raw.public_key, event.public_key);
+    assert_eq!(raw.signature, event.signature);
+}
+
+#[wasm_bindgen_test]
 fn test_nostr_public_key_rejects_invalid_hex() {
     let err = nostr_public_key("not-valid-hex".into()).unwrap_err();
     let msg = js_error_message(err);
