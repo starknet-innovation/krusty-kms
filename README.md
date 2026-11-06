@@ -8,7 +8,7 @@
   Deterministic key management, Starknet account tooling, and protocol cryptography in Rust.
 </p>
 
-> **Status**: Krusty is on the stable 1.x line and the published crates listed below are supported for production use. Their public API follows semantic versioning: breaking changes wait for a new major version. The internal crates and the experimental gaming crates are not covered by this commitment. See [SECURITY.md](SECURITY.md) for supported versions and how to report a vulnerability.
+> **Status**: Krusty is on the stable 1.x line and the published crates and the npm package listed below are supported for production use. Their public API follows semantic versioning: breaking changes wait for a new major version. The internal crates and the experimental gaming crates are not covered by this commitment. See [SECURITY.md](SECURITY.md) for supported versions and how to report a vulnerability.
 
 Krusty provides BIP-39/44 key derivation for Starknet and Nostr domains, deterministic Stark and Nostr signing, OpenZeppelin account descriptor/address calculation, Tongo confidential proof generation, and a focused Starknet client/gateway surface.
 
@@ -30,13 +30,19 @@ krusty-kms-sdk        Tongo protocol operations: fund, transfer, withdraw, rollo
 krusty-kms-client     Focused Starknet wallet, deployment, Tongo account, and call-builder client
 ```
 
+## Published npm Package
+
+```
+@starknetfoundation/krusty-kms-wasm  WebAssembly bindings for browser environments
+                                     (built from crates/wasm, takes the workspace version)
+```
+
 ## Internal Crates
 
 These remain in the repository for internal, experimental, or integration-specific use:
 
 ```
 krusty-kms-oracle     Versioned stdio transport on top of the gateway
-krusty-kms-wasm       WebAssembly bindings for browser environments
 krusty-kms-controller Cartridge Controller integration
 krusty-kms-cabi       C ABI shared library (libkms)
 mental-poker*         Experimental gaming protocol crates
