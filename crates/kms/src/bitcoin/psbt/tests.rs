@@ -11,7 +11,8 @@ use crate::bitcoin::tx::{OutPoint, TxIn};
 /// m/84'/0'/0'/0/0 of the BIP-84 test mnemonic (public, never fund it).
 pub(super) const KEY: &str = "4604b4b710fe91f584fff084e1a9159fe4f8408fff380596a604948474ce4fa3";
 /// m/84'/0'/0'/0/1 of the same mnemonic.
-const OTHER_KEY: &str = "2fd0affa51529f940a358ec0c50de81267d0bf5158ca61887347676946362c5b";
+pub(super) const OTHER_KEY: &str =
+    "2fd0affa51529f940a358ec0c50de81267d0bf5158ca61887347676946362c5b";
 const AMOUNT: u64 = 100_000;
 
 pub(super) fn key(hex_value: &str) -> [u8; 32] {

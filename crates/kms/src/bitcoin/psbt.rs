@@ -247,6 +247,9 @@ fn signable_amount(psbt: &Psbt, index: usize, signer: &P2wpkhSigner) -> Result<u
     if find(map, IN_SIGHASH_TYPE).is_some_and(|value| value != sighash_all) {
         return Err(refuse("requests a sighash type other than SIGHASH_ALL"));
     }
+    if input_rules::has_partial_signature_other_than_all(map) {
+        return Err(refuse("carries a partial signature other than SIGHASH_ALL"));
+    }
 
     let witness_utxo = TxOut::parse_exact(
         find(map, IN_WITNESS_UTXO).ok_or_else(|| refuse("has no witness_utxo"))?,
@@ -335,6 +338,8 @@ mod fields_test;
 mod key_encoding_test;
 #[cfg(test)]
 mod no_panic_test;
+#[cfg(test)]
+mod partial_sig_test;
 #[cfg(test)]
 mod scaling_test;
 #[cfg(test)]

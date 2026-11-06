@@ -24,6 +24,14 @@ All notable changes to the published Rust crates are documented here.
   `max_entries > 0`, keep accepting requests built with `with_ttl`. The
   oracle protocol version stays 1.0, because every 1.0 message remains valid.
 
+### Security
+
+- `sign_bitcoin_psbt_inputs` now refuses a listed input that already carries
+  a partial signature whose sighash byte is not `SIGHASH_ALL`, even when the
+  input declares no `PSBT_IN_SIGHASH_TYPE`. Such PSBTs were previously
+  signed. Unlisted inputs keep the BIP-174 rule that a partial signature
+  matches the declared type when one is present.
+
 ## [1.0.0] - 2026-11-05
 
 First stable release. From 1.0.0 on, the published crates follow semantic
