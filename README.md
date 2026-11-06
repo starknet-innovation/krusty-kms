@@ -8,7 +8,7 @@
   Deterministic key management, Starknet account tooling, and protocol cryptography in Rust.
 </p>
 
-> **Disclaimer**: This repository is experimental and is provided strictly for testing and experimentation purposes. It should not be used in production environments or relied upon for any security-critical application. There are no guarantees of stability, correctness, or continued maintenance. Use at your own risk.
+> **Status**: Krusty is on the stable 1.x line and the published crates listed below are supported for production use. Their public API follows semantic versioning: breaking changes wait for a new major version. The internal crates and the experimental gaming crates are not covered by this commitment. See [SECURITY.md](SECURITY.md) for supported versions and how to report a vulnerability.
 
 Krusty provides BIP-39/44 key derivation for Starknet and Nostr domains, deterministic Stark and Nostr signing, OpenZeppelin account descriptor/address calculation, Tongo confidential proof generation, and a focused Starknet client/gateway surface.
 

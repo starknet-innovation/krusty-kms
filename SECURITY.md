@@ -2,9 +2,15 @@
 
 ## Supported versions
 
-This repository is experimental. Security fixes are applied on a best-effort
-basis to the latest published crates.io versions on `main`. Older versions may
-not receive patches.
+Krusty is on the stable 1.x line. Security fixes go to the latest 1.x release
+of the published crates.io crates listed in the [README](README.md). Upgrade
+to the newest 1.x release to receive them: semantic versioning keeps 1.x
+upgrades free of breaking API changes. Releases before 1.0.0 are no longer
+supported.
+
+The internal crates (`krusty-kms-oracle`, `krusty-kms-wasm`,
+`krusty-kms-controller`, `krusty-kms-cabi`) and the experimental crates under
+`crates/experimental/` are fixed on a best-effort basis.
 
 ## Reporting a vulnerability
 
