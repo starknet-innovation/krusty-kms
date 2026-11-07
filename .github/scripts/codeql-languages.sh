@@ -32,11 +32,13 @@ while IFS= read -r path; do
       hits+="c-cpp " ;;
   esac
   case "$path" in
+    packages/kms-jvm/*.md) ;;
     *.java | *.kt | *.kts | packages/kms-jvm/*)
       hits+="java-kotlin " ;;
   esac
   case "$path" in
-    *.js | *.jsx | *.mjs | *.cjs | *.ts | *.tsx | *.mts | *.cts | *.vue | *.html | *.htm \
+    *.js | *.jsx | *.mjs | *.cjs | *.es | *.es6 | *.ts | *.tsx | *.mts | *.cts | *.vue \
+      | *.html | *.htm | *.xhtml | *.xhtm | *.ejs | *.hbs | *.njk \
       | */package.json | package.json | */package-lock.json | package-lock.json \
       | */tsconfig*.json | tsconfig*.json)
       hits+="javascript-typescript " ;;
@@ -46,6 +48,7 @@ while IFS= read -r path; do
       hits+="rust " ;;
   esac
   case "$path" in
+    packages/kms-swift/*.md) ;;
     *.swift | packages/kms-swift/*)
       hits+="swift " ;;
   esac

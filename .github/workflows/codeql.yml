@@ -51,10 +51,12 @@ jobs:
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             # The PR files endpoint stops at 3000 entries; a short list would
             # silently drop languages, so fall back to all of them instead.
-            if gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename' > "$files_list" \
+            # One record per file; renames also map their previous path.
+            if gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+                --jq '.[] | [.filename, (.previous_filename // "")] | @tsv' > "$files_list" \
               && (( $(wc -l < "$files_list") >= ${PR_CHANGED_FILES:-0} )) \
               && (( $(wc -l < "$files_list") < 3000 )); then
-              langs="$(bash .github/scripts/codeql-languages.sh < "$files_list")"
+              langs="$(tr '\t' '\n' < "$files_list" | bash .github/scripts/codeql-languages.sh)"
             else
               echo "::warning::could not list every PR file; analyzing every language"
               langs="$(bash .github/scripts/codeql-languages.sh --all)"
