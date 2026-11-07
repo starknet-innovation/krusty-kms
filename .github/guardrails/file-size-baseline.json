@@ -146,7 +146,11 @@
     },
     {
       "path": "crates/kms/src/typed_data.rs",
-      "lines": 394
+      "lines": 391
+    },
+    {
+      "path": "crates/kms/src/typed_data_compat.rs",
+      "lines": 385
     },
     {
       "path": "crates/kms/tests/tx_hash_parity.rs",
