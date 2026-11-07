@@ -1,0 +1,87 @@
+name: CodeQL
+
+# Advanced-setup replacement for GitHub's CodeQL default setup. It keeps the
+# same languages, query suite (security-extended) and build modes, but on pull
+# requests it only analyzes the languages whose files the PR touches. Pushes to
+# main and the weekly schedule always analyze every language so the base-branch
+# results PR alerts are compared against stay complete.
+# See docs/design/2026-11-07-conditional-codeql-pr-runs.md.
+#
+# Default setup must be disabled in Settings > Code security before this
+# workflow can upload results.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Tuesdays 04:17 UTC — full sweep, picks up new queries without code changes.
+    - cron: "17 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            if files="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename')"; then
+              langs="$(printf '%s\n' "$files" | bash .github/scripts/codeql-languages.sh)"
+            else
+              echo "::warning::could not list PR files; analyzing every language"
+              langs="$(bash .github/scripts/codeql-languages.sh --all)"
+            fi
+          else
+            langs="$(bash .github/scripts/codeql-languages.sh --all)"
+          fi
+          echo "Languages to analyze: ${langs:-<none>}"
+          matrix="$(printf '%s\n' "$langs" | jq -Rnc '[inputs | select(length > 0)]')"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    needs: changes
+    if: needs.changes.outputs.matrix != '[]'
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'swift' && 'autobuild' || 'none' }}
+          queries: security-extended
+      - if: matrix.language == 'swift'
+        uses: github/codeql-action/autobuild@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:${{ matrix.language }}"
