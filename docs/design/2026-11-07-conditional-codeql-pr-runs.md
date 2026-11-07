@@ -11,7 +11,11 @@ minutes of the ~16-minute wall clock (rust ~6 min, the rest under a minute).
 `.github/workflows/codeql.yml` moves CodeQL to advanced setup with the same
 configuration as default setup: the same languages, the `security-extended`
 suite, `build-mode: none` everywhere except Swift (`autobuild` on `macos-26`),
-and one `/language:<lang>` category per language. A `changes` job lists the
+and one `/language:<lang>` category per language. It also adds
+`java-kotlin`, which default setup did not analyze although
+`packages/kms-jvm` holds Java and Kotlin sources; Kotlin has no
+`build-mode: none`, so that job builds manually with the same
+`gradle classes` step as `wrappers.yml`. A `changes` job lists the
 PR's files through the REST API and `.github/scripts/codeql-languages.sh` maps
 them to languages; the analyze matrix covers only those. A PR that touches no
 analyzed language skips the analyze job entirely.

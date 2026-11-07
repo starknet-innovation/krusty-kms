@@ -6,7 +6,7 @@
 # every language so a configuration change is always exercised in full.
 set -euo pipefail
 
-all_languages=(actions c-cpp javascript-typescript rust swift)
+all_languages=(actions c-cpp java-kotlin javascript-typescript rust swift)
 
 if [[ "${1:-}" == "--all" ]]; then
   printf '%s\n' "${all_languages[@]}"
@@ -30,6 +30,10 @@ while IFS= read -r path; do
   case "$path" in
     *.c | *.h | *.cc | *.cpp | *.cxx | *.hh | *.hpp | *.hxx | *.inl)
       hits+="c-cpp " ;;
+  esac
+  case "$path" in
+    *.java | *.kt | *.kts | packages/kms-jvm/*)
+      hits+="java-kotlin " ;;
   esac
   case "$path" in
     *.js | *.jsx | *.mjs | *.cjs | *.ts | *.tsx | *.mts | *.cts | *.vue | *.html | *.htm \
