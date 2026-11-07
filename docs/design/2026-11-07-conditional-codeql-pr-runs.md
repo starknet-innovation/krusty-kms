@@ -15,7 +15,14 @@ and one `/language:<lang>` category per language. It also adds
 `java-kotlin`, which default setup did not analyze although
 `packages/kms-jvm` holds Java and Kotlin sources; Kotlin has no
 `build-mode: none`, so that job builds manually with the same
-`gradle classes` step as `wrappers.yml`. A `changes` job lists the
+`gradle classes` step as `wrappers.yml`.
+
+Known gap: `packages/kms-jvm` builds with Kotlin 2.4.21, while the pinned
+CodeQL bundle (2.27.4, action v4.39.3) documents Kotlin support up to 2.4.20.
+The job passes and the Java sources are analyzed, but the Kotlin source
+(`KmsKt.kt`, a thin wrapper) may not be extracted. We accept this until a
+CodeQL bundle supports 2.4.21 rather than pin the product build to an older
+Kotlin; Dependabot's github-actions updates will bring that bundle in. A `changes` job lists the
 PR's files through the REST API and `.github/scripts/codeql-languages.sh` maps
 them to languages; the analyze matrix covers only those. A PR that touches no
 analyzed language skips the analyze job entirely.
