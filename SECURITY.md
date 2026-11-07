@@ -2,13 +2,13 @@
 
 ## Supported versions
 
-Krusty is on the stable 1.x line. Security fixes go to the latest 1.x release
+Krusty is on the stable 2.x line. Security fixes go to the latest 2.x release
 of the published crates.io crates and of the
 `@starknetfoundation/krusty-kms-wasm` npm package, as listed in the
-[README](README.md). Upgrade to the newest 1.x release to receive them:
-semantic versioning keeps 1.x upgrades free of breaking API changes. For the
-npm package, that covers its JavaScript export surface. Releases before 1.0.0 are no longer
-supported.
+[README](README.md). Upgrade to the newest 2.x release to receive them:
+semantic versioning keeps 2.x upgrades free of breaking API changes. For the
+npm package, that covers its JavaScript export surface. Releases before 2.0.0
+are no longer supported; see `CHANGELOG.md` for the 1.x to 2.0 migration.
 
 The internal crates (`krusty-kms-oracle`, `krusty-kms-controller`,
 `krusty-kms-cabi`) and the experimental crates under

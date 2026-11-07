@@ -85,9 +85,8 @@ where
     ) -> GatewayResult<GatewayResponse<AccountSnapshot>> {
         match self.fetch_snapshot(request, now_ms).await {
             Ok(snapshot) => {
-                // Eviction uses the gateway-global ceiling only.
-                // `CachePolicy.max_entries` is deprecated and ignored here so a
-                // single request cannot flush unrelated shared-cache entries.
+                // Eviction uses the gateway-global ceiling only, so a single
+                // request cannot flush unrelated shared-cache entries.
                 self.store_snapshot(
                     key,
                     snapshot.clone(),
