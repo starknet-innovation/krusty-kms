@@ -335,6 +335,8 @@ fn read_map(reader: &mut Reader<'_>, scope: Scope) -> Result<Map> {
 #[cfg(test)]
 mod fields_test;
 #[cfg(test)]
+mod forward_signed_test;
+#[cfg(test)]
 mod key_encoding_test;
 #[cfg(test)]
 mod no_panic_test;
