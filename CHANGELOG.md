@@ -26,6 +26,14 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- **Breaking:** `krusty-kms-wasm` now reads unprefixed felt digits as decimal
+  across calldata compilation, transaction and typed-data hashes, account
+  addresses, signing, hashing, points, and proofs. Previously most of these
+  paths read `"1000"` as hexadecimal `0x1000`, as `isValidFelt` and
+  `isValidStarkPrivateKey` documented, while `encodeFelt` read it as decimal.
+  Digit-only inputs that callers meant as hex now silently produce different
+  values. Unprefixed hexadecimal text is rejected; add `0x` when hexadecimal
+  is intended. Decimal values outside the Stark field are also rejected.
 - `sign_nostr_message` (also WASM `signNostrMessage` and gateway raw Nostr
   signing) now signs the supplied bytes directly with BIP-340 and zero
   auxiliary randomness, as documented. Previously it signed

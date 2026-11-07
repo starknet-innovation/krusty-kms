@@ -9,7 +9,6 @@
 
 use crate::secret_input::{decode_secret_hex, parse_secret_felt, SecretHexError};
 use crate::types::{WasmNostrSignature, WasmStarkSignature};
-use starknet_types_core::felt::Felt;
 use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
 
@@ -20,13 +19,13 @@ use zeroize::Zeroizing;
 /// Derive the Stark public key corresponding to a private key.
 ///
 /// # Arguments
-/// * `private_key` - Stark private key as hex string (0x-prefixed)
+/// * `private_key` - Stark private key as decimal or prefixed hexadecimal
 ///
 /// # Returns
 /// The public key as a hex string (0x-prefixed)
 #[wasm_bindgen(js_name = "starkPublicKey")]
 pub fn stark_public_key(private_key: String) -> Result<String, JsValue> {
-    let sk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key hex")?;
+    let sk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key")?;
 
     let pk = krusty_kms::stark_public_key(sk.expose_secret())
         .map_err(|e| JsValue::from_str(&format!("Invalid private key: {e}")))?;
@@ -38,16 +37,16 @@ pub fn stark_public_key(private_key: String) -> Result<String, JsValue> {
 /// Uses deterministic RFC-6979 nonce generation.
 ///
 /// # Arguments
-/// * `private_key` - Stark private key as hex string (0x-prefixed)
-/// * `msg_hash` - Message hash as hex string (0x-prefixed)
+/// * `private_key` - Stark private key as decimal or prefixed hexadecimal
+/// * `msg_hash` - Message hash as decimal or prefixed hexadecimal
 ///
 /// # Returns
 /// Signature with r, s components and public key (all 0x-prefixed hex)
 #[wasm_bindgen(js_name = "signStarkHash")]
 pub fn sign_stark_hash(private_key: String, msg_hash: &str) -> Result<WasmStarkSignature, JsValue> {
-    let sk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key hex")?;
-    let hash = Felt::from_hex(msg_hash)
-        .map_err(|e| JsValue::from_str(&format!("Invalid message hash hex: {e}")))?;
+    let sk = parse_secret_felt(&Zeroizing::new(private_key), "Invalid private key")?;
+    let hash = crate::felt_input::parse_felt(msg_hash)
+        .map_err(|e| JsValue::from_str(&format!("Invalid message hash: {e}")))?;
 
     let sig = krusty_kms::sign_stark_hash(sk.expose_secret(), &hash)
         .map_err(|e| JsValue::from_str(&format!("Stark signing failed: {e}")))?;

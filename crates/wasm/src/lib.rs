@@ -23,6 +23,7 @@ pub mod calldata;
 pub mod discovery;
 pub mod encryption;
 pub mod error;
+mod felt_input;
 pub mod hashing;
 pub mod nostr_application_data;
 pub mod proof;
@@ -87,7 +88,7 @@ pub fn get_build_info() -> JsValue {
 /// Compute a Poseidon hash of the given inputs.
 ///
 /// # Arguments
-/// * `inputs` - Array of hex strings (felt values)
+/// * `inputs` - Array of decimal or prefixed hexadecimal felt strings
 ///
 /// # Returns
 /// The hash as a hex string
@@ -99,7 +100,7 @@ pub fn poseidon_hash(inputs: Vec<String>) -> Result<String, JsValue> {
     let felts: Vec<Felt> = inputs
         .iter()
         .map(|s| {
-            Felt::from_hex(s).map_err(|e| JsValue::from_str(&format!("Invalid hex input: {e}")))
+            felt_input::parse_felt(s).map_err(|e| JsValue::from_str(&format!("Invalid input: {e}")))
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -110,20 +111,18 @@ pub fn poseidon_hash(inputs: Vec<String>) -> Result<String, JsValue> {
 /// Compute Poseidon hash of exactly two field elements.
 ///
 /// # Arguments
-/// * `a` - First input (hex string)
-/// * `b` - Second input (hex string)
+/// * `a` - First input (decimal or prefixed hexadecimal)
+/// * `b` - Second input (decimal or prefixed hexadecimal)
 ///
 /// # Returns
 /// The Poseidon hash as a hex string
 #[wasm_bindgen(js_name = "poseidonHash")]
 pub fn poseidon_hash_two(a: &str, b: &str) -> Result<String, JsValue> {
     use krusty_kms_crypto::poseidon_hash_many;
-    use starknet_types_core::felt::Felt;
-
-    let a_felt =
-        Felt::from_hex(a).map_err(|e| JsValue::from_str(&format!("Invalid hex input a: {e}")))?;
-    let b_felt =
-        Felt::from_hex(b).map_err(|e| JsValue::from_str(&format!("Invalid hex input b: {e}")))?;
+    let a_felt = felt_input::parse_felt(a)
+        .map_err(|e| JsValue::from_str(&format!("Invalid input a: {e}")))?;
+    let b_felt = felt_input::parse_felt(b)
+        .map_err(|e| JsValue::from_str(&format!("Invalid input b: {e}")))?;
     let hash = poseidon_hash_many(&[a_felt, b_felt]);
     Ok(format!("{:#x}", hash))
 }
@@ -131,9 +130,9 @@ pub fn poseidon_hash_two(a: &str, b: &str) -> Result<String, JsValue> {
 /// Multiply a point by a scalar.
 ///
 /// # Arguments
-/// * `scalar` - Scalar value (hex string)
-/// * `point_x` - Point X coordinate (hex string)
-/// * `point_y` - Point Y coordinate (hex string)
+/// * `scalar` - Scalar value (decimal or prefixed hexadecimal)
+/// * `point_x` - Point X coordinate (decimal or prefixed hexadecimal)
+/// * `point_y` - Point Y coordinate (decimal or prefixed hexadecimal)
 ///
 /// # Returns
 /// Resulting point as {x, y} object
@@ -145,13 +144,11 @@ pub fn scalar_mul(
 ) -> Result<types::WasmPoint, JsValue> {
     use krusty_kms_crypto::StarkCurve;
     use starknet_types_core::curve::ProjectivePoint;
-    use starknet_types_core::felt::Felt;
-
     let s = secret_input::parse_secret_felt(&Zeroizing::new(scalar), "Invalid scalar")?;
-    let px =
-        Felt::from_hex(point_x).map_err(|e| JsValue::from_str(&format!("Invalid point X: {e}")))?;
-    let py =
-        Felt::from_hex(point_y).map_err(|e| JsValue::from_str(&format!("Invalid point Y: {e}")))?;
+    let px = felt_input::parse_felt(point_x)
+        .map_err(|e| JsValue::from_str(&format!("Invalid point X: {e}")))?;
+    let py = felt_input::parse_felt(point_y)
+        .map_err(|e| JsValue::from_str(&format!("Invalid point Y: {e}")))?;
 
     let point = ProjectivePoint::from_affine(px, py)
         .map_err(|e| JsValue::from_str(&format!("Invalid point: {e:?}")))?;
@@ -170,7 +167,7 @@ pub fn scalar_mul(
 /// Multiply the generator point by a scalar.
 ///
 /// # Arguments
-/// * `scalar` - Scalar value (hex string)
+/// * `scalar` - Scalar value (decimal or prefixed hexadecimal)
 ///
 /// # Returns
 /// Resulting point as {x, y} object
@@ -214,12 +211,14 @@ pub fn point_add(
     p2_y: &str,
 ) -> Result<types::WasmPoint, JsValue> {
     use starknet_types_core::curve::ProjectivePoint;
-    use starknet_types_core::felt::Felt;
-
-    let p1x = Felt::from_hex(p1_x).map_err(|e| JsValue::from_str(&format!("Invalid P1 X: {e}")))?;
-    let p1y = Felt::from_hex(p1_y).map_err(|e| JsValue::from_str(&format!("Invalid P1 Y: {e}")))?;
-    let p2x = Felt::from_hex(p2_x).map_err(|e| JsValue::from_str(&format!("Invalid P2 X: {e}")))?;
-    let p2y = Felt::from_hex(p2_y).map_err(|e| JsValue::from_str(&format!("Invalid P2 Y: {e}")))?;
+    let p1x = felt_input::parse_felt(p1_x)
+        .map_err(|e| JsValue::from_str(&format!("Invalid P1 X: {e}")))?;
+    let p1y = felt_input::parse_felt(p1_y)
+        .map_err(|e| JsValue::from_str(&format!("Invalid P1 Y: {e}")))?;
+    let p2x = felt_input::parse_felt(p2_x)
+        .map_err(|e| JsValue::from_str(&format!("Invalid P2 X: {e}")))?;
+    let p2y = felt_input::parse_felt(p2_y)
+        .map_err(|e| JsValue::from_str(&format!("Invalid P2 Y: {e}")))?;
 
     let p1 = ProjectivePoint::from_affine(p1x, p1y)
         .map_err(|e| JsValue::from_str(&format!("Invalid P1: {e:?}")))?;
@@ -255,20 +254,18 @@ pub fn random_felt() -> Result<String, JsValue> {
 /// Serialize a public key point to the standard hex format.
 ///
 /// # Arguments
-/// * `x` - X coordinate (hex string)
-/// * `y` - Y coordinate (hex string)
+/// * `x` - X coordinate (decimal or prefixed hexadecimal)
+/// * `y` - Y coordinate (decimal or prefixed hexadecimal)
 ///
 /// # Returns
 /// Concatenated "0x{x}{y}" format used by Tongo protocol
 #[wasm_bindgen(js_name = "serializePublicKey")]
 pub fn serialize_public_key(x: &str, y: &str) -> Result<String, JsValue> {
     use starknet_types_core::curve::ProjectivePoint;
-    use starknet_types_core::felt::Felt;
-
-    let x_felt =
-        Felt::from_hex(x).map_err(|e| JsValue::from_str(&format!("Invalid X coordinate: {e}")))?;
-    let y_felt =
-        Felt::from_hex(y).map_err(|e| JsValue::from_str(&format!("Invalid Y coordinate: {e}")))?;
+    let x_felt = felt_input::parse_felt(x)
+        .map_err(|e| JsValue::from_str(&format!("Invalid X coordinate: {e}")))?;
+    let y_felt = felt_input::parse_felt(y)
+        .map_err(|e| JsValue::from_str(&format!("Invalid Y coordinate: {e}")))?;
     ProjectivePoint::from_affine(x_felt, y_felt)
         .map_err(|_| JsValue::from_str("Invalid public key point"))?;
 
@@ -386,7 +383,7 @@ mod tests {
         let error = serialize_public_key("not-hex", "0x2").unwrap_err();
         let message = js_error_message(error);
         assert!(message.starts_with("Invalid X coordinate:"));
-        assert!(message.contains("invalid hex string"));
+        assert!(message.contains("expected decimal digits or a 0x-prefixed hex felt"));
     }
 
     #[wasm_bindgen_test]

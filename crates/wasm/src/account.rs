@@ -18,6 +18,8 @@ mod registry;
 mod wasm_account;
 
 #[cfg(test)]
+mod class_preset_tests;
+#[cfg(test)]
 mod registry_tests;
 #[cfg(test)]
 mod test_fixtures;
