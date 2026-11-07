@@ -1,0 +1,787 @@
+{
+  "source": "starknet.js 10.8.0 getMessageHash",
+  "vectors": [
+    {
+      "name": "i128_positive_number",
+      "account_address": "0x1234",
+      "expected_hash": "0x76bbe7bab7e89b7f0dc0951fdda377055d52ea011cd62a0f344d1572a23f3ef",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Amount",
+              "type": "i128"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Amount": 5
+        }
+      }
+    },
+    {
+      "name": "i128_positive_string",
+      "account_address": "0x1234",
+      "expected_hash": "0x76bbe7bab7e89b7f0dc0951fdda377055d52ea011cd62a0f344d1572a23f3ef",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Amount",
+              "type": "i128"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Amount": "5"
+        }
+      }
+    },
+    {
+      "name": "i128_negative_string",
+      "account_address": "0x1234",
+      "expected_hash": "0x1ee275d2124e93928cfb84b55eacd1d473cc0e0b6e71ae920fa41fc941c7abf",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Amount",
+              "type": "i128"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Amount": "-5"
+        }
+      }
+    },
+    {
+      "name": "revision_0_domain_revision",
+      "account_address": "0x1234",
+      "expected_hash": "0x4c97c2195dd0ea2021150cefad7773f8941e8ef672a3677878cdfe2f5311786",
+      "typed_data": {
+        "types": {
+          "StarkNetDomain": [
+            {
+              "name": "name",
+              "type": "felt"
+            },
+            {
+              "name": "version",
+              "type": "felt"
+            },
+            {
+              "name": "chainId",
+              "type": "felt"
+            },
+            {
+              "name": "revision",
+              "type": "felt"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Some Array",
+              "type": "u128*"
+            },
+            {
+              "name": "Some Object",
+              "type": "My Object"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "0"
+        },
+        "message": {
+          "Name": "some name",
+          "Some Array": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "Some Object": {
+            "Some Selector": "transfer",
+            "Some Contract Address": "0x0123"
+          }
+        }
+      }
+    },
+    {
+      "name": "primary_type_domain",
+      "account_address": "0x1234",
+      "expected_hash": "0x1c217da181e11728c1da0fdcc7a3dc325f3a4f76f73da07f6cd79127b38ccea",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Some Array",
+              "type": "u128*"
+            },
+            {
+              "name": "Some Object",
+              "type": "My Object"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "StarknetDomain",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        }
+      }
+    },
+    {
+      "name": "selector_hex",
+      "account_address": "0x1234",
+      "expected_hash": "0x563463141271defb1a05e2d2bf63ef82386855ecd0cbee58c73fcf323302fa3",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Some Array",
+              "type": "u128*"
+            },
+            {
+              "name": "Some Object",
+              "type": "My Object"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Name": "some name",
+          "Some Array": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "Some Object": {
+            "Some Selector": "0x1234",
+            "Some Contract Address": "0x0123"
+          }
+        }
+      }
+    },
+    {
+      "name": "felt_uppercase_hex",
+      "account_address": "0x1234",
+      "expected_hash": "0x55b3d9b0b50c065e285376e0f908e905c49650e8e6489e15a1c9c85280afe51",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Amount",
+              "type": "felt"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Amount": "0X1"
+        }
+      }
+    },
+    {
+      "name": "selector_hex_array",
+      "account_address": "0x1234",
+      "expected_hash": "0x1fb53987372fe41f1528f3fa51199decfd04831b2b46cdf370c71476e1aa78f",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Selectors",
+              "type": "selector*"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Selectors": [
+            "0x1234",
+            "transfer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "selector_hex_enum",
+      "account_address": "0x1234",
+      "expected_hash": "0x5ad73609853e5fc84599c47907bb7e1e3b49b67942c8c60f48fb704c53f446a",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Action",
+              "type": "enum",
+              "contains": "Action"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ],
+          "Action": [
+            {
+              "name": "Call",
+              "type": "(selector)"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Action": {
+            "Call": [
+              "0x1234"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "selector_hex_merkle_single_leaf",
+      "account_address": "0x1234",
+      "expected_hash": "0x88bd81605493cb3aee3afd3567020b85b12cd1558845f61fedca0aadb4508a",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Tree",
+              "type": "merkletree",
+              "contains": "Leaf"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ],
+          "Leaf": [
+            {
+              "name": "selector",
+              "type": "selector"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Tree": [
+            {
+              "selector": "0x1234"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "selector_hex_merkle_odd_leaves",
+      "account_address": "0x1234",
+      "expected_hash": "0x467a2252b21444c29ceb135f026997f91b99b4fe5179adc552650a9d9c2e0c",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Tree",
+              "type": "merkletree",
+              "contains": "Leaf"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ],
+          "Leaf": [
+            {
+              "name": "selector",
+              "type": "selector"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Tree": [
+            {
+              "selector": "0x1234"
+            },
+            {
+              "selector": "transfer"
+            },
+            {
+              "selector": "0x5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "revision_0_domain_value_only",
+      "account_address": "0x1234",
+      "expected_hash": "0x778d68fe2baf73ee78a6711c29bad4722680984c1553a8035c8cb3feb5310c9",
+      "typed_data": {
+        "types": {
+          "StarkNetDomain": [
+            {
+              "name": "name",
+              "type": "felt"
+            },
+            {
+              "name": "version",
+              "type": "felt"
+            },
+            {
+              "name": "chainId",
+              "type": "felt"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Name",
+              "type": "string"
+            },
+            {
+              "name": "Some Array",
+              "type": "u128*"
+            },
+            {
+              "name": "Some Object",
+              "type": "My Object"
+            }
+          ],
+          "My Object": [
+            {
+              "name": "Some Selector",
+              "type": "selector"
+            },
+            {
+              "name": "Some Contract Address",
+              "type": "ContractAddress"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "Starknet Example",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "0"
+        },
+        "message": {
+          "Name": "some name",
+          "Some Array": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "Some Object": {
+            "Some Selector": "transfer",
+            "Some Contract Address": "0x0123"
+          }
+        }
+      }
+    },
+    {
+      "name": "shortstring_uppercase_hex",
+      "account_address": "0x1234",
+      "expected_hash": "0x43f5cd00e68a6ab8009288edc15a4f013938f026df999a590a4bfd06ff4c5a1",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Name",
+              "type": "shortstring"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "0XABC",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Name": "0X1F"
+        }
+      }
+    }
+  ]
+}
