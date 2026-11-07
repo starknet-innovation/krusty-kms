@@ -26,11 +26,12 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
-- **Breaking:** `sign_nostr_message` (also WASM `signNostrMessage` and
-  gateway raw Nostr signing) now signs the supplied bytes directly with
-  BIP-340 and zero auxiliary randomness. Previously it signed
-  `SHA-256(message)`. Existing signatures change; callers that need the
-  former signature must hash the message before passing it in.
+- `sign_nostr_message` (also WASM `signNostrMessage` and gateway raw Nostr
+  signing) now signs the supplied bytes directly with BIP-340 and zero
+  auxiliary randomness, as documented. Previously it signed
+  `SHA-256(message)`, so standard BIP-340 verifiers rejected its signatures
+  over the original bytes. Signatures for the same input change; callers that
+  need the former signature must hash the message before passing it in.
 - `sign_bitcoin_psbt_inputs` now refuses a listed input that already carries
   a partial signature whose sighash byte is not `SIGHASH_ALL`, even when the
   input declares no `PSBT_IN_SIGHASH_TYPE`. Such PSBTs were previously

@@ -22,8 +22,10 @@ id and use `signNostrEventId`.
 
 ## Compatibility and verification
 
-This changes signatures for every raw-message caller, including the gateway;
-the changelog marks it as breaking behavior for release planning. To recreate
+This changes signatures for every raw-message caller, including the gateway.
+It is released as a security fix in a 1.x minor, not a major: the previous
+output did not meet the documented BIP-340 raw-message contract, and standard
+verifiers rejected it, so no correct caller could depend on it. To recreate
 an old signature, a caller can explicitly SHA-256 hash the bytes before
 calling the corrected function. Export signatures and wire shapes stay the
 same.
