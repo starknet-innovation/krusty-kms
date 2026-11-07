@@ -79,6 +79,8 @@ Supported request variants:
   - `event_id` is a 32-byte lowercase hex string
 - `kind = "nostr_raw_message"`
   - `payload` is `{ "Hex": "..." }` or `{ "Utf8": "..." }`
+  - signs those bytes directly with BIP-340 and zero auxiliary randomness;
+    it does not SHA-256 hash them first
 
 Impossible combinations are intentionally not representable on the wire. For example, there is no request shape that mixes a Nostr key with a Stark transaction hash.
 
