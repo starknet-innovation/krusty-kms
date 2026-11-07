@@ -14,21 +14,21 @@ if [[ "${1:-}" == "--all" ]]; then
 fi
 
 hits=" "
+select_all=0
 
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   case "$path" in
     .github/workflows/codeql.yml | .github/scripts/codeql-languages.sh | .github/codeql/*)
-      printf '%s\n' "${all_languages[@]}"
-      exit 0
-      ;;
+      # Keep reading so the producer never hits a closed pipe (SIGPIPE).
+      select_all=1 ;;
   esac
   case "$path" in
     .github/workflows/* | .github/actions/* | */action.yml | */action.yaml | action.yml | action.yaml)
       hits+="actions " ;;
   esac
   case "$path" in
-    *.c | *.h | *.cc | *.cpp | *.cxx | *.hh | *.hpp | *.hxx | *.inl)
+    *.c | *.h | *.cc | *.cpp | *.cxx | *.c++ | *.hh | *.hpp | *.hxx | *.h++ | *.inl)
       hits+="c-cpp " ;;
   esac
   case "$path" in
@@ -50,6 +50,11 @@ while IFS= read -r path; do
       hits+="swift " ;;
   esac
 done
+
+if [[ "$select_all" == "1" ]]; then
+  printf '%s\n' "${all_languages[@]}"
+  exit 0
+fi
 
 for lang in "${all_languages[@]}"; do
   if [[ "$hits" == *" $lang "* ]]; then

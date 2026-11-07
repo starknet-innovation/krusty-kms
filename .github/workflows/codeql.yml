@@ -44,13 +44,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
         run: |
           set -euo pipefail
+          files_list="${RUNNER_TEMP}/pr-files.txt"
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            if files="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename')"; then
-              langs="$(printf '%s\n' "$files" | bash .github/scripts/codeql-languages.sh)"
+            # The PR files endpoint stops at 3000 entries; a short list would
+            # silently drop languages, so fall back to all of them instead.
+            if gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --jq '.[].filename' > "$files_list" \
+              && (( $(wc -l < "$files_list") >= ${PR_CHANGED_FILES:-0} )) \
+              && (( $(wc -l < "$files_list") < 3000 )); then
+              langs="$(bash .github/scripts/codeql-languages.sh < "$files_list")"
             else
-              echo "::warning::could not list PR files; analyzing every language"
+              echo "::warning::could not list every PR file; analyzing every language"
               langs="$(bash .github/scripts/codeql-languages.sh --all)"
             fi
           else
