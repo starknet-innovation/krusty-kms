@@ -1,0 +1,108 @@
+name: CodeQL
+
+# Advanced-setup replacement for GitHub's CodeQL default setup. It keeps the
+# same languages (plus java-kotlin), query suite (security-extended) and build
+# modes, but on pull requests it only analyzes the languages whose files the PR
+# touches. Pushes to main and the weekly schedule always analyze every language
+# so the base-branch results PR alerts are compared against stay complete.
+# See docs/design/2026-11-07-conditional-codeql-pr-runs.md.
+#
+# Default setup must be disabled in Settings > Code security before this
+# workflow can upload results.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Tuesdays 04:17 UTC — full sweep, picks up new queries without code changes.
+    - cron: "17 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+          files_list="${RUNNER_TEMP}/pr-files.txt"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # The PR files endpoint stops at 3000 entries; a short list would
+            # silently drop languages, so fall back to all of them instead.
+            # One record per file; renames also map their previous path.
+            if gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+                --jq '.[] | [.filename, (.previous_filename // "")] | @tsv' > "$files_list" \
+              && (( $(wc -l < "$files_list") >= ${PR_CHANGED_FILES:-0} )) \
+              && (( $(wc -l < "$files_list") < 3000 )); then
+              langs="$(tr '\t' '\n' < "$files_list" | bash .github/scripts/codeql-languages.sh)"
+            else
+              echo "::warning::could not list every PR file; analyzing every language"
+              langs="$(bash .github/scripts/codeql-languages.sh --all)"
+            fi
+          else
+            langs="$(bash .github/scripts/codeql-languages.sh --all)"
+          fi
+          echo "Languages to analyze: ${langs:-<none>}"
+          matrix="$(printf '%s\n' "$langs" | jq -Rnc '[inputs | select(length > 0)]')"
+          echo "matrix=${matrix}" >> "$GITHUB_OUTPUT"
+
+  analyze:
+    needs: changes
+    if: needs.changes.outputs.matrix != '[]'
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-latest' }}
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'swift' && 'autobuild' || matrix.language == 'java-kotlin' && 'manual' || 'none' }}
+          queries: security-extended
+      - if: matrix.language == 'swift'
+        uses: github/codeql-action/autobuild@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      # Kotlin has no build-mode: none; mirror the wrappers.yml JVM build.
+      - if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+      - if: matrix.language == 'java-kotlin'
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "8.10"
+      - if: matrix.language == 'java-kotlin'
+        working-directory: packages/kms-jvm
+        run: gradle --no-daemon --no-build-cache classes
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:${{ matrix.language }}"

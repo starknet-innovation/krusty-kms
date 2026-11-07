@@ -66,8 +66,11 @@ strings: keep them out of logs and persistent storage.
 This package is generated with `wasm-pack --target web` and is intended for
 browser-oriented ESM toolchains that support loading WebAssembly modules.
 
-Krusty KMS is experimental. Do not rely on it for production or
-security-critical use.
+This package takes the Krusty workspace version and is supported for
+production use on the stable 1.x line. Its JavaScript exports follow semantic
+versioning: removing or changing an export waits for a new major version.
+Security fixes go to the latest 1.x release; see `SECURITY.md` in the
+repository for how to report a vulnerability.
 
 ## License
 

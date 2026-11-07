@@ -1,14 +1,15 @@
 //! SNIP-12 typed-data message hashing.
 //!
-//! Parsing and encoding are delegated to the locked `starknet-rust-core`
-//! implementation so accepted documents match the Starknet ecosystem for
-//! both revision 0 and revision 1.
+//! Parsing uses the locked `starknet-rust-core` implementation. A private
+//! compatibility layer matches starknet.js encodings for both revisions.
 
 use krusty_kms_common::{KmsError, Result};
 use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
-use starknet_rust_core::types::TypedData as StarknetTypedData;
 use starknet_types_core::felt::Felt;
 use std::{collections::HashSet, fmt};
+
+#[path = "typed_data_compat.rs"]
+mod compat;
 
 /// Maximum accepted typed-data JSON size.
 ///
@@ -120,38 +121,15 @@ impl<'de> Visitor<'de> for RejectDuplicateKeys {
     }
 }
 
-fn reject_duplicate_json_keys(json: &str) -> serde_json::Result<()> {
-    let mut deserializer = serde_json::Deserializer::from_str(json);
-    RejectDuplicateKeys.deserialize(&mut deserializer)?;
-    deserializer.end()
-}
-
 /// Compute the canonical SNIP-12 message hash for an account.
 ///
 /// The document's domain and type definitions select SNIP-12 revision 0 or 1.
-/// Unsupported, inconsistent, or noncanonical documents are rejected by the
-/// reference encoder rather than being partially interpreted.
+/// Unsupported, inconsistent, or noncanonical documents are rejected.
 pub fn compute_typed_data_message_hash(
     typed_data_json: &str,
     account_address: &Felt,
 ) -> Result<Felt> {
-    if typed_data_json.len() > MAX_TYPED_DATA_JSON_BYTES {
-        return Err(KmsError::SerializationError(format!(
-            "typed data JSON exceeds the {} byte limit",
-            MAX_TYPED_DATA_JSON_BYTES
-        )));
-    }
-
-    reject_duplicate_json_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
-    let envelope: CanonicalTypedDataEnvelope =
-        serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
-    let typed_data: StarknetTypedData = serde_json::from_value(
-        serde_json::to_value(envelope).map_err(|_| invalid_typed_data_error())?,
-    )
-    .map_err(|_| invalid_typed_data_error())?;
-    typed_data
-        .message_hash(*account_address)
-        .map_err(|_| invalid_typed_data_error())
+    compat::compute_typed_data_message_hash_impl(typed_data_json, account_address)
 }
 
 #[cfg(test)]
@@ -206,6 +184,25 @@ mod tests {
     #[test]
     fn hashes_revision_1_preset_types() {
         assert_vector("revision_1_preset_types");
+    }
+
+    #[test]
+    fn hashes_starknet_js_10_8_compatibility_vectors() {
+        let fixture: Fixture = serde_json::from_str(include_str!(
+            "../tests/fixtures/snip12_starknet_js_10_8_vectors.json"
+        ))
+        .unwrap();
+        for vector in fixture.vectors {
+            let account = Felt::from_hex(&vector.account_address).unwrap();
+            let actual = compute_typed_data_message_hash(&vector.typed_data.to_string(), &account)
+                .unwrap_or_else(|error| panic!("{}: {error}", vector.name));
+            assert_eq!(
+                actual,
+                Felt::from_hex(&vector.expected_hash).unwrap(),
+                "{}",
+                vector.name
+            );
+        }
     }
 
     #[test]

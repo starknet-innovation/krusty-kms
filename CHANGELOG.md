@@ -32,6 +32,10 @@ All notable changes to the published Rust crates are documented here.
   `"1000"` as hexadecimal `0x1000`, while `encodeFelt` read it as decimal.
   Unprefixed hexadecimal text is rejected; add `0x` when hexadecimal is
   intended. Decimal values outside the Stark field are also rejected.
+- SNIP-12 typed-data hashing now matches starknet.js 10.8.0 for decimal `i128`
+  values, legacy domain revision fields, domain primary types, hexadecimal
+  selectors, and uppercase `0X` felts. Signatures for hexadecimal selectors
+  and uppercase felts change to the interoperable message hash.
 - `sign_bitcoin_psbt_inputs` now refuses a listed input that already carries
   a partial signature whose sighash byte is not `SIGHASH_ALL`, even when the
   input declares no `PSBT_IN_SIGHASH_TYPE`. Such PSBTs were previously

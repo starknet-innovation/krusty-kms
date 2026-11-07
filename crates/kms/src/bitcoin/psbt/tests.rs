@@ -30,7 +30,7 @@ pub(super) fn pair(key: &[u8], value: &[u8]) -> Pair {
     }
 }
 
-fn txout(value: u64, script_pubkey: Vec<u8>) -> TxOut {
+pub(super) fn txout(value: u64, script_pubkey: Vec<u8>) -> TxOut {
     TxOut {
         value,
         script_pubkey,
@@ -51,11 +51,12 @@ pub(super) fn witness_utxo(output: &TxOut) -> Vec<u8> {
     bytes
 }
 
-/// A transaction whose output 1 pays `AMOUNT` to `script`.
-pub(super) fn funding_tx(script: Vec<u8>, salt: u8) -> Transaction {
+/// A transaction whose output 1 pays `AMOUNT` to `script`; `prev_txid_byte`
+/// fills its dummy previous txid so different calls give different txids.
+pub(super) fn funding_tx(script: Vec<u8>, prev_txid_byte: u8) -> Transaction {
     Transaction {
         version: 2,
-        inputs: vec![txin([salt; 32], 0)],
+        inputs: vec![txin([prev_txid_byte; 32], 0)],
         outputs: vec![txout(5_000, vec![0x51]), txout(AMOUNT, script)],
         lock_time: 0,
     }
