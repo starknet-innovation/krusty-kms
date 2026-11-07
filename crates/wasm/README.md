@@ -72,9 +72,9 @@ This package is generated with `wasm-pack --target web` and is intended for
 browser-oriented ESM toolchains that support loading WebAssembly modules.
 
 This package takes the Krusty workspace version and is supported for
-production use on the stable 1.x line. Its JavaScript exports follow semantic
+production use on the stable 2.x line. Its JavaScript exports follow semantic
 versioning: removing or changing an export waits for a new major version.
-Security fixes go to the latest 1.x release; see `SECURITY.md` in the
+Security fixes go to the latest 2.x release; see `SECURITY.md` in the
 repository for how to report a vulnerability.
 
 ## License

@@ -23,7 +23,7 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
 - Normal feature and fix PRs must not bump the root workspace version. Keep their
   notes under `## [Unreleased]`; create the dated entry and bump the version only in a
   focused release PR. Read every `## [Unreleased]` bullet before choosing the
-  increment. The crates are 1.x and follow semver:
+  increment. The crates are 2.x and follow semver:
   - **patch**: every bullet is `Fixed` or `Security`;
   - **minor**: any `Added`, `Deprecated` or non-breaking `Changed` bullet;
   - **major**: any bullet marked **Breaking**, or any `Removed` entry (removing public
@@ -40,8 +40,9 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
     `Added` or `Deprecated` changes fails ("requires new minor version"). A missing
     tag fails closed.
 
-  A breaking change is not merged past a red semver check in 1.x; it waits for a
-  2.0.0 plan. The job has no lint for a changed return type on an inherent method or
+  A breaking change is not merged past a red semver check within a major; it waits
+  for the next major plan and lands in that major's release PR, the only PR checked
+  at its actual increment. The job has no lint for a changed return type on an inherent method or
   free function, so a type change that breaks callers can still pass it: treat such a
   change as **Breaking** by hand. CI compares the release PR's base version
   with the latest published `krusty-kms` version on crates.io, so a second release
@@ -163,10 +164,10 @@ instead.
    version bump while a previous release version is pending publication.
 2. Change the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
    inherit this version; do not assign a one-off version to an individual published crate.
-   Internal `krusty-kms-*` path dependency requirements (currently `1.0.0`) need no move
-   for compatibility on patch and minor releases, because `^1.0.0` covers every 1.x.
+   Internal `krusty-kms-*` path dependency requirements (currently `2.0.0`) need no move
+   for compatibility on patch and minor releases, because `^2.0.0` covers every 2.x.
    Raise a requirement's lower bound when the dependent crate starts using an API added
-   in a later 1.x of that dependency (for example `1.1.0`); otherwise a downstream
+   in a later 2.x of that dependency (for example `2.1.0`); otherwise a downstream
    lockfile that still holds the older version satisfies the range and fails to
    compile. On a major release, move every requirement to the new version.
 3. Create the release entry in `CHANGELOG.md` using the workspace version and release

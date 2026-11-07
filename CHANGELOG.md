@@ -4,25 +4,30 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-07
+
+Major release. It carries one breaking WASM input change and removes the
+ignored `CachePolicy::max_entries`. Internal `krusty-kms-*` dependency
+requirements move to `2.0.0`.
+
 ### Added
 
-- `krusty_kms_domain::CachePolicy::with_ttl(ttl_ms, stale_while_revalidate_ms)`
-  and `CachePolicy::DEFAULT_MAX_ENTRIES`.
+- `krusty_kms_domain::CachePolicy::with_ttl(ttl_ms, stale_while_revalidate_ms)`.
 
-### Deprecated
+### Removed
 
-- `CachePolicy::max_entries` and `CachePolicy::new`. The gateway's snapshot
-  cache ignores per-request `max_entries` and uses a process-global ceiling,
-  so the field had no effect. Build policies with `CachePolicy::with_ttl`.
-  Both items will be removed in 2.0.0.
+- **Breaking:** `CachePolicy::max_entries` and `CachePolicy::new`. The
+  gateway's snapshot cache ignores per-request `max_entries` and uses a
+  process-global ceiling, so the field had no effect. Build policies with
+  `CachePolicy::with_ttl`.
 
 ### Changed
 
-- `max_entries` is no longer validated: `CachePolicy::new` and the gateway
-  accept `0`. On the wire the field may be omitted and then deserializes to
-  `1`. It is still serialized, so gateways older than 1.1.0, which require
-  `max_entries > 0`, keep accepting requests built with `with_ttl`. The
-  oracle protocol version stays 1.0, because every 1.0 message remains valid.
+- `CachePolicy` keeps the oracle v1.0 wire shape, so the protocol version
+  stays 1.0. It still serializes `"max_entries": 1`, so 1.0 gateways, which
+  require the field and reject `0`, accept 2.0 clients. Deserialization
+  ignores the field, so 2.0 gateways accept 1.x clients that send any value,
+  including `0`, or omit it.
 
 ### Security
 

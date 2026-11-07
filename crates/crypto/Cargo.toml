@@ -25,7 +25,7 @@ parallel = ["rayon"]
 insecure-deterministic-rng = ["dep:sha2"]
 
 [dependencies]
-krusty-kms-common = { version = "1.0.0", path = "../common" }
+krusty-kms-common = { version = "2.0.0", path = "../common" }
 starknet-types-core.workspace = true
 crypto-bigint.workspace = true
 sha2 = { workspace = true, optional = true }

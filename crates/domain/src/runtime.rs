@@ -32,41 +32,43 @@ pub struct TrackedToken {
 
 /// Cache behavior contract exposed to integrators.
 ///
-/// # Deprecated field
+/// Build policies with [`Self::with_ttl`]. Gateway snapshot eviction uses a
+/// process-global ceiling, so one client cannot flush another client's cache.
 ///
-/// [`Self::max_entries`] is deprecated and ignored. Gateway snapshot eviction
-/// uses a process-global ceiling, so one client cannot flush another client's
-/// cache by sending a small value. Build policies with [`Self::with_ttl`]. On
-/// the wire the field may be omitted; it deserializes to
-/// [`Self::DEFAULT_MAX_ENTRIES`] and is still serialized, so gateways older
-/// than 1.1.0 (which require it to be `> 0`) keep accepting requests. It will
-/// be removed in 2.0.0. See
-/// `docs/design/2026-11-05-deprecate-cache-policy-max-entries.md`.
+/// # Wire compatibility
+///
+/// 2.0.0 removed the ignored `max_entries` field. A policy still serializes
+/// `"max_entries": 1`, because 1.0 gateways require the field and reject `0`.
+/// Deserialization ignores the field, so 1.x clients that send it are
+/// accepted. See `docs/design/2026-11-07-remove-cache-policy-max-entries.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(into = "CachePolicyWire")]
 pub struct CachePolicy {
     pub ttl_ms: u64,
     pub stale_while_revalidate_ms: u64,
-    /// Ignored by the gateway's snapshot cache; see the type-level docs.
-    #[deprecated(
-        since = "1.1.0",
-        note = "ignored: the gateway snapshot cache uses a process-global ceiling; build with CachePolicy::with_ttl"
-    )]
-    #[doc(alias = "deprecated_max_entries")]
-    #[serde(default = "CachePolicy::default_max_entries")]
-    pub max_entries: usize,
 }
 
-#[allow(deprecated)] // constructs the deprecated field until 2.0.0 removes it
-impl CachePolicy {
-    /// Value written to the deprecated `max_entries` field by
-    /// [`Self::with_ttl`] and when the field is missing from the wire. It is
-    /// `1`, not `0`, because gateways older than 1.1.0 reject `0`.
-    pub const DEFAULT_MAX_ENTRIES: usize = 1;
+/// Serialized shape of [`CachePolicy`]: it adds the `max_entries` value that
+/// 1.0 gateways require.
+#[derive(Serialize)]
+struct CachePolicyWire {
+    ttl_ms: u64,
+    stale_while_revalidate_ms: u64,
+    max_entries: usize,
+}
 
-    fn default_max_entries() -> usize {
-        Self::DEFAULT_MAX_ENTRIES
+impl From<CachePolicy> for CachePolicyWire {
+    fn from(policy: CachePolicy) -> Self {
+        Self {
+            ttl_ms: policy.ttl_ms,
+            stale_while_revalidate_ms: policy.stale_while_revalidate_ms,
+            // 1, not 0: 1.0 gateways reject 0.
+            max_entries: 1,
+        }
     }
+}
 
+impl CachePolicy {
     /// Construct a cache policy. `ttl_ms` must be greater than zero.
     pub fn with_ttl(ttl_ms: u64, stale_while_revalidate_ms: u64) -> Result<Self, DomainError> {
         if ttl_ms == 0 {
@@ -77,26 +79,6 @@ impl CachePolicy {
         Ok(Self {
             ttl_ms,
             stale_while_revalidate_ms,
-            max_entries: Self::DEFAULT_MAX_ENTRIES,
-        })
-    }
-
-    /// Construct a cache policy with an explicit, ignored `max_entries`.
-    ///
-    /// `max_entries` is stored as given, including `0`. The gateway ignores
-    /// it, but gateways older than 1.1.0 reject `0`.
-    #[deprecated(
-        since = "1.1.0",
-        note = "max_entries is ignored; use CachePolicy::with_ttl(ttl_ms, stale_while_revalidate_ms)"
-    )]
-    pub fn new(
-        ttl_ms: u64,
-        stale_while_revalidate_ms: u64,
-        max_entries: usize,
-    ) -> Result<Self, DomainError> {
-        Ok(Self {
-            max_entries,
-            ..Self::with_ttl(ttl_ms, stale_while_revalidate_ms)?
         })
     }
 }

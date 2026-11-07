@@ -19,7 +19,7 @@ use starknet_types_core::felt::Felt;
 use tokio::sync::RwLock;
 
 /// Gateway-global ceiling for snapshot cache entries.
-/// Per-request `CachePolicy.max_entries` is deprecated and ignored for eviction.
+/// Requests cannot change it, so one client cannot flush another's entries.
 const DEFAULT_SNAPSHOT_CACHE_MAX_ENTRIES: usize = 256;
 /// Maximum accepted `WaitForAcceptance` timeout (15 minutes).
 ///
@@ -181,7 +181,6 @@ where
                 Some("cache ttl_ms must be greater than zero".to_string()),
             ));
         }
-        // `max_entries` is deprecated and ignored, so it is not validated.
         Ok(())
     }
 

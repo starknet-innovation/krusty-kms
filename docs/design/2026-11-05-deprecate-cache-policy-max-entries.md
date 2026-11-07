@@ -1,6 +1,6 @@
 # Deprecate `CachePolicy::max_entries`
 
-Date: 2026-11-05. Status: accepted.
+Date: 2026-11-05. Status: accepted; completed in 2.0.0 (`2026-11-07-release-2.0.0.md`).
 
 ## Problem
 
