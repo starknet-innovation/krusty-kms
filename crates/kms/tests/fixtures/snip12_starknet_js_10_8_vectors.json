@@ -739,6 +739,49 @@
           }
         }
       }
+    },
+    {
+      "name": "shortstring_uppercase_hex",
+      "account_address": "0x1234",
+      "expected_hash": "0x43f5cd00e68a6ab8009288edc15a4f013938f026df999a590a4bfd06ff4c5a1",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Example Message": [
+            {
+              "name": "Name",
+              "type": "shortstring"
+            }
+          ]
+        },
+        "primaryType": "Example Message",
+        "domain": {
+          "name": "0XABC",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "Name": "0X1F"
+        }
+      }
     }
   ]
 }
