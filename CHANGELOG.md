@@ -26,12 +26,14 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
-- `krusty-kms-wasm` now reads unprefixed felt digits as decimal across
-  calldata compilation, transaction and typed-data hashes, account addresses,
-  signing, hashing, points, and proofs. Previously most of these paths read
-  `"1000"` as hexadecimal `0x1000`, while `encodeFelt` read it as decimal.
-  Unprefixed hexadecimal text is rejected; add `0x` when hexadecimal is
-  intended. Decimal values outside the Stark field are also rejected.
+- **Breaking:** `krusty-kms-wasm` now reads unprefixed felt digits as decimal
+  across calldata compilation, transaction and typed-data hashes, account
+  addresses, signing, hashing, points, and proofs. Previously most of these
+  paths read `"1000"` as hexadecimal `0x1000`, as `isValidFelt` and
+  `isValidStarkPrivateKey` documented, while `encodeFelt` read it as decimal.
+  Digit-only inputs that callers meant as hex now silently produce different
+  values. Unprefixed hexadecimal text is rejected; add `0x` when hexadecimal
+  is intended. Decimal values outside the Stark field are also rejected.
 - SNIP-12 typed-data hashing now matches starknet.js 10.8.0 for decimal `i128`
   values, legacy domain revision fields, domain primary types, hexadecimal
   selectors, and uppercase `0X` felts. Signatures for hexadecimal selectors
