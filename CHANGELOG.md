@@ -34,6 +34,12 @@ All notable changes to the published Rust crates are documented here.
   Digit-only inputs that callers meant as hex now silently produce different
   values. Unprefixed hexadecimal text is rejected; add `0x` when hexadecimal
   is intended. Decimal values outside the Stark field are also rejected.
+- `sign_nostr_message` (also WASM `signNostrMessage` and gateway raw Nostr
+  signing) now signs the supplied bytes directly with BIP-340 and zero
+  auxiliary randomness, as documented. Previously it signed
+  `SHA-256(message)`, so standard BIP-340 verifiers rejected its signatures
+  over the original bytes. Signatures for the same input change; callers that
+  need the former signature must hash the message before passing it in.
 - SNIP-12 typed-data hashing now matches starknet.js 10.8.0 for decimal `i128`
   values, legacy domain revision fields, domain primary types, hexadecimal
   selectors, and uppercase `0X` felts. Signatures for hexadecimal selectors
