@@ -27,7 +27,7 @@ starknet-types-core.workspace = true
 starknet-rust-core.workspace = true
 bip39.workspace = true
 # RIPEMD-160 for P2WPKH key hashes; already in the graph through bip39.
-bitcoin_hashes = { version = "0.14.1", default-features = false }
+bitcoin_hashes = { version = "1.2.0", default-features = false }
 # `zeroize` makes SHA-2 hashers wipe their state on drop; zeroizing_hmac requires it.
 sha2 = { workspace = true, features = ["zeroize"] }
 sha3 = "0.12"
