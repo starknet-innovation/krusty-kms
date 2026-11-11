@@ -163,17 +163,12 @@ pub fn derive_keypair_with_coin_type(
     coin_type: u32,
     passphrase: Option<&str>,
 ) -> Result<TongoKeyPair> {
-    let private_key = SecretFelt::new(derive_private_key_with_coin_type(
-        mnemonic,
-        index,
-        account_index,
-        coin_type,
-        passphrase,
-    )?);
-    let public_key = compute_public_key(private_key.expose_secret())?;
+    let private_key =
+        derive_private_key_with_coin_type(mnemonic, index, account_index, coin_type, passphrase)?;
+    let public_key = compute_public_key(&private_key)?;
 
     Ok(TongoKeyPair {
-        private_key,
+        private_key: SecretFelt::new(private_key),
         public_key,
     })
 }

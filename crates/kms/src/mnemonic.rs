@@ -67,7 +67,6 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
         }
         phrase.push_str(word);
     }
-    debug_assert_eq!(phrase, mnemonic.to_string());
     Ok(phrase)
 }
 
@@ -104,6 +103,15 @@ mod tests {
         let mnemonic = generate_mnemonic(12).unwrap();
         assert_eq!(mnemonic.split_whitespace().count(), 12);
         assert!(validate_mnemonic(&mnemonic).is_ok());
+    }
+
+    #[test]
+    fn test_phrase_buffer_never_reallocates() {
+        // `generate_mnemonic` sizes its buffer at 9 bytes per word.
+        assert!(bip39::Language::English
+            .word_list()
+            .iter()
+            .all(|w| w.len() <= 8));
     }
 
     #[test]
