@@ -50,9 +50,10 @@ fn argent_double_derivation_strips_leading_zero_eth_key_bytes() {
             "0x3b8042748e0251dedec3001966d42b5427e764f540d8168d22bb1780955b5d1",
         ),
     ];
-    for (phrase, expected) in cases {
+    for (case, (phrase, expected)) in cases.into_iter().enumerate() {
         let key = krusty_kms::derive_argent_legacy_private_key(phrase, 0, 0).unwrap();
-        assert_eq!(key, Felt::from_hex(expected).unwrap(), "{phrase}");
+        // Boolean assert: never print phrases or keys on failure.
+        assert!(key == Felt::from_hex(expected).unwrap(), "case {case}");
     }
 }
 
