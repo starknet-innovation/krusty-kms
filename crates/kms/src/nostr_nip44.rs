@@ -178,6 +178,50 @@ mod tests {
         hex::decode(value).unwrap().try_into().unwrap()
     }
 
+    /// Flip `mask` into decrypted byte `at` of a valid payload and re-MAC it, so
+    /// only the checks after authentication can refuse it. ChaCha20 is a stream
+    /// cipher, so XOR on the ciphertext lands on the same plaintext byte.
+    fn remac(
+        payload: &str,
+        private_key: &[u8; 32],
+        peer: &[u8; 32],
+        at: usize,
+        mask: u8,
+    ) -> String {
+        let mut decoded = BASE64.decode(payload).unwrap();
+        let tag_at = decoded.len() - 32;
+        decoded[33 + at] ^= mask;
+        let nonce: [u8; 32] = decoded[1..33].try_into().unwrap();
+        let keys = message_keys(&conversation_key(private_key, peer).unwrap(), &nonce).unwrap();
+        let tag = hmac::<Sha256, 32>(&keys[44..], &[&nonce, &decoded[33..tag_at]]).unwrap();
+        decoded[tag_at..].copy_from_slice(tag.as_ref());
+        BASE64.encode(decoded)
+    }
+
+    #[test]
+    fn refuses_bad_padding_and_length_under_a_valid_mac() {
+        let (alice, bob) = ([3u8; 32], [4u8; 32]);
+        let bob_public = crate::nostr_public_key(&bob).unwrap();
+        let alice_public = crate::nostr_public_key(&alice).unwrap();
+        let payload = encrypt_with_nonce(&alice, &bob_public, "a", &[5u8; 32]).unwrap();
+        assert_eq!(decrypt(&bob, &alice_public, &payload).unwrap(), "a");
+
+        // Layout: 2-byte length (= 1), 1 byte of plaintext, 31 zero padding bytes.
+        for (at, mask) in [(3, 1), (33, 0x80), (1, 1), (0, 1)] {
+            let error = decrypt(
+                &bob,
+                &alice_public,
+                &remac(&payload, &alice, &bob_public, at, mask),
+            )
+            .unwrap_err()
+            .to_string();
+            assert!(
+                error.contains("Invalid NIP-44 padding"),
+                "byte {at}: {error}"
+            );
+        }
+    }
+
     #[test]
     fn matches_official_nip44_v2_vectors() {
         let first = bytes::<32>("0000000000000000000000000000000000000000000000000000000000000001");
