@@ -40,6 +40,11 @@ The rustdoc also states two existing limits:
 - `wrap_nostr_application_data` reads the system clock, which is unavailable
   on `wasm32-unknown-unknown`.
 
+The generic Nostr event code (event structs, id hashing, signing,
+verification and hex decoding) moves unchanged into the private submodule
+`nostr_application_data/event.rs`. Without the move,
+`nostr_application_data.rs` would pass the 350-line file-size soft limit.
+
 ## Compatibility and verification
 
 Additive only, so a minor bump. A core test opens one wrap twice and gets

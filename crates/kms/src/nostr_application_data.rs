@@ -1,12 +1,11 @@
 //! NIP-59 transport for bounded, non-chat application data.
 
 use crate::nostr_nip44;
-use crate::nostr_signing::{nostr_public_key, sign_nostr_event_id};
-use k256::schnorr::signature::hazmat::PrehashVerifier;
-use k256::schnorr::{Signature, VerifyingKey};
+use crate::nostr_signing::nostr_public_key;
+use event::{
+    decode_hex, event_id, signed_event, unsigned_event, verify_event, SignedEvent, UnsignedEvent,
+};
 use krusty_kms_common::KmsError;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::Zeroizing;
 
@@ -42,29 +41,6 @@ pub struct OpenedNostrApplicationData {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct UnsignedEvent {
-    id: String,
-    pubkey: String,
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SignedEvent {
-    id: String,
-    pubkey: String,
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-    sig: String,
-}
-
 fn valid_identifier(identifier: &str) -> bool {
     !identifier.is_empty()
         && identifier.len() <= MAX_IDENTIFIER_BYTES
@@ -87,95 +63,6 @@ fn validate_nested_plaintext(value: &str) -> Result<(), KmsError> {
         ));
     }
     Ok(())
-}
-
-fn decode_hex<const N: usize>(value: &str, name: &str) -> Result<[u8; N], KmsError> {
-    if value.len() != N * 2
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(KmsError::DeserializationError(format!(
-            "Invalid Nostr {name}"
-        )));
-    }
-    hex::decode(value)?
-        .try_into()
-        .map_err(|_| KmsError::DeserializationError(format!("Invalid Nostr {name}")))
-}
-
-fn event_id(
-    public_key: &str,
-    created_at: u64,
-    kind: u16,
-    tags: &[Vec<String>],
-    content: &str,
-) -> Result<[u8; 32], KmsError> {
-    let canonical = serde_json::to_vec(&(0, public_key, created_at, kind, tags, content))?;
-    Ok(Sha256::digest(canonical).into())
-}
-
-fn unsigned_event(
-    public_key: String,
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-) -> Result<UnsignedEvent, KmsError> {
-    let id = event_id(&public_key, created_at, kind, &tags, &content)?;
-    Ok(UnsignedEvent {
-        id: hex::encode(id),
-        pubkey: public_key,
-        created_at,
-        kind,
-        tags,
-        content,
-    })
-}
-
-fn signed_event(
-    private_key: &[u8; 32],
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-) -> Result<SignedEvent, KmsError> {
-    let public_key = hex::encode(nostr_public_key(private_key)?);
-    let id = event_id(&public_key, created_at, kind, &tags, &content)?;
-    let signature = sign_nostr_event_id(private_key, &id)?;
-    Ok(SignedEvent {
-        id: hex::encode(id),
-        pubkey: public_key,
-        created_at,
-        kind,
-        tags,
-        content,
-        sig: hex::encode(signature.signature),
-    })
-}
-
-fn verify_event(event: &SignedEvent) -> Result<(), KmsError> {
-    let expected = event_id(
-        &event.pubkey,
-        event.created_at,
-        event.kind,
-        &event.tags,
-        &event.content,
-    )?;
-    if decode_hex::<32>(&event.id, "event id")? != expected {
-        return Err(KmsError::CryptoError(
-            "Nostr event id does not match its contents".to_string(),
-        ));
-    }
-    let public_key = decode_hex::<32>(&event.pubkey, "public key")?;
-    let signature_bytes = decode_hex::<64>(&event.sig, "signature")?;
-    let verifying_key = VerifyingKey::from_slice(&public_key)
-        .map_err(|error| KmsError::InvalidPublicKey(error.to_string()))?;
-    let signature = Signature::try_from(signature_bytes.as_slice())
-        .map_err(|error| KmsError::CryptoError(error.to_string()))?;
-    verifying_key
-        .verify_prehash(&expected, &signature)
-        .map_err(|_| KmsError::CryptoError("Nostr event signature is invalid".to_string()))
 }
 
 fn now_seconds() -> Result<u64, KmsError> {
@@ -361,5 +248,6 @@ pub fn open_nostr_application_data_with_metadata(
     })
 }
 
+mod event;
 #[cfg(test)]
 mod tests;
