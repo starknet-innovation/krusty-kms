@@ -4,6 +4,17 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Nostr signing (`sign_nostr_event_id`, `sign_nostr_message`, and so gift-wrap
+  seals and wraps) verifies each BIP-340 signature before returning it, as
+  BIP-340 recommends against fault injection. Signatures are unchanged.
+- Opening a Nostr gift wrap no longer returns `serde_json` errors that can
+  quote decrypted seal or rumor JSON; malformed inner events get fixed
+  messages.
+- `chacha20` is built with `zeroize`, so the cipher state holding each NIP-44
+  message key is wiped on drop.
+
 ## [2.0.0] - 2026-11-07
 
 Major release. It carries one breaking WASM input change and removes the

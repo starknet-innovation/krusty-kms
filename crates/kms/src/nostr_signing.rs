@@ -12,6 +12,7 @@
 //! - signing is deterministic (`aux_rand = 0`) so repeated calls are stable
 //! - the returned public key is the x-only BIP-340 verifying key
 //! - invalid secret scalars are rejected before signing
+//! - every signature is verified before it is returned
 
 use k256::schnorr::SigningKey;
 use krusty_kms_common::KmsError;
@@ -37,7 +38,7 @@ pub fn sign_nostr_event_id(
     private_key: &[u8; 32],
     event_id: &[u8; 32],
 ) -> Result<NostrSignature, KmsError> {
-    sign_nostr_event_id_with_aux_rand(private_key, event_id, &[0u8; 32])
+    sign_raw_verified(private_key, event_id, &[0u8; 32])
 }
 
 /// Sign raw message bytes using BIP-340, without hashing them first.
@@ -49,15 +50,7 @@ pub fn sign_nostr_message(
     private_key: &[u8; 32],
     message: &[u8],
 ) -> Result<NostrSignature, KmsError> {
-    let signing_key = parse_signing_key(private_key)?;
-    let signature = signing_key
-        .sign_raw(message, &[0u8; 32])
-        .map_err(|error| KmsError::CryptoError(format!("nostr signing failed: {error}")))?;
-
-    Ok(NostrSignature {
-        public_key: signing_key.verifying_key().to_bytes().into(),
-        signature: signature.to_bytes(),
-    })
+    sign_raw_verified(private_key, message, &[0u8; 32])
 }
 
 fn parse_signing_key(private_key: &[u8; 32]) -> Result<SigningKey, KmsError> {
@@ -65,15 +58,21 @@ fn parse_signing_key(private_key: &[u8; 32]) -> Result<SigningKey, KmsError> {
         .map_err(|error| KmsError::InvalidPrivateKey(format!("Invalid secp256k1 key: {error}")))
 }
 
-fn sign_nostr_event_id_with_aux_rand(
+/// BIP-340 sign, then verify before release, as BIP-340 recommends against
+/// fault injection. k256 only self-verifies under `debug_assertions`.
+fn sign_raw_verified(
     private_key: &[u8; 32],
-    event_id: &[u8; 32],
+    message: &[u8],
     aux_rand: &[u8; 32],
 ) -> Result<NostrSignature, KmsError> {
     let signing_key = parse_signing_key(private_key)?;
     let signature = signing_key
-        .sign_raw(event_id, aux_rand)
+        .sign_raw(message, aux_rand)
         .map_err(|error| KmsError::CryptoError(format!("nostr signing failed: {error}")))?;
+    signing_key
+        .verifying_key()
+        .verify_raw(message, &signature)
+        .map_err(|_| KmsError::CryptoError("nostr signature self-check failed".to_string()))?;
 
     Ok(NostrSignature {
         public_key: signing_key.verifying_key().to_bytes().into(),
@@ -181,7 +180,7 @@ mod tests {
         let aux_rand =
             decode_array::<32>("0000000000000000000000000000000000000000000000000000000000000000");
 
-        let signed = sign_nostr_event_id_with_aux_rand(&private_key, &event_id, &aux_rand).unwrap();
+        let signed = sign_raw_verified(&private_key, &event_id, &aux_rand).unwrap();
 
         assert_eq!(
             hex::encode(signed.public_key),

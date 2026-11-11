@@ -50,3 +50,32 @@ fn gift_wrap_rejects_tampering_and_unbounded_inputs() {
     .to_string()
     .contains("nested envelope limit"));
 }
+
+#[test]
+fn gift_wrap_errors_never_quote_decrypted_json() {
+    let recipient_key = nostr_public_key(&RECIPIENT).unwrap();
+    let recipient = hex::encode(recipient_key);
+    let marker = "PLAINTEXT-MARKER";
+    let wrap_inner = |seal_json: &str| {
+        let ephemeral = ephemeral_private_key().unwrap();
+        let content = nostr_nip44::encrypt(&ephemeral, &recipient_key, seal_json).unwrap();
+        let tags = vec![vec!["p".to_string(), recipient.clone()]];
+        let wrap = signed_event(&ephemeral, 1, GIFT_WRAP_KIND, tags, content).unwrap();
+        serde_json::to_string(&wrap).unwrap()
+    };
+
+    // A seal that is not valid event JSON.
+    let bad_seal = format!(r#"{{"id":"{marker}"}}"#);
+    // A valid seal whose rumor has a string where a number belongs.
+    let bad_rumor = format!(r#"{{"created_at":"{marker}"}}"#);
+    let seal_content = nostr_nip44::encrypt(&SENDER, &recipient_key, &bad_rumor).unwrap();
+    let seal = signed_event(&SENDER, 1, SEAL_KIND, Vec::new(), seal_content).unwrap();
+
+    for event in [
+        wrap_inner(&bad_seal),
+        wrap_inner(&serde_json::to_string(&seal).unwrap()),
+    ] {
+        let error = open_nostr_application_data(&RECIPIENT, &event).unwrap_err();
+        assert!(!format!("{error} {error:?}").contains(marker));
+    }
+}
