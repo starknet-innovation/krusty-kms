@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `open_nostr_application_data_with_metadata` and `OpenedNostrApplicationData`
+  return the verified gift-wrap id, rumor id and rumor `created_at`, so callers
+  can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
+  and `createdAt` to its JSON result.
+
 ## [2.0.0] - 2026-11-07
 
 Major release. It carries one breaking WASM input change and removes the

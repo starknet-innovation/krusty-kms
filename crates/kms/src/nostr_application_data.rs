@@ -26,6 +26,22 @@ pub struct NostrApplicationData {
     pub sender_public_key: String,
 }
 
+/// [`NostrApplicationData`] plus the verified ids and timestamp callers need
+/// to reject replays. Opening is stateless: the same wrap opens every time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OpenedNostrApplicationData {
+    pub data: NostrApplicationData,
+    /// Verified gift-wrap event id. Deduplicating on it drops relay replays.
+    pub wrap_id: String,
+    /// Verified rumor event id. Unchanged when the same seal is re-wrapped,
+    /// so deduplicating on it also drops sender or recipient re-wraps.
+    pub rumor_id: String,
+    /// Rumor `created_at` (NIP-59's canonical time). Authenticated as the
+    /// sender's claim, not as a trusted clock.
+    pub created_at: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UnsignedEvent {
@@ -193,6 +209,14 @@ fn ephemeral_private_key() -> Result<Zeroizing<[u8; 32]>, KmsError> {
 }
 
 /// Wraps one bounded application-data rumor for one Nostr recipient.
+///
+/// Content is limited to 32,768 bytes, and its JSON-escaped form must also
+/// fit the nested NIP-44 envelope: at most 40,614 to 40,742 escaped bytes,
+/// depending on the identifier length. Quotes, backslashes and control
+/// characters expand when escaped.
+///
+/// Reads the system clock, which panics on `wasm32-unknown-unknown`; use
+/// [`wrap_nostr_application_data_at`] there.
 pub fn wrap_nostr_application_data(
     private_key: &[u8; 32],
     recipient_public_key: &str,
@@ -259,10 +283,24 @@ pub fn wrap_nostr_application_data_at(
 }
 
 /// Opens and authenticates one NIP-59 application-data gift wrap.
+///
+/// Opening is stateless, so replay protection is the caller's job; use
+/// [`open_nostr_application_data_with_metadata`] to get the ids and timestamp
+/// for it. Only Krusty's exact wrap shape is accepted: a single `["p", recipient]`
+/// tag, kind 1059, and no relay hints, `expiration` or proof-of-work tags.
 pub fn open_nostr_application_data(
     private_key: &[u8; 32],
     event_json: &str,
 ) -> Result<NostrApplicationData, KmsError> {
+    open_nostr_application_data_with_metadata(private_key, event_json).map(|opened| opened.data)
+}
+
+/// Like [`open_nostr_application_data`], also returning the verified wrap id,
+/// rumor id and rumor `created_at` for replay and freshness checks.
+pub fn open_nostr_application_data_with_metadata(
+    private_key: &[u8; 32],
+    event_json: &str,
+) -> Result<OpenedNostrApplicationData, KmsError> {
     if event_json.is_empty() || event_json.len() > MAX_EVENT_JSON_BYTES {
         return Err(KmsError::DeserializationError(
             "Invalid Nostr gift-wrap size".to_string(),
@@ -311,10 +349,15 @@ pub fn open_nostr_application_data(
         ));
     }
     validate_content(&rumor.content)?;
-    Ok(NostrApplicationData {
-        content: rumor.content,
-        identifier: rumor.tags[0][1].clone(),
-        sender_public_key: rumor.pubkey,
+    Ok(OpenedNostrApplicationData {
+        data: NostrApplicationData {
+            content: rumor.content,
+            identifier: rumor.tags[0][1].clone(),
+            sender_public_key: rumor.pubkey,
+        },
+        wrap_id: wrap.id,
+        rumor_id: rumor.id,
+        created_at: rumor.created_at,
     })
 }
 
