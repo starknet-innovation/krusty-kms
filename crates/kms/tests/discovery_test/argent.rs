@@ -34,6 +34,28 @@ fn argent_double_derivation_key_matches() {
     );
 }
 
+/// Argent X re-seeds with the ETH key as a number, dropping leading zero
+/// bytes. These phrases have an `m/44'/60'/0'/0/0` key starting with `0x00`;
+/// expected values come from Argent X's `keyDerivation.ts` (ethers 5) and
+/// `ArgentSigner.ts` (`@scure/bip32`), which agree. Throwaway phrases.
+#[test]
+fn argent_double_derivation_strips_leading_zero_eth_key_bytes() {
+    let cases = [
+        (
+            "verify burst quarter genuine artefact arrow spot keep ecology confirm sorry sauce",
+            "0x78fb8e59a8c26d6f4204bcedd6e8427fdf8be8e3081d2d09ac01526c718326b",
+        ),
+        (
+            "quote denial risk amused glory have finish mean review night any excite",
+            "0x3b8042748e0251dedec3001966d42b5427e764f540d8168d22bb1780955b5d1",
+        ),
+    ];
+    for (phrase, expected) in cases {
+        let key = krusty_kms::derive_argent_legacy_private_key(phrase, 0, 0).unwrap();
+        assert_eq!(key, Felt::from_hex(expected).unwrap(), "{phrase}");
+    }
+}
+
 /// Confirm that Argent's derivation is NOT a simple direct `m/44'/9004'/0'/0/0`.
 ///
 /// This test documents the incompatibility: a wallet using direct BIP-44
