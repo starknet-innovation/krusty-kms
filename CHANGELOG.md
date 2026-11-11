@@ -4,6 +4,12 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
+  source fails instead of panicking, which aborted `panic = "abort"` hosts and
+  trapped the WASM instance.
+
 ## [2.0.0] - 2026-11-07
 
 Major release. It carries one breaking WASM input change and removes the
