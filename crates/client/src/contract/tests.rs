@@ -128,6 +128,37 @@ async fn mocked_provider_decodes_account_state() {
     assert_eq!(calls[0].calldata, vec![x, y]);
 }
 
+#[tokio::test]
+async fn mocked_provider_rejects_malformed_account_state() {
+    let key = krusty_kms_crypto::StarkCurve::generator();
+    let affine = key.to_affine().unwrap();
+    let (x, y) = (core_felt_to_rs(affine.x()), core_felt_to_rs(affine.y()));
+    let valid = vec![x, y, x, y, x, y, x, y, StarknetRsFelt::ONE];
+    let mut cases = vec![(vec![x, y], "Expected 9 felts for AccountState")];
+    for (offset, expected) in [
+        (0, "Invalid balance.L point"),
+        (2, "Invalid balance.R point"),
+        (4, "Invalid pending.L point"),
+        (6, "Invalid pending.R point"),
+    ] {
+        let mut response = valid.clone();
+        response[offset] = StarknetRsFelt::ZERO;
+        response[offset + 1] = StarknetRsFelt::ZERO;
+        cases.push((response, expected));
+    }
+
+    for (response, expected) in cases {
+        let provider = Arc::new(MockProvider::with_responses(vec![response]));
+        let contract = TongoContract::with_provider(provider, CoreFelt::from(9u64));
+        let error = contract.get_state(&key).await.unwrap_err();
+        assert!(
+            matches!(error, krusty_kms_common::KmsError::DeserializationError(_)),
+            "{error}"
+        );
+        assert!(error.to_string().contains(expected), "{error}");
+    }
+}
+
 /// Oversized RPC felts must error instead of silently truncating (M-13):
 /// a truncated `rate` feeds `approve(amount * rate)`.
 #[test]
