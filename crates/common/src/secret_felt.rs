@@ -83,7 +83,8 @@ impl PartialEq for SecretFelt {
 impl PartialEq<Felt> for SecretFelt {
     fn eq(&self, other: &Felt) -> bool {
         let a = zeroize::Zeroizing::new(self.0.to_bytes_be());
-        bool::from(a.ct_eq(&other.to_bytes_be()))
+        let b = zeroize::Zeroizing::new(other.to_bytes_be());
+        bool::from(a.ct_eq(&*b))
     }
 }
 
