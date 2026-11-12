@@ -202,11 +202,7 @@ pub fn verify(
     let v1 = StarkCurve::add(v, &neg_g1);
 
     // Verify second POE: g2^s1 = A1 + V1^c1
-    if !ProofOfExponentiation::verify_internal(&v1, g2, &a1_proj, &c1, &s1)? {
-        return Ok(false);
-    }
-
-    Ok(true)
+    ProofOfExponentiation::verify_internal(&v1, g2, &a1_proj, &c1, &s1)
 }
 
 #[cfg(test)]
