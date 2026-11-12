@@ -51,7 +51,8 @@ scrypt.workspace = true
 aes.workspace = true
 ctr.workspace = true
 base64.workspace = true
-chacha20.workspace = true
+# `zeroize` wipes the cipher state holding each NIP-44 message key on drop.
+chacha20 = { workspace = true, features = ["zeroize"] }
 
 [dev-dependencies]
 # Differential oracle for zeroizing_hmac; production HMACs do not use it.

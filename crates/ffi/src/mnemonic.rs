@@ -22,6 +22,8 @@ pub unsafe extern "C" fn kms_generate_mnemonic(
         || match krusty_kms::generate_mnemonic(word_count as usize) {
             // Mnemonic is secret key material: zeroize the Rust-side copy on drop.
             Ok(m) => write_string_output(&Zeroizing::new(m), out, out_len, out_written),
+            // Entropy failure is environmental, not a bad word count.
+            Err(krusty_kms_common::KmsError::CryptoError(_)) => KMS_ERR_CRYPTO,
             Err(_) => KMS_ERR_INVALID_INPUT,
         },
     )

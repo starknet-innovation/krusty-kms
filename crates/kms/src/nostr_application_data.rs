@@ -1,12 +1,11 @@
 //! NIP-59 transport for bounded, non-chat application data.
 
 use crate::nostr_nip44;
-use crate::nostr_signing::{nostr_public_key, sign_nostr_event_id};
-use k256::schnorr::signature::hazmat::PrehashVerifier;
-use k256::schnorr::{Signature, VerifyingKey};
+use crate::nostr_signing::nostr_public_key;
+use event::{
+    decode_hex, event_id, signed_event, unsigned_event, verify_event, SignedEvent, UnsignedEvent,
+};
 use krusty_kms_common::KmsError;
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zeroize::Zeroizing;
 
@@ -26,27 +25,20 @@ pub struct NostrApplicationData {
     pub sender_public_key: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct UnsignedEvent {
-    id: String,
-    pubkey: String,
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SignedEvent {
-    id: String,
-    pubkey: String,
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-    sig: String,
+/// [`NostrApplicationData`] plus the verified ids and timestamp callers need
+/// to reject replays. Opening is stateless: the same wrap opens every time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct OpenedNostrApplicationData {
+    pub data: NostrApplicationData,
+    /// Verified gift-wrap event id. Deduplicating on it drops relay replays.
+    pub wrap_id: String,
+    /// Verified rumor event id. Unchanged when the same seal is re-wrapped,
+    /// so deduplicating on it also drops sender or recipient re-wraps.
+    pub rumor_id: String,
+    /// Rumor `created_at` (NIP-59's canonical time). Authenticated as the
+    /// sender's claim, not as a trusted clock.
+    pub created_at: u64,
 }
 
 fn valid_identifier(identifier: &str) -> bool {
@@ -71,95 +63,6 @@ fn validate_nested_plaintext(value: &str) -> Result<(), KmsError> {
         ));
     }
     Ok(())
-}
-
-fn decode_hex<const N: usize>(value: &str, name: &str) -> Result<[u8; N], KmsError> {
-    if value.len() != N * 2
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(KmsError::DeserializationError(format!(
-            "Invalid Nostr {name}"
-        )));
-    }
-    hex::decode(value)?
-        .try_into()
-        .map_err(|_| KmsError::DeserializationError(format!("Invalid Nostr {name}")))
-}
-
-fn event_id(
-    public_key: &str,
-    created_at: u64,
-    kind: u16,
-    tags: &[Vec<String>],
-    content: &str,
-) -> Result<[u8; 32], KmsError> {
-    let canonical = serde_json::to_vec(&(0, public_key, created_at, kind, tags, content))?;
-    Ok(Sha256::digest(canonical).into())
-}
-
-fn unsigned_event(
-    public_key: String,
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-) -> Result<UnsignedEvent, KmsError> {
-    let id = event_id(&public_key, created_at, kind, &tags, &content)?;
-    Ok(UnsignedEvent {
-        id: hex::encode(id),
-        pubkey: public_key,
-        created_at,
-        kind,
-        tags,
-        content,
-    })
-}
-
-fn signed_event(
-    private_key: &[u8; 32],
-    created_at: u64,
-    kind: u16,
-    tags: Vec<Vec<String>>,
-    content: String,
-) -> Result<SignedEvent, KmsError> {
-    let public_key = hex::encode(nostr_public_key(private_key)?);
-    let id = event_id(&public_key, created_at, kind, &tags, &content)?;
-    let signature = sign_nostr_event_id(private_key, &id)?;
-    Ok(SignedEvent {
-        id: hex::encode(id),
-        pubkey: public_key,
-        created_at,
-        kind,
-        tags,
-        content,
-        sig: hex::encode(signature.signature),
-    })
-}
-
-fn verify_event(event: &SignedEvent) -> Result<(), KmsError> {
-    let expected = event_id(
-        &event.pubkey,
-        event.created_at,
-        event.kind,
-        &event.tags,
-        &event.content,
-    )?;
-    if decode_hex::<32>(&event.id, "event id")? != expected {
-        return Err(KmsError::CryptoError(
-            "Nostr event id does not match its contents".to_string(),
-        ));
-    }
-    let public_key = decode_hex::<32>(&event.pubkey, "public key")?;
-    let signature_bytes = decode_hex::<64>(&event.sig, "signature")?;
-    let verifying_key = VerifyingKey::from_slice(&public_key)
-        .map_err(|error| KmsError::InvalidPublicKey(error.to_string()))?;
-    let signature = Signature::try_from(signature_bytes.as_slice())
-        .map_err(|error| KmsError::CryptoError(error.to_string()))?;
-    verifying_key
-        .verify_prehash(&expected, &signature)
-        .map_err(|_| KmsError::CryptoError("Nostr event signature is invalid".to_string()))
 }
 
 fn now_seconds() -> Result<u64, KmsError> {
@@ -193,6 +96,14 @@ fn ephemeral_private_key() -> Result<Zeroizing<[u8; 32]>, KmsError> {
 }
 
 /// Wraps one bounded application-data rumor for one Nostr recipient.
+///
+/// Content is limited to 32,768 bytes, and its JSON-escaped form must also
+/// fit the nested NIP-44 envelope: at most 40,614 to 40,742 escaped bytes,
+/// depending on the identifier length. Quotes, backslashes and control
+/// characters expand when escaped.
+///
+/// Reads the system clock, which panics on `wasm32-unknown-unknown`; use
+/// [`wrap_nostr_application_data_at`] there.
 pub fn wrap_nostr_application_data(
     private_key: &[u8; 32],
     recipient_public_key: &str,
@@ -259,10 +170,24 @@ pub fn wrap_nostr_application_data_at(
 }
 
 /// Opens and authenticates one NIP-59 application-data gift wrap.
+///
+/// Opening is stateless, so replay protection is the caller's job; use
+/// [`open_nostr_application_data_with_metadata`] to get the ids and timestamp
+/// for it. Only Krusty's exact wrap shape is accepted: a single `["p", recipient]`
+/// tag, kind 1059, and no relay hints, `expiration` or proof-of-work tags.
 pub fn open_nostr_application_data(
     private_key: &[u8; 32],
     event_json: &str,
 ) -> Result<NostrApplicationData, KmsError> {
+    open_nostr_application_data_with_metadata(private_key, event_json).map(|opened| opened.data)
+}
+
+/// Like [`open_nostr_application_data`], also returning the verified wrap id,
+/// rumor id and rumor `created_at` for replay and freshness checks.
+pub fn open_nostr_application_data_with_metadata(
+    private_key: &[u8; 32],
+    event_json: &str,
+) -> Result<OpenedNostrApplicationData, KmsError> {
     if event_json.is_empty() || event_json.len() > MAX_EVENT_JSON_BYTES {
         return Err(KmsError::DeserializationError(
             "Invalid Nostr gift-wrap size".to_string(),
@@ -280,7 +205,9 @@ pub fn open_nostr_application_data(
 
     let wrap_public_key = decode_hex::<32>(&wrap.pubkey, "gift-wrap public key")?;
     let seal_json = nostr_nip44::decrypt(private_key, &wrap_public_key, &wrap.content)?;
-    let seal: SignedEvent = serde_json::from_str(&seal_json)?;
+    // Decrypted JSON: never let a serde error quote it back to the caller.
+    let seal: SignedEvent = serde_json::from_str(&seal_json)
+        .map_err(|_| KmsError::DeserializationError("Invalid Nostr seal".to_string()))?;
     verify_event(&seal)?;
     if seal.kind != SEAL_KIND || !seal.tags.is_empty() {
         return Err(KmsError::DeserializationError(
@@ -290,7 +217,9 @@ pub fn open_nostr_application_data(
 
     let sender_public_key = decode_hex::<32>(&seal.pubkey, "sender public key")?;
     let rumor_json = nostr_nip44::decrypt(private_key, &sender_public_key, &seal.content)?;
-    let rumor: UnsignedEvent = serde_json::from_str(&rumor_json)?;
+    let rumor: UnsignedEvent = serde_json::from_str(&rumor_json).map_err(|_| {
+        KmsError::DeserializationError("Invalid Nostr application rumor".to_string())
+    })?;
     let expected_id = event_id(
         &rumor.pubkey,
         rumor.created_at,
@@ -311,12 +240,18 @@ pub fn open_nostr_application_data(
         ));
     }
     validate_content(&rumor.content)?;
-    Ok(NostrApplicationData {
-        content: rumor.content,
-        identifier: rumor.tags[0][1].clone(),
-        sender_public_key: rumor.pubkey,
+    Ok(OpenedNostrApplicationData {
+        data: NostrApplicationData {
+            content: rumor.content,
+            identifier: rumor.tags[0][1].clone(),
+            sender_public_key: rumor.pubkey,
+        },
+        wrap_id: wrap.id,
+        rumor_id: rumor.id,
+        created_at: rumor.created_at,
     })
 }
 
+mod event;
 #[cfg(test)]
 mod tests;

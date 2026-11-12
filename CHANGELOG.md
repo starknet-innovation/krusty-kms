@@ -9,9 +9,34 @@ All notable changes to the published Rust crates are documented here.
 - `krusty_kms::mnemonic_from_entropy(entropy)`, which encodes caller-supplied
   BIP-39 entropy as a phrase returned in a `Zeroizing<String>`. The C ABI's
   `kms_generate_mnemonic_from_entropy` now goes through it.
+- `open_nostr_application_data_with_metadata` and `OpenedNostrApplicationData`
+  return the verified gift-wrap id, rumor id and rumor `created_at`, so callers
+  can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
+  and `createdAt` to its JSON result. `createdAt` is a decimal string to
+  preserve the full timestamp when parsed by JavaScript.
+
+### Security
+
+- Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
+  bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
+  `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.
+  `generate_mnemonic` builds the phrase without reallocating, so no partial
+  phrases are freed unwiped. No API change.
+
+- Nostr signing (`sign_nostr_event_id`, `sign_nostr_message`, and so gift-wrap
+  seals and wraps) verifies each BIP-340 signature before returning it, as
+  BIP-340 recommends against fault injection. Signatures are unchanged.
+- Opening a Nostr gift wrap no longer returns `serde_json` errors that can
+  quote decrypted seal or rumor JSON; malformed inner events get fixed
+  messages.
+- `chacha20` is built with `zeroize`, so the cipher state holding each NIP-44
+  message key is wiped on drop.
 
 ### Fixed
 
+- `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
+  source fails instead of panicking, which aborted `panic = "abort"` hosts and
+  trapped the WASM instance.
 - `derive_argent_legacy_private_key` and `derive_stark_from_eth_key` now strip
   leading zero bytes from the Ethereum key before re-seeding BIP-32, matching
   Argent X. About 1 phrase in 256 previously derived a key that matched no

@@ -104,10 +104,7 @@ fn nfkd(text: &str) -> Zeroizing<String> {
 ///
 /// Returns [`KmsError`] if:
 /// - Invalid word count (not 12, 15, 18, 21, or 24) (`InvalidMnemonic`)
-///
-/// # Panics
-///
-/// Panics if OS entropy is unavailable (catastrophic, non-recoverable).
+/// - OS entropy source unavailable (`CryptoError`)
 ///
 /// # Cyclomatic Complexity: 2 (early return for invalid input)
 pub fn generate_mnemonic(word_count: usize) -> Result<String> {
@@ -126,7 +123,8 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
     };
 
     let mut entropy = Zeroizing::new(vec![0u8; entropy_size]);
-    getrandom::fill(entropy.as_mut_slice()).expect("OS entropy source unavailable");
+    getrandom::fill(entropy.as_mut_slice())
+        .map_err(|e| KmsError::CryptoError(format!("OS entropy source unavailable: {e}")))?;
 
     // Moves the phrase's buffer out without copying it.
     mnemonic_from_entropy(&entropy).map(|mut phrase| std::mem::take(&mut *phrase))
@@ -197,6 +195,15 @@ mod tests {
         let mnemonic = generate_mnemonic(12).unwrap();
         assert_eq!(mnemonic.split_whitespace().count(), 12);
         assert!(validate_mnemonic(&mnemonic).is_ok());
+    }
+
+    #[test]
+    fn test_phrase_buffer_never_reallocates() {
+        // `generate_mnemonic` sizes its buffer at 9 bytes per word.
+        assert!(bip39::Language::English
+            .word_list()
+            .iter()
+            .all(|w| w.len() <= 8));
     }
 
     #[test]
