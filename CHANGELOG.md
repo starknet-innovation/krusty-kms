@@ -6,6 +6,9 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
+- `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
+  source fails instead of panicking, which aborted `panic = "abort"` hosts and
+  trapped the WASM instance.
 - `derive_argent_legacy_private_key` and `derive_stark_from_eth_key` now strip
   leading zero bytes from the Ethereum key before re-seeding BIP-32, matching
   Argent X. About 1 phrase in 256 previously derived a key that matched no
