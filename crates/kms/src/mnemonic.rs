@@ -27,10 +27,7 @@ fn parse_mnemonic(phrase: &str) -> Result<Zeroizing<Mnemonic>> {
 ///
 /// Returns [`KmsError`] if:
 /// - Invalid word count (not 12, 15, 18, 21, or 24) (`InvalidMnemonic`)
-///
-/// # Panics
-///
-/// Panics if OS entropy is unavailable (catastrophic, non-recoverable).
+/// - OS entropy source unavailable (`CryptoError`)
 ///
 /// # Cyclomatic Complexity: 2 (early return for invalid input)
 pub fn generate_mnemonic(word_count: usize) -> Result<String> {
@@ -51,7 +48,8 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
     // Entropy and the parsed word indices are the root secret; both are
     // wiped on drop. Only the returned phrase outlives this function.
     let mut entropy = Zeroizing::new(vec![0u8; entropy_size]);
-    getrandom::fill(entropy.as_mut_slice()).expect("OS entropy source unavailable");
+    getrandom::fill(entropy.as_mut_slice())
+        .map_err(|e| KmsError::CryptoError(format!("OS entropy source unavailable: {e}")))?;
 
     let mnemonic = Mnemonic::from_entropy(&entropy)
         .map(Zeroizing::new)
