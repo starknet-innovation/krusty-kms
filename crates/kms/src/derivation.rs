@@ -306,7 +306,7 @@ pub fn derive_nostr_keypair(
 /// "double derivation" scheme used by old Argent wallets.
 ///
 /// Derivation:
-/// 1. Use ETH private key bytes as a new BIP-32 master seed
+/// 1. Use the ETH key, leading zero bytes stripped (as Argent X does), as a BIP-32 seed
 /// 2. Derive Starknet key at `m/44'/9004'/0'/0/{index}` from the second tree
 /// 3. `grindKey` the result to produce a valid Stark scalar
 ///
@@ -322,8 +322,9 @@ pub fn derive_stark_from_eth_key(
     require_unhardened_component(index, "index")?;
     require_unhardened_component(account_index, "account_index")?;
 
-    // Use the ETH private key as the seed for a new BIP-32 master key
-    let master = derive_master_key(eth_private_key)?;
+    // Argent X seeds with the key as a number (`BigNumber.toHexString()`): no leading zeros.
+    let first = eth_private_key.iter().position(|&b| b != 0).unwrap_or(32);
+    let master = derive_master_key(&eth_private_key[first..])?;
 
     // Derive at m/44'/9004'/account'/0/index (same path as standard Starknet)
     let path = [
@@ -334,8 +335,7 @@ pub fn derive_stark_from_eth_key(
         index,
     ];
 
-    let derived = derive_path(&master.0, &master.1, &path)?;
-    grind_key(&derived.0)
+    grind_key(&derive_path(&master.0, &master.1, &path)?.0)
 }
 
 /// Derive a Starknet private key from a mnemonic using old Argent's double

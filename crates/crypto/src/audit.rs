@@ -406,11 +406,7 @@ impl AuditProver {
 
         let c_l1 = StarkCurve::mul(&c, Some(&cipher1.l));
         let rhs4 = StarkCurve::add(&al1, &c_l1);
-        if lhs4 != rhs4 {
-            return Ok(false);
-        }
-
-        Ok(true)
+        Ok(lhs4 == rhs4)
     }
 }
 
