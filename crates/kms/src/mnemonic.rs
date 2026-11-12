@@ -27,10 +27,7 @@ fn parse_mnemonic(phrase: &str) -> Result<Zeroizing<Mnemonic>> {
 ///
 /// Returns [`KmsError`] if:
 /// - Invalid word count (not 12, 15, 18, 21, or 24) (`InvalidMnemonic`)
-///
-/// # Panics
-///
-/// Panics if OS entropy is unavailable (catastrophic, non-recoverable).
+/// - OS entropy source unavailable (`CryptoError`)
 ///
 /// # Cyclomatic Complexity: 2 (early return for invalid input)
 pub fn generate_mnemonic(word_count: usize) -> Result<String> {
@@ -51,13 +48,24 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
     // Entropy and the parsed word indices are the root secret; both are
     // wiped on drop. Only the returned phrase outlives this function.
     let mut entropy = Zeroizing::new(vec![0u8; entropy_size]);
-    getrandom::fill(entropy.as_mut_slice()).expect("OS entropy source unavailable");
+    getrandom::fill(entropy.as_mut_slice())
+        .map_err(|e| KmsError::CryptoError(format!("OS entropy source unavailable: {e}")))?;
 
     let mnemonic = Mnemonic::from_entropy(&entropy)
         .map(Zeroizing::new)
         .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;
 
-    Ok(mnemonic.to_string())
+    // `to_string()` grows word by word and frees unwiped partial phrases on
+    // each reallocation. BIP-39 English words are at most 8 letters, so 9
+    // bytes per word (plus separator) never reallocates.
+    let mut phrase = String::with_capacity(word_count * 9);
+    for (i, word) in mnemonic.words().enumerate() {
+        if i > 0 {
+            phrase.push(' ');
+        }
+        phrase.push_str(word);
+    }
+    Ok(phrase)
 }
 
 /// Validate a BIP-39 mnemonic phrase.
@@ -93,6 +101,15 @@ mod tests {
         let mnemonic = generate_mnemonic(12).unwrap();
         assert_eq!(mnemonic.split_whitespace().count(), 12);
         assert!(validate_mnemonic(&mnemonic).is_ok());
+    }
+
+    #[test]
+    fn test_phrase_buffer_never_reallocates() {
+        // `generate_mnemonic` sizes its buffer at 9 bytes per word.
+        assert!(bip39::Language::English
+            .word_list()
+            .iter()
+            .all(|w| w.len() <= 8));
     }
 
     #[test]

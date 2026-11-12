@@ -56,8 +56,9 @@ pub use keystore::{decrypt_ethers_keystore, decrypt_keystore, encrypt_keystore};
 pub use mnemonic::{generate_mnemonic, mnemonic_to_seed, validate_mnemonic};
 pub use multisig::{OpenZeppelinMultisig, OzMultisigDeploymentDescriptor};
 pub use nostr_application_data::{
-    open_nostr_application_data, wrap_nostr_application_data, wrap_nostr_application_data_at,
-    NostrApplicationData,
+    open_nostr_application_data, open_nostr_application_data_with_metadata,
+    wrap_nostr_application_data, wrap_nostr_application_data_at, NostrApplicationData,
+    OpenedNostrApplicationData,
 };
 pub use nostr_signing::{
     nostr_public_key, sign_nostr_event_id, sign_nostr_message, NostrEventSignature, NostrSignature,

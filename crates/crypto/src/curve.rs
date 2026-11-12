@@ -86,7 +86,7 @@ impl StarkCurve {
     ///
     /// Cyclomatic Complexity: 3 (nested loops)
     fn scalar_mul(point: &ProjectivePoint, scalar: &Felt) -> ProjectivePoint {
-        let scalar_bytes = scalar.to_bytes_be();
+        let scalar_bytes = zeroize::Zeroizing::new(scalar.to_bytes_be());
         let mut result = ProjectivePoint::identity();
         let mut temp = point.clone();
 
