@@ -7,7 +7,12 @@
 //! (`zeroizing_hmac`). `bip39` makes unwiped copies of the entropy and word
 //! indices while it encodes or parses (its `zeroize` feature wipes only the
 //! final `Mnemonic`), so each public function here runs that work in a nested
-//! frame, then overwrites 32 KiB of the stack below it. Not covered: heap
+//! frame, then performs a best-effort 32 KiB stack overwrite. Coverage depends
+//! on the compiler, target and optimization profile; the committed memory
+//! probes check selected representations and inputs on their recorded builds,
+//! not every possible copy. Each call needs at least 32 KiB of additional
+//! stack headroom; small foreign/custom-thread stacks can overflow.
+//! Not covered: heap
 //! copies made by NFKD (`bip39`'s of a non-ASCII phrase, and the normaliser's
 //! buffer for long combining sequences), copies the compiler makes when it
 //! moves a value, register spills, and stack deeper than the scrub. A seed or
@@ -22,13 +27,12 @@ use zeroize::{Zeroize, Zeroizing};
 /// BIP-39 seed derivation: PBKDF2-HMAC-SHA512, 2048 rounds.
 const PBKDF2_ROUNDS: u32 = 2048;
 
-/// Stack overwritten after each `bip39` call. Its encode, parse, and our
-/// PBKDF2 use a few KiB; the margin covers other targets and compilers.
-// ponytail: fixed size; derive it from a measured high-water mark if a
-// target with deeper frames turns up.
+/// Stack reserved for the post-call overwrite. The memory probes validate
+/// the window for their recorded builds; other frame layouts need measurement.
+// Changing the window requires rerunning both control-backed memory probes.
 const STACK_SCRUB_BYTES: usize = 32 * 1024;
 
-/// Run `f` one frame down, then overwrite the stack it left behind.
+/// Run `f` in a nested call, then overwrite a reserved stack window.
 fn scrubbed<T>(f: impl FnOnce() -> T) -> T {
     let out = run_nested(f);
     scrub_stack();
@@ -40,8 +44,8 @@ fn run_nested<T>(f: impl FnOnce() -> T) -> T {
     f()
 }
 
-/// Called from the frame that called [`run_nested`], so its buffer lies on
-/// the stack the nested call used. `zeroize` writes are volatile.
+/// Probe-tested builds place this buffer over the nested call's inactive
+/// stack. Rust does not guarantee that layout. `zeroize` writes are volatile.
 #[inline(never)]
 fn scrub_stack() {
     let mut stack = [0u8; STACK_SCRUB_BYTES];

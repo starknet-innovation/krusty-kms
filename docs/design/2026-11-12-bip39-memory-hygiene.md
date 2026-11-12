@@ -31,9 +31,10 @@ the wiping on, and `bip39` caps `bitcoin_hashes` below 0.15, so a newer
    buffers are `Zeroizing` and sized up front, so they never reallocate.
 2. **Stack scrub.** Each public function in `mnemonic` runs its `bip39` work in
    an `#[inline(never)]` frame, then calls a second `#[inline(never)]`
-   function from the same frame that overwrites 32 KiB of stack with
-   `zeroize`. That second frame sits on the stack the first one used. The
-   deepest remnant measured was under 2 KiB below the caller.
+   function from the same caller that overwrites a 32 KiB stack buffer with
+   `zeroize`. This is best-effort: Rust does not guarantee frame overlap.
+   Control-backed probes check the selected representations on each recorded
+   compiler/target/profile, rather than treating that layout as portable.
 3. **`mnemonic_from_entropy`** is the one public entry for caller-supplied
    entropy, so the C ABI no longer calls `bip39` directly and the scrub covers
    it.
@@ -53,6 +54,12 @@ the wiping on, and `bip39` caps `bitcoin_hashes` below 0.15, so a newer
   than 32 KiB.
 - Variable-time word lookup inside `bip39` (binary search, table indexing).
 
+The overwrite reserves a real 32 KiB frame in addition to the caller's stack
+needs. Small foreign/custom-thread stacks can abort from overflow; callers
+must provide headroom. A 16 KiB requested thread stack overflowed in a release
+Rust 1.100/macOS aarch64 reproduction while plain `bip39` validation succeeded.
+That observation is not a portable minimum-stack measurement.
+
 ## Compatibility
 
 Additive. Seeds, phrases and accepted inputs are unchanged. A differential
@@ -62,12 +69,33 @@ that NFKD changes, and Trezor and CPython `hashlib` vectors are checked too.
 `bip39::Mnemonic` is not part of Krusty's public API, so losing `Serialize`
 on it is not visible to callers.
 
-## Verification
+## Reproducible verification
 
-The review's memory harness, rerun against this branch: every remnant above
-is gone, natively and on wasm32. The one hit left, a copy of the seed on
-wasm32, lies in the harness's own frame, which received the returned seed,
-not in any Krusty frame.
-With the scrub turned off, the bip39 remnants and our own SHA-2 midstates
-come back, so the scrub is what removes them. Seed derivation takes about
-0.75 ms natively, the same as `bip39`'s.
+The committed [`tools/memory-inspection`](../../tools/memory-inspection/README.md)
+suite runs optimized native and WASM probes through `bash tools/check.sh memory`.
+The runner snapshots tracked working-tree source, then removes exactly one
+`scrub_stack()` call in the temporary control snapshot. Production source has
+no insecure feature or runtime switch. Both builds must pass: clean builds
+must have zero searched remnants, and controls must detect remnants for the
+required cases. Unsupported reads and vacuous controls fail, not skip.
+
+The native observer copies a quiescent worker's inactive stack through OS
+APIs, without Rust/C reads of uninitialized storage. The Node observer scans
+WASM linear memory after each operation, including freed heap, with only
+precisely identified caller-owned input/output slots excluded. Each backend
+documents its cases, patterns, ownership boundaries and unobserved regions.
+Count-only JSON reports record compiler, target/profile and source hashes;
+raw snapshots and fixture secrets are not retained.
+
+This gives reproducible empirical regression evidence, not a proof that every
+representation of every secret disappears on every consumer build. Seed and
+phrase compatibility remain covered by the independent differential/vector
+tests. CI additionally runs the probes on Linux native, macOS native and WASM.
+
+CodeQL's fixed `"mnemonic"` salt prefix and long-HMAC-key SHA-512 reduction
+are protocol requirements, not replacements for password stretching: see
+[BIP-39](https://bips.dev/39/#from-mnemonic-to-seed) and
+[RFC 2104 section 2](https://www.rfc-editor.org/rfc/rfc2104.html#section-2).
+The PBKDF2 loop still performs 2048 rounds. Public CPython vector constants
+remain fixed so tests can compare against independent outputs. Individual
+CodeQL dispositions record those reasons; no query or workflow is excluded.

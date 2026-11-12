@@ -17,6 +17,12 @@ def main():
     parser.add_argument("--toolchain", default="1.100.0")
     parser.add_argument("--target-dir", type=Path)
     args = parser.parse_args()
+    overrides = [name for name in os.environ if
+                 name in ("CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_TARGET")
+                 or name.startswith("CARGO_PROFILE_")
+                 or (name.startswith("CARGO_TARGET_") and name.endswith("_RUSTFLAGS"))]
+    if overrides:
+        raise SystemExit("build overrides present; use the common runner to normalize them")
     here = Path(__file__).resolve().parent
     source = args.source_root.resolve()
     report = args.report.resolve()
@@ -58,6 +64,7 @@ def main():
                 "wasm_bindgen": bindgen_version,
                 "target": "wasm32-unknown-unknown", "profile": "release",
                 "opt_level": 3, "codegen_units": 1, "lto": False,
+                "rustflags": env["RUSTFLAGS"],
                 "memory_scope": "whole linear memory including freed heap and dead stack",
                 "exclusions": "exact host input, returned phrase, or 64-byte caller seed return slot only",
             }

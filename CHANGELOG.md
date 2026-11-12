@@ -37,8 +37,10 @@ All notable changes to the published Rust crates are documented here.
   instead of calling `bip39`'s `to_seed`, which leaves its HMAC key pads and
   hash states on the stack. Seeds are unchanged.
 - `generate_mnemonic`, `mnemonic_from_entropy`, `validate_mnemonic` and
-  `mnemonic_to_seed` overwrite 32 KiB of stack after `bip39` returns,
-  removing its unwiped copies of the entropy, entropy bits and word indices.
+  `mnemonic_to_seed` perform a best-effort 32 KiB stack overwrite after
+  `bip39` returns. Control-backed native/WASM probes check the observed
+  entropy, entropy-bit and word-index remnants on their recorded builds.
+  Calls require additional stack headroom; coverage is compiler-dependent.
 - `bip39` is built without `std`, which in 3.0.0 also enabled `serde` and made
   `bip39::Mnemonic` serializable.
 

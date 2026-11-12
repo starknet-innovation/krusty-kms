@@ -38,10 +38,13 @@ jobs:
         include:
           - backend: native
             os: ubuntu-24.04
+            manifest: native/Cargo.toml
           - backend: native
             os: macos-15
+            manifest: native/Cargo.toml
           - backend: wasm
             os: ubuntu-24.04
+            manifest: wasm/probe/Cargo.toml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -58,8 +61,8 @@ jobs:
           bash .github/scripts/install-wasm-bindgen-cli.sh
       - name: Check standalone probe formatting
         env:
-          BACKEND: ${{ matrix.backend }}
-        run: cargo fmt --manifest-path "tools/memory-inspection/${BACKEND}/Cargo.toml" -- --check
+          PROBE_MANIFEST: tools/memory-inspection/${{ matrix.manifest }}
+        run: cargo fmt --manifest-path "$PROBE_MANIFEST" -- --check
       - name: Compare scrubbed and disabled-scrub optimized builds
         env:
           BACKEND: ${{ matrix.backend }}

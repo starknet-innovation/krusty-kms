@@ -149,6 +149,7 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures 0.3.0",
+ "zeroize",
 ]
 
 [[package]]

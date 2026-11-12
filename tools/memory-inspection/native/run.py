@@ -25,6 +25,12 @@ def main():
               "iterations": 4, "operations": ["encode", "validate", "seed"],
               "records": []}
     try:
+        overrides = [name for name in os.environ if
+                     name in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_TARGET")
+                     or name.startswith("CARGO_PROFILE_")
+                     or (name.startswith("CARGO_TARGET_") and name.endswith("_RUSTFLAGS"))]
+        if overrides:
+            raise RuntimeError("build overrides present; use the common runner to normalize them")
         if platform.system() not in ("Darwin", "Linux") or platform.machine() not in (
                 "arm64", "aarch64", "x86_64", "AMD64"):
             raise RuntimeError("unsupported OS/architecture; inspection was not run")
