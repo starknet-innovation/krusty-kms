@@ -205,7 +205,9 @@ pub fn open_nostr_application_data_with_metadata(
 
     let wrap_public_key = decode_hex::<32>(&wrap.pubkey, "gift-wrap public key")?;
     let seal_json = nostr_nip44::decrypt(private_key, &wrap_public_key, &wrap.content)?;
-    let seal: SignedEvent = serde_json::from_str(&seal_json)?;
+    // Decrypted JSON: never let a serde error quote it back to the caller.
+    let seal: SignedEvent = serde_json::from_str(&seal_json)
+        .map_err(|_| KmsError::DeserializationError("Invalid Nostr seal".to_string()))?;
     verify_event(&seal)?;
     if seal.kind != SEAL_KIND || !seal.tags.is_empty() {
         return Err(KmsError::DeserializationError(
@@ -215,7 +217,9 @@ pub fn open_nostr_application_data_with_metadata(
 
     let sender_public_key = decode_hex::<32>(&seal.pubkey, "sender public key")?;
     let rumor_json = nostr_nip44::decrypt(private_key, &sender_public_key, &seal.content)?;
-    let rumor: UnsignedEvent = serde_json::from_str(&rumor_json)?;
+    let rumor: UnsignedEvent = serde_json::from_str(&rumor_json).map_err(|_| {
+        KmsError::DeserializationError("Invalid Nostr application rumor".to_string())
+    })?;
     let expected_id = event_id(
         &rumor.pubkey,
         rumor.created_at,
