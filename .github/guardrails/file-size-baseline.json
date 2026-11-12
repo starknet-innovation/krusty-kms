@@ -34,11 +34,11 @@
     },
     {
       "path": "crates/crypto/src/audit.rs",
-      "lines": 828
+      "lines": 824
     },
     {
       "path": "crates/crypto/src/bit.rs",
-      "lines": 360
+      "lines": 356
     },
     {
       "path": "crates/crypto/src/poe2.rs",
@@ -66,7 +66,7 @@
     },
     {
       "path": "crates/experimental/gaming-experimental/mental-poker/src/shuffle.rs",
-      "lines": 686
+      "lines": 685
     },
     {
       "path": "crates/experimental/gaming-experimental/mental-poker/src/types.rs",

@@ -10,6 +10,13 @@ All notable changes to the published Rust crates are documented here.
   BIP-39 entropy as a phrase returned in a `Zeroizing<String>`. The C ABI's
   `kms_generate_mnemonic_from_entropy` now goes through it.
 
+### Fixed
+
+- `derive_argent_legacy_private_key` and `derive_stark_from_eth_key` now strip
+  leading zero bytes from the Ethereum key before re-seeding BIP-32, matching
+  Argent X. About 1 phrase in 256 previously derived a key that matched no
+  Ready (Argent X) legacy account; those keys change.
+
 ### Security
 
 - `mnemonic_to_seed` computes PBKDF2-HMAC-SHA512 in buffers that are wiped,
