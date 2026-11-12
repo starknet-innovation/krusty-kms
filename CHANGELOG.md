@@ -4,6 +4,24 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `krusty_kms::mnemonic_from_entropy(entropy)`, which encodes caller-supplied
+  BIP-39 entropy as a phrase returned in a `Zeroizing<String>`. The C ABI's
+  `kms_generate_mnemonic_from_entropy` now goes through it.
+
+### Security
+
+- `mnemonic_to_seed` computes PBKDF2-HMAC-SHA512 in buffers that are wiped,
+  over the canonical phrase and an NFKD passphrase built in a wiped buffer,
+  instead of calling `bip39`'s `to_seed`, which leaves its HMAC key pads and
+  hash states on the stack. Seeds are unchanged.
+- `generate_mnemonic`, `mnemonic_from_entropy`, `validate_mnemonic` and
+  `mnemonic_to_seed` overwrite 32 KiB of stack after `bip39` returns,
+  removing its unwiped copies of the entropy, entropy bits and word indices.
+- `bip39` is built without `std`, which in 3.0.0 also enabled `serde` and made
+  `bip39::Mnemonic` serializable.
+
 ## [2.0.0] - 2026-11-07
 
 Major release. It carries one breaking WASM input change and removes the

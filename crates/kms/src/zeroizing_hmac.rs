@@ -13,12 +13,13 @@
 //! when it moves a value, register spills, and the temporaries of the SHA-2
 //! compression and finalization functions.
 //!
-//! Keys longer than one block are refused rather than hashed: no caller needs
-//! one, and refusing keeps the padded key the whole key schedule.
+//! Keys longer than one block are refused rather than hashed: refusing keeps
+//! the padded key the whole key schedule. PBKDF2, whose password can be
+//! longer, hashes it into a wiped buffer first.
 
 use krusty_kms_common::{KmsError, Result};
 use sha2::digest::common::BlockSizeUser;
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha512};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 /// SHA-512's block, the largest of the hashes used here.
@@ -26,6 +27,7 @@ const MAX_HMAC_BLOCK: usize = 128;
 const IPAD: u8 = 0x36;
 const OPAD: u8 = 0x5c;
 const SHA256_LEN: usize = 32;
+const SHA512_LEN: usize = 64;
 
 /// `HMAC-D(key, message[0] || message[1] || ...)`.
 ///
@@ -82,6 +84,38 @@ pub(crate) fn hkdf_sha256_expand<const L: usize>(
         previous.copy_from_slice(&block[..]);
     }
     Ok(okm)
+}
+
+/// PBKDF2-HMAC-SHA512 (RFC 8018) with a 64-byte output: one block, so
+/// `U_1 = HMAC(P, salt[0] || salt[1] || ... || INT(1))`. A password longer
+/// than one SHA-512 block is replaced by its hash, as HMAC specifies.
+///
+/// # Errors
+///
+/// None in practice: every key passed to [`hmac`] fits one block.
+// ponytail: rebuilds both pads every round (4 compressions, not 2), as fast as
+// `bip39`'s own (~0.75 ms native); reuse keyed hasher states if it matters.
+pub(crate) fn pbkdf2_sha512(
+    password: &[u8],
+    salt: &[&[u8]],
+    rounds: u32,
+) -> Result<Zeroizing<[u8; SHA512_LEN]>> {
+    let hashed: Zeroizing<[u8; SHA512_LEN]>;
+    let key = if password.len() > <Sha512 as BlockSizeUser>::block_size() {
+        hashed = take_output(&mut Sha512::digest(password));
+        &hashed[..]
+    } else {
+        password
+    };
+    let index = 1u32.to_be_bytes();
+    let first: Vec<&[u8]> = salt.iter().copied().chain([&index[..]]).collect();
+    let mut u = hmac::<Sha512, SHA512_LEN>(key, &first)?;
+    let mut out = u.clone();
+    for _ in 1..rounds {
+        u = hmac::<Sha512, SHA512_LEN>(key, &[&u[..]])?;
+        out.iter_mut().zip(u.iter()).for_each(|(o, b)| *o ^= b);
+    }
+    Ok(out)
 }
 
 /// Copy a secret-bearing buffer into a wiped-on-drop array, then wipe it.
