@@ -316,12 +316,12 @@ mod tests {
                 assert_eq!(*phrase, reference.to_string());
                 short |= phrase.len() <= 128;
                 long |= phrase.len() > 128;
-                for passphrase in passphrases {
+                for (case, passphrase) in passphrases.iter().enumerate() {
+                    // Name the case, not the secret inputs, on failure.
                     assert_eq!(
                         mnemonic_to_seed(&phrase, passphrase).unwrap(),
-                        reference.to_seed(passphrase),
-                        "{} / {passphrase:?}",
-                        *phrase
+                        reference.to_seed(*passphrase),
+                        "entropy {len} bytes, fill {fill:#04x}, passphrase case {case}"
                     );
                 }
             }
