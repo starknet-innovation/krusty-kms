@@ -15,4 +15,3 @@ zeroize = "1.9"
 
 [profile.release]
 debug = true
-
