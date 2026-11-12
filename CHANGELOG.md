@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- `open_nostr_application_data_with_metadata` and `OpenedNostrApplicationData`
+  return the verified gift-wrap id, rumor id and rumor `created_at`, so callers
+  can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
+  and `createdAt` to its JSON result. `createdAt` is a decimal string to
+  preserve the full timestamp when parsed by JavaScript.
+
 ### Security
 
 - Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
