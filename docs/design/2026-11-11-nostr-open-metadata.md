@@ -31,7 +31,10 @@ does not keep replay state; callers hold the processed-id set and their own
 freshness policy.
 
 WASM `openNostrApplicationData` adds `wrapId`, `rumorId` and `createdAt` to
-its JSON result. The export signature is unchanged.
+its JSON result. `createdAt` is a decimal string, so JavaScript's `JSON.parse`
+preserves every authenticated `u64` timestamp, including values above its
+safe-integer limit. Callers can use `BigInt(createdAt)` for exact comparisons.
+The export signature is unchanged.
 
 The rustdoc also states two existing limits:
 
@@ -51,4 +54,5 @@ Additive only, so a minor bump. A core test opens one wrap twice and gets
 identical results. It then re-wraps the same seal under a new ephemeral key and
 checks that the wrap id changes and the rumor id does not, and that
 `created_at` equals the wrap time. The WASM round-trip test checks the three
-new JSON fields.
+new JSON fields. A WASM regression parses the returned JSON with JavaScript
+and checks exact timestamps of `2^53 + 1` and `u64::MAX`.
