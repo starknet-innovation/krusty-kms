@@ -52,6 +52,8 @@ pub fn wrap_nostr_application_data(
 }
 
 /// Opens a NIP-59 gift wrap without exposing the derived Nostr private key.
+/// Returns JSON with `createdAt` as a decimal string, preserving the full
+/// authenticated `u64` timestamp when JavaScript parses the result.
 #[wasm_bindgen(js_name = "openNostrApplicationData")]
 pub fn open_nostr_application_data(
     mnemonic: String,
@@ -74,7 +76,7 @@ pub fn open_nostr_application_data(
         "senderPublicKey": opened.data.sender_public_key,
         "wrapId": opened.wrap_id,
         "rumorId": opened.rumor_id,
-        "createdAt": opened.created_at,
+        "createdAt": opened.created_at.to_string(),
     })
     .to_string())
 }
@@ -108,7 +110,28 @@ mod tests {
         assert!(opened.contains(r#""content":"payload""#));
         let opened: serde_json::Value = serde_json::from_str(&opened).unwrap();
         assert!(opened["wrapId"].is_string() && opened["rumorId"].is_string());
-        assert!(opened["createdAt"].is_u64());
+        assert!(opened["createdAt"].is_string());
         assert!(open_nostr_application_data(MNEMONIC.into(), 0, 0, None, &event).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn opened_timestamp_survives_javascript_json_parsing() {
+        let sender = nostr_private_key(MNEMONIC, 0, 0, None).unwrap();
+        let recipient = nostr_private_key(MNEMONIC, 1, 0, None).unwrap();
+        for timestamp in [(1u64 << 53) + 1, u64::MAX] {
+            let event = krusty_kms::wrap_nostr_application_data_at(
+                &sender.private_key,
+                &hex::encode(recipient.public_key),
+                "mc-wallet.multisig",
+                "payload",
+                timestamp,
+            )
+            .unwrap();
+            let opened = open_nostr_application_data(MNEMONIC.into(), 1, 0, None, &event).unwrap();
+            let parsed = js_sys::JSON::parse(&opened).unwrap();
+            let created_at =
+                js_sys::Reflect::get(&parsed, &JsValue::from_str("createdAt")).unwrap();
+            assert_eq!(created_at.as_string(), Some(timestamp.to_string()));
+        }
     }
 }
