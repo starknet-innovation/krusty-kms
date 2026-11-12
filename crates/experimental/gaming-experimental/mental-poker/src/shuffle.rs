@@ -233,8 +233,7 @@ impl ShuffleArgument {
         let mut perm_commitment = StarkCurve::mul(&perm_blind, Some(&params.h));
 
         // Add contribution from each permutation position
-        for i in 0..n {
-            let perm_i = witness.permutation.indices[i];
+        for (i, &perm_i) in witness.permutation.indices.iter().enumerate().take(n) {
             let scalar = Felt::from((perm_i + 1) as u64); // +1 to avoid zero
             let term = StarkCurve::mul(&scalar, Some(&params.g));
             let weighted = StarkCurve::mul(&Felt::from((i + 1) as u64), Some(&term));
