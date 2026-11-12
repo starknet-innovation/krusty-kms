@@ -12,6 +12,13 @@ All notable changes to the published Rust crates are documented here.
   `generate_mnemonic` builds the phrase without reallocating, so no partial
   phrases are freed unwiped. No API change.
 
+### Fixed
+
+- `derive_argent_legacy_private_key` and `derive_stark_from_eth_key` now strip
+  leading zero bytes from the Ethereum key before re-seeding BIP-32, matching
+  Argent X. About 1 phrase in 256 previously derived a key that matched no
+  Ready (Argent X) legacy account; those keys change.
+
 ## [2.0.0] - 2026-11-07
 
 Major release. It carries one breaking WASM input change and removes the
