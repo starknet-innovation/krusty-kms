@@ -11,8 +11,19 @@ All notable changes to the published Rust crates are documented here.
   can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
   and `createdAt` to its JSON result.
 
+### Security
+
+- Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
+  bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
+  `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.
+  `generate_mnemonic` builds the phrase without reallocating, so no partial
+  phrases are freed unwiped. No API change.
+
 ### Fixed
 
+- `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
+  source fails instead of panicking, which aborted `panic = "abort"` hosts and
+  trapped the WASM instance.
 - `derive_argent_legacy_private_key` and `derive_stark_from_eth_key` now strip
   leading zero bytes from the Ethereum key before re-seeding BIP-32, matching
   Argent X. About 1 phrase in 256 previously derived a key that matched no
