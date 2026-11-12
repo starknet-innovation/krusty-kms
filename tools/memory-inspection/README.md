@@ -12,6 +12,7 @@ the locked `wasm-bindgen` CLI are also needed for WASM. Install the WASM target
 and CLI using the repository helper:
 
 ```sh
+rustup toolchain install 1.100.0 --profile minimal --component rustfmt
 rustup target add wasm32-unknown-unknown --toolchain 1.100.0
 RUSTUP_TOOLCHAIN=1.100.0 bash .github/scripts/install-wasm-bindgen-cli.sh
 RUSTUP_TOOLCHAIN=1.100.0 bash tools/check.sh memory
