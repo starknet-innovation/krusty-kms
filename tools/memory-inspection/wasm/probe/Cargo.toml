@@ -1,0 +1,22 @@
+[package]
+name = "krusty-memory-wasm-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+krusty-kms = { path = "../../../../crates/kms", default-features = false }
+wasm-bindgen = "=0.2.127"
+krusty-kms-common = { path = "../../../../crates/common" }
+zeroize = "1.9"
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = false
+codegen-units = 1
