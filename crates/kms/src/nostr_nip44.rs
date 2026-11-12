@@ -203,7 +203,9 @@ mod tests {
         let (alice, bob) = ([3u8; 32], [4u8; 32]);
         let bob_public = crate::nostr_public_key(&bob).unwrap();
         let alice_public = crate::nostr_public_key(&alice).unwrap();
-        let payload = encrypt_with_nonce(&alice, &bob_public, "a", &[5u8; 32]).unwrap();
+        // The mutation helper reads the payload nonce; these checks do not
+        // depend on a particular nonce or ciphertext.
+        let payload = encrypt(&alice, &bob_public, "a").unwrap();
         assert_eq!(decrypt(&bob, &alice_public, &payload).unwrap(), "a");
 
         // Layout: 2-byte length (= 1), 1 byte of plaintext, 31 zero padding bytes.
