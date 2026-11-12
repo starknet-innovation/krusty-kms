@@ -55,7 +55,17 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
         .map(Zeroizing::new)
         .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;
 
-    Ok(mnemonic.to_string())
+    // `to_string()` grows word by word and frees unwiped partial phrases on
+    // each reallocation. BIP-39 English words are at most 8 letters, so 9
+    // bytes per word (plus separator) never reallocates.
+    let mut phrase = String::with_capacity(word_count * 9);
+    for (i, word) in mnemonic.words().enumerate() {
+        if i > 0 {
+            phrase.push(' ');
+        }
+        phrase.push_str(word);
+    }
+    Ok(phrase)
 }
 
 /// Validate a BIP-39 mnemonic phrase.
@@ -91,6 +101,15 @@ mod tests {
         let mnemonic = generate_mnemonic(12).unwrap();
         assert_eq!(mnemonic.split_whitespace().count(), 12);
         assert!(validate_mnemonic(&mnemonic).is_ok());
+    }
+
+    #[test]
+    fn test_phrase_buffer_never_reallocates() {
+        // `generate_mnemonic` sizes its buffer at 9 bytes per word.
+        assert!(bip39::Language::English
+            .word_list()
+            .iter()
+            .all(|w| w.len() <= 8));
     }
 
     #[test]

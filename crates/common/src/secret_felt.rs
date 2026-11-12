@@ -44,7 +44,23 @@ impl SecretFelt {
     /// whenever possible. The returned buffer zeroizes itself on drop; callers
     /// that copy it into a plain `String` own that copy's hygiene.
     pub fn expose_secret_hex(&self) -> zeroize::Zeroizing<String> {
-        zeroize::Zeroizing::new(format!("{:#x}", self.0))
+        // Same output as `{:#x}`, but `Felt`'s `LowerHex` builds an
+        // intermediate `String` that is never wiped. Capacity 66 means no
+        // reallocation leaves a partial copy behind.
+        let bytes = zeroize::Zeroizing::new(self.0.to_bytes_be());
+        let mut out = zeroize::Zeroizing::new(String::with_capacity(66));
+        out.push_str("0x");
+        let mut started = false;
+        for nibble in bytes.iter().flat_map(|b| [b >> 4, b & 0xf]) {
+            started |= nibble != 0;
+            if started {
+                out.push(char::from_digit(u32::from(nibble), 16).expect("nibble < 16"));
+            }
+        }
+        if !started {
+            out.push('0');
+        }
+        out
     }
 }
 
@@ -58,13 +74,17 @@ impl PartialEq for SecretFelt {
     fn eq(&self, other: &Self) -> bool {
         // Constant-time compare of big-endian encodings to avoid timing leaks
         // when checking secret equality (e.g. key verification).
-        bool::from(self.0.to_bytes_be().ct_eq(&other.0.to_bytes_be()))
+        let a = zeroize::Zeroizing::new(self.0.to_bytes_be());
+        let b = zeroize::Zeroizing::new(other.0.to_bytes_be());
+        bool::from(a.ct_eq(&*b))
     }
 }
 
 impl PartialEq<Felt> for SecretFelt {
     fn eq(&self, other: &Felt) -> bool {
-        bool::from(self.0.to_bytes_be().ct_eq(&other.to_bytes_be()))
+        let a = zeroize::Zeroizing::new(self.0.to_bytes_be());
+        let b = zeroize::Zeroizing::new(other.to_bytes_be());
+        bool::from(a.ct_eq(&*b))
     }
 }
 
@@ -125,6 +145,21 @@ mod tests {
         let secret = SecretFelt::new(Felt::from(42u64));
         let hex = secret.expose_secret_hex();
         assert_eq!(hex.as_str(), "0x2a");
+    }
+
+    #[test]
+    fn test_secret_felt_hex_matches_lower_hex() {
+        for felt in [
+            Felt::ZERO,
+            Felt::ONE,
+            Felt::from(0x10u64),
+            Felt::MAX,
+            Felt::from_hex("0x7baa040a82762f75cb1fdd42cc04edbe20aae62899dd01f2cc93c169b594640")
+                .unwrap(),
+        ] {
+            let hex = SecretFelt::new(felt).expose_secret_hex();
+            assert_eq!(hex.as_str(), format!("{felt:#x}"));
+        }
     }
 
     #[test]

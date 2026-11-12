@@ -4,6 +4,14 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Security
+
+- Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
+  bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
+  `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.
+  `generate_mnemonic` builds the phrase without reallocating, so no partial
+  phrases are freed unwiped. No API change.
+
 ### Fixed
 
 - `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy

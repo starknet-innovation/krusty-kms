@@ -13,7 +13,7 @@
 //! - the helper signs the caller-supplied felt directly; it does not hash bytes
 //! - out-of-range message values are rejected explicitly
 
-use krusty_kms_common::KmsError;
+use krusty_kms_common::{KmsError, SecretFelt};
 use starknet_crypto::{get_public_key, rfc6979_generate_k, sign, Felt, SignError};
 
 /// Stark curve order n (order of the generator point).
@@ -80,9 +80,10 @@ pub fn sign_stark_hash(private_key: &Felt, hash: &Felt) -> Result<StarkSignature
     let mut seed = None;
 
     loop {
-        let k = rfc6979_generate_k(hash, private_key, seed.as_ref());
+        // `k` and a signature reveal the private key; wipe it on every path.
+        let k = SecretFelt::new(rfc6979_generate_k(hash, private_key, seed.as_ref()));
 
-        match sign(private_key, hash, &k) {
+        match sign(private_key, hash, k.expose_secret()) {
             Ok(signature) => {
                 return Ok(StarkSignature {
                     public_key: get_public_key(private_key),
