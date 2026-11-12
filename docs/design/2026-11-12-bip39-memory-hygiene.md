@@ -5,8 +5,9 @@ Date: 2026-11-12. Status: proposed.
 ## Problem
 
 `bip39` 3.0.0's `zeroize` feature wipes the final `Mnemonic` and nothing else.
-An internal review, reproduced on wasm32 and native aarch64, found these left
-in memory after `mnemonic_to_seed` and `generate_mnemonic` returned:
+An internal review found these left in memory after `mnemonic_to_seed` and
+`generate_mnemonic` returned. It reproduced the first two on wasm32 and native
+aarch64 and found the third by reading the source:
 
 - `to_seed`: its HMAC `ipad`/`opad` (the phrase XOR a constant when it fits
   one SHA-512 block, otherwise `SHA-512(phrase)`), both HMAC midstates and the
@@ -44,10 +45,10 @@ the wiping on, and `bip39` caps `bitcoin_hashes` below 0.15, so a newer
 
 - The NFKD heap copy `parse` makes of a non-ASCII phrase. ASCII input, which
   covers all English phrases, makes none.
-- Copies the compiler makes when it moves a value. On wasm32, one copy of
-  the 64-byte seed is still left after `mnemonic_to_seed` returns it by
-  value. Removing it would mean writing the seed straight into a
-  caller-supplied buffer.
+- The NFKD iterator's internal buffer, which moves to the heap for a run of
+  more than four combining characters in the passphrase.
+- Copies the compiler makes when it moves a value, including the seed that
+  `mnemonic_to_seed` returns by value into the caller's frame.
 - Register spills, the heap, and any target whose `bip39` frames are deeper
   than 32 KiB.
 - Variable-time word lookup inside `bip39` (binary search, table indexing).
@@ -64,7 +65,9 @@ on it is not visible to callers.
 ## Verification
 
 The review's memory harness, rerun against this branch: every remnant above
-is gone, natively and on wasm32, except the wasm32 seed copy noted above.
+is gone, natively and on wasm32. The one hit left, a copy of the seed on
+wasm32, lies in the harness's own frame, which received the returned seed,
+not in any Krusty frame.
 With the scrub turned off, the bip39 remnants and our own SHA-2 midstates
 come back, so the scrub is what removes them. Seed derivation takes about
 0.75 ms natively, the same as `bip39`'s.

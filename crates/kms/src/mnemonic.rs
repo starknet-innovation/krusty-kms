@@ -6,12 +6,12 @@
 //! PBKDF2 buffer live in `Zeroizing` values or the crate's wiped HMAC
 //! (`zeroizing_hmac`). `bip39` makes unwiped copies of the entropy and word
 //! indices while it encodes or parses (its `zeroize` feature wipes only the
-//! final `Mnemonic`), so each public function here runs that work in a
-//! nested frame and then overwrites 32 KiB of the stack below it. Not covered: heap copies `bip39` makes when it NFKD-normalises a
-//! phrase that is not already NFKD (only non-ASCII input), copies the
-//! compiler makes when it moves a value, register spills, and stack
-//! deeper than the scrub. A seed or phrase returned by value is the
-//! caller's to wipe.
+//! final `Mnemonic`), so each public function here runs that work in a nested
+//! frame, then overwrites 32 KiB of the stack below it. Not covered: heap
+//! copies made by NFKD (`bip39`'s of a non-ASCII phrase, and the normaliser's
+//! buffer for long combining sequences), copies the compiler makes when it
+//! moves a value, register spills, and stack deeper than the scrub. A seed or
+//! phrase returned by value is the caller's to wipe.
 
 use crate::zeroizing_hmac::pbkdf2_sha512;
 use bip39::Mnemonic;
