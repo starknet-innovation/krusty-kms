@@ -39,6 +39,18 @@ pub struct WasmEncryptedPayload {
     pub ciphertext: String,
 }
 
+/// Preserve the caller's exact JavaScript number before wasm-bindgen could
+/// coerce it modulo 2^32 (for example, 2^32 + 1024 into 1024).
+fn parse_scrypt_n(value: &JsValue) -> Result<u32, JsValue> {
+    let Some(number) = value.as_f64() else {
+        return Err(JsValue::from_str("scryptN must be a number"));
+    };
+    if !number.is_finite() || number.fract() != 0.0 || !(0.0..=u32::MAX as f64).contains(&number) {
+        return Err(JsValue::from_str("scryptN must be an exact u32 integer"));
+    }
+    Ok(number as u32)
+}
+
 // ---------------------------------------------------------------------------
 // Private key encryption
 // ---------------------------------------------------------------------------
@@ -53,9 +65,10 @@ pub struct WasmEncryptedPayload {
 pub fn encrypt_private_key(
     private_key_hex: String,
     password: String,
-    scrypt_n: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue,
 ) -> Result<WasmEncryptedKey, JsValue> {
     let (private_key_hex, password) = (Zeroizing::new(private_key_hex), Zeroizing::new(password));
+    let scrypt_n = parse_scrypt_n(&scrypt_n)?;
     let result = encryption::encrypt_private_key(&private_key_hex, &password, scrypt_n)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))?;
 
@@ -74,15 +87,52 @@ pub fn encrypt_private_key(
 /// @param password - The password used during encryption
 /// @param scryptN - The same scrypt cost parameter used during encryption
 /// @returns Hex-encoded private key (no 0x prefix)
+/// Rejects KDF settings above the 256 MiB default memory budget. Use
+/// `decryptPrivateKeyHighCost` deliberately for older high-cost ciphertexts.
 #[wasm_bindgen(js_name = "decryptPrivateKey")]
 pub fn decrypt_private_key(
     nonce: &str,
     salt: &str,
     encrypted_key: &str,
     password: String,
+    #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue,
+) -> Result<String, JsValue> {
+    let scrypt_n = parse_scrypt_n(&scrypt_n)?;
+    decrypt_private_key_inner(nonce, salt, encrypted_key, password, scrypt_n, false)
+}
+
+/// Recover a legacy private key encrypted with an N that exceeds the default
+/// memory budget. This may require up to about 1 GiB of scrypt scratch.
+#[wasm_bindgen(js_name = "decryptPrivateKeyHighCost")]
+pub fn decrypt_private_key_high_cost(
+    nonce: &str,
+    salt: &str,
+    encrypted_key: &str,
+    password: String,
+    #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue,
+) -> Result<String, JsValue> {
+    let scrypt_n = parse_scrypt_n(&scrypt_n)?;
+    decrypt_private_key_inner(nonce, salt, encrypted_key, password, scrypt_n, true)
+}
+
+fn decrypt_private_key_inner(
+    nonce: &str,
+    salt: &str,
+    encrypted_key: &str,
+    password: String,
     scrypt_n: u32,
+    high_cost: bool,
 ) -> Result<String, JsValue> {
     let password = Zeroizing::new(password);
+    if nonce.len() > 24 * 2 {
+        return Err(JsValue::from_str("Invalid nonce: exceeds 24 bytes"));
+    }
+    if salt.len() > 128 * 2 {
+        return Err(JsValue::from_str("Invalid salt: exceeds 128 bytes"));
+    }
+    if encrypted_key.len() > 1024 * 1024 * 2 {
+        return Err(JsValue::from_str("Invalid encrypted key: exceeds 1 MiB"));
+    }
     let encrypted = EncryptedKey {
         nonce: hex::decode(nonce)
             .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {e}")))?,
@@ -92,8 +142,12 @@ pub fn decrypt_private_key(
             .map_err(|e| JsValue::from_str(&format!("Invalid encrypted key hex: {e}")))?,
     };
 
-    encryption::decrypt_private_key(&encrypted, &password, scrypt_n)
-        .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
+    let result = if high_cost {
+        encryption::decrypt_private_key(&encrypted, &password, scrypt_n)
+    } else {
+        encryption::decrypt_private_key_bounded(&encrypted, &password, scrypt_n)
+    };
+    result.map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
 }
 
 // ---------------------------------------------------------------------------
@@ -174,9 +228,10 @@ fn parse_symmetric_key(key_hex: &str) -> Result<Zeroizing<[u8; 32]>, JsValue> {
 pub fn encrypt_keystore(
     mnemonic: String,
     password: String,
-    scrypt_n: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue,
 ) -> Result<String, JsValue> {
     let (mnemonic, password) = (Zeroizing::new(mnemonic), Zeroizing::new(password));
+    let scrypt_n = parse_scrypt_n(&scrypt_n)?;
     keystore::encrypt_keystore(&mnemonic, &password, scrypt_n)
         .map_err(|e| JsValue::from(crate::error::WasmError::from(e)))
 }
@@ -210,6 +265,10 @@ mod tests {
 
     const TEST_SCRYPT_N: u32 = 1024;
 
+    fn test_scrypt_n() -> JsValue {
+        JsValue::from_f64(TEST_SCRYPT_N as f64)
+    }
+
     fn test_password(offset: u8) -> String {
         (0..12)
             .map(|index| char::from(b'a' + index + offset))
@@ -222,18 +281,89 @@ mod tests {
         let password = test_password(0);
 
         let encrypted =
-            encrypt_private_key(private_key.into(), password.clone(), TEST_SCRYPT_N).unwrap();
+            encrypt_private_key(private_key.into(), password.clone(), test_scrypt_n()).unwrap();
 
         let decrypted = decrypt_private_key(
             &encrypted.nonce,
             &encrypted.salt,
             &encrypted.encrypted_key,
             password,
-            TEST_SCRYPT_N,
+            test_scrypt_n(),
         )
         .unwrap();
 
         assert_eq!(decrypted, private_key);
+    }
+
+    #[wasm_bindgen_test]
+    fn high_cost_decrypt_requires_explicit_export() {
+        let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+        let password = test_password(0);
+        let encrypted =
+            encrypt_private_key(private_key.into(), password.clone(), test_scrypt_n()).unwrap();
+
+        let err = decrypt_private_key(
+            &encrypted.nonce,
+            &encrypted.salt,
+            &encrypted.encrypted_key,
+            password.clone(),
+            JsValue::from_f64((1 << 19) as f64),
+        )
+        .expect_err("default export must reject 512 MiB before KDF");
+        let message = js_sys::Reflect::get(&err, &JsValue::from_str("message"))
+            .unwrap()
+            .as_string()
+            .unwrap();
+        assert!(message.contains("memory ceiling"));
+
+        assert_eq!(
+            decrypt_private_key_high_cost(
+                &encrypted.nonce,
+                &encrypted.salt,
+                &encrypted.encrypted_key,
+                password,
+                test_scrypt_n(),
+            )
+            .unwrap(),
+            private_key
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn scrypt_cost_rejects_js_integer_wrap_before_kdf() {
+        let wrapped = JsValue::from_f64((1u64 << 32 | u64::from(TEST_SCRYPT_N)) as f64);
+        assert!(parse_scrypt_n(&wrapped).is_err());
+        assert!(parse_scrypt_n(&JsValue::from_f64(1024.5)).is_err());
+        assert!(parse_scrypt_n(&JsValue::from_str("1024")).is_err());
+        let private_key = "ab".repeat(32);
+        assert!(
+            encrypt_private_key(private_key, "synthetic-password".into(), wrapped.clone()).is_err()
+        );
+        assert!(encrypt_keystore(
+            "abandon about".into(),
+            "synthetic-password".into(),
+            wrapped.clone()
+        )
+        .is_err());
+        let nonce = "11".repeat(24);
+        let salt = "22".repeat(16);
+        let ciphertext = "33".repeat(48);
+        assert!(decrypt_private_key(
+            &nonce,
+            &salt,
+            &ciphertext,
+            "synthetic-password".into(),
+            wrapped.clone()
+        )
+        .is_err());
+        assert!(decrypt_private_key_high_cost(
+            &nonce,
+            &salt,
+            &ciphertext,
+            "synthetic-password".into(),
+            wrapped
+        )
+        .is_err());
     }
 
     #[wasm_bindgen_test]
@@ -255,7 +385,7 @@ mod tests {
         let password = test_password(0);
 
         let keystore_json =
-            encrypt_keystore(mnemonic.into(), password.clone(), TEST_SCRYPT_N).unwrap();
+            encrypt_keystore(mnemonic.into(), password.clone(), test_scrypt_n()).unwrap();
         let decrypted = decrypt_keystore(&keystore_json, password).unwrap();
 
         assert_eq!(decrypted, mnemonic);

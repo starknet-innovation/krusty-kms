@@ -48,8 +48,8 @@ pub use discovery::{
     DerivationType, DerivedKeypair, DerivedKeypairWithSecrets, WalletType,
 };
 pub use encryption::{
-    decrypt_private_key, decrypt_with_key, encrypt_private_key, encrypt_with_key, EncryptedKey,
-    EncryptedPayload,
+    decrypt_private_key, decrypt_private_key_bounded, decrypt_with_key, encrypt_private_key,
+    encrypt_with_key, EncryptedKey, EncryptedPayload,
 };
 pub use eth_signer::{EthCoordinate, EthSigner};
 pub use keystore::{decrypt_ethers_keystore, decrypt_keystore, encrypt_keystore};

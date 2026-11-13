@@ -9,11 +9,17 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use krusty_kms_common::{KmsError, Result};
-use scrypt::{scrypt, Params as ScryptParams};
 use zeroize::Zeroizing;
+
+mod scrypt_limits;
+pub(crate) use scrypt_limits::{
+    derive_scrypt_key, ensure_default_scrypt_budget, scrypt_log_n, SCRYPT_MEMORY_CEILING_BYTES,
+};
 
 /// XChaCha20-Poly1305 extended nonce length, in bytes.
 pub(crate) const XNONCE_LEN: usize = 24;
+/// Keep direct ciphertexts within the WASM decryption input ceiling.
+const MAX_DIRECT_KEY_BYTES: usize = 1024 * 1024 - 16;
 
 /// Validate a nonce length before it reaches the AEAD.
 ///
@@ -55,45 +61,6 @@ pub struct EncryptedPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/// Minimum allowed scrypt N (2^10).
-pub(crate) const SCRYPT_N_MIN: u32 = 1 << 10;
-/// Maximum allowed scrypt N (2^20).
-pub(crate) const SCRYPT_N_MAX: u32 = 1 << 20;
-
-/// Validate scrypt N and return `log2(N)` for [`ScryptParams`].
-///
-/// Requires `N` to be a power of two in `[2^10, 2^20]`.
-pub(crate) fn scrypt_log_n(n: u32) -> Result<u8> {
-    if !(SCRYPT_N_MIN..=SCRYPT_N_MAX).contains(&n) || !n.is_power_of_two() {
-        return Err(KmsError::CryptoError(format!(
-            "Invalid scrypt N={n}: must be a power of 2 in [{SCRYPT_N_MIN}, {SCRYPT_N_MAX}]"
-        )));
-    }
-    Ok(n.trailing_zeros() as u8)
-}
-
-/// Derive a 32-byte key from a password and salt using scrypt.
-///
-/// [`Zeroizing`] rather than a bare array: every caller has a `?` between the
-/// derivation and the end of the function, and a wrong password takes that path.
-pub(crate) fn derive_scrypt_key(
-    password: &[u8],
-    kdf_salt: &[u8],
-    n: u32,
-) -> Result<Zeroizing<[u8; 32]>> {
-    let log_n = scrypt_log_n(n)?;
-    let params = ScryptParams::new(log_n, 8, 1)
-        .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
-    let mut key = Zeroizing::new([u8::default(); 32]);
-    scrypt(password, kdf_salt, &params, &mut *key)
-        .map_err(|e| KmsError::CryptoError(format!("Scrypt KDF failed: {e}")))?;
-    Ok(key)
-}
-
-// ---------------------------------------------------------------------------
 // Password-based private key encryption
 // ---------------------------------------------------------------------------
 
@@ -111,6 +78,15 @@ pub fn encrypt_private_key(
     password: &str,
     scrypt_n: u32,
 ) -> Result<EncryptedKey> {
+    ensure_default_scrypt_budget(scrypt_n)?;
+    let hex_str = private_key_hex
+        .strip_prefix("0x")
+        .unwrap_or(private_key_hex);
+    if hex_str.len() > MAX_DIRECT_KEY_BYTES * 2 {
+        return Err(KmsError::CryptoError(format!(
+            "private key exceeds the {MAX_DIRECT_KEY_BYTES} byte limit"
+        )));
+    }
     // Generate 16-byte salt
     let salt = krusty_kms_crypto::random_bytes::<16>();
 
@@ -121,9 +97,6 @@ pub fn encrypt_private_key(
     let nonce_bytes = krusty_kms_crypto::random_bytes::<XNONCE_LEN>();
 
     // Decode hex private key; scrubbed on drop — this buffer is the raw key.
-    let hex_str = private_key_hex
-        .strip_prefix("0x")
-        .unwrap_or(private_key_hex);
     let plaintext = Zeroizing::new(
         hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?,
     );
@@ -152,11 +125,15 @@ pub fn encrypt_private_key(
 ///
 /// # Returns
 /// Hex-encoded private key (no `0x` prefix).
+///
+/// The legacy N range is for deliberate recovery by a trusted Rust caller.
+/// Use [`decrypt_private_key_bounded`] for untrusted metadata.
 pub fn decrypt_private_key(
     encrypted: &EncryptedKey,
     password: &str,
     scrypt_n: u32,
 ) -> Result<String> {
+    scrypt_limits::ensure_direct_input_lengths(encrypted)?;
     // Validate before deriving, so a malformed nonce costs no KDF work.
     let nonce = xnonce(&encrypted.nonce)?;
 
@@ -173,6 +150,20 @@ pub fn decrypt_private_key(
     );
 
     Ok(hex::encode(&*plaintext))
+}
+
+/// Decrypt a private key using the default 256 MiB KDF memory budget.
+///
+/// Prefer this when `scrypt_n` comes from untrusted metadata. The legacy
+/// [`decrypt_private_key`] accepts up to `N=2^20` so older high-cost keys remain
+/// recoverable when the caller deliberately opts into their resource cost.
+pub fn decrypt_private_key_bounded(
+    encrypted: &EncryptedKey,
+    password: &str,
+    scrypt_n: u32,
+) -> Result<String> {
+    ensure_default_scrypt_budget(scrypt_n)?;
+    decrypt_private_key(encrypted, password, scrypt_n)
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +322,14 @@ mod tests {
         assert!(scrypt_log_n(3).is_err());
         assert!(scrypt_log_n(1 << 21).is_err());
         assert_eq!(scrypt_log_n(1024).unwrap(), 10);
+    }
+
+    #[test]
+    fn direct_encryption_rejects_oversized_hex_before_kdf() {
+        let oversized = "a".repeat(MAX_DIRECT_KEY_BYTES * 2 + 1);
+        let err = encrypt_private_key(&oversized, "synthetic-password", TEST_SCRYPT_N)
+            .expect_err("oversized key must be rejected before KDF");
+        assert!(format!("{err}").contains("private key exceeds"));
     }
 
     #[test]

@@ -302,7 +302,8 @@ fn mnemonics_and_passwords_are_handled_as_before() {
     assert_eq!(message(error), "Invalid mnemonic: BadWordCount(1)");
 
     let password = "pässwörd ✓";
-    let sealed = encryption::encrypt_keystore(MNEMONIC.into(), password.into(), SCRYPT_N).unwrap();
+    let sealed =
+        encryption::encrypt_keystore(MNEMONIC.into(), password.into(), SCRYPT_N.into()).unwrap();
     let opened = encryption::decrypt_keystore(&sealed, password.into()).unwrap();
     assert_eq!(opened, MNEMONIC);
     let error = encryption::decrypt_keystore(&sealed, "passwörd ✓".into()).unwrap_err();
@@ -312,13 +313,14 @@ fn mnemonics_and_passwords_are_handled_as_before() {
     );
 
     let key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-    let sealed = encryption::encrypt_private_key(key.into(), password.into(), SCRYPT_N).unwrap();
+    let sealed =
+        encryption::encrypt_private_key(key.into(), password.into(), SCRYPT_N.into()).unwrap();
     let opened = encryption::decrypt_private_key(
         &sealed.nonce,
         &sealed.salt,
         &sealed.encrypted_key,
         password.into(),
-        SCRYPT_N,
+        SCRYPT_N.into(),
     );
     assert_eq!(opened.unwrap(), key);
 }

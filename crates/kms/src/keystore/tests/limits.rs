@@ -276,3 +276,121 @@ fn encrypt_keystore_rejects_n_above_the_decrypt_ceiling() {
     // 2^18 · 8 · 128 bytes is exactly the ceiling: the largest accepted cost.
     assert!(validate_scrypt_resource_params(1 << 18, 8, 1, 32).is_ok());
 }
+
+#[test]
+fn direct_encryption_rejects_scrypt_cost_above_keystore_ceiling() {
+    // This is a valid scrypt N, but fixed r=8 would allocate 512 MiB.
+    let err = crate::encryption::ensure_default_scrypt_budget(1 << 19)
+        .expect_err("new encryption must reject the oversized request");
+    assert!(format!("{err}").contains("memory ceiling"));
+    // The old range remains parseable for deliberate legacy decryption; no
+    // 512 MiB KDF is attempted in this test.
+    assert!(scrypt_log_n(1 << 19).is_ok());
+}
+
+#[test]
+fn direct_encryption_rejects_oversized_salt_before_kdf() {
+    let salt = vec![0xabu8; 129];
+    let err = derive_scrypt_key(b"synthetic-password", &salt, TEST_SCRYPT_N)
+        .expect_err("direct KDF must reject an oversized salt");
+    assert!(format!("{err}").contains("scrypt salt exceeds"));
+}
+
+#[test]
+fn direct_decryption_rejects_oversized_ciphertext_before_kdf() {
+    let encrypted = crate::encryption::EncryptedKey {
+        nonce: vec![0; 24],
+        salt: vec![0; 16],
+        encrypted_key: vec![0; 1024 * 1024 + 1],
+    };
+    let err = crate::encryption::decrypt_private_key(&encrypted, "synthetic-password", 1 << 20)
+        .expect_err("oversized ciphertext must be rejected before legacy KDF");
+    assert!(format!("{err}").contains("encrypted key length"));
+}
+
+#[test]
+fn direct_decryption_rejects_short_ciphertext_and_salt_before_kdf() {
+    let mut encrypted = crate::encryption::EncryptedKey {
+        nonce: vec![0; 24],
+        salt: vec![0; 16],
+        encrypted_key: vec![0; 15],
+    };
+    let err = crate::encryption::decrypt_private_key(&encrypted, "synthetic-password", 1 << 20)
+        .expect_err("short AEAD tag must be rejected before KDF");
+    assert!(format!("{err}").contains("encrypted key length"));
+
+    encrypted.encrypted_key.push(0);
+    encrypted.salt.pop();
+    let err = crate::encryption::decrypt_private_key(&encrypted, "synthetic-password", 1 << 20)
+        .expect_err("short direct-key salt must be rejected before KDF");
+    assert!(format!("{err}").contains("direct-key salt length"));
+}
+
+#[test]
+fn bounded_direct_decryption_rejects_legacy_high_n_before_kdf() {
+    let encrypted = crate::encryption::EncryptedKey {
+        nonce: vec![0; 24],
+        salt: vec![0; 16],
+        encrypted_key: vec![0; 48],
+    };
+    let err =
+        crate::encryption::decrypt_private_key_bounded(&encrypted, "synthetic-password", 1 << 19)
+            .expect_err("untrusted metadata must not trigger a 512 MiB KDF");
+    assert!(format!("{err}").contains("memory ceiling"));
+}
+
+#[test]
+fn imported_keystore_limits_total_scrypt_work() {
+    // A small memory footprint can still hide many sequential ROMix lanes.
+    assert!(validate_scrypt_resource_params(1 << 18, 8, 1, 32).is_ok());
+    let err = validate_scrypt_resource_params(1 << 18, 1, 16, 32)
+        .expect_err("excessive CPU work must be rejected");
+    assert!(format!("{err}").contains("work units"));
+}
+
+#[test]
+fn both_imports_reject_oversized_json_before_parsing() {
+    // Invalid JSON would have a parse error if the cap were checked too late.
+    let oversized = " ".repeat(MAX_KEYSTORE_JSON_BYTES + 1);
+    for import in [
+        decrypt_keystore as fn(&str, &str) -> Result<String>,
+        decrypt_ethers_keystore,
+    ] {
+        let err = import(&oversized, "synthetic-password").expect_err("must reject");
+        assert!(format!("{err}").contains("keystore JSON exceeds"));
+    }
+}
+
+#[test]
+fn native_keystore_never_writes_an_unimportable_large_mnemonic() {
+    let oversized = "a".repeat(super::super::input_limits::MAX_NATIVE_MNEMONIC_BYTES + 1);
+    let err = encrypt_keystore(&oversized, "synthetic-password", TEST_SCRYPT_N)
+        .expect_err("large plaintext must be rejected before KDF");
+    assert!(format!("{err}").contains("mnemonic exceeds"));
+}
+
+#[test]
+fn salt_length_is_rejected_before_hex_decoding() {
+    // The invalid hex would yield a different error if decoded first.
+    let encoded = "z".repeat(MAX_KEYSTORE_SALT_BYTES * 2 + 1);
+    let v1 = serde_json::json!({
+        "version": 1,
+        "crypto": {"kdfparams": {"salt": encoded}}
+    })
+    .to_string();
+    let v3 = serde_json::json!({
+        "version": 3,
+        "crypto": {"kdf": "scrypt", "kdfparams": {"salt": encoded}}
+    })
+    .to_string();
+    for (input, import) in [
+        (
+            v1.as_str(),
+            decrypt_keystore as fn(&str, &str) -> Result<String>,
+        ),
+        (v3.as_str(), decrypt_ethers_keystore),
+    ] {
+        let err = import(input, "synthetic-password").expect_err("must reject");
+        assert!(format!("{err}").contains("kdfparams.salt exceeds"));
+    }
+}

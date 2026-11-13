@@ -48,11 +48,12 @@ crates/wasm/src/discovery.rs: wasm_bindgen(js_name=discoverAccountsFromMnemonic)
 crates/wasm/src/discovery.rs: wasm_bindgen(js_name=discoverAccountsFromMnemonicWithSecrets) | pub fn discover_accounts_from_mnemonic_with_secrets(mnemonic: String, max_index: Option<u32>) -> Result<String, JsValue>
 crates/wasm/src/encryption.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedKey { pub nonce: String; pub salt: String; wasm_bindgen(js_name=encryptedKey) | pub encrypted_key: String }
 crates/wasm/src/encryption.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmEncryptedPayload { pub nonce: String; pub ciphertext: String }
-crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptPrivateKey) | pub fn encrypt_private_key(private_key_hex: String, password: String, scrypt_n: u32) -> Result<WasmEncryptedKey, JsValue>
-crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptPrivateKey) | pub fn decrypt_private_key(nonce: &str, salt: &str, encrypted_key: &str, password: String, scrypt_n: u32) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptPrivateKey) | pub fn encrypt_private_key(private_key_hex: String, password: String, #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue) -> Result<WasmEncryptedKey, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptPrivateKey) | pub fn decrypt_private_key(nonce: &str, salt: &str, encrypted_key: &str, password: String, #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptPrivateKeyHighCost) | pub fn decrypt_private_key_high_cost(nonce: &str, salt: &str, encrypted_key: &str, password: String, #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue) -> Result<String, JsValue>
 crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptWithKey) | pub fn encrypt_with_key(plaintext: String, key_hex: String) -> Result<WasmEncryptedPayload, JsValue>
 crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptWithKey) | pub fn decrypt_with_key(nonce: &str, ciphertext: &str, key_hex: String) -> Result<String, JsValue>
-crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptKeystore) | pub fn encrypt_keystore(mnemonic: String, password: String, scrypt_n: u32) -> Result<String, JsValue>
+crates/wasm/src/encryption.rs: wasm_bindgen(js_name=encryptKeystore) | pub fn encrypt_keystore(mnemonic: String, password: String, #[wasm_bindgen(unchecked_param_type = "number")] scrypt_n: JsValue) -> Result<String, JsValue>
 crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptKeystore) | pub fn decrypt_keystore(keystore_json: &str, password: String) -> Result<String, JsValue>
 crates/wasm/src/encryption.rs: wasm_bindgen(js_name=decryptEthersKeystore) | pub fn decrypt_ethers_keystore(keystore_json: &str, password: String) -> Result<String, JsValue>
 crates/wasm/src/hashing.rs: wasm_bindgen(js_name=pedersenHash) | pub fn pedersen_hash(a: &str, b: &str) -> Result<String, JsValue>

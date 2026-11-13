@@ -17,6 +17,11 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- Bound new direct scrypt encryption and default WASM decryption to the same
+  256 MiB budget as imported keystores. Legacy Rust decryption still accepts
+  older high-cost ciphertext; WASM callers can deliberately recover one with
+  `decryptPrivateKeyHighCost`. Import JSON and encoded salt are checked before
+  parsing or decoding, and v3 keystore parameters have a total-work ceiling.
 - Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
   bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
   `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.
