@@ -14,7 +14,7 @@ fn decrypt_with_key_rejects_wrong_nonce_length_without_panicking() {
     let key = test_key(0);
     for len in [0usize, 4, 12, 23, 25, 64] {
         let payload = EncryptedPayload {
-            nonce: vec![0u8; len],
+            nonce: synthetic_nonce(len),
             ciphertext: vec![0u8; 48],
         };
         let err = decrypt_with_key(&payload, &key).expect_err("must be rejected");
@@ -29,7 +29,7 @@ fn decrypt_with_key_rejects_wrong_nonce_length_without_panicking() {
 fn decrypt_private_key_rejects_wrong_nonce_length_without_panicking() {
     for len in [0usize, 4, 12, 23, 25] {
         let encrypted = EncryptedKey {
-            nonce: vec![0u8; len],
+            nonce: synthetic_nonce(len),
             salt: krusty_kms_crypto::random_bytes::<16>().to_vec(), // nonce rejected first
             encrypted_key: vec![0u8; 48],
         };
@@ -47,7 +47,7 @@ fn correct_nonce_length_is_accepted() {
     // Guards against over-tightening: a well-formed 24-byte nonce must
     // still reach the AEAD and fail on authentication, not on length.
     let payload = EncryptedPayload {
-        nonce: vec![0u8; XNONCE_LEN],
+        nonce: synthetic_nonce(XNONCE_LEN),
         ciphertext: vec![0u8; 48],
     };
     let err = decrypt_with_key(&payload, &test_key(0)).expect_err("tag must fail");
@@ -58,6 +58,10 @@ fn test_password(offset: u8) -> String {
     (0..12)
         .map(|index| char::from(b'a' + index + offset))
         .collect()
+}
+
+fn synthetic_nonce(len: usize) -> Vec<u8> {
+    krusty_kms_crypto::random_bytes::<64>()[..len].to_vec()
 }
 
 fn test_key(offset: u8) -> [u8; 32] {
