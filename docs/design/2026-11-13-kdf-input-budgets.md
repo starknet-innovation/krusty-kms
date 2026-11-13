@@ -48,6 +48,16 @@ work, keeping every newly written file below the import ceiling.
 
 ## Compatibility and verification
 
+These bounds change the accepted inputs of existing public Rust and WASM
+functions: high-N direct encryption/default WASM decryption, non-16-byte
+direct salts, large native plaintexts or direct ciphertexts, v3 work above
+the new ceiling, and JavaScript numeric strings can now fail. This is a
+behavioral breaking change even though Rust function signatures are stable.
+Under `AGENTS.md`, this patch must wait for a planned major-version release
+unless the existing calls are redesigned to preserve their former behavior.
+The 2.x `cargo-semver-checks` comparison does not detect these input-policy
+changes, so a green semver check is not approval to merge them into 2.x.
+
 Only newly encrypted keys are forced to the default 256 MiB budget. The
 existing Rust decryption function and the named WASM high-cost recovery export
 retain the old N range. The WASM export snapshot records the one added name.

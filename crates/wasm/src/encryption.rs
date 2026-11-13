@@ -136,13 +136,22 @@ fn decrypt_private_key_inner(
         )));
     }
     if nonce.len() > 24 * 2 {
-        return Err(JsValue::from_str("Invalid nonce: exceeds 24 bytes"));
+        return Err(crate::error::WasmError::SerializationError(
+            "Invalid nonce: exceeds 24 bytes".to_string(),
+        )
+        .into());
     }
     if salt.len() > 128 * 2 {
-        return Err(JsValue::from_str("Invalid salt: exceeds 128 bytes"));
+        return Err(crate::error::WasmError::SerializationError(
+            "Invalid salt: exceeds 128 bytes".to_string(),
+        )
+        .into());
     }
     if encrypted_key.len() > 1024 * 1024 * 2 {
-        return Err(JsValue::from_str("Invalid encrypted key: exceeds 1 MiB"));
+        return Err(crate::error::WasmError::SerializationError(
+            "Invalid encrypted key: exceeds 1 MiB".to_string(),
+        )
+        .into());
     }
     let encrypted = EncryptedKey {
         nonce: hex::decode(nonce)

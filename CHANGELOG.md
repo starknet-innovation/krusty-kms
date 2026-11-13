@@ -20,7 +20,7 @@ All notable changes to the published Rust crates are documented here.
 - WASM errors created from `WasmError` now expose their documented `code`
   property alongside `message` for programmatic handling.
 
-### Changed
+### Breaking
 
 - Direct `encrypt_private_key` rejects scrypt N above 2^18; default WASM
   `decryptPrivateKey` rejects older high-cost N with a serialization error that
@@ -33,6 +33,9 @@ All notable changes to the published Rust crates are documented here.
 - WASM scrypt-N inputs must be exact JavaScript numbers; numeric strings that
   wasm-bindgen previously coerced are rejected with a structured
   `SERIALIZATION_ERROR`.
+- Direct private-key encryption caps plaintext at 1 MiB minus the 16-byte
+  authentication tag; direct decryption caps ciphertext at 1 MiB. Keystore
+  imports cap decoded KDF salts at 128 bytes.
 
 ### Security
 

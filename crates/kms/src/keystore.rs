@@ -204,7 +204,7 @@ pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String> {
             .ok_or_else(|| KmsError::DeserializationError("Missing ciphertext".to_string()))?,
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid ciphertext hex: {e}")))?;
-
+    input_limits::validate_native_ciphertext_length(&ciphertext)?;
     // Validate before deriving, so a malformed nonce costs no KDF work.
     xnonce(&nonce)?;
 

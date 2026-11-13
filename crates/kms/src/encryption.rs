@@ -88,6 +88,11 @@ pub fn encrypt_private_key(
             "private key exceeds the {MAX_DIRECT_KEY_BYTES} byte limit"
         )));
     }
+    // Decode before the expensive KDF: malformed caller input cannot make us
+    // spend the full scrypt budget on a value that cannot be encrypted.
+    let plaintext = Zeroizing::new(
+        hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?,
+    );
     // Generate 16-byte salt
     let salt = krusty_kms_crypto::random_bytes::<16>();
 
@@ -96,11 +101,6 @@ pub fn encrypt_private_key(
 
     // Generate 24-byte nonce
     let nonce_bytes = krusty_kms_crypto::random_bytes::<XNONCE_LEN>();
-
-    // Decode hex private key; scrubbed on drop — this buffer is the raw key.
-    let plaintext = Zeroizing::new(
-        hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?,
-    );
 
     // Encrypt
     let cipher = XChaCha20Poly1305::new_from_slice(key.as_slice())

@@ -106,24 +106,75 @@ fn scrypt_cost_rejects_js_integer_wrap_before_kdf() {
 
 #[wasm_bindgen_test]
 fn malformed_scrypt_n_has_structured_error() {
-    for (high_cost, invalid) in [
-        (false, JsValue::from_str("1024")),
-        (true, JsValue::from_f64(1024.5)),
+    let nonce = "11".repeat(24);
+    let salt = "22".repeat(16);
+    let ciphertext = "33".repeat(48);
+    for invalid in [
+        JsValue::from_str("1024"),
+        JsValue::from_f64(1024.5),
+        JsValue::from_f64(f64::NAN),
+        JsValue::from_f64(f64::INFINITY),
+        JsValue::from_f64(f64::NEG_INFINITY),
+        JsValue::from_f64(-1.0),
+        JsValue::from(js_sys::BigInt::new(&JsValue::from_str("1024")).unwrap()),
+        JsValue::NULL,
+        JsValue::UNDEFINED,
     ] {
-        let password = test_password(0);
-        let error = if high_cost {
-            decrypt_private_key_high_cost("", "", "", password, invalid).unwrap_err()
-        } else {
-            decrypt_private_key("", "", "", password, invalid).unwrap_err()
-        };
-        assert_eq!(
-            js_sys::Reflect::get(&error, &JsValue::from_str("code"))
-                .unwrap()
-                .as_string()
-                .as_deref(),
-            Some("SERIALIZATION_ERROR")
-        );
+        for high_cost in [false, true] {
+            let error = if high_cost {
+                decrypt_private_key_high_cost(
+                    &nonce,
+                    &salt,
+                    &ciphertext,
+                    test_password(0),
+                    invalid.clone(),
+                )
+                .unwrap_err()
+            } else {
+                decrypt_private_key(
+                    &nonce,
+                    &salt,
+                    &ciphertext,
+                    test_password(0),
+                    invalid.clone(),
+                )
+                .unwrap_err()
+            };
+            assert_serialization_error(&error, "scryptN");
+        }
     }
+}
+
+#[wasm_bindgen_test]
+fn direct_decryption_length_caps_have_structured_errors() {
+    let nonce = "11".repeat(24);
+    let salt = "22".repeat(16);
+    let ciphertext = "33".repeat(48);
+    for (nonce, salt, ciphertext, detail) in [
+        ("11".repeat(25), salt.clone(), ciphertext.clone(), "nonce"),
+        (nonce.clone(), "22".repeat(129), ciphertext.clone(), "salt"),
+        (nonce, salt, "33".repeat(1024 * 1024 + 1), "encrypted key"),
+    ] {
+        let error = decrypt_private_key(
+            &nonce,
+            &salt,
+            &ciphertext,
+            test_password(0),
+            test_scrypt_n(),
+        )
+        .unwrap_err();
+        assert_serialization_error(&error, detail);
+    }
+}
+
+fn assert_serialization_error(error: &JsValue, detail: &str) {
+    let code = js_sys::Reflect::get(error, &JsValue::from_str("code")).unwrap();
+    assert_eq!(code.as_string().as_deref(), Some("SERIALIZATION_ERROR"));
+    let message = js_sys::Reflect::get(error, &JsValue::from_str("message"))
+        .unwrap()
+        .as_string()
+        .unwrap();
+    assert!(message.contains(detail), "{message}");
 }
 
 #[wasm_bindgen_test]

@@ -16,6 +16,16 @@ pub(super) fn validate_native_mnemonic_length(mnemonic: &str) -> Result<()> {
     Ok(())
 }
 
+/// A native ciphertext must include the Poly1305 tag before scrypt runs.
+pub(super) fn validate_native_ciphertext_length(ciphertext: &[u8]) -> Result<()> {
+    if ciphertext.len() < 16 {
+        return Err(KmsError::DeserializationError(
+            "Native keystore ciphertext is shorter than its authentication tag".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Reject a too-large encoded salt before hex decoding allocates its bytes.
 pub(super) fn decode_salt(value: &serde_json::Value) -> Result<Vec<u8>> {
     let encoded = value
