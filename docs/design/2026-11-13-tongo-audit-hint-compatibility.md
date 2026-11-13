@@ -27,7 +27,19 @@ No existing public signature is removed. The SDK's `Audit` serialization stays
 as a `u512` with the least-significant 128-bit limb first, and the nonce as
 an unshifted 192-bit integer in a `u256`. The client event reader reverses
 those steps when reconstructing bytes and rejects event limbs that exceed
-their Cairo integer widths.
+their Cairo integer widths. The reader also recognizes the earlier Krusty
+layout: its low nonce limb ends in 64 zero bits, while a current random nonce
+does so with probability 2^-64. A high nonce limb wider than 64 bits is read
+as legacy instead of failing an otherwise valid transfer-event batch. AEAD
+authentication, rather than this layout hint, determines whether a decoded
+balance is genuine. Historical Krusty ciphertexts still require the legacy
+decryptor; they were not compatible with the pinned Tongo auditor.
+
+An audit hint is sender-controlled data. A decrypted value is not evidence of
+the declared ElGamal balance until the caller checks it against the proof or
+encrypted balance. The ECDH point and HKDF object are upstream types without
+`Zeroize`; byte copies, plaintext, and derived key are wrapped in `Zeroizing`,
+but this implementation does not claim complete stack erasure.
 
 The change spans the SDK operation builders, common Cairo serializer, client
 event decoder, and cross-SDK vectors because they all handle the same hint.

@@ -15,6 +15,7 @@ use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
 mod tongo_audit;
+pub(crate) use tongo_audit::validate_hint_context;
 pub use tongo_audit::{decrypt_as_auditor_with_context, encrypt_for_auditor_with_context};
 
 /// Size of the XChaCha20-Poly1305 nonce in bytes.

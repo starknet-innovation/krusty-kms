@@ -28,6 +28,14 @@ fn checked_account_nonce(nonce: &Felt) -> Result<u64> {
     Ok(u64::from_be_bytes(low))
 }
 
+/// Reject unsupported hint values before any operation proof is generated.
+pub(crate) fn validate_hint_context(balance: u128, nonce: &Felt) -> Result<(u32, u64)> {
+    let balance = u32::try_from(balance).map_err(|_| {
+        KmsError::InvalidAmount("Tongo audit hint balance exceeds 32 bits".to_string())
+    })?;
+    Ok((balance, checked_account_nonce(nonce)?))
+}
+
 fn derive_tongo_audit_key(
     private_key: &Felt,
     other_public_key: &ProjectivePoint,
@@ -73,10 +81,7 @@ pub fn encrypt_for_auditor_with_context(
     account_nonce: &Felt,
     tongo_address: &Felt,
 ) -> Result<([u8; CIPHERTEXT_SIZE], [u8; 24])> {
-    let balance = u32::try_from(balance).map_err(|_| {
-        KmsError::InvalidAmount("Tongo audit hint balance exceeds 32 bits".to_string())
-    })?;
-    let nonce = checked_account_nonce(account_nonce)?;
+    let (balance, nonce) = validate_hint_context(balance, account_nonce)?;
     let key = derive_tongo_audit_key(user_private_key, auditor_public_key, nonce, tongo_address)?;
 
     // Tongo authenticates the entire 48-byte plaintext: 44 random bytes and
@@ -97,6 +102,9 @@ pub fn encrypt_for_auditor_with_context(
 }
 
 /// Decrypt a Tongo audit hint with the auditor's key and its operation context.
+///
+/// The sender chooses the hint plaintext. Callers must compare the result to
+/// the declared ElGamal balance or its validated proof before trusting it.
 pub fn decrypt_as_auditor_with_context(
     ciphertext: &[u8; CIPHERTEXT_SIZE],
     cipher_nonce: &[u8; 24],

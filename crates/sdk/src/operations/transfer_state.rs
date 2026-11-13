@@ -53,7 +53,6 @@ impl<'a> TransferBuildState<'a> {
         if !account.has_sufficient_balance(params.amount) {
             return Err(KmsError::InsufficientBalance);
         }
-
         let secret = account.owner_private_key().expose_secret();
         let generator = StarkCurve::generator();
         verify_cipher_encrypts_balance(

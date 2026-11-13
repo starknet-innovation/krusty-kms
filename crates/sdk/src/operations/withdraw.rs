@@ -2,7 +2,10 @@ use super::{
     shared::{create_affine_point, verify_cipher_encrypts_balance},
     Audit, WithdrawParams, WithdrawProof,
 };
-use crate::{crypto::encrypt_for_auditor_with_context, TongoAccount};
+use crate::{
+    crypto::{encrypt_for_auditor_with_context, validate_hint_context},
+    TongoAccount,
+};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, Result};
 use krusty_kms_crypto::{
     hash, poseidon_hash_many, range, scalar, AuditPrefixData, AuditProver, StarkCurve,
@@ -11,6 +14,13 @@ use starknet_types_core::felt::Felt;
 
 /// Cairo string 'withdraw'.
 const WITHDRAW_CAIRO_STRING: Felt = Felt::from_hex_unchecked("0x7769746864726177");
+
+fn preflight_auditor_hint(account: &TongoAccount, params: &WithdrawParams) -> Result<()> {
+    if params.auditor_key.is_some() {
+        validate_hint_context(account.balance() - params.amount, &params.nonce)?;
+    }
+    Ok(())
+}
 
 /// Execute a withdraw operation.
 ///
@@ -44,7 +54,7 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     if !account.has_sufficient_balance(params.amount) {
         return Err(KmsError::InsufficientBalance);
     }
-
+    preflight_auditor_hint(account, &params)?;
     let x: &Felt = account.owner_private_key().expose_secret();
     let g = StarkCurve::generator();
     let h = StarkCurve::generator_h();

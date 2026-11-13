@@ -46,6 +46,14 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
+- Tongo auditor-enabled operations now produce the pinned Tongo 1.3.2 audit
+  hint format, including HKDF context, authenticated plaintext, and Cairo
+  `u512`/`u256` limb order. Historical hints emitted with Krusty's earlier
+  wire layout remain readable by the client event parser and the deprecated
+  context-free auditor decryptor; they are not Tongo 1.3.2 audit hints.
+  `encrypt_for_auditor` and `decrypt_as_auditor` are deprecated in favor of
+  their context-aware counterparts. Callers constructing hints through the
+  shared serializer or C ABI now emit the corrected Cairo layout.
 - `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
   source fails instead of panicking, which aborted `panic = "abort"` hosts and
   trapped the WASM instance.

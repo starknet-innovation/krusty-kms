@@ -1,5 +1,8 @@
 use super::{Audit, FundParams, FundProof};
-use crate::{crypto::encrypt_for_auditor_with_context, TongoAccount};
+use crate::{
+    crypto::{encrypt_for_auditor_with_context, validate_hint_context},
+    TongoAccount,
+};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, Result};
 use krusty_kms_crypto::{
     poseidon_hash_many, AuditPrefixData, AuditProver, ProofOfExponentiation, StarkCurve,
@@ -15,6 +18,16 @@ fn funded_balance(balance: u128, amount: u128) -> Result<u128> {
     balance
         .checked_add(amount)
         .ok_or_else(|| KmsError::InvalidAmount("funded balance overflow".to_string()))
+}
+
+fn preflight_auditor_hint(account: &TongoAccount, params: &FundParams) -> Result<()> {
+    if params.auditor_pub_key.is_some() {
+        validate_hint_context(
+            funded_balance(account.balance(), params.amount)?,
+            &params.nonce,
+        )?;
+    }
+    Ok(())
 }
 
 /// Execute a fund operation.
@@ -39,7 +52,7 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
             "Amount must be greater than zero".to_string(),
         ));
     }
-
+    preflight_auditor_hint(account, &params)?;
     // Compute public key y = g^x
     let y = account.owner_public_key().clone();
 
