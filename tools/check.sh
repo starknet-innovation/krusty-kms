@@ -13,7 +13,7 @@ Usage: bash tools/check.sh <mode>
 Modes:
   quick       Formatting plus fast maintainability guardrails
   rust        Formatting, Clippy, examples, and native Rust tests
-  wasm        WASM boundary tests under Node
+  wasm        WASM boundary tests and generated TypeScript declaration check
   all         rust + guardrails + wasm (standard pre-handoff check)
   fmt         Check Rust formatting
   lint        Run the workspace and NATS-feature Clippy checks
@@ -111,6 +111,7 @@ check_wasm() {
   fi
   if [[ -n "$installed" && "$installed" == "$wanted" ]]; then
     run wasm-pack test --node --mode no-install crates/wasm
+    run wasm-pack build crates/wasm --target web --out-dir pkg --mode no-install
   elif [[ -n "${CI:-}" ]]; then
     echo "wasm-bindgen ${wanted} is not on PATH (found '${installed:-none}');" >&2
     echo "run bash .github/scripts/install-wasm-bindgen-cli.sh first" >&2
@@ -120,7 +121,10 @@ check_wasm() {
     echo "      wasm-pack will download a prebuilt one; run" >&2
     echo "      bash .github/scripts/install-wasm-bindgen-cli.sh to build it from crates.io" >&2
     run wasm-pack test --node crates/wasm
+    run wasm-pack build crates/wasm --target web --out-dir pkg
   fi
+  run npm ci --prefix cross-tests
+  run npm run check:wasm-types --prefix cross-tests
 }
 
 check_rust() {

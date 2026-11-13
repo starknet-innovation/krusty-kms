@@ -7,6 +7,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "check:wasm-types": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler src/verify-wasm-null-types.ts",
     "verify": "tsx src/verify-rust-proofs.ts",
     "verify:wasm": "tsx src/verify-wasm-bindings.ts",
     "verify:snip12": "tsx src/verify-snip12-vectors.ts",
