@@ -18,10 +18,8 @@ if ! grep -n 'SecretFelt(\*\*\*)' "$root/crates/common/src/secret_felt.rs" >/dev
   failed=1
 fi
 
-# 3) Native KDF entry points must use the scratch-wiping implementation.
-if grep -R --include='*.rs' -nE 'scrypt::scrypt[[:space:]]*\(' \
-  "$root/crates/kms/src" >/dev/null; then
-  echo "::error::native KDF path bypasses scratch-wiping scrypt"
+# 3) Native KDF entry points must not import or call upstream scrypt.
+if ! python3 "$root/.github/scripts/check-scrypt-entrypoints.py" "$root"; then
   failed=1
 fi
 
