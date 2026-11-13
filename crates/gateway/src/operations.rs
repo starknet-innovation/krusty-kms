@@ -91,6 +91,33 @@ mod tests {
     use super::*;
     use krusty_kms_domain::{GatewayErrorCode, OperationKind};
 
+    fn insert_rejected_and_assert_bounded(store: &mut OperationStore, id: OperationId, text: &str) {
+        store.insert(
+            OperationStatus {
+                id: id.clone(),
+                kind: OperationKind::DeployAccount,
+                state: OperationState::Rejected {
+                    // Construct directly to exercise the store's own
+                    // boundary, independent of GatewayError::new.
+                    error: GatewayError {
+                        code: GatewayErrorCode::RpcDegraded,
+                        retryable: true,
+                        message: Some(text.to_owned()),
+                    },
+                },
+                provenance: None,
+            },
+            0,
+        );
+
+        let OperationState::Rejected { error } = store.get(&id, 0).unwrap().state else {
+            panic!("stored operation must be rejected");
+        };
+        let retained = error.message.unwrap();
+        assert!(retained.len() <= 1_024);
+        assert!(retained.ends_with("… [truncated]"));
+    }
+
     #[test]
     fn rejected_operations_retain_bounded_utf8_error_text() {
         let mut store = OperationStore::new(OperationRetentionPolicy::default());
@@ -98,30 +125,7 @@ mod tests {
 
         for index in 0..3 {
             let id = OperationId::new(format!("synthetic-{index}")).unwrap();
-            store.insert(
-                OperationStatus {
-                    id: id.clone(),
-                    kind: OperationKind::DeployAccount,
-                    state: OperationState::Rejected {
-                        // Construct directly to exercise the store's own
-                        // boundary, independent of GatewayError::new.
-                        error: GatewayError {
-                            code: GatewayErrorCode::RpcDegraded,
-                            retryable: true,
-                            message: Some(oversized.clone()),
-                        },
-                    },
-                    provenance: None,
-                },
-                0,
-            );
-
-            let OperationState::Rejected { error } = store.get(&id, 0).unwrap().state else {
-                panic!("stored operation must be rejected");
-            };
-            let retained = error.message.unwrap();
-            assert!(retained.len() <= 1_024);
-            assert!(retained.ends_with("… [truncated]"));
+            insert_rejected_and_assert_bounded(&mut store, id, &oversized);
         }
 
         let retained_capacity: usize = store
