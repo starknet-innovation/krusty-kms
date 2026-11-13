@@ -55,9 +55,13 @@ pub fn grind_key(seed_hex: String) -> Result<String, JsValue> {
 /// # Returns
 /// Hex-encoded bytes with `0x` prefix
 #[wasm_bindgen(js_name = "randomBytesHex")]
-pub fn random_bytes_hex(length: usize) -> Result<String, JsValue> {
+pub fn random_bytes_hex(
+    #[wasm_bindgen(unchecked_param_type = "number")] length: JsValue,
+) -> Result<String, JsValue> {
     /// Largest byte count this convenience API will generate.
     const MAX_RANDOM_BYTES: usize = 1024;
+
+    let length = crate::numeric_input::u32(length, "random byte length")? as usize;
 
     if length > MAX_RANDOM_BYTES {
         return Err(JsValue::from_str(&format!(
@@ -125,13 +129,13 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn test_random_bytes_hex() {
-        let result = random_bytes_hex(16).unwrap();
+        let result = random_bytes_hex(16.into()).unwrap();
         assert!(result.starts_with("0x"));
         // 16 bytes = 32 hex chars + "0x" prefix = 34 chars
         assert_eq!(result.len(), 34);
 
         // Two calls should produce different results (with overwhelming probability)
-        let result2 = random_bytes_hex(16).unwrap();
+        let result2 = random_bytes_hex(16.into()).unwrap();
         assert_ne!(result, result2);
     }
 

@@ -32,6 +32,16 @@ fn da_mode_from_u8(val: u8) -> Result<krusty_kms::tx_hash::DaMode, JsValue> {
     }
 }
 
+fn parse_da_modes(
+    nonce: JsValue,
+    fee: JsValue,
+) -> Result<(krusty_kms::tx_hash::DaMode, krusty_kms::tx_hash::DaMode), JsValue> {
+    Ok((
+        da_mode_from_u8(crate::numeric_input::u8(nonce, "nonce DA mode")?)?,
+        da_mode_from_u8(crate::numeric_input::u8(fee, "fee DA mode")?)?,
+    ))
+}
+
 // ---------------------------------------------------------------------------
 // Serde structs for deserialising resource bounds from JS objects
 // ---------------------------------------------------------------------------
@@ -116,8 +126,8 @@ pub fn compute_invoke_transaction_hash_v3(
     tip: &str,
     resource_bounds: JsValue,
     paymaster_data: Vec<String>,
-    nonce_data_availability_mode: u8,
-    fee_data_availability_mode: u8,
+    #[wasm_bindgen(unchecked_param_type = "number")] nonce_data_availability_mode: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] fee_data_availability_mode: JsValue,
     account_deployment_data: Vec<String>,
     proof_facts: Option<Vec<String>>,
 ) -> Result<String, JsValue> {
@@ -132,8 +142,8 @@ pub fn compute_invoke_transaction_hash_v3(
         Some(values) => parse_felts(&values)?,
         None => Vec::new(),
     };
-    let nonce_da = da_mode_from_u8(nonce_data_availability_mode)?;
-    let fee_da = da_mode_from_u8(fee_data_availability_mode)?;
+    let (nonce_da, fee_da) =
+        parse_da_modes(nonce_data_availability_mode, fee_data_availability_mode)?;
 
     let bounds: ResourceBoundsInput = serde_wasm_bindgen::from_value(resource_bounds)
         .map_err(|e| JsValue::from_str(&format!("Invalid resource bounds: {e}")))?;
@@ -204,8 +214,8 @@ pub fn compute_deploy_account_transaction_hash_v3(
     tip: &str,
     resource_bounds: JsValue,
     paymaster_data: Vec<String>,
-    nonce_data_availability_mode: u8,
-    fee_data_availability_mode: u8,
+    #[wasm_bindgen(unchecked_param_type = "number")] nonce_data_availability_mode: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] fee_data_availability_mode: JsValue,
 ) -> Result<String, JsValue> {
     let addr = parse_felt(contract_address)?;
     let cls = parse_felt(class_hash)?;
@@ -215,8 +225,8 @@ pub fn compute_deploy_account_transaction_hash_v3(
     let n = parse_felt(nonce)?;
     let tip_val = parse_tip(tip)?;
     let pm_data = parse_felts(&paymaster_data)?;
-    let nonce_da = da_mode_from_u8(nonce_data_availability_mode)?;
-    let fee_da = da_mode_from_u8(fee_data_availability_mode)?;
+    let (nonce_da, fee_da) =
+        parse_da_modes(nonce_data_availability_mode, fee_data_availability_mode)?;
 
     let bounds: ResourceBoundsInput = serde_wasm_bindgen::from_value(resource_bounds)
         .map_err(|e| JsValue::from_str(&format!("Invalid resource bounds: {e}")))?;
@@ -283,8 +293,8 @@ pub fn compute_declare_transaction_hash_v3(
     tip: &str,
     resource_bounds: JsValue,
     paymaster_data: Vec<String>,
-    nonce_data_availability_mode: u8,
-    fee_data_availability_mode: u8,
+    #[wasm_bindgen(unchecked_param_type = "number")] nonce_data_availability_mode: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] fee_data_availability_mode: JsValue,
     account_deployment_data: Vec<String>,
 ) -> Result<String, JsValue> {
     let sender = parse_felt(sender_address)?;
@@ -295,8 +305,8 @@ pub fn compute_declare_transaction_hash_v3(
     let tip_val = parse_tip(tip)?;
     let pm_data = parse_felts(&paymaster_data)?;
     let acct_deploy_data = parse_felts(&account_deployment_data)?;
-    let nonce_da = da_mode_from_u8(nonce_data_availability_mode)?;
-    let fee_da = da_mode_from_u8(fee_data_availability_mode)?;
+    let (nonce_da, fee_da) =
+        parse_da_modes(nonce_data_availability_mode, fee_data_availability_mode)?;
 
     let bounds: ResourceBoundsInput = serde_wasm_bindgen::from_value(resource_bounds)
         .map_err(|e| JsValue::from_str(&format!("Invalid resource bounds: {e}")))?;
@@ -353,127 +363,7 @@ pub fn compute_typed_data_message_hash(
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_felt_valid() {
-        assert!(parse_felt("0x1").is_ok());
-        assert!(parse_felt("0xdeadbeef").is_ok());
-        assert!(parse_felt("0x0").is_ok());
-    }
-
-    #[test]
-    fn test_parse_felts() {
-        let inputs = vec!["0x1".to_string(), "0x2".to_string(), "0x3".to_string()];
-        let result = parse_felts(&inputs);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 3);
-    }
-
-    #[test]
-    fn test_da_mode_from_u8() {
-        assert!(da_mode_from_u8(0).is_ok());
-        assert!(da_mode_from_u8(1).is_ok());
-    }
-
-    #[test]
-    fn test_parse_tip() {
-        assert_eq!(parse_tip("0").unwrap(), 0);
-        assert_eq!(parse_tip("100").unwrap(), 100);
-        assert_eq!(parse_tip("0xff").unwrap(), 255);
-    }
-
-    #[test]
-    fn test_compute_typed_data_message_hash_wasm() {
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Example": [
-                    { "name": "value", "type": "felt" }
-                ]
-            },
-            "primaryType": "Example",
-            "domain": {
-                "name": "StarkNet",
-                "version": "1",
-                "chainId": "SN_MAIN",
-                "revision": "1"
-            },
-            "message": {
-                "value": "0x1"
-            }
-        });
-
-        let result = compute_typed_data_message_hash(&json.to_string(), "0x1234");
-        assert!(result.is_ok());
-        let hash = result.unwrap();
-        assert!(hash.starts_with("0x"));
-        assert_ne!(hash, "0x0");
-
-        // Must be deterministic.
-        let result2 = compute_typed_data_message_hash(&json.to_string(), "0x1234");
-        assert_eq!(hash, result2.unwrap());
-    }
-
-    #[test]
-    fn test_typed_data_different_accounts() {
-        let json = serde_json::json!({
-            "types": {
-                "StarknetDomain": [
-                    { "name": "name", "type": "shortstring" },
-                    { "name": "version", "type": "shortstring" },
-                    { "name": "chainId", "type": "shortstring" },
-                    { "name": "revision", "type": "shortstring" }
-                ],
-                "Example": [
-                    { "name": "value", "type": "felt" }
-                ]
-            },
-            "primaryType": "Example",
-            "domain": {
-                "name": "StarkNet",
-                "version": "1",
-                "chainId": "SN_MAIN",
-                "revision": "1"
-            },
-            "message": {
-                "value": "0x1"
-            }
-        });
-
-        let hash1 = compute_typed_data_message_hash(&json.to_string(), "0x1111").unwrap();
-        let hash2 = compute_typed_data_message_hash(&json.to_string(), "0x2222").unwrap();
-        assert_ne!(hash1, hash2);
-    }
-
-    #[test]
-    fn test_resource_bound_input_parsing() {
-        let input = ResourceBoundInput {
-            max_amount: "1000".to_string(),
-            max_price_per_unit: "500".to_string(),
-        };
-        let rb = input.to_resource_bounds().unwrap();
-        assert_eq!(rb.max_amount, 1000);
-        assert_eq!(rb.max_price_per_unit, 500);
-    }
-
-    #[test]
-    fn test_resource_bound_input_hex_parsing() {
-        let input = ResourceBoundInput {
-            max_amount: "0x3e8".to_string(),
-            max_price_per_unit: "0x1f4".to_string(),
-        };
-        let rb = input.to_resource_bounds().unwrap();
-        assert_eq!(rb.max_amount, 1000);
-        assert_eq!(rb.max_price_per_unit, 500);
-    }
-}
+mod tests;
 
 #[cfg(all(test, target_arch = "wasm32"))]
 mod wasm_tests;

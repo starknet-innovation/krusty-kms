@@ -291,12 +291,12 @@ fn mnemonics_and_passwords_are_handled_as_before() {
     }
 
     let expected = krusty_kms::derive_keypair(MNEMONIC, 0, 0, None).unwrap();
-    let keypair = account::derive_keypair(MNEMONIC.into(), 0, 0, None).unwrap();
+    let keypair = account::derive_keypair(MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
     assert_eq!(
         keypair.private_key,
         *expected.private_key.expose_secret_hex()
     );
-    let error = account::derive_keypair("abandon".into(), 0, 0, None)
+    let error = account::derive_keypair("abandon".into(), 0.into(), 0.into(), None)
         .err()
         .unwrap();
     assert_eq!(message(error), "Invalid mnemonic: BadWordCount(1)");

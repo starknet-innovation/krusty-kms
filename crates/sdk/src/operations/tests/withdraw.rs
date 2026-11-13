@@ -4,6 +4,31 @@ use krusty_kms_common::ElGamalCiphertext;
 use starknet_types_core::felt::Felt;
 
 #[test]
+fn test_withdraw_rejects_invalid_range_width_before_proving() {
+    let mut account = create_test_account();
+    account.set_balance(1000);
+    let current_balance = encrypt_balance_for_account(&account, 1000, Felt::from(42u64));
+
+    for bit_size in [0, 129] {
+        let params = WithdrawParams {
+            recipient_address: Felt::ONE,
+            amount: 100,
+            nonce: Felt::ONE,
+            chain_id: Felt::ONE,
+            tongo_address: Felt::ONE,
+            sender_address: Felt::ONE,
+            current_balance: current_balance.clone(),
+            bit_size,
+            auditor_key: None,
+        };
+        let error = withdraw(&account, params)
+            .err()
+            .expect("invalid width must fail");
+        assert!(error.to_string().contains("bit_size"));
+    }
+}
+
+#[test]
 #[ignore = "Comprehensive testing done in integration tests"]
 fn test_withdraw() {
     // Note: This test is simplified. Comprehensive withdraw testing

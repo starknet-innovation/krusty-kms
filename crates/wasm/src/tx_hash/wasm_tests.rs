@@ -28,8 +28,8 @@ fn compute_v3(proof_facts: Option<Vec<String>>) -> String {
         "0x0",
         resource_bounds(),
         vec![],
-        0,
-        0,
+        0.into(),
+        0.into(),
         vec![],
         proof_facts,
     )
@@ -53,8 +53,8 @@ fn invoke_v3_uses_decimal_nonce_and_calldata() {
             "0",
             resource_bounds(),
             vec![],
-            0,
-            0,
+            0.into(),
+            0.into(),
             vec![],
             None,
         )

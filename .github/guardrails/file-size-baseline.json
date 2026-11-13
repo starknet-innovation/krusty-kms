@@ -45,10 +45,6 @@
       "lines": 383
     },
     {
-      "path": "crates/crypto/src/range.rs",
-      "lines": 468
-    },
-    {
       "path": "crates/experimental/gaming-experimental/mental-poker/src/blackjack.rs",
       "lines": 888
     },
@@ -177,24 +173,20 @@
       "lines": 388
     },
     {
-      "path": "crates/wasm/src/discovery.rs",
-      "lines": 430
-    },
-    {
       "path": "crates/wasm/src/lib.rs",
-      "lines": 395
+      "lines": 392
     },
     {
       "path": "crates/wasm/src/proof.rs",
-      "lines": 958
+      "lines": 802
     },
     {
       "path": "crates/wasm/src/tx_hash.rs",
-      "lines": 479
+      "lines": 369
     },
     {
       "path": "crates/wasm/src/types.rs",
-      "lines": 504
+      "lines": 503
     }
   ]
 }
