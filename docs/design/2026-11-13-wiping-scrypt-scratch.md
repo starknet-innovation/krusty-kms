@@ -17,10 +17,18 @@ forbids unsafe code. We retain `scrypt::Params` to preserve parameter checks
 and compare derived outputs against the locked implementation across salts,
 passwords, lane counts and output lengths.
 
+Each B/V/T buffer reserves capacity fallibly before initialization. A reserve
+failure returns a `KmsError::CryptoError` without attempting an unbounded
+allocation; successful buffers still wipe on drop. A WASM runtime trap or
+allocator abort can bypass Rust destructors, so this is not a guarantee of
+password wiping for every out-of-memory condition.
+
 The `salsa20/zeroize` feature wipes the temporary Salsa core state on drop.
-The secret-hygiene guardrail rejects imports and calls to upstream
-`scrypt::scrypt` from native KMS source, except for explicit differential-test
-imports, so a later KDF refactor cannot silently bypass the wiping path.
+KMS denies Clippy's path-resolved `disallowed_methods` lint for
+`scrypt::scrypt`, including aliased imports. Explicit differential-test modules
+allow that method; the source guardrail remains a second, fast check and fails
+closed if the KMS source directory is missing. This prevents a production KDF
+refactor from silently bypassing the wiping path.
 
 The copied portable BlockMix and ROMix carry source attribution in their
 module headers. Their upstream MIT and Apache-2.0 license texts are included
@@ -33,11 +41,14 @@ scratch and the portable BlockMix may be slower than the upstream SIMD paths.
 ## Verification
 
 The focused differential test covers multiple parameter shapes. The native
-memory-inspection gate checks the 1 MiB ROMix allocation at deallocation
-after successful encryption, successful decryption and failed decryption.
-Its isolated control build disables the V-buffer wipe and must observe a
-nonzero free in all three paths; the clean build must observe zero in all
-three. A compile-time test pins `SalsaCore`'s `ZeroizeOnDrop` implementation.
+memory-inspection gate checks the 1 MiB V and two 1 KiB B/T allocations at
+deallocation after successful encryption, successful decryption, failed
+decryption, and a runtime-generated ethers v3 keystore import that reaches
+the KDF and fails at MAC verification. Its isolated control build disables
+the B/V/T buffer wipes and must observe nonzero frees in all four paths; the
+clean build must observe zero in all four. A compile-time test pins
+`SalsaCore`'s `ZeroizeOnDrop` implementation. An oversized reserve test uses
+`usize::MAX` to prove safe error return without allocating that amount.
 The native and WASM canonical checks cover existing keystore vectors and
 cross-boundary behavior. The allocator probe does not claim to wipe compiler
 registers or small temporary copies inside underlying crypto dependencies.

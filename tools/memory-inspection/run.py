@@ -14,8 +14,10 @@ import tempfile
 
 SCRUB_CALL = "    let out = run_nested(f);\n    scrub_stack();\n    out\n"
 CONTROL_CALL = "    let out = run_nested(f);\n    // Inspection control only: omit the stack scrub.\n    out\n"
-SCRYPT_WIPED_V = "    let mut v = Zeroizing::new(vec![0u8; nr128]);\n"
-SCRYPT_CONTROL_V = "    let mut v = vec![0u8; nr128];\n"
+SCRYPT_WIPED_SIGNATURE = "fn zeroed_scratch(len: usize) -> Result<Zeroizing<Vec<u8>>> {"
+SCRYPT_CONTROL_SIGNATURE = "fn zeroed_scratch(len: usize) -> Result<Vec<u8>> {"
+SCRYPT_WIPED_RETURN = "    Ok(Zeroizing::new(buffer))"
+SCRYPT_CONTROL_RETURN = "    Ok(buffer)"
 
 
 def snapshot(source, destination, files):
@@ -44,9 +46,10 @@ def disable_scrub(root):
 def disable_scrypt_wipe(root):
     path = root / "crates/kms/src/scrypt_wiping.rs"
     text = path.read_text()
-    if text.count(SCRYPT_WIPED_V) != 1:
-        raise RuntimeError("ROMix V allocation changed; review the control mutation")
-    path.write_text(text.replace(SCRYPT_WIPED_V, SCRYPT_CONTROL_V, 1))
+    if text.count(SCRYPT_WIPED_SIGNATURE) != 1 or text.count(SCRYPT_WIPED_RETURN) != 1:
+        raise RuntimeError("ROMix scratch allocation changed; review the control mutation")
+    path.write_text(text.replace(SCRYPT_WIPED_SIGNATURE, SCRYPT_CONTROL_SIGNATURE, 1)
+                    .replace(SCRYPT_WIPED_RETURN, SCRYPT_CONTROL_RETURN, 1))
 
 
 def main():
