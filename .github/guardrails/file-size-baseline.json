@@ -186,7 +186,7 @@
     },
     {
       "path": "crates/wasm/src/encryption.rs",
-      "lines": 393
+      "lines": 388
     },
     {
       "path": "crates/wasm/src/lib.rs",
