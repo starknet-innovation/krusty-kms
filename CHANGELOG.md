@@ -17,6 +17,8 @@ All notable changes to the published Rust crates are documented here.
 - `decrypt_private_key_bounded` for untrusted direct-key metadata and the WASM
   `decryptPrivateKeyHighCost` export for deliberate legacy recovery. The
   default direct-key scrypt ceiling is available as `DEFAULT_SCRYPT_N_MAX`.
+- WASM errors created from `WasmError` now expose their documented `code`
+  property alongside `message` for programmatic handling.
 
 ### Changed
 
@@ -29,7 +31,8 @@ All notable changes to the published Rust crates are documented here.
   plaintext over 4096 bytes; v3 imports reject N·r·p above 2^21 even when
   the memory footprint alone is within the old ceiling.
 - WASM scrypt-N inputs must be exact JavaScript numbers; numeric strings that
-  wasm-bindgen previously coerced are rejected.
+  wasm-bindgen previously coerced are rejected with a structured
+  `SERIALIZATION_ERROR`.
 
 ### Security
 

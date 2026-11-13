@@ -50,6 +50,8 @@ The default WASM decryption export reports an over-budget legacy N as a
 serialization error and names `decryptPrivateKeyHighCost`, so it is distinct
 from a wrong-password crypto error. Owned WASM passwords are wrapped in
 `Zeroizing` before numeric validation, including on this failure path.
+Malformed scrypt-N values also return a structured serialization error;
+`WasmError` now includes its existing code in the JavaScript Error object.
 `CHANGELOG.md` records the tighter direct salt, plaintext, v3 work, and exact
 JavaScript-number contracts for existing public entry points.
 Tests use small fixtures to assert rejection before KDF work, verify ordinary

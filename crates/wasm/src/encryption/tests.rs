@@ -57,6 +57,13 @@ fn high_cost_decrypt_requires_explicit_export() {
     assert!(message.contains("memory ceiling"));
     assert!(message.contains("decryptPrivateKeyHighCost"));
     assert!(message.starts_with("Serialization error:"));
+    assert_eq!(
+        js_sys::Reflect::get(&err, &JsValue::from_str("code"))
+            .unwrap()
+            .as_string()
+            .as_deref(),
+        Some("SERIALIZATION_ERROR")
+    );
 
     assert_eq!(
         decrypt_private_key_high_cost(
@@ -95,6 +102,28 @@ fn scrypt_cost_rejects_js_integer_wrap_before_kdf() {
         decrypt_private_key_high_cost(&nonce, &salt, &ciphertext, test_password(0), wrapped)
             .is_err()
     );
+}
+
+#[wasm_bindgen_test]
+fn malformed_scrypt_n_has_structured_error() {
+    for (high_cost, invalid) in [
+        (false, JsValue::from_str("1024")),
+        (true, JsValue::from_f64(1024.5)),
+    ] {
+        let password = test_password(0);
+        let error = if high_cost {
+            decrypt_private_key_high_cost("", "", "", password, invalid).unwrap_err()
+        } else {
+            decrypt_private_key("", "", "", password, invalid).unwrap_err()
+        };
+        assert_eq!(
+            js_sys::Reflect::get(&error, &JsValue::from_str("code"))
+                .unwrap()
+                .as_string()
+                .as_deref(),
+            Some("SERIALIZATION_ERROR")
+        );
+    }
 }
 
 #[wasm_bindgen_test]

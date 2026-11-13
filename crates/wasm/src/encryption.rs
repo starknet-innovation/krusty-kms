@@ -43,9 +43,17 @@ pub struct WasmEncryptedPayload {
 /// coerce it modulo 2^32 (for example, 2^32 + 1024 into 1024).
 fn parse_scrypt_n(value: &JsValue) -> Result<u32, JsValue> {
     if value.as_f64().is_none() {
-        return Err(JsValue::from_str("scryptN must be a number"));
+        return Err(crate::error::WasmError::SerializationError(
+            "scryptN must be a number".to_string(),
+        )
+        .into());
     }
-    crate::numeric_input::u32(value.clone(), "scryptN")
+    crate::numeric_input::u32(value.clone(), "scryptN").map_err(|_| {
+        crate::error::WasmError::SerializationError(
+            "scryptN must be an exact u32 integer".to_string(),
+        )
+        .into()
+    })
 }
 
 // ---------------------------------------------------------------------------
