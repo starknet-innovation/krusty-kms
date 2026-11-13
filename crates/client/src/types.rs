@@ -73,9 +73,9 @@ pub fn tongo_to_erc20(tongo_amount: u128, rate: u128) -> Result<u128> {
 /// Layout used to decode an authenticated balance hint from Cairo felts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AEBalanceLayout {
-    /// The earlier Krusty calldata layout and context-free decryptor.
+    /// Earlier Krusty calldata: ciphertext limbs in byte order; nonce high aligned.
     Legacy,
-    /// The Cairo integer layout used by the context-aware Tongo decryptor.
+    /// Cairo integer layout: ciphertext limbs reversed; nonce low aligned.
     Current,
 }
 

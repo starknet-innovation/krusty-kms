@@ -107,13 +107,18 @@ fn legacy_ciphertext_can_use_current_cairo_limb_layout() {
     assert_eq!(current.ciphertext, ciphertext);
     assert_eq!(current.nonce, nonce);
 
+    // Either AE scheme can appear in either Cairo limb layout. Use synthetic
+    // context values from this test's random nonce to prove the wrong scheme
+    // rejects the bytes, then decrypt with the legacy scheme below.
+    let operation_nonce = Felt::from(u64::from_be_bytes(nonce[..8].try_into().unwrap()));
+    let tongo_address = Felt::from(u64::from_be_bytes(nonce[8..16].try_into().unwrap()));
     assert!(krusty_kms_sdk::decrypt_as_auditor_with_context(
         &current.ciphertext,
         &current.nonce,
         &auditor_private_key,
         &user_public_key,
-        &Felt::from(7u64),
-        &Felt::from(9u64),
+        &operation_nonce,
+        &tongo_address,
     )
     .is_err());
     assert_eq!(

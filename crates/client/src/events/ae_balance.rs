@@ -56,9 +56,13 @@ fn parse_legacy_ae_balance(limbs: &[[u8; 16]; 6]) -> ([u8; 64], [u8; 24]) {
     {
         chunk.copy_from_slice(limb);
     }
-    let mut nonce = [0u8; 24];
-    nonce[..16].copy_from_slice(&limbs[5]);
-    nonce[16..].copy_from_slice(&limbs[4][..8]);
+    let nonce: [u8; 24] = std::array::from_fn(|i| {
+        if i < 16 {
+            limbs[5][i]
+        } else {
+            limbs[4][i - 16]
+        }
+    });
     (ciphertext, nonce)
 }
 
@@ -72,8 +76,12 @@ fn parse_current_ae_balance(limbs: &[[u8; 16]; 6]) -> ([u8; 64], [u8; 24]) {
     {
         chunk.copy_from_slice(limb);
     }
-    let mut nonce = [0u8; 24];
-    nonce[..8].copy_from_slice(&limbs[5][8..]);
-    nonce[8..].copy_from_slice(&limbs[4]);
+    let nonce: [u8; 24] = std::array::from_fn(|i| {
+        if i < 8 {
+            limbs[5][i + 8]
+        } else {
+            limbs[4][i - 8]
+        }
+    });
     (ciphertext, nonce)
 }
