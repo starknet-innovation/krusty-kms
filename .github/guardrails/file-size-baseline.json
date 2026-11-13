@@ -134,11 +134,15 @@
     },
     {
       "path": "crates/kms/src/encryption.rs",
-      "lines": 359
+      "lines": 358
+    },
+    {
+      "path": "crates/kms/src/keystore/tests/limits.rs",
+      "lines": 396
     },
     {
       "path": "crates/kms/src/keystore.rs",
-      "lines": 498
+      "lines": 497
     },
     {
       "path": "crates/kms/src/tx_hash.rs",
@@ -179,6 +183,10 @@
     {
       "path": "crates/wasm/src/discovery.rs",
       "lines": 430
+    },
+    {
+      "path": "crates/wasm/src/encryption.rs",
+      "lines": 393
     },
     {
       "path": "crates/wasm/src/lib.rs",
