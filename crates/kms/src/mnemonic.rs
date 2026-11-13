@@ -1,8 +1,61 @@
 //! Mnemonic phrase generation and validation.
+//!
+//! # Memory
+//!
+//! The entropy, the phrase this module builds, the NFKD passphrase, and every
+//! PBKDF2 buffer live in `Zeroizing` values or the crate's wiped HMAC
+//! (`zeroizing_hmac`). `bip39` makes unwiped copies of the entropy and word
+//! indices while it encodes or parses (its `zeroize` feature wipes only the
+//! final `Mnemonic`), so each public function here runs that work in a nested
+//! frame, then performs a best-effort 32 KiB stack overwrite. Coverage depends
+//! on the compiler, target and optimization profile; the committed memory
+//! probes check selected representations and inputs on their recorded builds,
+//! not every possible copy. Each call needs at least 32 KiB of additional
+//! stack headroom; small foreign/custom-thread stacks can overflow.
+//! Not covered: heap
+//! copies made by NFKD (`bip39`'s of a non-ASCII phrase, and the normaliser's
+//! buffer for long combining sequences), copies the compiler makes when it
+//! moves a value, register spills, and stack deeper than the scrub. A seed or
+//! phrase returned by value is the caller's to wipe.
 
+use crate::zeroizing_hmac::pbkdf2_sha512;
 use bip39::Mnemonic;
 use krusty_kms_common::{KmsError, Result};
-use zeroize::Zeroizing;
+use unicode_normalization::UnicodeNormalization;
+use zeroize::{Zeroize, Zeroizing};
+
+/// BIP-39 seed derivation: PBKDF2-HMAC-SHA512, 2048 rounds.
+const PBKDF2_ROUNDS: u32 = 2048;
+
+/// Stack reserved for the post-call overwrite. The memory probes validate
+/// the window for their recorded builds; other frame layouts need measurement.
+// Changing the window requires rerunning both control-backed memory probes.
+const STACK_SCRUB_BYTES: usize = 32 * 1024;
+
+/// Run `f` in a nested call, then overwrite a reserved stack window.
+fn scrubbed<T>(f: impl FnOnce() -> T) -> T {
+    let out = run_nested(f);
+    scrub_stack();
+    out
+}
+
+#[inline(never)]
+fn run_nested<T>(f: impl FnOnce() -> T) -> T {
+    f()
+}
+
+/// Probe-tested builds place this buffer over the nested call's inactive
+/// stack. Rust does not guarantee that layout. `zeroize` writes are volatile.
+#[inline(never)]
+fn scrub_stack() {
+    let mut stack = [0u8; STACK_SCRUB_BYTES];
+    stack.zeroize();
+    core::hint::black_box(&stack);
+}
+
+fn invalid(e: bip39::Error) -> KmsError {
+    KmsError::InvalidMnemonic(format!("{e:?}"))
+}
 
 /// Parse a phrase into a mnemonic that is wiped on drop.
 ///
@@ -12,7 +65,35 @@ fn parse_mnemonic(phrase: &str) -> Result<Zeroizing<Mnemonic>> {
     phrase
         .parse::<Mnemonic>()
         .map(Zeroizing::new)
-        .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))
+        .map_err(invalid)
+}
+
+/// The canonical phrase (words joined by single spaces), in a buffer sized
+/// up front so it never reallocates and leaves a partial copy behind.
+fn phrase_of(mnemonic: &Mnemonic) -> Zeroizing<String> {
+    let len = mnemonic
+        .words()
+        .map(|w| w.len() + 1)
+        .sum::<usize>()
+        .saturating_sub(1);
+    let mut phrase = Zeroizing::new(String::with_capacity(len));
+    for (i, word) in mnemonic.words().enumerate() {
+        if i > 0 {
+            phrase.push(' ');
+        }
+        phrase.push_str(word);
+    }
+    phrase
+}
+
+/// NFKD form of `text`, sized up front for the same reason as [`phrase_of`].
+fn nfkd(text: &str) -> Zeroizing<String> {
+    let len = text.nfkd().map(char::len_utf8).sum();
+    let mut out = Zeroizing::new(String::with_capacity(len));
+    for c in text.nfkd() {
+        out.push(c);
+    }
+    out
 }
 
 /// Generate a new BIP-39 mnemonic phrase.
@@ -45,27 +126,27 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
         }
     };
 
-    // Entropy and the parsed word indices are the root secret; both are
-    // wiped on drop. Only the returned phrase outlives this function.
     let mut entropy = Zeroizing::new(vec![0u8; entropy_size]);
     getrandom::fill(entropy.as_mut_slice())
         .map_err(|e| KmsError::CryptoError(format!("OS entropy source unavailable: {e}")))?;
 
-    let mnemonic = Mnemonic::from_entropy(&entropy)
-        .map(Zeroizing::new)
-        .map_err(|e| KmsError::InvalidMnemonic(format!("{e:?}")))?;
+    // Moves the phrase's buffer out without copying it.
+    mnemonic_from_entropy(&entropy).map(|mut phrase| std::mem::take(&mut *phrase))
+}
 
-    // `to_string()` grows word by word and frees unwiped partial phrases on
-    // each reallocation. BIP-39 English words are at most 8 letters, so 9
-    // bytes per word (plus separator) never reallocates.
-    let mut phrase = String::with_capacity(word_count * 9);
-    for (i, word) in mnemonic.words().enumerate() {
-        if i > 0 {
-            phrase.push(' ');
-        }
-        phrase.push_str(word);
-    }
-    Ok(phrase)
+/// Encode BIP-39 entropy (16 to 32 bytes, a multiple of 4) as an English
+/// phrase. See the module's Memory section for what is wiped.
+///
+/// # Errors
+///
+/// `InvalidMnemonic` if the entropy length is not one BIP-39 accepts.
+pub fn mnemonic_from_entropy(entropy: &[u8]) -> Result<Zeroizing<String>> {
+    scrubbed(|| {
+        let mnemonic = Mnemonic::from_entropy(entropy)
+            .map(Zeroizing::new)
+            .map_err(invalid)?;
+        Ok(phrase_of(&mnemonic))
+    })
 }
 
 /// Validate a BIP-39 mnemonic phrase.
@@ -78,107 +159,36 @@ pub fn generate_mnemonic(word_count: usize) -> Result<String> {
 ///
 /// # Cyclomatic Complexity: 1
 pub fn validate_mnemonic(phrase: &str) -> Result<()> {
-    parse_mnemonic(phrase).map(drop)
+    scrubbed(|| parse_mnemonic(phrase).map(drop))
 }
 
 /// Convert mnemonic to seed bytes.
+///
+/// The seed is PBKDF2-HMAC-SHA512 over the canonical phrase, salted with
+/// `"mnemonic"` and the NFKD passphrase, computed here in wiped buffers
+/// rather than by `bip39`, whose PBKDF2 leaves its key pads on the stack.
 ///
 /// # Arguments
 /// * `mnemonic` - The mnemonic phrase
 /// * `passphrase` - Optional passphrase (empty string for no passphrase)
 ///
+/// # Errors
+///
+/// `InvalidMnemonic` if the phrase does not parse or its checksum fails.
+///
 /// # Cyclomatic Complexity: 1
 pub fn mnemonic_to_seed(mnemonic: &str, passphrase: &str) -> Result<[u8; 64]> {
-    Ok(parse_mnemonic(mnemonic)?.to_seed(passphrase))
+    scrubbed(|| {
+        let phrase = phrase_of(&*parse_mnemonic(mnemonic)?);
+        let passphrase = nfkd(passphrase);
+        let seed = pbkdf2_sha512(
+            phrase.as_bytes(),
+            &[b"mnemonic", passphrase.as_bytes()],
+            PBKDF2_ROUNDS,
+        )?;
+        Ok(*seed)
+    })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_generate_mnemonic_12_words() {
-        let mnemonic = generate_mnemonic(12).unwrap();
-        assert_eq!(mnemonic.split_whitespace().count(), 12);
-        assert!(validate_mnemonic(&mnemonic).is_ok());
-    }
-
-    #[test]
-    fn test_phrase_buffer_never_reallocates() {
-        // `generate_mnemonic` sizes its buffer at 9 bytes per word.
-        assert!(bip39::Language::English
-            .word_list()
-            .iter()
-            .all(|w| w.len() <= 8));
-    }
-
-    #[test]
-    fn test_generate_mnemonic_24_words() {
-        let mnemonic = generate_mnemonic(24).unwrap();
-        assert_eq!(mnemonic.split_whitespace().count(), 24);
-        assert!(validate_mnemonic(&mnemonic).is_ok());
-    }
-
-    #[test]
-    fn test_validate_valid_mnemonic() {
-        let mnemonic =
-            "habit hope tip crystal because grunt nation idea electric witness alert like";
-        assert!(validate_mnemonic(mnemonic).is_ok());
-    }
-
-    #[test]
-    fn test_validate_invalid_mnemonic() {
-        let mnemonic = "invalid mnemonic phrase that should fail";
-        assert!(validate_mnemonic(mnemonic).is_err());
-    }
-
-    #[test]
-    fn test_invalid_word_count() {
-        let result = generate_mnemonic(11);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_generate_mnemonic_15_words() {
-        let mnemonic = generate_mnemonic(15).unwrap();
-        assert_eq!(mnemonic.split_whitespace().count(), 15);
-        assert!(validate_mnemonic(&mnemonic).is_ok());
-    }
-
-    #[test]
-    fn test_generate_mnemonic_18_words() {
-        let mnemonic = generate_mnemonic(18).unwrap();
-        assert_eq!(mnemonic.split_whitespace().count(), 18);
-        assert!(validate_mnemonic(&mnemonic).is_ok());
-    }
-
-    #[test]
-    fn test_generate_mnemonic_21_words() {
-        let mnemonic = generate_mnemonic(21).unwrap();
-        assert_eq!(mnemonic.split_whitespace().count(), 21);
-        assert!(validate_mnemonic(&mnemonic).is_ok());
-    }
-
-    #[test]
-    fn test_mnemonic_to_seed() {
-        let mnemonic =
-            "habit hope tip crystal because grunt nation idea electric witness alert like";
-        let seed = mnemonic_to_seed(mnemonic, "").unwrap();
-        assert_eq!(seed.len(), 64);
-    }
-
-    #[test]
-    fn test_mnemonic_to_seed_with_passphrase() {
-        let mnemonic =
-            "habit hope tip crystal because grunt nation idea electric witness alert like";
-        let seed1 = mnemonic_to_seed(mnemonic, "").unwrap();
-        let seed2 = mnemonic_to_seed(mnemonic, "mypassphrase").unwrap();
-        assert_ne!(seed1, seed2);
-    }
-
-    #[test]
-    fn test_mnemonic_to_seed_invalid() {
-        let result = mnemonic_to_seed("invalid mnemonic", "");
-        assert!(result.is_err());
-    }
-}
+mod tests;

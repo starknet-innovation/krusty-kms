@@ -46,7 +46,8 @@ starknet-rust-providers = "=0.20.0"
 starknet-rust-accounts = "=0.20.0"
 starknet-rust-signers = { version = "=0.20.0", default-features = false, features = ["std"] }
 starknet-crypto = { package = "starknet-rust-crypto", version = "=0.20.0" }
-bip39 = { version = "3.0.0", features = ["zeroize"] }
+# No `std`: in bip39 3.0.0 it also enables serde, making `Mnemonic` serializable.
+bip39 = { version = "3.0.0", default-features = false, features = ["alloc", "zeroize"] }
 hmac = "0.13.0"
 sha2 = "0.11.0"
 sha3 = "0.12.0"

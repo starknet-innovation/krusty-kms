@@ -22,6 +22,10 @@ Modes:
   examples    Check the maintained examples
   test        Run native workspace and NATS-feature tests
   guardrails  Run fast local maintainability fitness checks
+  memory      Inspect native + WASM mnemonic memory with a no-scrub control
+  memory-native
+              Inspect optimized native mnemonic memory
+  memory-wasm Inspect optimized WASM mnemonic memory under Node
   help        Show this message
 
 The WASM crate is deliberately excluded from native cargo tests and is tested
@@ -126,6 +130,15 @@ check_rust() {
   check_tests
 }
 
+check_memory() {
+  local backend="$1"
+  local args=(--backend "$backend" --toolchain "${RUSTUP_TOOLCHAIN:-stable}")
+  if [[ -n "${KMS_MEMORY_REPORT_DIR:-}" ]]; then
+    args+=(--report-dir "$KMS_MEMORY_REPORT_DIR")
+  fi
+  run python3 tools/memory-inspection/run.py "${args[@]}"
+}
+
 mode="${1:-help}"
 if (($# > 1)); then
   usage >&2
@@ -165,6 +178,15 @@ case "$mode" in
     ;;
   guardrails)
     check_guardrails
+    ;;
+  memory)
+    check_memory all
+    ;;
+  memory-native)
+    check_memory native
+    ;;
+  memory-wasm)
+    check_memory wasm
     ;;
   help|-h|--help)
     usage

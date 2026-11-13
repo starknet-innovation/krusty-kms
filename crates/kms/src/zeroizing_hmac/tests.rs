@@ -134,3 +134,50 @@ fn hash_states_wipe_themselves_on_drop() {
     assert_zeroize_on_drop::<Sha512>();
     assert_zeroize_on_drop::<Zeroizing<[u8; 64]>>();
 }
+
+#[test]
+fn pbkdf2_sha512_matches_python_hashlib() {
+    // Vectors from CPython's `hashlib.pbkdf2_hmac("sha512", ...)`. The last two
+    // sit on either side of the one-block password limit, where the password
+    // stops being the HMAC key and its SHA-512 hash takes over.
+    type Case<'a> = (&'a [u8], &'a [&'a [u8]], u32, &'a str);
+    let cases: [Case; 4] = [
+        (
+            b"password",
+            &[b"salt"],
+            1,
+            "867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5d513554e1c8cf252\
+          c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce",
+        ),
+        (
+            b"password",
+            &[b"sa", b"lt"],
+            2048,
+            "91be23564f09fc855c82ce84a223ebe7d63d8b49d69372593a0d9ed39e143c83\
+          e1ab2f722a5ddb969feefc88403f7e2afe1afb8b2f0e6b20add0fb7b28368807",
+        ),
+        (
+            &[b'p'; 129],
+            &[b"mnemonic", b"salt"],
+            2048,
+            "11b11ac66534b3dc649bfe75a7d2cace13f58de19f85f5a3909f3204588fbf48\
+          a5393110450ed22fe1097bf6813125e1c6833a8b83cc2f416164947ee9ce10d7",
+        ),
+        (
+            &[b'p'; 128],
+            &[b"mnemonic", b"salt"],
+            2048,
+            "08b718151edd9e7dd75296cb612a951f531acc6529da263939f71a7b623142f7\
+          c900aefea3e667064f4ba54a52da3999e90b00901d03f4b317f9f79c094dda56",
+        ),
+    ];
+    for (password, salt, rounds, expected) in cases {
+        let got = pbkdf2_sha512(password, salt, rounds).unwrap();
+        assert_eq!(
+            hex::encode(&got[..]),
+            expected,
+            "{} byte password",
+            password.len()
+        );
+    }
+}

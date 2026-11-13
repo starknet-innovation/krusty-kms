@@ -31,10 +31,9 @@
 //! hashers built with their `zeroize` feature. HMAC is computed locally so
 //! that its padded key is one of those buffers. Not covered: copies the
 //! compiler makes when it moves a value, register spills, the SHA-2
-//! compression functions' stack temporaries, and the BIP-39 seed computation
-//! shared with the rest of the crate (`bip39`'s PBKDF2 state and normalized
-//! passphrase copy). Commitments, `SHA256(secret)`, roots, and digests are
-//! public and not wiped.
+//! compression functions' stack temporaries, and what the BIP-39 seed step
+//! leaves outside the stack (see `mnemonic`'s Memory section). Commitments,
+//! `SHA256(secret)`, roots, and digests are public and not wiped.
 
 mod key;
 mod transaction;

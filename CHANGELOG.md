@@ -6,6 +6,9 @@ All notable changes to the published Rust crates are documented here.
 
 ### Added
 
+- `krusty_kms::mnemonic_from_entropy(entropy)`, which encodes caller-supplied
+  BIP-39 entropy as a phrase returned in a `Zeroizing<String>`. The C ABI's
+  `kms_generate_mnemonic_from_entropy` now goes through it.
 - `open_nostr_application_data_with_metadata` and `OpenedNostrApplicationData`
   return the verified gift-wrap id, rumor id and rumor `created_at`, so callers
   can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
@@ -28,6 +31,18 @@ All notable changes to the published Rust crates are documented here.
   messages.
 - `chacha20` is built with `zeroize`, so the cipher state holding each NIP-44
   message key is wiped on drop.
+
+- `mnemonic_to_seed` computes PBKDF2-HMAC-SHA512 in buffers that are wiped,
+  over the canonical phrase and an NFKD passphrase built in a wiped buffer,
+  instead of calling `bip39`'s `to_seed`, which leaves its HMAC key pads and
+  hash states on the stack. Seeds are unchanged.
+- `generate_mnemonic`, `mnemonic_from_entropy`, `validate_mnemonic` and
+  `mnemonic_to_seed` perform a best-effort 32 KiB stack overwrite after
+  `bip39` returns. Control-backed native/WASM probes check the observed
+  entropy, entropy-bit and word-index remnants on their recorded builds.
+  Calls require additional stack headroom; coverage is compiler-dependent.
+- `bip39` is built without `std`, which in 3.0.0 also enabled `serde` and made
+  `bip39::Mnemonic` serializable.
 
 ### Fixed
 
