@@ -16,6 +16,21 @@ use rayon::prelude::*;
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
+/// Reject unsupported range widths before allocating randomness or indexing a proof.
+pub fn validate_bit_size(bit_size: usize) -> Result<()> {
+    if bit_size == 0 {
+        return Err(krusty_kms_common::KmsError::CryptoError(
+            "bit_size must be at least 1".to_string(),
+        ));
+    }
+    if bit_size > 128 {
+        return Err(krusty_kms_common::KmsError::CryptoError(format!(
+            "bit_size {bit_size} exceeds maximum 128"
+        )));
+    }
+    Ok(())
+}
+
 /// Computes the total randomness from per-bit random values.
 ///
 /// Computes r = sum(random_values\[i\] * 2^i) for i in 0..random_values.len()
@@ -23,12 +38,7 @@ use starknet_types_core::felt::Felt;
 /// This is useful when you need to know `r` before calling `prove_with_randomness`,
 /// e.g. to compute cipher balance coordinates for prefix hashing.
 pub fn compute_total_randomness(random_values: &[Felt]) -> Result<Felt> {
-    if random_values.len() > 128 {
-        return Err(krusty_kms_common::KmsError::CryptoError(format!(
-            "random_values length {} exceeds maximum 128",
-            random_values.len()
-        )));
-    }
+    validate_bit_size(random_values.len())?;
     let mut r = Felt::ZERO;
     for (i, r_inn) in random_values.iter().enumerate() {
         let pow = Felt::from(1u128 << i);
@@ -59,6 +69,7 @@ pub fn prove(
     g2: &ProjectivePoint,
     initial_prefix: &Felt,
 ) -> Result<(Range, Felt)> {
+    validate_bit_size(bit_size)?;
     let random_values = random_felts(bit_size);
     prove_with_randomness(b, bit_size, g1, g2, initial_prefix, &random_values)
 }
@@ -88,13 +99,7 @@ pub fn prove_with_randomness(
     initial_prefix: &Felt,
     random_values: &[Felt],
 ) -> Result<(Range, Felt)> {
-    // Check range
-    if bit_size > 128 {
-        return Err(krusty_kms_common::KmsError::CryptoError(format!(
-            "bit_size {} exceeds maximum 128",
-            bit_size
-        )));
-    }
+    validate_bit_size(bit_size)?;
 
     if random_values.len() != bit_size {
         return Err(krusty_kms_common::KmsError::CryptoError(format!(
@@ -191,6 +196,7 @@ pub fn verify(
     g2: &ProjectivePoint,
     initial_prefix: &Felt,
 ) -> Result<ProjectivePoint> {
+    validate_bit_size(bit_size)?;
     // Check lengths match
     if range.commitments.len() != bit_size || range.proofs.len() != bit_size {
         return Err(krusty_kms_common::KmsError::CryptoError(format!(
@@ -239,230 +245,4 @@ pub fn verify(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_range_proof_small() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 7u128;
-        let bit_size = 8;
-
-        let (range, r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-        let v = verify(&range, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Check V = g1^b * g2^r
-        let expected = StarkCurve::add(
-            &StarkCurve::mul(&Felt::from(b), Some(&g1)),
-            &StarkCurve::mul(&r, Some(&g2)),
-        );
-
-        let v_affine = StarkCurve::projective_to_affine(&v).unwrap();
-        let expected_affine = StarkCurve::projective_to_affine(&expected).unwrap();
-
-        assert_eq!(v_affine, expected_affine);
-    }
-
-    #[test]
-    fn test_range_proof_zero() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 0u128;
-        let bit_size = 8;
-
-        let (range, r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-        let v = verify(&range, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Check V = g1^0 * g2^r = g2^r
-        let expected = StarkCurve::mul(&r, Some(&g2));
-
-        let v_affine = StarkCurve::projective_to_affine(&v).unwrap();
-        let expected_affine = StarkCurve::projective_to_affine(&expected).unwrap();
-
-        assert_eq!(v_affine, expected_affine);
-    }
-
-    #[test]
-    fn test_range_proof_max_value() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        // Maximum value for 8 bits: 255
-        let b = 255u128;
-        let bit_size = 8;
-
-        let (range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-        let result = verify(&range, bit_size, &g1, &g2, &prefix);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_range_proof_out_of_range() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        // Value 256 is out of range for 8 bits (max is 255)
-        let b = 256u128;
-        let bit_size = 8;
-
-        let result = prove(b, bit_size, &g1, &g2, &prefix);
-        assert!(result.is_err());
-        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
-            assert!(msg.contains("not in range"));
-        }
-    }
-
-    #[test]
-    fn test_range_proof_bit_size_too_large() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 1u128;
-        let bit_size = 129; // exceeds 128
-
-        let result = prove(b, bit_size, &g1, &g2, &prefix);
-        assert!(result.is_err());
-        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
-            assert!(msg.contains("exceeds maximum 128"));
-        }
-    }
-
-    #[test]
-    fn test_range_verify_length_mismatch() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 7u128;
-        let bit_size = 8;
-
-        let (range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Verify with wrong bit_size
-        let result = verify(&range, 16, &g1, &g2, &prefix);
-        assert!(result.is_err());
-        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
-            assert!(msg.contains("Length mismatch"));
-        }
-    }
-
-    #[test]
-    fn test_range_verify_tampered_commitment() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 7u128;
-        let bit_size = 8;
-
-        let (mut range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Tamper with first commitment
-        range.commitments[0] =
-            SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
-
-        let result = verify(&range, bit_size, &g1, &g2, &prefix);
-        assert!(result.is_err());
-        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
-            assert!(msg.contains("Bit proof failed at index 0"));
-        }
-    }
-
-    #[test]
-    fn test_range_verify_tampered_middle_commitment() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 7u128;
-        let bit_size = 8;
-
-        let (mut range, _r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Tamper with a middle commitment (index 3)
-        range.commitments[3] =
-            SerializablePoint::try_from_projective(&StarkCurve::generator()).unwrap();
-
-        let result = verify(&range, bit_size, &g1, &g2, &prefix);
-        assert!(result.is_err());
-        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
-            assert!(msg.contains("Bit proof failed at index 3"));
-        }
-    }
-
-    #[test]
-    fn test_range_proof_larger_value() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        // Test with a larger value
-        let b = 12345u128;
-        let bit_size = 16;
-
-        let (range, r) = prove(b, bit_size, &g1, &g2, &prefix).unwrap();
-        let v = verify(&range, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Check V = g1^b * g2^r
-        let expected = StarkCurve::add(
-            &StarkCurve::mul(&Felt::from(b), Some(&g1)),
-            &StarkCurve::mul(&r, Some(&g2)),
-        );
-
-        let v_affine = StarkCurve::projective_to_affine(&v).unwrap();
-        let expected_affine = StarkCurve::projective_to_affine(&expected).unwrap();
-
-        assert_eq!(v_affine, expected_affine);
-    }
-
-    #[test]
-    fn test_prove_with_randomness_same_as_prove() {
-        let g1 = StarkCurve::generator();
-        let g2 = StarkCurve::generator_h();
-        let prefix = Felt::from(42u64);
-
-        let b = 7u128;
-        let bit_size = 8;
-
-        // Generate random values manually
-        let random_values = random_felts(bit_size);
-
-        // prove_with_randomness should produce valid proof
-        let (range, r) =
-            prove_with_randomness(b, bit_size, &g1, &g2, &prefix, &random_values).unwrap();
-        let v = verify(&range, bit_size, &g1, &g2, &prefix).unwrap();
-
-        // Check V = g1^b * g2^r
-        let expected = StarkCurve::add(
-            &StarkCurve::mul(&Felt::from(b), Some(&g1)),
-            &StarkCurve::mul(&r, Some(&g2)),
-        );
-
-        let v_affine = StarkCurve::projective_to_affine(&v).unwrap();
-        let expected_affine = StarkCurve::projective_to_affine(&expected).unwrap();
-        assert_eq!(v_affine, expected_affine);
-
-        // compute_total_randomness should give same r
-        let r2 = compute_total_randomness(&random_values).unwrap();
-        assert_eq!(r, r2);
-    }
-
-    /// Regression: compute_total_randomness must reject >128 elements (would panic on 1u128 << i).
-    #[test]
-    fn test_compute_total_randomness_rejects_oversized() {
-        let values = random_felts(129);
-        let result = compute_total_randomness(&values);
-        assert!(result.is_err());
-        if let Err(krusty_kms_common::KmsError::CryptoError(msg)) = result {
-            assert!(msg.contains("exceeds maximum 128"));
-        }
-    }
-}
+mod tests;

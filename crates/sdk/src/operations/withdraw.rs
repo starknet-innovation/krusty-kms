@@ -35,6 +35,7 @@ const WITHDRAW_CAIRO_STRING: Felt = Felt::from_hex_unchecked("0x7769746864726177
 ///
 /// # Cyclomatic Complexity: 4
 pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<WithdrawProof> {
+    range::validate_bit_size(params.bit_size)?;
     if params.amount == 0 {
         return Err(KmsError::InvalidAmount(
             "Amount must be greater than zero".to_string(),
@@ -49,7 +50,6 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let g = StarkCurve::generator();
     let h = StarkCurve::generator_h();
 
-    // Compute y = g^x
     let y = account.owner_public_key().clone();
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 

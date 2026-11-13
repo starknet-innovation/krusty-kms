@@ -4,6 +4,32 @@ use krusty_kms_common::ElGamalCiphertext;
 use starknet_types_core::felt::Felt;
 
 #[test]
+fn test_transfer_rejects_invalid_range_width_before_proving() {
+    use krusty_kms_crypto::StarkCurve;
+    let mut account = create_test_account();
+    account.set_balance(1000);
+    let current_balance = encrypt_balance_for_account(&account, 1000, Felt::from(42u64));
+
+    for bit_size in [0, 129] {
+        let params = TransferParams {
+            recipient_public_key: StarkCurve::mul_generator(&Felt::from(99u64)),
+            amount: 100,
+            nonce: Felt::ONE,
+            chain_id: Felt::ONE,
+            tongo_address: Felt::ONE,
+            sender_address: Felt::ONE,
+            current_balance: current_balance.clone(),
+            bit_size,
+            auditor_pub_key: None,
+        };
+        let error = transfer(&account, params)
+            .err()
+            .expect("invalid width must fail");
+        assert!(error.to_string().contains("bit_size"));
+    }
+}
+
+#[test]
 fn test_transfer() {
     use krusty_kms_crypto::StarkCurve;
     let mut account = create_test_account();
