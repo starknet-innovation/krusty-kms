@@ -14,6 +14,22 @@ All notable changes to the published Rust crates are documented here.
   can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
   and `createdAt` to its JSON result. `createdAt` is a decimal string to
   preserve the full timestamp when parsed by JavaScript.
+- `decrypt_private_key_bounded` for untrusted direct-key metadata and the WASM
+  `decryptPrivateKeyHighCost` export for deliberate legacy recovery. The
+  default direct-key scrypt ceiling is available as `DEFAULT_SCRYPT_N_MAX`.
+
+### Changed
+
+- Direct `encrypt_private_key` rejects scrypt N above 2^18; default WASM
+  `decryptPrivateKey` rejects older high-cost N with a serialization error that
+  names `decryptPrivateKeyHighCost`. Trusted Rust callers can still use legacy
+  `decrypt_private_key` to recover keys with N up to 2^20.
+- Direct decryption requires the public `EncryptedKey.salt` field to contain
+  exactly 16 bytes. `encrypt_keystore` and WASM `encryptKeystore` reject native
+  plaintext over 4096 bytes; v3 imports reject N·r·p above 2^21 even when
+  the memory footprint alone is within the old ceiling.
+- WASM scrypt-N inputs must be exact JavaScript numbers; numeric strings that
+  wasm-bindgen previously coerced are rejected.
 
 ### Security
 

@@ -46,6 +46,12 @@ work, keeping every newly written file below the import ceiling.
 Only newly encrypted keys are forced to the default 256 MiB budget. The
 existing Rust decryption function and the named WASM high-cost recovery export
 retain the old N range. The WASM export snapshot records the one added name.
+The default WASM decryption export reports an over-budget legacy N as a
+serialization error and names `decryptPrivateKeyHighCost`, so it is distinct
+from a wrong-password crypto error. Owned WASM passwords are wrapped in
+`Zeroizing` before numeric validation, including on this failure path.
+`CHANGELOG.md` records the tighter direct salt, plaintext, v3 work, and exact
+JavaScript-number contracts for existing public entry points.
 Tests use small fixtures to assert rejection before KDF work, verify ordinary
 roundtrips and the explicit recovery entry point, and run the canonical Rust
 and WASM checks. No 512 MiB or 1 GiB allocation is needed to test the limits.

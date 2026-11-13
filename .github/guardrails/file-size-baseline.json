@@ -129,10 +129,6 @@
       "lines": 688
     },
     {
-      "path": "crates/kms/src/encryption.rs",
-      "lines": 358
-    },
-    {
       "path": "crates/kms/src/keystore/tests/limits.rs",
       "lines": 396
     },
@@ -174,10 +170,6 @@
     },
     {
       "path": "crates/sdk/tests/prover_vectors.rs",
-      "lines": 388
-    },
-    {
-      "path": "crates/wasm/src/encryption.rs",
       "lines": 388
     },
     {
