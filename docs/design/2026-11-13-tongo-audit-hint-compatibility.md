@@ -29,6 +29,11 @@ an unshifted 192-bit integer in a `u256`. The client event reader reverses
 those steps when reconstructing bytes and rejects event limbs that exceed
 their Cairo integer widths.
 
+The change spans the SDK operation builders, common Cairo serializer, client
+event decoder, and cross-SDK vectors because they all handle the same hint.
+Splitting the wire-format update would leave an intermediate version that
+emits or reconstructs bytes differently from the pinned auditor.
+
 ## Verification
 
 Rust tests check zero and maximum supported balances, nonce overflow, and
