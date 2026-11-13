@@ -5,6 +5,7 @@
 //! (see [`crate`]).
 
 use crate::error::from_sdk_result;
+use crate::numeric_input;
 use serde_json::json;
 use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
@@ -30,8 +31,8 @@ fn nostr_private_key(
 #[wasm_bindgen(js_name = "wrapNostrApplicationData")]
 pub fn wrap_nostr_application_data(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
     recipient_public_key: &str,
     identifier: &str,
@@ -39,6 +40,8 @@ pub fn wrap_nostr_application_data(
 ) -> Result<String, JsValue> {
     let (mnemonic, passphrase) = (Zeroizing::new(mnemonic), passphrase.map(Zeroizing::new));
     let content = Zeroizing::new(content);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let passphrase_ref = passphrase.as_deref().map(String::as_str);
     let keypair = nostr_private_key(&mnemonic, address_index, account_index, passphrase_ref)?;
     from_sdk_result(krusty_kms::wrap_nostr_application_data_at(
@@ -57,12 +60,14 @@ pub fn wrap_nostr_application_data(
 #[wasm_bindgen(js_name = "openNostrApplicationData")]
 pub fn open_nostr_application_data(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
     event_json: &str,
 ) -> Result<String, JsValue> {
     let (mnemonic, passphrase) = (Zeroizing::new(mnemonic), passphrase.map(Zeroizing::new));
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let passphrase_ref = passphrase.as_deref().map(String::as_str);
     let keypair = nostr_private_key(&mnemonic, address_index, account_index, passphrase_ref)?;
     let opened = from_sdk_result(krusty_kms::open_nostr_application_data_with_metadata(
@@ -92,11 +97,12 @@ mod tests {
     #[wasm_bindgen_test]
     fn mnemonic_bound_gift_wrap_round_trip() {
         let recipient =
-            crate::account::derive_nostr_public_key(MNEMONIC.into(), 1, 0, None).unwrap();
+            crate::account::derive_nostr_public_key(MNEMONIC.into(), 1.into(), 0.into(), None)
+                .unwrap();
         let event = wrap_nostr_application_data(
             MNEMONIC.into(),
-            0,
-            0,
+            0.into(),
+            0.into(),
             None,
             &recipient.public_key,
             "mc-wallet.multisig",
@@ -104,14 +110,17 @@ mod tests {
         )
         .unwrap();
 
-        let opened = open_nostr_application_data(MNEMONIC.into(), 1, 0, None, &event).unwrap();
+        let opened =
+            open_nostr_application_data(MNEMONIC.into(), 1.into(), 0.into(), None, &event).unwrap();
 
         assert!(opened.contains(r#""identifier":"mc-wallet.multisig""#));
         assert!(opened.contains(r#""content":"payload""#));
         let opened: serde_json::Value = serde_json::from_str(&opened).unwrap();
         assert!(opened["wrapId"].is_string() && opened["rumorId"].is_string());
         assert!(opened["createdAt"].is_string());
-        assert!(open_nostr_application_data(MNEMONIC.into(), 0, 0, None, &event).is_err());
+        assert!(
+            open_nostr_application_data(MNEMONIC.into(), 0.into(), 0.into(), None, &event).is_err()
+        );
     }
 
     #[wasm_bindgen_test]
@@ -127,7 +136,9 @@ mod tests {
                 timestamp,
             )
             .unwrap();
-            let opened = open_nostr_application_data(MNEMONIC.into(), 1, 0, None, &event).unwrap();
+            let opened =
+                open_nostr_application_data(MNEMONIC.into(), 1.into(), 0.into(), None, &event)
+                    .unwrap();
             let parsed = js_sys::JSON::parse(&opened).unwrap();
             let created_at =
                 js_sys::Reflect::get(&parsed, &JsValue::from_str("createdAt")).unwrap();
