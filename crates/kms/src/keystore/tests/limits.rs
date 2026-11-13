@@ -341,9 +341,9 @@ fn bounded_direct_decryption_rejects_legacy_high_n_before_kdf() {
 
 #[test]
 fn imported_keystore_limits_total_scrypt_work() {
-    // A small memory footprint can still hide many sequential ROMix lanes.
+    // This formerly memory-compliant v3 parameter set exceeds the work cap.
     assert!(validate_scrypt_resource_params(1 << 18, 8, 1, 32).is_ok());
-    let err = validate_scrypt_resource_params(1 << 18, 1, 16, 32)
+    let err = validate_scrypt_resource_params(1 << 18, 8, 2, 32)
         .expect_err("excessive CPU work must be rejected");
     assert!(format!("{err}").contains("work units"));
 }
