@@ -46,6 +46,9 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
+- WASM TypeScript declarations again accept explicit `null` for optional
+  discovery indices, mnemonic word count, balance search limit, and proof
+  bit-size property, matching runtime behavior and the pre-validation API.
 - `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
   source fails instead of panicking, which aborted `panic = "abort"` hosts and
   trapped the WASM instance.

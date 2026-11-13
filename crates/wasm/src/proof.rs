@@ -204,7 +204,7 @@ impl WasmTransferParams {
             auditor_public_key: None,
         }
     }
-
+    /// Set the optional range-proof bit size (default: 40).
     #[wasm_bindgen(js_name = "withBitSize")]
     pub fn with_bit_size(
         mut self,
@@ -213,16 +213,16 @@ impl WasmTransferParams {
         self.bit_size = Some(crate::numeric_input::u8(bit_size, "bit size")?);
         Ok(self)
     }
-
+    /// Range-proof bit size, if explicitly set.
     #[wasm_bindgen(getter = bit_size)]
     pub fn bit_size(&self) -> Option<u8> {
         self.bit_size
     }
-
+    /// Set or clear the optional range-proof bit size.
     #[wasm_bindgen(setter = bit_size)]
     pub fn set_bit_size(
         &mut self,
-        #[wasm_bindgen(unchecked_param_type = "number | undefined")] bit_size: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "number | null | undefined")] bit_size: JsValue,
     ) -> Result<(), JsValue> {
         self.bit_size = crate::numeric_input::optional_u8(bit_size, "bit size")?;
         Ok(())
@@ -529,7 +529,7 @@ impl WasmWithdrawParams {
             auditor_public_key: None,
         }
     }
-
+    /// Set the optional range-proof bit size (default: 40).
     #[wasm_bindgen(js_name = "withBitSize")]
     pub fn with_bit_size(
         mut self,
@@ -538,16 +538,16 @@ impl WasmWithdrawParams {
         self.bit_size = Some(crate::numeric_input::u8(bit_size, "bit size")?);
         Ok(self)
     }
-
+    /// Range-proof bit size, if explicitly set.
     #[wasm_bindgen(getter = bit_size)]
     pub fn bit_size(&self) -> Option<u8> {
         self.bit_size
     }
-
+    /// Set or clear the optional range-proof bit size.
     #[wasm_bindgen(setter = bit_size)]
     pub fn set_bit_size(
         &mut self,
-        #[wasm_bindgen(unchecked_param_type = "number | undefined")] bit_size: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "number | null | undefined")] bit_size: JsValue,
     ) -> Result<(), JsValue> {
         self.bit_size = crate::numeric_input::optional_u8(bit_size, "bit size")?;
         Ok(())

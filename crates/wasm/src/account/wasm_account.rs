@@ -159,7 +159,7 @@ impl WasmAccount {
     pub fn decrypt_balance(
         &self,
         ciphertext: &WasmCiphertext,
-        #[wasm_bindgen(unchecked_optional_param_type = "bigint")] max_search: JsValue,
+        #[wasm_bindgen(unchecked_optional_param_type = "bigint | null")] max_search: JsValue,
     ) -> Result<String, JsValue> {
         /// Upper bound on the brute-force discrete-log search.
         ///
