@@ -251,7 +251,7 @@ mod tests {
         for len in [0usize, 4, 12, 23, 25] {
             let encrypted = EncryptedKey {
                 nonce: vec![0u8; len],
-                salt: vec![0u8; 16],
+                salt: krusty_kms_crypto::random_bytes::<16>().to_vec(), // nonce rejected first
                 encrypted_key: vec![0u8; 48],
             };
             let err = decrypt_private_key(&encrypted, &test_password(0), TEST_SCRYPT_N)

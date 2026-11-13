@@ -134,11 +134,11 @@
     },
     {
       "path": "crates/kms/src/encryption.rs",
-      "lines": 359
+      "lines": 358
     },
     {
       "path": "crates/kms/src/keystore.rs",
-      "lines": 498
+      "lines": 497
     },
     {
       "path": "crates/kms/src/tx_hash.rs",
