@@ -45,10 +45,6 @@
       "lines": 383
     },
     {
-      "path": "crates/crypto/src/range.rs",
-      "lines": 468
-    },
-    {
       "path": "crates/experimental/gaming-experimental/mental-poker/src/blackjack.rs",
       "lines": 888
     },
