@@ -15,6 +15,20 @@ All notable changes to the published Rust crates are documented here.
   and `createdAt` to its JSON result. `createdAt` is a decimal string to
   preserve the full timestamp when parsed by JavaScript.
 
+### Changed
+
+- Tongo auditor-enabled operations now produce the pinned Tongo 1.3.2 audit
+  hint format, including HKDF context, authenticated plaintext, and Cairo
+  `u512`/`u256` limb order. The shared serializer and C ABI emit the corrected
+  Cairo layout for identical input bytes. Historical Krusty hints remain
+  readable by the client event parser and the legacy auditor decryptor; they
+  are not Tongo 1.3.2 audit hints.
+
+### Deprecated
+
+- `encrypt_for_auditor` and `decrypt_as_auditor` retain the legacy Krusty
+  format. Use their context-aware counterparts for Tongo operations.
+
 ### Security
 
 - Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
@@ -46,14 +60,6 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
-- Tongo auditor-enabled operations now produce the pinned Tongo 1.3.2 audit
-  hint format, including HKDF context, authenticated plaintext, and Cairo
-  `u512`/`u256` limb order. Historical hints emitted with Krusty's earlier
-  wire layout remain readable by the client event parser and the deprecated
-  context-free auditor decryptor; they are not Tongo 1.3.2 audit hints.
-  `encrypt_for_auditor` and `decrypt_as_auditor` are deprecated in favor of
-  their context-aware counterparts. Callers constructing hints through the
-  shared serializer or C ABI now emit the corrected Cairo layout.
 - `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
   source fails instead of panicking, which aborted `panic = "abort"` hosts and
   trapped the WASM instance.

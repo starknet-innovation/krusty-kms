@@ -45,6 +45,7 @@ fn preflight_auditor_hint(account: &TongoAccount, params: &WithdrawParams) -> Re
 ///
 /// # Cyclomatic Complexity: 4
 pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<WithdrawProof> {
+    range::validate_bit_size(params.bit_size)?;
     if params.amount == 0 {
         return Err(KmsError::InvalidAmount(
             "Amount must be greater than zero".to_string(),
@@ -59,7 +60,6 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
     let g = StarkCurve::generator();
     let h = StarkCurve::generator_h();
 
-    // Compute y = g^x
     let y = account.owner_public_key().clone();
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
 

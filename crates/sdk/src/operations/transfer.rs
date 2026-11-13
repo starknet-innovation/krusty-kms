@@ -13,6 +13,7 @@ use krusty_kms_common::Result;
 /// Returns KmsError when validation, point conversion, range-proof generation,
 /// scalar arithmetic, or optional audit generation fails.
 pub fn transfer(account: &TongoAccount, params: TransferParams) -> Result<TransferProof> {
+    krusty_kms_crypto::range::validate_bit_size(params.bit_size)?;
     if params.auditor_pub_key.is_some()
         && params.amount != 0
         && account.has_sufficient_balance(params.amount)

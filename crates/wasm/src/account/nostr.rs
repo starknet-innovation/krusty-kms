@@ -1,6 +1,7 @@
 //! Nostr (secp256k1 / BIP-340) key derivation.
 
 use crate::error::from_sdk_result;
+use crate::numeric_input;
 use crate::types::{WasmNostrKeypair, WasmNostrPublicKey};
 use wasm_bindgen::prelude::*;
 use zeroize::Zeroizing;
@@ -28,12 +29,14 @@ use zeroize::Zeroizing;
 #[wasm_bindgen(js_name = "deriveNostrKeypair")]
 pub fn derive_nostr_keypair(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmNostrKeypair, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
         &mnemonic,
         address_index,
@@ -58,12 +61,14 @@ pub fn derive_nostr_keypair(
 #[wasm_bindgen(js_name = "deriveNostrPublicKey")]
 pub fn derive_nostr_public_key(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmNostrPublicKey, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let kp = from_sdk_result(krusty_kms::derive_nostr_keypair(
         &mnemonic,
         address_index,

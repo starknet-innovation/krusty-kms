@@ -2,6 +2,7 @@
 //! and Argent-legacy schemes), plus coin type constants.
 
 use crate::error::from_sdk_result;
+use crate::numeric_input;
 use crate::types::{WasmKeypair, WasmPublicKey, WasmStarkXOnlyKeypair, WasmStarkXOnlyPublicKey};
 use krusty_kms_common::SecretFelt;
 use wasm_bindgen::prelude::*;
@@ -16,8 +17,10 @@ use zeroize::Zeroizing;
 /// never log it, never persist it unencrypted, and prefer keeping it only in
 /// secure storage after generation.
 #[wasm_bindgen(js_name = "generateMnemonic")]
-pub fn generate_mnemonic(word_count: Option<u8>) -> Result<String, JsValue> {
-    let count = word_count.unwrap_or(12) as usize;
+pub fn generate_mnemonic(
+    #[wasm_bindgen(unchecked_optional_param_type = "number")] word_count: JsValue,
+) -> Result<String, JsValue> {
+    let count = numeric_input::optional_u8(word_count, "word count")?.unwrap_or(12) as usize;
     from_sdk_result(krusty_kms::generate_mnemonic(count)).map_err(JsValue::from)
 }
 
@@ -38,12 +41,14 @@ pub fn validate_mnemonic(mnemonic: String) -> bool {
 #[wasm_bindgen(js_name = "deriveKeypair")]
 pub fn derive_keypair(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let kp = from_sdk_result(krusty_kms::derive_keypair(
         &mnemonic,
         address_index,
@@ -72,12 +77,14 @@ pub fn derive_keypair(
 #[wasm_bindgen(js_name = "derivePublicKey")]
 pub fn derive_public_key(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmPublicKey, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let kp = from_sdk_result(krusty_kms::derive_keypair(
         &mnemonic,
         address_index,
@@ -118,12 +125,14 @@ pub fn derive_public_key(
 #[wasm_bindgen(js_name = "deriveStarknetKeypair")]
 pub fn derive_starknet_keypair(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmKeypair, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
         &mnemonic,
         address_index,
@@ -154,12 +163,14 @@ pub fn derive_starknet_keypair(
 #[wasm_bindgen(js_name = "deriveStarknetPublicKey")]
 pub fn derive_starknet_public_key(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
     passphrase: Option<String>,
 ) -> Result<WasmPublicKey, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let passphrase = passphrase.map(Zeroizing::new);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let kp = from_sdk_result(krusty_kms::derive_keypair_with_coin_type(
         &mnemonic,
         address_index,
@@ -222,10 +233,12 @@ pub fn get_nostr_coin_type() -> u32 {
 #[wasm_bindgen(js_name = "deriveArgentLegacyKeypair")]
 pub fn derive_argent_legacy_keypair(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
 ) -> Result<WasmStarkXOnlyKeypair, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let pk = SecretFelt::new(
         krusty_kms::derive_argent_legacy_private_key(&mnemonic, address_index, account_index)
             .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,
@@ -247,10 +260,12 @@ pub fn derive_argent_legacy_keypair(
 #[wasm_bindgen(js_name = "deriveArgentLegacyPublicKey")]
 pub fn derive_argent_legacy_public_key(
     mnemonic: String,
-    address_index: u32,
-    account_index: u32,
+    #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+    #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
 ) -> Result<WasmStarkXOnlyPublicKey, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
+    let (address_index, account_index) =
+        numeric_input::derivation_indices(address_index, account_index)?;
     let pk = SecretFelt::new(
         krusty_kms::derive_argent_legacy_private_key(&mnemonic, address_index, account_index)
             .map_err(|e| JsValue::from_str(&format!("Argent legacy derivation failed: {e}")))?,

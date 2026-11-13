@@ -26,6 +26,7 @@ pub mod error;
 mod felt_input;
 pub mod hashing;
 pub mod nostr_application_data;
+mod numeric_input;
 pub mod proof;
 pub mod qsb_hors;
 mod secret_input;
@@ -80,10 +81,6 @@ pub fn get_build_info() -> JsValue {
 
     serde_wasm_bindgen::to_value(&info).unwrap_or(JsValue::NULL)
 }
-
-// ============================================================================
-// Cryptographic Utilities
-// ============================================================================
 
 /// Compute a Poseidon hash of the given inputs.
 ///
