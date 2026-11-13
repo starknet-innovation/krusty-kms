@@ -9,11 +9,18 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use krusty_kms_common::{KmsError, Result};
-use scrypt::Params as ScryptParams;
 use zeroize::Zeroizing;
+
+mod scrypt_limits;
+pub use scrypt_limits::DEFAULT_SCRYPT_N_MAX;
+pub(crate) use scrypt_limits::{
+    derive_scrypt_key, ensure_default_scrypt_budget, scrypt_log_n, SCRYPT_MEMORY_CEILING_BYTES,
+};
 
 /// XChaCha20-Poly1305 extended nonce length, in bytes.
 pub(crate) const XNONCE_LEN: usize = 24;
+/// Keep direct ciphertexts within the WASM decryption input ceiling.
+const MAX_DIRECT_KEY_BYTES: usize = 1024 * 1024 - 16;
 
 /// Validate a nonce length before it reaches the AEAD.
 ///
@@ -55,44 +62,6 @@ pub struct EncryptedPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/// Minimum allowed scrypt N (2^10).
-pub(crate) const SCRYPT_N_MIN: u32 = 1 << 10;
-/// Maximum allowed scrypt N (2^20).
-pub(crate) const SCRYPT_N_MAX: u32 = 1 << 20;
-
-/// Validate scrypt N and return `log2(N)` for [`ScryptParams`].
-///
-/// Requires `N` to be a power of two in `[2^10, 2^20]`.
-pub(crate) fn scrypt_log_n(n: u32) -> Result<u8> {
-    if !(SCRYPT_N_MIN..=SCRYPT_N_MAX).contains(&n) || !n.is_power_of_two() {
-        return Err(KmsError::CryptoError(format!(
-            "Invalid scrypt N={n}: must be a power of 2 in [{SCRYPT_N_MIN}, {SCRYPT_N_MAX}]"
-        )));
-    }
-    Ok(n.trailing_zeros() as u8)
-}
-
-/// Derive a 32-byte key from a password and salt using scrypt.
-///
-/// [`Zeroizing`] rather than a bare array: every caller has a `?` between the
-/// derivation and the end of the function, and a wrong password takes that path.
-pub(crate) fn derive_scrypt_key(
-    password: &[u8],
-    kdf_salt: &[u8],
-    n: u32,
-) -> Result<Zeroizing<[u8; 32]>> {
-    let log_n = scrypt_log_n(n)?;
-    let params = ScryptParams::new(log_n, 8, 1)
-        .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
-    let mut key = Zeroizing::new([u8::default(); 32]);
-    crate::scrypt_wiping::scrypt(password, kdf_salt, &params, &mut *key)?;
-    Ok(key)
-}
-
-// ---------------------------------------------------------------------------
 // Password-based private key encryption
 // ---------------------------------------------------------------------------
 
@@ -110,6 +79,20 @@ pub fn encrypt_private_key(
     password: &str,
     scrypt_n: u32,
 ) -> Result<EncryptedKey> {
+    ensure_default_scrypt_budget(scrypt_n)?;
+    let hex_str = private_key_hex
+        .strip_prefix("0x")
+        .unwrap_or(private_key_hex);
+    if hex_str.len() > MAX_DIRECT_KEY_BYTES * 2 {
+        return Err(KmsError::CryptoError(format!(
+            "private key exceeds the {MAX_DIRECT_KEY_BYTES} byte limit"
+        )));
+    }
+    // Decode before the expensive KDF: malformed caller input cannot make us
+    // spend the full scrypt budget on a value that cannot be encrypted.
+    let plaintext = Zeroizing::new(
+        hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?,
+    );
     // Generate 16-byte salt
     let salt = krusty_kms_crypto::random_bytes::<16>();
 
@@ -118,14 +101,6 @@ pub fn encrypt_private_key(
 
     // Generate 24-byte nonce
     let nonce_bytes = krusty_kms_crypto::random_bytes::<XNONCE_LEN>();
-
-    // Decode hex private key; scrubbed on drop — this buffer is the raw key.
-    let hex_str = private_key_hex
-        .strip_prefix("0x")
-        .unwrap_or(private_key_hex);
-    let plaintext = Zeroizing::new(
-        hex::decode(hex_str).map_err(|e| KmsError::CryptoError(format!("Invalid hex: {e}")))?,
-    );
 
     // Encrypt
     let cipher = XChaCha20Poly1305::new_from_slice(key.as_slice())
@@ -151,11 +126,15 @@ pub fn encrypt_private_key(
 ///
 /// # Returns
 /// Hex-encoded private key (no `0x` prefix).
+///
+/// The legacy N range is for deliberate recovery by a trusted Rust caller.
+/// Use [`decrypt_private_key_bounded`] for untrusted metadata.
 pub fn decrypt_private_key(
     encrypted: &EncryptedKey,
     password: &str,
     scrypt_n: u32,
 ) -> Result<String> {
+    scrypt_limits::ensure_direct_input_lengths(encrypted)?;
     // Validate before deriving, so a malformed nonce costs no KDF work.
     let nonce = xnonce(&encrypted.nonce)?;
 
@@ -172,6 +151,20 @@ pub fn decrypt_private_key(
     );
 
     Ok(hex::encode(&*plaintext))
+}
+
+/// Decrypt a private key using the default 256 MiB KDF memory budget.
+///
+/// Prefer this when `scrypt_n` comes from untrusted metadata. The legacy
+/// [`decrypt_private_key`] accepts up to `N=2^20` so older high-cost keys remain
+/// recoverable when the caller deliberately opts into their resource cost.
+pub fn decrypt_private_key_bounded(
+    encrypted: &EncryptedKey,
+    password: &str,
+    scrypt_n: u32,
+) -> Result<String> {
+    ensure_default_scrypt_budget(scrypt_n)?;
+    decrypt_private_key(encrypted, password, scrypt_n)
 }
 
 // ---------------------------------------------------------------------------
@@ -220,139 +213,4 @@ pub fn decrypt_with_key(payload: &EncryptedPayload, key: &[u8; 32]) -> Result<Ve
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Use a low scrypt N for fast tests
-    const TEST_SCRYPT_N: u32 = 1024;
-
-    // A nonce length must be validated, not asserted.
-
-    #[test]
-    fn decrypt_with_key_rejects_wrong_nonce_length_without_panicking() {
-        // `XNonce::from_slice` asserts on a length mismatch, so a nonce taken
-        // from untrusted JSON used to abort the process instead of erroring.
-        let key = test_key(0);
-        for len in [0usize, 4, 12, 23, 25, 64] {
-            let payload = EncryptedPayload {
-                nonce: vec![0u8; len],
-                ciphertext: vec![0u8; 48],
-            };
-            let err = decrypt_with_key(&payload, &key).expect_err("must be rejected");
-            assert!(
-                format!("{err}").contains("Invalid nonce length"),
-                "len={len}, got {err}"
-            );
-        }
-    }
-
-    #[test]
-    fn decrypt_private_key_rejects_wrong_nonce_length_without_panicking() {
-        for len in [0usize, 4, 12, 23, 25] {
-            let encrypted = EncryptedKey {
-                nonce: vec![0u8; len],
-                salt: krusty_kms_crypto::random_bytes::<16>().to_vec(), // nonce rejected first
-                encrypted_key: vec![0u8; 48],
-            };
-            let err = decrypt_private_key(&encrypted, &test_password(0), TEST_SCRYPT_N)
-                .expect_err("must be rejected");
-            assert!(
-                format!("{err}").contains("Invalid nonce length"),
-                "len={len}, got {err}"
-            );
-        }
-    }
-
-    #[test]
-    fn correct_nonce_length_is_accepted() {
-        // Guards against over-tightening: a well-formed 24-byte nonce must
-        // still reach the AEAD and fail on authentication, not on length.
-        let payload = EncryptedPayload {
-            nonce: vec![0u8; XNONCE_LEN],
-            ciphertext: vec![0u8; 48],
-        };
-        let err = decrypt_with_key(&payload, &test_key(0)).expect_err("tag must fail");
-        assert!(format!("{err}").contains("Decryption failed"), "got {err}");
-    }
-
-    fn test_password(offset: u8) -> String {
-        (0..12)
-            .map(|index| char::from(b'a' + index + offset))
-            .collect()
-    }
-
-    fn test_key(offset: u8) -> [u8; 32] {
-        std::array::from_fn(|index| index as u8 + offset)
-    }
-
-    #[test]
-    fn encrypt_decrypt_private_key_roundtrip() {
-        let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-        let password = test_password(0);
-
-        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
-        assert_eq!(encrypted.nonce.len(), 24);
-        assert_eq!(encrypted.salt.len(), 16);
-
-        let decrypted = decrypt_private_key(&encrypted, &password, TEST_SCRYPT_N).unwrap();
-        assert_eq!(decrypted, private_key);
-    }
-
-    #[test]
-    fn encrypt_decrypt_private_key_with_0x_prefix() {
-        let private_key = "0xdeadbeef00112233deadbeef00112233deadbeef00112233deadbeef00112233";
-        let password = test_password(0);
-
-        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
-        let decrypted = decrypt_private_key(&encrypted, &password, TEST_SCRYPT_N).unwrap();
-        // Decrypted is returned without 0x prefix
-        assert_eq!(
-            decrypted,
-            "deadbeef00112233deadbeef00112233deadbeef00112233deadbeef00112233"
-        );
-    }
-
-    #[test]
-    fn wrong_password_fails_decryption() {
-        let private_key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
-        let password = test_password(0);
-
-        let encrypted = encrypt_private_key(private_key, &password, TEST_SCRYPT_N).unwrap();
-
-        let wrong_password = test_password(1);
-        let result = decrypt_private_key(&encrypted, &wrong_password, TEST_SCRYPT_N);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn reject_invalid_scrypt_n() {
-        assert!(scrypt_log_n(1023).is_err());
-        assert!(scrypt_log_n(3).is_err());
-        assert!(scrypt_log_n(1 << 21).is_err());
-        assert_eq!(scrypt_log_n(1024).unwrap(), 10);
-    }
-
-    #[test]
-    fn encrypt_decrypt_with_key_roundtrip() {
-        let plaintext = b"some secret data that must remain confidential";
-        let key = test_key(0);
-
-        let payload = encrypt_with_key(plaintext, &key).unwrap();
-        assert_eq!(payload.nonce.len(), 24);
-
-        let decrypted = decrypt_with_key(&payload, &key).unwrap();
-        assert_eq!(decrypted, plaintext);
-    }
-
-    #[test]
-    fn wrong_key_fails_decrypt_with_key() {
-        let plaintext = b"secret";
-        let key = test_key(0);
-        let wrong_key = test_key(1);
-
-        let payload = encrypt_with_key(plaintext, &key).unwrap();
-
-        let result = decrypt_with_key(&payload, &wrong_key);
-        assert!(result.is_err());
-    }
-}
+mod tests;

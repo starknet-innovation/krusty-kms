@@ -129,12 +129,12 @@
       "lines": 688
     },
     {
-      "path": "crates/kms/src/encryption.rs",
-      "lines": 358
+      "path": "crates/kms/src/keystore/tests/limits.rs",
+      "lines": 396
     },
     {
       "path": "crates/kms/src/keystore.rs",
-      "lines": 497
+      "lines": 496
     },
     {
       "path": "crates/kms/src/tx_hash.rs",

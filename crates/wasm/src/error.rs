@@ -48,7 +48,13 @@ impl WasmError {
             Self::InternalError(s) => format!("Internal error: {s}"),
         };
 
-        js_sys::Error::new(&msg).into()
+        let error = js_sys::Error::new(&msg);
+        let _ = js_sys::Reflect::set(
+            error.as_ref(),
+            &JsValue::from_str("code"),
+            &JsValue::from_str(self.code()),
+        );
+        error.into()
     }
 
     /// Error code for programmatic handling in JavaScript.
