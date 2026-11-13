@@ -91,8 +91,10 @@ pub struct AEBalanceCandidate {
 ///
 /// The public `ciphertext` and `nonce` are the reader's best-effort layout
 /// guess. A sender can make the layouts overlap, so an auditor must try both
-/// [`Self::candidates`] with their matching decryptors and verify any result
-/// against the declared ElGamal balance or a validated proof.
+/// [`Self::candidates`]. The limb layout does not identify the encryption
+/// format: either candidate may need either the context-aware or legacy
+/// decryptor. Verify any authenticated result against the declared ElGamal
+/// balance or a validated proof.
 #[derive(Debug, Clone)]
 pub struct AEBalance {
     pub ciphertext: [u8; 64],
@@ -118,8 +120,9 @@ impl AEBalance {
         }
     }
 
-    /// Both interpretations, with the reader's heuristic choice first.
-    /// Authenticate each candidate with its corresponding decryptor.
+    /// Both limb interpretations, with the reader's heuristic choice first.
+    /// Try each candidate with both auditor decryptors as needed; the layout
+    /// alone does not identify the encryption format.
     pub fn candidates(&self) -> [AEBalanceCandidate; 2] {
         let mut alternate_ciphertext = [0u8; 64];
         for (target, source) in alternate_ciphertext

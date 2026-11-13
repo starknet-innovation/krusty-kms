@@ -38,11 +38,14 @@ decryptor; they were not compatible with the pinned Tongo auditor.
 The nonce shape can be deliberately chosen by a sender. In particular, a
 current hint whose final eight nonce bytes are zero is guessed as legacy.
 `AEBalance::candidates()` retains both byte interpretations and labels each
-layout, so an auditor can try the context-aware decryptor for `Current` and
-the legacy decryptor for `Legacy` even when the heuristic is wrong. The
-existing `ciphertext` and `nonce` fields remain the heuristic candidate for
-older callers. This adds fields to the public `AEBalance` struct, so downstream
-code constructing or exhaustively matching it must adapt.
+layout. The Cairo limb layout and AE scheme are independent: a still-public
+legacy `encrypt_for_auditor` result can be put through the current Cairo
+serializer. An auditor may need to try both decryptors on each byte candidate
+and compare any authenticated result against the declared ElGamal balance or
+a validated proof. The existing `ciphertext` and `nonce` fields remain the
+heuristic candidate for older callers. This adds fields to the public
+`AEBalance` struct, so downstream code constructing or exhaustively matching
+it must adapt.
 
 The shared public serializer and C ABI calldata produce different felts for
 identical inputs. Earlier Krusty documentation explicitly promised to keep

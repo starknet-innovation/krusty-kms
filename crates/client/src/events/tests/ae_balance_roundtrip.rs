@@ -84,6 +84,51 @@ fn colliding_current_nonce_keeps_both_layout_candidates() {
 }
 
 #[test]
+#[allow(deprecated)] // Exercise the still-public legacy auditor format.
+fn legacy_ciphertext_can_use_current_cairo_limb_layout() {
+    let user_private_key = Felt::from(42u64);
+    let auditor_private_key = Felt::from(123u64);
+    let user_public_key = krusty_kms_crypto::StarkCurve::mul_generator(&user_private_key);
+    let auditor_public_key = krusty_kms_crypto::StarkCurve::mul_generator(&auditor_private_key);
+    let (ciphertext, nonce) =
+        krusty_kms_sdk::crypto::encrypt_for_auditor(77, &user_private_key, &auditor_public_key)
+            .unwrap();
+    let felts: Vec<_> = serialize_ae_balance(&ciphertext, &nonce)
+        .unwrap()
+        .into_iter()
+        .map(|felt| StarknetRsFelt::from_bytes_be(&felt.to_bytes_be()))
+        .collect();
+    let decoded = parse_ae_balance(&felts, 0).unwrap();
+    let current = decoded
+        .candidates()
+        .into_iter()
+        .find(|candidate| candidate.layout == AEBalanceLayout::Current)
+        .unwrap();
+    assert_eq!(current.ciphertext, ciphertext);
+    assert_eq!(current.nonce, nonce);
+
+    assert!(krusty_kms_sdk::decrypt_as_auditor_with_context(
+        &current.ciphertext,
+        &current.nonce,
+        &auditor_private_key,
+        &user_public_key,
+        &Felt::from(7u64),
+        &Felt::from(9u64),
+    )
+    .is_err());
+    assert_eq!(
+        krusty_kms_sdk::crypto::decrypt_as_auditor(
+            &current.ciphertext,
+            &current.nonce,
+            &auditor_private_key,
+            &user_public_key,
+        )
+        .unwrap(),
+        77
+    );
+}
+
+#[test]
 fn high_sender_hint_nonce_limb_does_not_reject_event() {
     let mut data = legacy_ae_hint_felts([0x46; 64], [0x9c; 24]);
     // A Cairo u256 limb may exceed u64. Previously this rejected the whole

@@ -25,8 +25,9 @@ All notable changes to the published Rust crates are documented here.
   hint format, including HKDF context, authenticated plaintext, and Cairo
   `u512`/`u256` limb order. The shared serializer and C ABI emit the corrected
   Cairo layout for identical input bytes. Historical Krusty hints remain
-  readable when callers select the matching `AEBalance` candidate and legacy
-  decryptor; they are not Tongo 1.3.2 audit hints. `AEBalance` now stores
+  readable when callers try both `AEBalance` byte candidates and the relevant
+  decryptor; the limb layout alone does not select the encryption format.
+  They are not Tongo 1.3.2 audit hints. `AEBalance` now stores
   layout metadata, so downstream struct-literal construction and exhaustive
   destructuring require changes.
 
