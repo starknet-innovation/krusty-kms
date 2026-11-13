@@ -18,7 +18,7 @@ use zeroize::Zeroizing;
 /// secure storage after generation.
 #[wasm_bindgen(js_name = "generateMnemonic")]
 pub fn generate_mnemonic(
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] word_count: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] word_count: JsValue,
 ) -> Result<String, JsValue> {
     let count = numeric_input::optional_u8(word_count, "word count")?.unwrap_or(12) as usize;
     from_sdk_result(krusty_kms::generate_mnemonic(count)).map_err(JsValue::from)

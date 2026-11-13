@@ -70,7 +70,7 @@ fn to_json_string<T: serde::Serialize>(value: &T) -> Result<String, JsValue> {
 #[wasm_bindgen(js_name = "generateAccountCandidates")]
 pub fn generate_account_candidates(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);
@@ -90,7 +90,7 @@ pub fn generate_account_candidates(
 #[wasm_bindgen(js_name = "generateAccountCandidatesWithSecrets")]
 pub fn generate_account_candidates_with_secrets(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);
@@ -124,7 +124,7 @@ pub fn generate_account_candidates_with_secrets(
 #[wasm_bindgen(js_name = "generateAccountAddresses")]
 pub fn generate_account_addresses(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);
@@ -186,7 +186,7 @@ pub fn generate_account_addresses(
 #[wasm_bindgen(js_name = "deriveDiscoveryKeypairs")]
 pub fn derive_discovery_keypairs(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);
@@ -204,7 +204,7 @@ pub fn derive_discovery_keypairs(
 #[wasm_bindgen(js_name = "deriveDiscoveryKeypairsWithSecrets")]
 pub fn derive_discovery_keypairs_with_secrets(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);
@@ -235,7 +235,7 @@ pub fn derive_discovery_keypairs_with_secrets(
 #[wasm_bindgen(js_name = "discoverAccountsFromMnemonic")]
 pub fn discover_accounts_from_mnemonic(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);
@@ -260,7 +260,7 @@ pub fn discover_accounts_from_mnemonic(
 #[wasm_bindgen(js_name = "discoverAccountsFromMnemonicWithSecrets")]
 pub fn discover_accounts_from_mnemonic_with_secrets(
     mnemonic: String,
-    #[wasm_bindgen(unchecked_optional_param_type = "number")] max_index: JsValue,
+    #[wasm_bindgen(unchecked_optional_param_type = "number | null")] max_index: JsValue,
 ) -> Result<String, JsValue> {
     let mnemonic = Zeroizing::new(mnemonic);
     let max = crate::numeric_input::optional_u32(max_index, "max index")?.unwrap_or(5);

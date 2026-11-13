@@ -6,6 +6,7 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "cross-tests/**"
       - ".cargo/audit.toml"
       - "CHANGELOG.md"
       - "tools/check.sh"
@@ -18,6 +19,7 @@ on:
       - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "cross-tests/**"
       - ".cargo/audit.toml"
       - "CHANGELOG.md"
       - "tools/check.sh"
@@ -96,7 +98,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
       - run: rustup target add wasm32-unknown-unknown
       # Build wasm-pack and the wasm-bindgen CLI it drives from their crates.io
       # releases rather than downloading prebuilt binaries: the versions and

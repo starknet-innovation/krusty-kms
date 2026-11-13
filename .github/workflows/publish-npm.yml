@@ -32,7 +32,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
       - run: rustup target add wasm32-unknown-unknown
       # Build wasm-pack and the wasm-bindgen CLI it drives from their crates.io
       # releases rather than downloading prebuilt binaries: the versions and
@@ -48,7 +48,7 @@ jobs:
       # workflow_dispatch bypasses rust.yml's parallel wasm job entirely, so
       # without this a wasm-only regression could reach npm untested. Building
       # and `npm pack --dry-run` in the publish job are not a substitute.
-      - run: wasm-pack test --node --mode no-install crates/wasm
+      - run: bash tools/check.sh wasm
       - run: cargo install cargo-audit --version 0.22.1 --locked
       - run: cargo audit --deny warnings
       - run: cargo install cargo-deny --version 0.19.8 --locked

@@ -6,6 +6,8 @@ All notable changes to the published Rust crates are documented here.
 
 ### Added
 
+- `krusty_kms_crypto::range::validate_bit_size` exposes the shared
+  `1..=128` range-proof width check to callers.
 - `krusty_kms::mnemonic_from_entropy(entropy)`, which encodes caller-supplied
   BIP-39 entropy as a phrase returned in a `Zeroizing<String>`. The C ABI's
   `kms_generate_mnemonic_from_entropy` now goes through it.
@@ -15,8 +17,15 @@ All notable changes to the published Rust crates are documented here.
   and `createdAt` to its JSON result. `createdAt` is a decimal string to
   preserve the full timestamp when parsed by JavaScript.
 
+### Changed
+
+- `compute_total_randomness(&[])` now returns an invalid-width error instead
+  of `Ok(Felt::ZERO)`.
+
 ### Security
 
+- Reject range-proof widths outside `1..=128` before generating randomness or
+  indexing commitments.
 - Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
   bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
   `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.
@@ -49,6 +58,9 @@ All notable changes to the published Rust crates are documented here.
 
 ### Fixed
 
+- WASM TypeScript declarations again accept explicit `null` for optional
+  discovery indices, mnemonic word count, balance search limit, and proof
+  bit-size property, matching runtime behavior and the pre-validation API.
 - `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
   source fails instead of panicking, which aborted `panic = "abort"` hosts and
   trapped the WASM instance.
