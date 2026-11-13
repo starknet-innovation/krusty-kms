@@ -134,7 +134,7 @@
     },
     {
       "path": "crates/kms/src/keystore.rs",
-      "lines": 497
+      "lines": 496
     },
     {
       "path": "crates/kms/src/tx_hash.rs",
