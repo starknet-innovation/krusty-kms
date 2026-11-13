@@ -8,6 +8,11 @@ a 256 MiB ceiling, but parsed unrestricted JSON and decoded salt text before
 checking its length. A v3 keystore could also request excessive total work by
 combining a high `p` with a modest memory footprint.
 
+The review patch exceeds the 400-line production-Rust PR size guideline
+because one input policy must cover direct encryption, both keystore formats,
+and the WASM boundary together. Applying only part of it would leave an
+unbounded entry point or produce ciphertext the default reader cannot open.
+
 ## Design
 
 New direct encryption and the default WASM decryption export now use a 256 MiB
