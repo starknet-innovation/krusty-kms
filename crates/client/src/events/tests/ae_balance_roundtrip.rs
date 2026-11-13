@@ -1,4 +1,5 @@
 use super::super::{parse_ae_balance, parse_transfer_event, tongo_events, StarknetRsFelt};
+use crate::types::AEBalanceLayout;
 use krusty_kms_common::{
     serialize_ae_balance, AuditProof, ElGamalCiphertext, PoeProof, SerializablePoint,
 };
@@ -55,7 +56,31 @@ fn legacy_ae_hint_layout_remains_readable() {
         let decoded = parse_ae_balance(&data, 0).unwrap();
         assert_eq!(decoded.ciphertext, ciphertext);
         assert_eq!(decoded.nonce, nonce);
+        let [guess, alternate] = decoded.candidates();
+        assert_eq!(guess.layout, AEBalanceLayout::Legacy);
+        assert_eq!(guess.ciphertext, ciphertext);
+        assert_eq!(guess.nonce, nonce);
+        assert_eq!(alternate.layout, AEBalanceLayout::Current);
     }
+}
+
+#[test]
+fn colliding_current_nonce_keeps_both_layout_candidates() {
+    let ciphertext: [u8; 64] = std::array::from_fn(|i| i as u8);
+    let mut nonce: [u8; 24] = std::array::from_fn(|i| 0x80 + i as u8);
+    nonce[16..].fill(0);
+    let encoded = serialize_ae_balance(&ciphertext, &nonce).unwrap();
+    let felts: Vec<_> = encoded
+        .into_iter()
+        .map(|felt| StarknetRsFelt::from_bytes_be(&felt.to_bytes_be()))
+        .collect();
+    let decoded = parse_ae_balance(&felts, 0).unwrap();
+    let [guess, alternate] = decoded.candidates();
+    assert_eq!(guess.layout, AEBalanceLayout::Legacy);
+    assert_ne!(guess.ciphertext, ciphertext);
+    assert_eq!(alternate.layout, AEBalanceLayout::Current);
+    assert_eq!(alternate.ciphertext, ciphertext);
+    assert_eq!(alternate.nonce, nonce);
 }
 
 #[test]
@@ -65,7 +90,11 @@ fn high_sender_hint_nonce_limb_does_not_reject_event() {
     // event batch even though the old Krusty wire format used a u128 limb.
     data[5] = StarknetRsFelt::from_hex("0x10000000000000000").unwrap();
     data[4] = StarknetRsFelt::from(1u8);
-    assert!(parse_ae_balance(&data, 0).is_ok());
+    let decoded = parse_ae_balance(&data, 0).unwrap();
+    let [guess, alternate] = decoded.candidates();
+    assert_eq!(guess.layout, AEBalanceLayout::Legacy);
+    assert_eq!(alternate.layout, AEBalanceLayout::Current);
+    assert_eq!(alternate.nonce[16..], [0, 0, 0, 0, 0, 0, 0, 1]);
 }
 
 #[test]

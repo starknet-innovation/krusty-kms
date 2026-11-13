@@ -1,5 +1,9 @@
 # Restore the audit-hint nonce from Tongo events
 
+Superseded for new Tongo hints by
+[`2026-11-13-tongo-audit-hint-compatibility.md`](2026-11-13-tongo-audit-hint-compatibility.md).
+The earlier encoder described here remains relevant to historical Krusty hints.
+
 Date: 2026-11-05. Origin: security audit of `cb4f4ec` (Krusty 0.15.0).
 
 ## Problem

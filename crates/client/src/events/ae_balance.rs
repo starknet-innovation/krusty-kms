@@ -1,6 +1,7 @@
 //! Decode the exact Cairo integer shape of Tongo AE hints from event felts.
 
 use super::{AEBalance, KmsError, Result, StarknetRsFelt};
+use crate::types::AEBalanceLayout;
 
 fn read_u128_limb(felt: &StarknetRsFelt) -> Result<[u8; 16]> {
     let bytes = felt.to_bytes_be();
@@ -34,14 +35,18 @@ pub(super) fn parse_ae_balance(felts: &[StarknetRsFelt], offset: usize) -> Resul
     // random nonce can collide with the old shape with probability 2^-64.
     let legacy =
         limbs[4][8..].iter().all(|byte| *byte == 0) || limbs[5][..8].iter().any(|byte| *byte != 0);
-    if legacy {
-        Ok(parse_legacy_ae_balance(&limbs))
+    Ok(if legacy {
+        let (ciphertext, nonce) = parse_legacy_ae_balance(&limbs);
+        let mut tail = [0u8; 8];
+        tail.copy_from_slice(&limbs[4][8..]);
+        AEBalance::from_decoded(ciphertext, nonce, AEBalanceLayout::Legacy, tail)
     } else {
-        Ok(parse_current_ae_balance(&limbs))
-    }
+        let (ciphertext, nonce) = parse_current_ae_balance(&limbs);
+        AEBalance::from_decoded(ciphertext, nonce, AEBalanceLayout::Current, [0u8; 8])
+    })
 }
 
-fn parse_legacy_ae_balance(limbs: &[[u8; 16]; 6]) -> AEBalance {
+fn parse_legacy_ae_balance(limbs: &[[u8; 16]; 6]) -> ([u8; 64], [u8; 24]) {
     let mut ciphertext = [0u8; 64];
     for (chunk, limb) in ciphertext
         .as_chunks_mut::<16>()
@@ -54,10 +59,10 @@ fn parse_legacy_ae_balance(limbs: &[[u8; 16]; 6]) -> AEBalance {
     let mut nonce = [0u8; 24];
     nonce[..16].copy_from_slice(&limbs[5]);
     nonce[16..].copy_from_slice(&limbs[4][..8]);
-    AEBalance { ciphertext, nonce }
+    (ciphertext, nonce)
 }
 
-fn parse_current_ae_balance(limbs: &[[u8; 16]; 6]) -> AEBalance {
+fn parse_current_ae_balance(limbs: &[[u8; 16]; 6]) -> ([u8; 64], [u8; 24]) {
     let mut ciphertext = [0u8; 64];
     for (chunk, limb) in ciphertext
         .as_chunks_mut::<16>()
@@ -70,5 +75,5 @@ fn parse_current_ae_balance(limbs: &[[u8; 16]; 6]) -> AEBalance {
     let mut nonce = [0u8; 24];
     nonce[..8].copy_from_slice(&limbs[5][8..]);
     nonce[8..].copy_from_slice(&limbs[4]);
-    AEBalance { ciphertext, nonce }
+    (ciphertext, nonce)
 }

@@ -35,6 +35,21 @@ authentication, rather than this layout hint, determines whether a decoded
 balance is genuine. Historical Krusty ciphertexts still require the legacy
 decryptor; they were not compatible with the pinned Tongo auditor.
 
+The nonce shape can be deliberately chosen by a sender. In particular, a
+current hint whose final eight nonce bytes are zero is guessed as legacy.
+`AEBalance::candidates()` retains both byte interpretations and labels each
+layout, so an auditor can try the context-aware decryptor for `Current` and
+the legacy decryptor for `Legacy` even when the heuristic is wrong. The
+existing `ciphertext` and `nonce` fields remain the heuristic candidate for
+older callers. This adds fields to the public `AEBalance` struct, so downstream
+code constructing or exhaustively matching it must adapt.
+
+The shared public serializer and C ABI calldata produce different felts for
+identical inputs. Earlier Krusty documentation explicitly promised to keep
+that encoder unchanged, so this is a **breaking behavioral change** even
+though it corrects Tongo compatibility. It must wait for a major release or
+be split into new named APIs that leave existing entry points unchanged.
+
 An audit hint is sender-controlled data. A decrypted value is not evidence of
 the declared ElGamal balance until the caller checks it against the proof or
 encrypted balance. The ECDH point and HKDF object are upstream types without
