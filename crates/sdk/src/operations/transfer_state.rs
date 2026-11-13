@@ -2,6 +2,7 @@ use super::{
     shared::{create_affine_point, verify_cipher_encrypts_balance},
     Audit, TransferParams, TransferProof,
 };
+
 use crate::{crypto::encrypt_for_auditor_with_context as hint, TongoAccount};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, ProofOfTransfer, Range, Result};
 use krusty_kms_crypto::{poseidon_hash_many, range, AuditPrefixData, AuditProver, StarkCurve};

@@ -20,7 +20,6 @@ pub use tongo_audit::{decrypt_as_auditor_with_context, encrypt_for_auditor_with_
 
 /// Size of the XChaCha20-Poly1305 nonce in bytes.
 pub const NONCE_SIZE: usize = 24;
-
 /// Size of the Poly1305 authentication tag in bytes.
 pub const TAG_SIZE: usize = 16;
 
