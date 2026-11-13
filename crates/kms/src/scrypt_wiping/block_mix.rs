@@ -56,3 +56,15 @@ fn xor(x: &[u8], y: &[u8], output: &mut [u8]) {
         *out = x_i ^ y_i;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Salsa20_8;
+    use zeroize::ZeroizeOnDrop;
+
+    #[test]
+    fn salsa_state_wipes_on_drop() {
+        fn assert_zeroize_on_drop<T: ZeroizeOnDrop>() {}
+        assert_zeroize_on_drop::<Salsa20_8>();
+    }
+}

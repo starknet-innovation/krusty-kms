@@ -18,6 +18,13 @@ if ! grep -n 'SecretFelt(\*\*\*)' "$root/crates/common/src/secret_felt.rs" >/dev
   failed=1
 fi
 
+# 3) Native KDF entry points must use the scratch-wiping implementation.
+if grep -R --include='*.rs' -nE 'scrypt::scrypt[[:space:]]*\(' \
+  "$root/crates/kms/src" >/dev/null; then
+  echo "::error::native KDF path bypasses scratch-wiping scrypt"
+  failed=1
+fi
+
 # Advisory only: discourage println of exposed secrets outside tests.
 while IFS= read -r match; do
   echo "::warning::$match"

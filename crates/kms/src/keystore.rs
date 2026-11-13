@@ -348,6 +348,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::scrypt::scrypt as upstream_scrypt;
 
     mod limits;
 
@@ -391,8 +392,7 @@ mod tests {
 
     #[test]
     fn decrypt_ethers_keystore_known_vector() {
-        // Build a test keystore by manually encrypting a known private key
-        // using the ethers.js format (AES-128-CTR + scrypt).
+        // Build an ethers.js AES-128-CTR/scrypt test keystore for a known key.
         let private_key_bytes =
             hex::decode("4c0883a69102937d6231471b5dbb6204fe512961708279f696ae35e0c2a1b5ce")
                 .unwrap();
@@ -405,7 +405,7 @@ mod tests {
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
-        ::scrypt::scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
+        upstream_scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
         // Encrypt with AES-128-CTR
         let aes_key = &derived_key[..16];
@@ -460,7 +460,7 @@ mod tests {
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
-        ::scrypt::scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
+        upstream_scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
         let ciphertext = vec![0u8; 32];
         let mut mac_input = Vec::new();

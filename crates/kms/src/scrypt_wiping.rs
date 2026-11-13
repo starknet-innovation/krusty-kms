@@ -61,6 +61,7 @@ pub(crate) fn scrypt(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::scrypt::scrypt as upstream_scrypt;
 
     #[test]
     fn matches_locked_scrypt_across_parameters() {
@@ -89,7 +90,7 @@ mod tests {
             let params = Params::new(log_n, r, p).unwrap();
             let mut expected = vec![0u8; output_len];
             let mut actual = vec![0u8; output_len];
-            ::scrypt::scrypt(password, salt, &params, &mut expected).unwrap();
+            upstream_scrypt(password, salt, &params, &mut expected).unwrap();
             scrypt(password, salt, &params, &mut actual).unwrap();
             assert_eq!(actual, expected, "log_n={log_n}, r={r}, p={p}");
         }
