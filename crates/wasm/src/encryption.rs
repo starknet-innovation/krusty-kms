@@ -336,15 +336,10 @@ mod tests {
         assert!(parse_scrypt_n(&JsValue::from_f64(1024.5)).is_err());
         assert!(parse_scrypt_n(&JsValue::from_str("1024")).is_err());
         let private_key = "ab".repeat(32);
+        assert!(encrypt_private_key(private_key, test_password(0), wrapped.clone()).is_err());
         assert!(
-            encrypt_private_key(private_key, "synthetic-password".into(), wrapped.clone()).is_err()
+            encrypt_keystore("abandon about".into(), test_password(0), wrapped.clone()).is_err()
         );
-        assert!(encrypt_keystore(
-            "abandon about".into(),
-            "synthetic-password".into(),
-            wrapped.clone()
-        )
-        .is_err());
         let nonce = "11".repeat(24);
         let salt = "22".repeat(16);
         let ciphertext = "33".repeat(48);
@@ -352,7 +347,7 @@ mod tests {
             &nonce,
             &salt,
             &ciphertext,
-            "synthetic-password".into(),
+            test_password(0),
             wrapped.clone()
         )
         .is_err());
@@ -360,7 +355,7 @@ mod tests {
             &nonce,
             &salt,
             &ciphertext,
-            "synthetic-password".into(),
+            test_password(0),
             wrapped
         )
         .is_err());

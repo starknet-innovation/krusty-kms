@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn direct_encryption_rejects_oversized_hex_before_kdf() {
         let oversized = "a".repeat(MAX_DIRECT_KEY_BYTES * 2 + 1);
-        let err = encrypt_private_key(&oversized, "synthetic-password", TEST_SCRYPT_N)
+        let err = encrypt_private_key(&oversized, &test_password(0), TEST_SCRYPT_N)
             .expect_err("oversized key must be rejected before KDF");
         assert!(format!("{err}").contains("private key exceeds"));
     }

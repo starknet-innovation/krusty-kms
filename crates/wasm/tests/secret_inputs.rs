@@ -301,12 +301,16 @@ fn mnemonics_and_passwords_are_handled_as_before() {
         .unwrap();
     assert_eq!(message(error), "Invalid mnemonic: BadWordCount(1)");
 
-    let password = "pässwörd ✓";
+    let password = format!(
+        "{}{}",
+        char::from_u32(0x00e4).unwrap(),
+        hex::encode(krusty_kms_crypto::random_bytes::<16>())
+    );
     let sealed =
-        encryption::encrypt_keystore(MNEMONIC.into(), password.into(), SCRYPT_N.into()).unwrap();
-    let opened = encryption::decrypt_keystore(&sealed, password.into()).unwrap();
+        encryption::encrypt_keystore(MNEMONIC.into(), password.clone(), SCRYPT_N.into()).unwrap();
+    let opened = encryption::decrypt_keystore(&sealed, password.clone()).unwrap();
     assert_eq!(opened, MNEMONIC);
-    let error = encryption::decrypt_keystore(&sealed, "passwörd ✓".into()).unwrap_err();
+    let error = encryption::decrypt_keystore(&sealed, format!("{password}x")).unwrap_err();
     assert_eq!(
         message(error),
         "Crypto error: Decryption failed: aead::Error"
@@ -314,12 +318,12 @@ fn mnemonics_and_passwords_are_handled_as_before() {
 
     let key = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
     let sealed =
-        encryption::encrypt_private_key(key.into(), password.into(), SCRYPT_N.into()).unwrap();
+        encryption::encrypt_private_key(key.into(), password.clone(), SCRYPT_N.into()).unwrap();
     let opened = encryption::decrypt_private_key(
         &sealed.nonce,
         &sealed.salt,
         &sealed.encrypted_key,
-        password.into(),
+        password,
         SCRYPT_N.into(),
     );
     assert_eq!(opened.unwrap(), key);

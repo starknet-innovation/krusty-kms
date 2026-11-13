@@ -291,7 +291,7 @@ fn direct_encryption_rejects_scrypt_cost_above_keystore_ceiling() {
 #[test]
 fn direct_encryption_rejects_oversized_salt_before_kdf() {
     let salt = vec![0xabu8; 129];
-    let err = derive_scrypt_key(b"synthetic-password", &salt, TEST_SCRYPT_N)
+    let err = derive_scrypt_key(test_password(0).as_bytes(), &salt, TEST_SCRYPT_N)
         .expect_err("direct KDF must reject an oversized salt");
     assert!(format!("{err}").contains("scrypt salt exceeds"));
 }
@@ -299,11 +299,11 @@ fn direct_encryption_rejects_oversized_salt_before_kdf() {
 #[test]
 fn direct_decryption_rejects_oversized_ciphertext_before_kdf() {
     let encrypted = crate::encryption::EncryptedKey {
-        nonce: vec![0; 24],
+        nonce: krusty_kms_crypto::random_bytes::<24>().to_vec(),
         salt: vec![0; 16],
         encrypted_key: vec![0; 1024 * 1024 + 1],
     };
-    let err = crate::encryption::decrypt_private_key(&encrypted, "synthetic-password", 1 << 20)
+    let err = crate::encryption::decrypt_private_key(&encrypted, &test_password(0), 1 << 20)
         .expect_err("oversized ciphertext must be rejected before legacy KDF");
     assert!(format!("{err}").contains("encrypted key length"));
 }
@@ -311,17 +311,17 @@ fn direct_decryption_rejects_oversized_ciphertext_before_kdf() {
 #[test]
 fn direct_decryption_rejects_short_ciphertext_and_salt_before_kdf() {
     let mut encrypted = crate::encryption::EncryptedKey {
-        nonce: vec![0; 24],
+        nonce: krusty_kms_crypto::random_bytes::<24>().to_vec(),
         salt: vec![0; 16],
         encrypted_key: vec![0; 15],
     };
-    let err = crate::encryption::decrypt_private_key(&encrypted, "synthetic-password", 1 << 20)
+    let err = crate::encryption::decrypt_private_key(&encrypted, &test_password(0), 1 << 20)
         .expect_err("short AEAD tag must be rejected before KDF");
     assert!(format!("{err}").contains("encrypted key length"));
 
     encrypted.encrypted_key.push(0);
     encrypted.salt.pop();
-    let err = crate::encryption::decrypt_private_key(&encrypted, "synthetic-password", 1 << 20)
+    let err = crate::encryption::decrypt_private_key(&encrypted, &test_password(0), 1 << 20)
         .expect_err("short direct-key salt must be rejected before KDF");
     assert!(format!("{err}").contains("direct-key salt length"));
 }
@@ -329,12 +329,12 @@ fn direct_decryption_rejects_short_ciphertext_and_salt_before_kdf() {
 #[test]
 fn bounded_direct_decryption_rejects_legacy_high_n_before_kdf() {
     let encrypted = crate::encryption::EncryptedKey {
-        nonce: vec![0; 24],
+        nonce: krusty_kms_crypto::random_bytes::<24>().to_vec(),
         salt: vec![0; 16],
         encrypted_key: vec![0; 48],
     };
     let err =
-        crate::encryption::decrypt_private_key_bounded(&encrypted, "synthetic-password", 1 << 19)
+        crate::encryption::decrypt_private_key_bounded(&encrypted, &test_password(0), 1 << 19)
             .expect_err("untrusted metadata must not trigger a 512 MiB KDF");
     assert!(format!("{err}").contains("memory ceiling"));
 }
@@ -356,7 +356,7 @@ fn both_imports_reject_oversized_json_before_parsing() {
         decrypt_keystore as fn(&str, &str) -> Result<String>,
         decrypt_ethers_keystore,
     ] {
-        let err = import(&oversized, "synthetic-password").expect_err("must reject");
+        let err = import(&oversized, &test_password(0)).expect_err("must reject");
         assert!(format!("{err}").contains("keystore JSON exceeds"));
     }
 }
@@ -364,7 +364,7 @@ fn both_imports_reject_oversized_json_before_parsing() {
 #[test]
 fn native_keystore_never_writes_an_unimportable_large_mnemonic() {
     let oversized = "a".repeat(super::super::input_limits::MAX_NATIVE_MNEMONIC_BYTES + 1);
-    let err = encrypt_keystore(&oversized, "synthetic-password", TEST_SCRYPT_N)
+    let err = encrypt_keystore(&oversized, &test_password(0), TEST_SCRYPT_N)
         .expect_err("large plaintext must be rejected before KDF");
     assert!(format!("{err}").contains("mnemonic exceeds"));
 }
@@ -390,7 +390,7 @@ fn salt_length_is_rejected_before_hex_decoding() {
         ),
         (v3.as_str(), decrypt_ethers_keystore),
     ] {
-        let err = import(input, "synthetic-password").expect_err("must reject");
+        let err = import(input, &test_password(0)).expect_err("must reject");
         assert!(format!("{err}").contains("kdfparams.salt exceeds"));
     }
 }
