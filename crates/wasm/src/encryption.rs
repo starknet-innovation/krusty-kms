@@ -48,12 +48,20 @@ fn parse_scrypt_n(value: &JsValue) -> Result<u32, JsValue> {
         )
         .into());
     }
-    crate::numeric_input::u32(value.clone(), "scryptN").map_err(|_| {
+    let n = crate::numeric_input::u32(value.clone(), "scryptN").map_err(|_| {
         crate::error::WasmError::SerializationError(
             "scryptN must be an exact u32 integer".to_string(),
         )
-        .into()
-    })
+    })?;
+    // Match the KMS scrypt domain here so an invalid parameter is reported
+    // as malformed input, not a crypto failure indistinguishable from a bad password.
+    if !(1 << 10..=1 << 20).contains(&n) || !n.is_power_of_two() {
+        return Err(crate::error::WasmError::SerializationError(
+            "scryptN must be a power of 2 in [1024, 1048576]".to_string(),
+        )
+        .into());
+    }
+    Ok(n)
 }
 
 // ---------------------------------------------------------------------------
@@ -154,12 +162,15 @@ fn decrypt_private_key_inner(
         .into());
     }
     let encrypted = EncryptedKey {
-        nonce: hex::decode(nonce)
-            .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {e}")))?,
-        salt: hex::decode(salt)
-            .map_err(|e| JsValue::from_str(&format!("Invalid salt hex: {e}")))?,
-        encrypted_key: hex::decode(encrypted_key)
-            .map_err(|e| JsValue::from_str(&format!("Invalid encrypted key hex: {e}")))?,
+        nonce: hex::decode(nonce).map_err(|e| {
+            crate::error::WasmError::SerializationError(format!("Invalid nonce hex: {e}"))
+        })?,
+        salt: hex::decode(salt).map_err(|e| {
+            crate::error::WasmError::SerializationError(format!("Invalid salt hex: {e}"))
+        })?,
+        encrypted_key: hex::decode(encrypted_key).map_err(|e| {
+            crate::error::WasmError::SerializationError(format!("Invalid encrypted key hex: {e}"))
+        })?,
     };
 
     let result = if high_cost {

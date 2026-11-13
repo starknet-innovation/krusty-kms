@@ -116,6 +116,8 @@ fn malformed_scrypt_n_has_structured_error() {
         JsValue::from_f64(f64::INFINITY),
         JsValue::from_f64(f64::NEG_INFINITY),
         JsValue::from_f64(-1.0),
+        JsValue::from_f64(3000.0),
+        JsValue::from_f64((1 << 21) as f64),
         JsValue::from(js_sys::BigInt::new(&JsValue::from_str("1024")).unwrap()),
         JsValue::NULL,
         JsValue::UNDEFINED,
@@ -146,7 +148,7 @@ fn malformed_scrypt_n_has_structured_error() {
 }
 
 #[wasm_bindgen_test]
-fn direct_decryption_length_caps_have_structured_errors() {
+fn direct_decryption_input_errors_are_structured() {
     let nonce = "11".repeat(24);
     let salt = "22".repeat(16);
     let ciphertext = "33".repeat(48);
@@ -154,6 +156,24 @@ fn direct_decryption_length_caps_have_structured_errors() {
         ("11".repeat(25), salt.clone(), ciphertext.clone(), "nonce"),
         (nonce.clone(), "22".repeat(129), ciphertext.clone(), "salt"),
         (nonce, salt, "33".repeat(1024 * 1024 + 1), "encrypted key"),
+        (
+            "zz".repeat(24),
+            "22".repeat(16),
+            "33".repeat(48),
+            "nonce hex",
+        ),
+        (
+            "11".repeat(24),
+            "zz".repeat(16),
+            "33".repeat(48),
+            "salt hex",
+        ),
+        (
+            "11".repeat(24),
+            "22".repeat(16),
+            "zz".repeat(48),
+            "encrypted key hex",
+        ),
     ] {
         let error = decrypt_private_key(
             &nonce,
