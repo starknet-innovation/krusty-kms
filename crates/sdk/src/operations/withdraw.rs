@@ -2,7 +2,7 @@ use super::{
     shared::{create_affine_point, verify_cipher_encrypts_balance},
     Audit, WithdrawParams, WithdrawProof,
 };
-use crate::{crypto::encrypt_for_auditor, TongoAccount};
+use crate::{crypto::encrypt_for_auditor_with_context, TongoAccount};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, Result};
 use krusty_kms_crypto::{
     hash, poseidon_hash_many, range, scalar, AuditPrefixData, AuditProver, StarkCurve,
@@ -188,13 +188,13 @@ pub fn withdraw(account: &TongoAccount, params: WithdrawParams) -> Result<Withdr
             false,
             Some(&audit_prefix),
         )?;
-
-        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor_with_context(
             left,
             account.owner_private_key().expose_secret(),
             &auditor_key,
+            &params.nonce,
+            &params.tongo_address,
         )?;
-
         Some(Audit {
             audited_balance,
             hint_ciphertext: audit_hint_ct,

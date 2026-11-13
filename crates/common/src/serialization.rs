@@ -103,8 +103,10 @@ pub fn serialize_ae_balance(ciphertext_bytes: &[u8], nonce_bytes: &[u8]) -> Resu
 
     let ct_felts = bytes_to_u512(ciphertext_bytes);
 
+    // Cairo u256 is the integer represented by the 24 nonce bytes, so pad
+    // on the most-significant side before splitting it into low/high limbs.
     let mut nonce_padded = [0u8; 32];
-    nonce_padded[..24].copy_from_slice(nonce_bytes);
+    nonce_padded[8..].copy_from_slice(nonce_bytes);
     let nonce_felts = bytes_to_u256(&nonce_padded);
 
     Ok(vec![
@@ -123,10 +125,11 @@ fn bytes_to_u512(bytes: &[u8]) -> (Felt, Felt, Felt, Felt) {
     let mut limb2 = [0u8; 16];
     let mut limb3 = [0u8; 16];
 
-    limb0.copy_from_slice(&bytes[0..16]);
-    limb1.copy_from_slice(&bytes[16..32]);
-    limb2.copy_from_slice(&bytes[32..48]);
-    limb3.copy_from_slice(&bytes[48..64]);
+    // Cairo u512 limbs are least-significant first.
+    limb0.copy_from_slice(&bytes[48..64]);
+    limb1.copy_from_slice(&bytes[32..48]);
+    limb2.copy_from_slice(&bytes[16..32]);
+    limb3.copy_from_slice(&bytes[0..16]);
 
     (
         Felt::from(u128::from_be_bytes(limb0)),
@@ -271,6 +274,9 @@ pub fn serialize_proof_of_transfer(proof: &ProofOfTransfer) -> Result<Vec<Felt>>
 }
 
 #[cfg(test)]
+mod ae_balance_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::SerializablePoint;
@@ -290,12 +296,6 @@ mod tests {
             serialize_poe_proof(&proof).unwrap(),
             vec![Felt::from(1u64), Felt::from(2u64), Felt::from(3u64)]
         );
-    }
-
-    #[test]
-    fn serialize_ae_balance_validates_sizes() {
-        assert!(serialize_ae_balance(&[0u8; 63], &[0u8; 24]).is_err());
-        assert!(serialize_ae_balance(&[0u8; 64], &[0u8; 23]).is_err());
     }
 
     #[test]

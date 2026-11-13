@@ -1898,6 +1898,8 @@ version = "2.0.0"
 dependencies = [
  "chacha20poly1305",
  "criterion",
+ "hex",
+ "hkdf",
  "krusty-kms",
  "krusty-kms-common",
  "krusty-kms-crypto",
@@ -1906,6 +1908,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "starknet-types-core",
+ "zeroize",
 ]
 
 [[package]]

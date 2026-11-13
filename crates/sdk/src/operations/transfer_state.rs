@@ -2,7 +2,7 @@ use super::{
     shared::{create_affine_point, verify_cipher_encrypts_balance},
     Audit, TransferParams, TransferProof,
 };
-use crate::{crypto::encrypt_for_auditor, TongoAccount};
+use crate::{crypto::encrypt_for_auditor_with_context as hint, TongoAccount};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, ProofOfTransfer, Range, Result};
 use krusty_kms_crypto::{poseidon_hash_many, range, AuditPrefixData, AuditProver, StarkCurve};
 use starknet_types_core::curve::ProjectivePoint;
@@ -304,6 +304,7 @@ impl<'a> TransferBuildState<'a> {
             sender_address: self.params.sender_address,
             user_pub_key: self.owner.clone(),
         };
+        let (nonce, address) = (&self.params.nonce, &self.params.tongo_address);
         let (balance_proof, audited_balance) = AuditProver::prove_with_validation(
             self.secret,
             self.leftover,
@@ -313,7 +314,7 @@ impl<'a> TransferBuildState<'a> {
             Some(&prefix),
         )?;
         let (balance_hint, balance_nonce) =
-            encrypt_for_auditor(self.leftover, self.secret, auditor)?;
+            hint(self.leftover, self.secret, auditor, nonce, address)?;
         let transfer_self = ElGamalCiphertext {
             l: prepared.transfer_balance_self_l.clone(),
             r: prepared.transfer_balance_self_r.clone(),
@@ -326,8 +327,7 @@ impl<'a> TransferBuildState<'a> {
             Some(&prefix),
         )?;
         let (transfer_hint, transfer_nonce) =
-            encrypt_for_auditor(self.amount, self.secret, auditor)?;
-
+            hint(self.amount, self.secret, auditor, nonce, address)?;
         Ok((
             Some(Audit {
                 audited_balance,

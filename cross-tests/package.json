@@ -8,6 +8,7 @@
   },
   "scripts": {
     "verify": "tsx src/verify-rust-proofs.ts",
+    "verify:audit-hints": "tsx src/verify-audit-hints.ts",
     "verify:wasm": "tsx src/verify-wasm-bindings.ts",
     "verify:snip12": "tsx src/verify-snip12-vectors.ts",
     "verify:tx-hashes": "tsx src/generate-tx-hash-vectors.ts",

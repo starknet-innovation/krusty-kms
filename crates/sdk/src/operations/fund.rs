@@ -1,5 +1,5 @@
 use super::{Audit, FundParams, FundProof};
-use crate::{crypto::encrypt_for_auditor, TongoAccount};
+use crate::{crypto::encrypt_for_auditor_with_context, TongoAccount};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, Result};
 use krusty_kms_crypto::{
     poseidon_hash_many, AuditPrefixData, AuditProver, ProofOfExponentiation, StarkCurve,
@@ -103,12 +103,12 @@ pub fn fund(account: &TongoAccount, params: FundParams) -> Result<FundProof> {
             Some(&audit_prefix),
         )?;
 
-        // Generate audit hint (XChaCha20-Poly1305 encryption of the plaintext balance)
-        // The auditor can decrypt this using ECDH with user's public key
-        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor_with_context(
             new_balance,
             account.owner_private_key().expose_secret(),
             auditor_key,
+            &params.nonce,
+            &params.tongo_address,
         )?;
 
         Some(Audit {

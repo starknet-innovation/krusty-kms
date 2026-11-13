@@ -12,7 +12,9 @@ pub mod operations;
 pub mod serialization;
 
 pub use account::TongoAccount;
+#[allow(deprecated)]
 pub use crypto::{decrypt_as_auditor, encrypt_for_auditor};
+pub use crypto::{decrypt_as_auditor_with_context, encrypt_for_auditor_with_context};
 pub use operations::{
     fund, ragequit, rollover, transfer, withdraw, Audit, FundParams, FundProof, RagequitParams,
     RagequitProof, RolloverParams, RolloverProof, TransferParams, TransferProof, WithdrawParams,
