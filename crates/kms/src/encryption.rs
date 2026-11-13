@@ -9,7 +9,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use krusty_kms_common::{KmsError, Result};
-use scrypt::{scrypt, Params as ScryptParams};
+use scrypt::Params as ScryptParams;
 use zeroize::Zeroizing;
 
 /// XChaCha20-Poly1305 extended nonce length, in bytes.
@@ -88,8 +88,7 @@ pub(crate) fn derive_scrypt_key(
     let params = ScryptParams::new(log_n, 8, 1)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut key = Zeroizing::new([u8::default(); 32]);
-    scrypt(password, kdf_salt, &params, &mut *key)
-        .map_err(|e| KmsError::CryptoError(format!("Scrypt KDF failed: {e}")))?;
+    crate::scrypt_wiping::scrypt(password, kdf_salt, &params, &mut *key)?;
     Ok(key)
 }
 
@@ -252,7 +251,7 @@ mod tests {
         for len in [0usize, 4, 12, 23, 25] {
             let encrypted = EncryptedKey {
                 nonce: vec![0u8; len],
-                salt: vec![0u8; 16],
+                salt: krusty_kms_crypto::random_bytes::<16>().to_vec(), // nonce rejected first
                 encrypted_key: vec![0u8; 48],
             };
             let err = decrypt_private_key(&encrypted, &test_password(0), TEST_SCRYPT_N)

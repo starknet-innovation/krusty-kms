@@ -1,0 +1,3 @@
+disallowed-methods = [
+    { path = "scrypt::scrypt", reason = "KMS must use its scratch-wiping scrypt implementation" },
+]
