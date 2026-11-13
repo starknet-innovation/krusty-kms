@@ -42,13 +42,10 @@ pub struct WasmEncryptedPayload {
 /// Preserve the caller's exact JavaScript number before wasm-bindgen could
 /// coerce it modulo 2^32 (for example, 2^32 + 1024 into 1024).
 fn parse_scrypt_n(value: &JsValue) -> Result<u32, JsValue> {
-    let Some(number) = value.as_f64() else {
+    if value.as_f64().is_none() {
         return Err(JsValue::from_str("scryptN must be a number"));
-    };
-    if !number.is_finite() || number.fract() != 0.0 || !(0.0..=u32::MAX as f64).contains(&number) {
-        return Err(JsValue::from_str("scryptN must be an exact u32 integer"));
     }
-    Ok(number as u32)
+    crate::numeric_input::u32(value.clone(), "scryptN")
 }
 
 // ---------------------------------------------------------------------------
