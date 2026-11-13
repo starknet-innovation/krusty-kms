@@ -344,9 +344,9 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 
     Ok(hex::encode(&*plaintext))
 }
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)] // Differential vectors use upstream scrypt.
     use super::*;
     use ::scrypt::scrypt as upstream_scrypt;
 

@@ -54,8 +54,15 @@ def main() -> int:
     self_test()
     root = Path(sys.argv[1]).resolve()
     base = root / "crates/kms/src"
+    if not base.is_dir():
+        print(f"::error::KMS source directory is missing: {base}")
+        return 1
     failures = []
-    for path in sorted(base.rglob("*.rs")):
+    paths = sorted(base.rglob("*.rs"))
+    if not paths:
+        print(f"::error::KMS source directory has no Rust files: {base}")
+        return 1
+    for path in paths:
         relative = path.relative_to(root).as_posix()
         for number in forbidden(path.read_text(), relative):
             failures.append(f"{relative}:{number}")

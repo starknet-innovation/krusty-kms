@@ -17,6 +17,15 @@ mod block_mix;
 #[path = "scrypt_wiping/romix.rs"]
 mod romix;
 
+fn zeroed_scratch(len: usize) -> Result<Zeroizing<Vec<u8>>> {
+    let mut buffer = Vec::new();
+    buffer.try_reserve_exact(len).map_err(|_| {
+        KmsError::CryptoError("Unable to allocate scrypt scratch buffer".to_string())
+    })?;
+    buffer.resize(len, 0);
+    Ok(Zeroizing::new(buffer))
+}
+
 /// Derive bytes exactly as `scrypt::scrypt`, retaining ownership of all large
 /// scratch allocations until their `Zeroizing` drop. Callers validate their
 /// application-specific memory and work budgets before invoking this function.
@@ -45,11 +54,11 @@ pub(crate) fn scrypt(
         .checked_mul(r128)
         .ok_or_else(|| KmsError::CryptoError("Invalid scrypt work size".to_string()))?;
 
-    let mut b = Zeroizing::new(vec![0u8; pr128]);
+    let mut b = zeroed_scratch(pr128)?;
     pbkdf2_hmac::<Sha256>(password, salt, 1, &mut b);
 
-    let mut v = Zeroizing::new(vec![0u8; nr128]);
-    let mut t = Zeroizing::new(vec![0u8; r128]);
+    let mut v = zeroed_scratch(nr128)?;
+    let mut t = zeroed_scratch(r128)?;
     for chunk in b.chunks_mut(r128) {
         romix::scrypt_ro_mix(chunk, &mut v, &mut t, n);
     }
@@ -60,8 +69,15 @@ pub(crate) fn scrypt(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)] // Only differential tests invoke upstream scrypt.
     use super::*;
     use ::scrypt::scrypt as upstream_scrypt;
+
+    #[test]
+    fn oversized_scratch_allocation_returns_error() {
+        let error = zeroed_scratch(usize::MAX).expect_err("capacity overflow must not allocate");
+        assert!(matches!(error, KmsError::CryptoError(_)));
+    }
 
     #[test]
     fn matches_locked_scrypt_across_parameters() {
