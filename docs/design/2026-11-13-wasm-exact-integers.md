@@ -21,3 +21,9 @@ wrapped indices, nonce overflow, proof bit size, and direct setters. Scrypt
 work-factor validation is handled in the separate KDF remediation. The
 WASM export snapshot and generated TypeScript declarations are checked before
 handoff.
+
+The change spans multiple export modules because each public numeric argument
+and generated setter needs to receive the original JavaScript value before
+narrowing. Existing tests and conversion helpers were moved into modules to
+keep source files within the repository's file-size guardrail; those moves
+account for much of the diff without changing their behavior.
