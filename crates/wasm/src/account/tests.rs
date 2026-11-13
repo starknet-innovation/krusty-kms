@@ -32,7 +32,7 @@ fn js_error_message(error: JsValue) -> String {
 
 #[wasm_bindgen_test]
 fn test_generate_mnemonic() {
-    let mnemonic = generate_mnemonic(Some(12)).unwrap();
+    let mnemonic = generate_mnemonic(12.into()).unwrap();
     assert!(validate_mnemonic(mnemonic.clone()));
     let words: Vec<&str> = mnemonic.split_whitespace().collect();
     assert_eq!(words.len(), 12);
@@ -41,7 +41,8 @@ fn test_generate_mnemonic() {
 #[wasm_bindgen_test]
 fn test_account_from_mnemonic() {
     let contract = "0x1234";
-    let account = WasmAccount::from_mnemonic(TEST_MNEMONIC.into(), 0, 0, contract, None);
+    let account =
+        WasmAccount::from_mnemonic(TEST_MNEMONIC.into(), 0.into(), 0.into(), contract, None);
     assert!(account.is_ok());
 
     let acc = account.unwrap();
@@ -58,7 +59,7 @@ fn test_account_from_private_key() {
 
 #[wasm_bindgen_test]
 fn test_derive_keypair() {
-    let kp = derive_keypair(TEST_MNEMONIC.into(), 0, 0, None);
+    let kp = derive_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None);
     assert!(kp.is_ok());
 
     let keypair = kp.unwrap();
@@ -71,7 +72,7 @@ fn test_state_management() {
     let contract = "0x1234";
     let mut account = WasmAccount::from_private_key("0x2a".into(), contract).unwrap();
 
-    let new_state = WasmAccountState::new("1000".to_string(), "500".to_string(), 5).unwrap();
+    let new_state = WasmAccountState::new("1000".to_string(), "500".to_string(), 5.into()).unwrap();
     account.update_state(new_state).unwrap();
 
     let state = account.get_state();
@@ -83,7 +84,7 @@ fn test_state_management() {
 
 #[wasm_bindgen_test]
 fn test_state_rejects_invalid_balance_strings() {
-    let err = WasmAccountState::new("abc".to_string(), "500".to_string(), 5).unwrap_err();
+    let err = WasmAccountState::new("abc".to_string(), "500".to_string(), 5.into()).unwrap_err();
     assert_eq!(
         js_error_message(err),
         "Serialization error: balance must be a valid unsigned decimal string"
@@ -109,7 +110,8 @@ fn test_total_balance_rejects_invalid_state_fields() {
 fn test_account_total_balance_rejects_overflow() {
     let contract = "0x1234";
     let mut account = WasmAccount::from_private_key("0x2a".into(), contract).unwrap();
-    let overflow_state = WasmAccountState::new(u128::MAX.to_string(), "1".to_string(), 0).unwrap();
+    let overflow_state =
+        WasmAccountState::new(u128::MAX.to_string(), "1".to_string(), 0.into()).unwrap();
     account.update_state(overflow_state).unwrap();
 
     let err = account.total_balance().unwrap_err();
@@ -175,7 +177,7 @@ fn test_decrypt_to_point_represents_zero_balance_as_identity() {
 
 #[wasm_bindgen_test]
 fn test_derive_starknet_keypair() {
-    let kp = derive_starknet_keypair(TEST_MNEMONIC.into(), 0, 0, None);
+    let kp = derive_starknet_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None);
     assert!(kp.is_ok());
 
     let keypair = kp.unwrap();
@@ -183,14 +185,14 @@ fn test_derive_starknet_keypair() {
     assert!(keypair.public_key_x.starts_with("0x"));
 
     // Starknet keypair should be different from Tongo keypair (different coin types)
-    let tongo_kp = derive_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
+    let tongo_kp = derive_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
     assert_ne!(keypair.private_key, tongo_kp.private_key);
 }
 
 #[wasm_bindgen_test]
 fn test_derive_oz_account_address() {
     // First derive a Starknet keypair
-    let kp = derive_starknet_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
+    let kp = derive_starknet_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
 
     // Use the latest manifest-backed OZ class hash.
     let oz_class_hash = "0x01d1777db36cdd06dd62cfde77b1b6ae06412af95d57a13dc40ac77b8a702381";
@@ -211,7 +213,7 @@ fn test_coin_type_constants() {
 
 #[wasm_bindgen_test]
 fn test_derive_nostr_keypair() {
-    let kp = derive_nostr_keypair(TEST_MNEMONIC.into(), 0, 0, None);
+    let kp = derive_nostr_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None);
     assert!(kp.is_ok());
 
     let keypair = kp.unwrap();
@@ -225,9 +227,10 @@ fn test_derive_nostr_keypair() {
 
 #[wasm_bindgen_test]
 fn test_nostr_keypair_different_from_starknet() {
-    let nostr_kp = derive_nostr_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
-    let starknet_kp = derive_starknet_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
-    let tongo_kp = derive_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
+    let nostr_kp = derive_nostr_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
+    let starknet_kp =
+        derive_starknet_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
+    let tongo_kp = derive_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
 
     // Nostr keypair should be different from both Starknet and Tongo keypairs
     // (different curves and coin types)
@@ -244,12 +247,12 @@ fn test_nostr_keypair_different_from_starknet() {
 #[wasm_bindgen_test]
 fn test_nostr_keypair_deterministic() {
     // Same mnemonic should produce same keypair
-    let kp1 = derive_nostr_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
-    let kp2 = derive_nostr_keypair(TEST_MNEMONIC.into(), 0, 0, None).unwrap();
+    let kp1 = derive_nostr_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
+    let kp2 = derive_nostr_keypair(TEST_MNEMONIC.into(), 0.into(), 0.into(), None).unwrap();
     assert_eq!(kp1.private_key, kp2.private_key);
     assert_eq!(kp1.public_key, kp2.public_key);
 
     // Different index should produce different keypair
-    let kp3 = derive_nostr_keypair(TEST_MNEMONIC.into(), 1, 0, None).unwrap();
+    let kp3 = derive_nostr_keypair(TEST_MNEMONIC.into(), 1.into(), 0.into(), None).unwrap();
     assert_ne!(kp1.private_key, kp3.private_key);
 }

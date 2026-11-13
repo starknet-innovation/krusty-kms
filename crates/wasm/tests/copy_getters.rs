@@ -9,10 +9,20 @@ use wasm_bindgen_test::wasm_bindgen_test;
 function check(value, expected, message) {
     if (value !== expected) throw new Error(message);
 }
+function rejects(action, message) {
+    try { action(); } catch (_) { return; }
+    throw new Error(message);
+}
 export function checkAccount(state) {
     check(state.nonce, 7n, 'nonce getter');
     state.nonce = 9n;
     check(state.nonce, 9n, 'nonce setter');
+    rejects(() => { state.nonce = 18446744073709551616n; }, 'nonce overflow accepted');
+    check(state.nonce, 9n, 'rejected nonce changed state');
+    rejects(() => { state.nonce = 9007199254740992; }, 'unsafe Number accepted');
+    state.nonce = 9007199254740992n;
+    check(state.nonce, 9007199254740992n, 'large BigInt was rejected');
+    state.nonce = 9n;
     check(state.balance, '10', 'string getter');
     check(state.balance, '10', 'repeat string getter');
     state.balance = '20';
@@ -28,6 +38,9 @@ export function checkParams(params) {
     check(params.bit_size, undefined, 'absent optional getter');
     params.bit_size = 40;
     check(params.bit_size, 40, 'optional setter and getter');
+    rejects(() => { params.bit_size = 256; }, 'wrapped proof width accepted');
+    check(params.bit_size, 40, 'rejected width changed state');
+    rejects(() => { params.bit_size = 1.5; }, 'fractional proof width accepted');
     params.bit_size = undefined;
     check(params.bit_size, undefined, 'clear optional setter');
     check(params.amount, '1', 'params string getter');
