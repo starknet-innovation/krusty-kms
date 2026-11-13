@@ -14,9 +14,12 @@ use sha2::{Digest, Sha256};
 use starknet_types_core::curve::ProjectivePoint;
 use starknet_types_core::felt::Felt;
 
+mod tongo_audit;
+pub(crate) use tongo_audit::validate_hint_context;
+pub use tongo_audit::{decrypt_as_auditor_with_context, encrypt_for_auditor_with_context};
+
 /// Size of the XChaCha20-Poly1305 nonce in bytes.
 pub const NONCE_SIZE: usize = 24;
-
 /// Size of the Poly1305 authentication tag in bytes.
 pub const TAG_SIZE: usize = 16;
 
@@ -66,6 +69,10 @@ pub fn derive_shared_secret(
 /// A tuple of (ciphertext, nonce) where:
 /// - ciphertext is 64 bytes (16 bytes plaintext + 16 bytes tag, padded to 64)
 /// - nonce is 24 bytes
+///
+/// This is Krusty's legacy format. Tongo's auditor cannot decrypt it; use
+/// [`encrypt_for_auditor_with_context`] for a Tongo operation.
+#[deprecated(note = "legacy Krusty format; use encrypt_for_auditor_with_context for Tongo")]
 pub fn encrypt_audit_hint(
     plaintext_balance: u128,
     shared_secret: &[u8; 32],
@@ -102,6 +109,9 @@ pub fn encrypt_audit_hint(
 ///
 /// # Returns
 /// The decrypted u128 balance value
+/// This only reads Krusty's legacy format. Use
+/// [`decrypt_as_auditor_with_context`] for Tongo audit hints.
+#[deprecated(note = "legacy Krusty format; use decrypt_as_auditor_with_context for Tongo")]
 pub fn decrypt_audit_hint(
     ciphertext: &[u8; 64],
     nonce: &[u8; 24],
@@ -144,6 +154,10 @@ pub fn decrypt_audit_hint(
 ///
 /// # Returns
 /// A tuple of (ciphertext, nonce)
+/// This is Krusty's legacy format. Tongo's auditor cannot decrypt it; use
+/// [`encrypt_for_auditor_with_context`] for a Tongo operation.
+#[deprecated(note = "legacy Krusty format; use encrypt_for_auditor_with_context for Tongo")]
+#[allow(deprecated)]
 pub fn encrypt_for_auditor(
     balance: u128,
     user_private_key: &Felt,
@@ -163,6 +177,10 @@ pub fn encrypt_for_auditor(
 ///
 /// # Returns
 /// The decrypted balance
+/// This only reads Krusty's legacy format. Use
+/// [`decrypt_as_auditor_with_context`] for Tongo audit hints.
+#[deprecated(note = "legacy Krusty format; use decrypt_as_auditor_with_context for Tongo")]
+#[allow(deprecated)]
 pub fn decrypt_as_auditor(
     ciphertext: &[u8; 64],
     nonce: &[u8; 24],
@@ -174,6 +192,7 @@ pub fn decrypt_as_auditor(
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

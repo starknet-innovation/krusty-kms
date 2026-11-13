@@ -16,6 +16,27 @@ All notable changes to the published Rust crates are documented here.
   can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
   and `createdAt` to its JSON result. `createdAt` is a decimal string to
   preserve the full timestamp when parsed by JavaScript.
+- `encrypt_for_auditor_with_context` and `decrypt_as_auditor_with_context`
+  produce and read the pinned Tongo 1.3.2 audit-hint format. The client exposes
+  both possible Cairo/legacy decodings through `AEBalance::candidates` because
+  a sender-chosen nonce can make the wire layouts overlap.
+
+### Changed
+
+- **Breaking:** Tongo auditor-enabled operations now produce the pinned Tongo 1.3.2 audit
+  hint format, including HKDF context, authenticated plaintext, and Cairo
+  `u512`/`u256` limb order. The shared serializer and C ABI emit the corrected
+  Cairo layout for identical input bytes. Historical Krusty hints remain
+  readable when callers try both `AEBalance` byte candidates and the relevant
+  decryptor; the limb layout alone does not select the encryption format.
+  They are not Tongo 1.3.2 audit hints. `AEBalance` now stores
+  layout metadata, so downstream struct-literal construction and exhaustive
+  destructuring require changes.
+
+### Deprecated
+
+- `encrypt_for_auditor` and `decrypt_as_auditor` retain the legacy Krusty
+  format. Use their context-aware counterparts for Tongo operations.
 
 ### Changed
 

@@ -1,5 +1,8 @@
 use super::{shared::verify_cipher_encrypts_balance, Audit, RagequitParams, RagequitProof};
-use crate::{crypto::encrypt_for_auditor, TongoAccount};
+use crate::{
+    crypto::{encrypt_for_auditor_with_context, validate_hint_context},
+    TongoAccount,
+};
 use krusty_kms_common::{ElGamalCiphertext, KmsError, Result};
 use krusty_kms_crypto::{
     hash, poseidon_hash_many, scalar, AuditPrefixData, AuditProver, StarkCurve,
@@ -8,6 +11,13 @@ use starknet_types_core::felt::Felt;
 
 /// Cairo string 'ragequit'.
 const RAGEQUIT_CAIRO_STRING: Felt = Felt::from_hex_unchecked("0x7261676571756974");
+
+fn preflight_auditor_hint(params: &RagequitParams) -> Result<()> {
+    if params.auditor_key.is_some() {
+        validate_hint_context(0, &params.nonce)?;
+    }
+    Ok(())
+}
 
 /// Execute a ragequit operation.
 ///
@@ -30,9 +40,9 @@ const RAGEQUIT_CAIRO_STRING: Felt = Felt::from_hex_unchecked("0x7261676571756974
 ///
 /// # Cyclomatic Complexity: 2
 pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<RagequitProof> {
+    preflight_auditor_hint(&params)?;
     let x: &Felt = account.owner_private_key().expose_secret();
     let g = StarkCurve::generator();
-
     // Compute y = g^x
     let y = account.owner_public_key().clone();
     let y_affine = y.to_affine().map_err(|_| KmsError::PointAtInfinity)?;
@@ -126,13 +136,13 @@ pub fn ragequit(account: &TongoAccount, params: RagequitParams) -> Result<Ragequ
             Some(&audit_prefix),
         )?;
 
-        // Encrypt zero balance for auditor (after ragequit balance is 0)
-        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor(
+        let (audit_hint_ct, audit_hint_nonce) = encrypt_for_auditor_with_context(
             0, // Balance after ragequit is 0
             account.owner_private_key().expose_secret(),
             &auditor_key,
+            &params.nonce,
+            &params.tongo_address,
         )?;
-
         Some(Audit {
             audited_balance,
             hint_ciphertext: audit_hint_ct,
