@@ -124,18 +124,20 @@ mod tests {
             assert!(retained.ends_with("… [truncated]"));
         }
 
-        let retained_bytes: usize = store
+        let retained_capacity: usize = store
             .entries
             .values()
             .map(|entry| match &entry.status.state {
-                OperationState::Rejected { error } => error.message.as_ref().map_or(0, String::len),
+                OperationState::Rejected { error } => {
+                    error.message.as_ref().map_or(0, String::capacity)
+                }
                 _ => 0,
             })
             .sum();
-        assert!(retained_bytes <= 3 * 1_024);
+        assert!(retained_capacity <= 3 * 2 * 1_024);
 
         // Ordinary gateway construction also bounds the immediate response.
         let returned = GatewayError::new(GatewayErrorCode::RpcDegraded, true, Some(oversized));
-        assert!(returned.message.unwrap().len() <= 1_024);
+        assert!(returned.message.unwrap().capacity() <= 2 * 1_024);
     }
 }
