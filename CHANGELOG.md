@@ -33,6 +33,8 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- Wipe scrypt's B, V and T scratch buffers after key derivation, including
+  failed decryption, while preserving the locked scrypt output format.
 - Bound new direct scrypt encryption and default WASM decryption to the same
   256 MiB budget as imported keystores. Legacy Rust decryption still accepts
   older high-cost ciphertext; WASM callers can deliberately recover one with
