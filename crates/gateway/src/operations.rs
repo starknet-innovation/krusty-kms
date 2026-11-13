@@ -1,7 +1,7 @@
 //! Bounded, TTL-pruned store for tracked operation state.
 
 use crate::types::OperationRetentionPolicy;
-use krusty_kms_domain::{OperationId, OperationState, OperationStatus};
+use krusty_kms_domain::{GatewayError, OperationId, OperationState, OperationStatus};
 use std::collections::HashMap;
 
 pub(crate) struct OperationStore {
@@ -30,7 +30,12 @@ impl OperationStore {
         self.entries.get(id).map(|entry| entry.status.clone())
     }
 
-    pub(crate) fn insert(&mut self, status: OperationStatus, now_ms: u64) {
+    pub(crate) fn insert(&mut self, mut status: OperationStatus, now_ms: u64) {
+        if let OperationState::Rejected { error } = &mut status.state {
+            // Defend the store invariant even if an error came from public
+            // struct fields or deserialization instead of GatewayError::new.
+            *error = GatewayError::new(error.code, error.retryable, error.message.take());
+        }
         let revision = self.next_revision;
         self.next_revision = self.next_revision.saturating_add(1);
         self.entries.insert(
@@ -78,5 +83,65 @@ impl OperationStore {
         for (id, _, _) in by_age.into_iter().take(remove_count) {
             self.entries.remove(&id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use krusty_kms_domain::{GatewayErrorCode, OperationKind};
+
+    fn insert_rejected_and_assert_bounded(store: &mut OperationStore, id: OperationId, text: &str) {
+        store.insert(
+            OperationStatus {
+                id: id.clone(),
+                kind: OperationKind::DeployAccount,
+                state: OperationState::Rejected {
+                    // Construct directly to exercise the store's own
+                    // boundary, independent of GatewayError::new.
+                    error: GatewayError {
+                        code: GatewayErrorCode::RpcDegraded,
+                        retryable: true,
+                        message: Some(text.to_owned()),
+                    },
+                },
+                provenance: None,
+            },
+            0,
+        );
+
+        let OperationState::Rejected { error } = store.get(&id, 0).unwrap().state else {
+            panic!("stored operation must be rejected");
+        };
+        let retained = error.message.unwrap();
+        assert!(retained.len() <= 1_024);
+        assert!(retained.ends_with("… [truncated]"));
+    }
+
+    #[test]
+    fn rejected_operations_retain_bounded_utf8_error_text() {
+        let mut store = OperationStore::new(OperationRetentionPolicy::default());
+        let oversized = "🔒".repeat(4_096);
+
+        for index in 0..3 {
+            let id = OperationId::new(format!("synthetic-{index}")).unwrap();
+            insert_rejected_and_assert_bounded(&mut store, id, &oversized);
+        }
+
+        let retained_capacity: usize = store
+            .entries
+            .values()
+            .map(|entry| match &entry.status.state {
+                OperationState::Rejected { error } => {
+                    error.message.as_ref().map_or(0, String::capacity)
+                }
+                _ => 0,
+            })
+            .sum();
+        assert!(retained_capacity <= 3 * 2 * 1_024);
+
+        // Ordinary gateway construction also bounds the immediate response.
+        let returned = GatewayError::new(GatewayErrorCode::RpcDegraded, true, Some(oversized));
+        assert!(returned.message.unwrap().capacity() <= 2 * 1_024);
     }
 }

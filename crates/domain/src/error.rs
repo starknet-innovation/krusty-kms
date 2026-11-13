@@ -60,16 +60,77 @@ pub struct GatewayError {
     pub message: Option<String>,
 }
 
+// RPC providers can control typed error messages, so a count-only operation
+// limit is insufficient. Keep returned and retained detail allocations bounded.
+const MAX_GATEWAY_ERROR_MESSAGE_BYTES: usize = 1_024;
+const TRUNCATION_MARKER: &str = "… [truncated]";
+
 impl GatewayError {
     pub fn new(
         code: GatewayErrorCode,
         retryable: bool,
         message: impl Into<Option<String>>,
     ) -> Self {
-        Self {
+        let mut error = Self {
             code,
             retryable,
             message: message.into(),
+        };
+        error.bound_message();
+        error
+    }
+
+    fn bound_message(&mut self) {
+        let Some(message) = &mut self.message else {
+            return;
+        };
+        let truncated = message.len() > MAX_GATEWAY_ERROR_MESSAGE_BYTES;
+        let end = if truncated {
+            let mut end = MAX_GATEWAY_ERROR_MESSAGE_BYTES - TRUNCATION_MARKER.len();
+            while !message.is_char_boundary(end) {
+                end -= 1;
+            }
+            end
+        } else {
+            message.len()
+        };
+
+        // Truncating in place keeps the provider-controlled allocation alive.
+        // A fresh bounded allocation also handles short strings with excess capacity.
+        let capacity = end
+            + if truncated {
+                TRUNCATION_MARKER.len()
+            } else {
+                0
+            };
+        let mut bounded = String::with_capacity(capacity);
+        bounded.push_str(&message[..end]);
+        if truncated {
+            bounded.push_str(TRUNCATION_MARKER);
         }
+        *message = bounded;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gateway_error_releases_oversized_message_allocations() {
+        let mut large = String::with_capacity(64 * 1024);
+        large.push_str(&"🔒".repeat(4_096));
+        let error = GatewayError::new(GatewayErrorCode::RpcDegraded, true, Some(large));
+        let message = error.message.unwrap();
+        assert!(message.len() <= MAX_GATEWAY_ERROR_MESSAGE_BYTES);
+        assert!(message.capacity() <= 2 * MAX_GATEWAY_ERROR_MESSAGE_BYTES);
+        assert!(message.ends_with(TRUNCATION_MARKER));
+
+        let mut short = String::with_capacity(64 * 1024);
+        short.push_str("synthetic error");
+        let error = GatewayError::new(GatewayErrorCode::RpcDegraded, true, Some(short));
+        let message = error.message.unwrap();
+        assert_eq!(message, "synthetic error");
+        assert!(message.capacity() <= 2 * MAX_GATEWAY_ERROR_MESSAGE_BYTES);
     }
 }
