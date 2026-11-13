@@ -17,6 +17,9 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- Reject range-proof widths outside `1..=128` before generating randomness or
+  indexing commitments. `compute_total_randomness(&[])` now returns an
+  invalid-width error instead of `Ok(0)`.
 - Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
   bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
   `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.
