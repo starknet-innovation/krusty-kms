@@ -18,9 +18,9 @@ and compare derived outputs against the locked implementation across salts,
 passwords, lane counts and output lengths.
 
 The `salsa20/zeroize` feature wipes the temporary Salsa core state on drop.
-The secret-hygiene guardrail rejects direct calls to upstream `scrypt::scrypt`
-from native KMS source, so a later KDF refactor cannot silently bypass the
-wiping implementation.
+The secret-hygiene guardrail rejects imports and calls to upstream
+`scrypt::scrypt` from native KMS source, except for explicit differential-test
+imports, so a later KDF refactor cannot silently bypass the wiping path.
 
 The copied portable BlockMix and ROMix carry source attribution in their
 module headers. Their upstream MIT and Apache-2.0 license texts are included
