@@ -60,16 +60,39 @@ pub struct GatewayError {
     pub message: Option<String>,
 }
 
+// RPC providers can control typed error messages, so a count-only operation
+// limit is insufficient. Keep returned and retained detail text bounded.
+const MAX_GATEWAY_ERROR_MESSAGE_BYTES: usize = 1_024;
+const TRUNCATION_MARKER: &str = "… [truncated]";
+
 impl GatewayError {
     pub fn new(
         code: GatewayErrorCode,
         retryable: bool,
         message: impl Into<Option<String>>,
     ) -> Self {
-        Self {
+        let mut error = Self {
             code,
             retryable,
             message: message.into(),
+        };
+        error.bound_message();
+        error
+    }
+
+    fn bound_message(&mut self) {
+        let Some(message) = &mut self.message else {
+            return;
+        };
+        if message.len() <= MAX_GATEWAY_ERROR_MESSAGE_BYTES {
+            return;
         }
+
+        let mut end = MAX_GATEWAY_ERROR_MESSAGE_BYTES - TRUNCATION_MARKER.len();
+        while !message.is_char_boundary(end) {
+            end -= 1;
+        }
+        message.truncate(end);
+        message.push_str(TRUNCATION_MARKER);
     }
 }
