@@ -17,6 +17,8 @@ All notable changes to the published Rust crates are documented here.
 
 ### Security
 
+- Wipe scrypt's B, V and T scratch buffers after key derivation, including
+  failed decryption, while preserving the locked scrypt output format.
 - Wipe internal copies of secrets: the RFC 6979 signing nonce, the scalar
   bytes in `StarkCurve` multiplication, the bytes compared by `SecretFelt`'s
   `PartialEq`, and the intermediate string in `SecretFelt::expose_secret_hex`.

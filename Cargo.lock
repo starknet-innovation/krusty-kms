@@ -1758,6 +1758,8 @@ dependencies = [
  "krusty-kms-crypto",
  "num-bigint 0.5.1",
  "num-traits",
+ "pbkdf2",
+ "salsa20",
  "scrypt",
  "serde",
  "serde_json",

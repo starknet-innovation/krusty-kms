@@ -16,6 +16,7 @@ pub mod nostr_application_data;
 mod nostr_nip44;
 pub mod nostr_signing;
 pub mod qsb_hors;
+mod scrypt_wiping;
 pub mod stark_signing;
 pub mod strk20;
 pub mod tx_hash;

@@ -7,7 +7,7 @@
 use aes::cipher::{KeyIvInit, StreamCipher};
 use aes::Aes128;
 use krusty_kms_common::{KmsError, Result};
-use scrypt::{scrypt, Params as ScryptParams};
+use scrypt::Params as ScryptParams;
 use sha3::{Digest, Keccak256};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
@@ -316,8 +316,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     let params = ScryptParams::new(log_n, r, p)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut derived_key = Zeroizing::new(vec![0u8; dklen]);
-    scrypt(password.as_bytes(), &salt, &params, &mut derived_key)
-        .map_err(|e| KmsError::CryptoError(format!("Scrypt KDF failed: {e}")))?;
+    crate::scrypt_wiping::scrypt(password.as_bytes(), &salt, &params, &mut derived_key)?;
 
     let aes_key = &derived_key[..V3_DKLEN / 2];
     let mac_key = &derived_key[V3_DKLEN / 2..V3_DKLEN];
@@ -406,7 +405,7 @@ mod tests {
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
-        scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
+        ::scrypt::scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
         // Encrypt with AES-128-CTR
         let aes_key = &derived_key[..16];
@@ -461,7 +460,7 @@ mod tests {
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
-        scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
+        ::scrypt::scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
         let ciphertext = vec![0u8; 32];
         let mut mac_input = Vec::new();
