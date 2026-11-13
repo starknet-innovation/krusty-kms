@@ -58,18 +58,19 @@ pub struct WasmAccountState {
     #[wasm_bindgen(getter_with_clone)]
     pub pending_balance: String,
     /// Current nonce for replay protection
+    #[wasm_bindgen(skip)]
     pub nonce: u64,
 }
 
 #[wasm_bindgen]
 impl WasmAccountState {
-    /// Create a new account state.
     #[wasm_bindgen(constructor)]
     pub fn new(
         balance: String,
         pending_balance: String,
-        transaction_nonce: u64,
+        #[wasm_bindgen(unchecked_param_type = "bigint")] transaction_nonce: JsValue,
     ) -> Result<WasmAccountState, JsValue> {
+        let transaction_nonce = crate::numeric_input::u64(transaction_nonce, "transaction nonce")?;
         let state = Self {
             balance,
             pending_balance,
@@ -497,8 +498,6 @@ pub struct WasmNostrSignature {
     pub signature: String,
 }
 
+mod numeric_accessors;
 #[cfg(test)]
 mod tests;
-
-// Note: Parameter types (WasmFundParams, WasmTransferParams, etc.) and
-// proof result types are defined in proof.rs with complete fields.

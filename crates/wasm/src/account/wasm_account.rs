@@ -2,6 +2,7 @@
 
 use super::helpers::{decrypted_point_to_wasm, parse_ciphertext, parse_felt, parse_u128_decimal};
 use crate::error::from_sdk_result;
+use crate::numeric_input;
 use crate::types::{WasmAccountState, WasmCiphertext, WasmDecryptedPoint};
 use krusty_kms_common::SecretFelt;
 use wasm_bindgen::prelude::*;
@@ -32,14 +33,16 @@ impl WasmAccount {
     #[wasm_bindgen(js_name = "fromMnemonic")]
     pub fn from_mnemonic(
         mnemonic: String,
-        address_index: u32,
-        account_index: u32,
+        #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue,
+        #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue,
         contract_address: &str,
         passphrase: Option<String>,
     ) -> Result<WasmAccount, JsValue> {
         // Wrap before anything fallible, so a rejected call wipes both.
         let mnemonic = Zeroizing::new(mnemonic);
         let passphrase = passphrase.map(Zeroizing::new);
+        let (address_index, account_index) =
+            numeric_input::derivation_indices(address_index, account_index)?;
         let contract_felt = parse_felt(contract_address)?;
         let passphrase_ref = passphrase.as_deref().map(String::as_str);
 
@@ -156,7 +159,7 @@ impl WasmAccount {
     pub fn decrypt_balance(
         &self,
         ciphertext: &WasmCiphertext,
-        max_search: Option<u64>,
+        #[wasm_bindgen(unchecked_optional_param_type = "bigint")] max_search: JsValue,
     ) -> Result<String, JsValue> {
         /// Upper bound on the brute-force discrete-log search.
         ///
@@ -172,14 +175,14 @@ impl WasmAccount {
         /// (baby-step giant-step, Pollard's kangaroo), not a bigger linear cap.
         const MAX_SEARCH_CEILING: u64 = 1 << 20;
 
-        let cipher = parse_ciphertext(ciphertext)?;
-
-        let max = max_search.unwrap_or(1_000_000);
+        let max = numeric_input::optional_u64(max_search, "max search")?.unwrap_or(1_000_000);
         if max > MAX_SEARCH_CEILING {
             return Err(JsValue::from_str(&format!(
                 "max_search {max} exceeds ceiling {MAX_SEARCH_CEILING}"
             )));
         }
+
+        let cipher = parse_ciphertext(ciphertext)?;
 
         let decrypted_point =
             from_sdk_result(self.inner.decrypt(&cipher)).map_err(JsValue::from)?;

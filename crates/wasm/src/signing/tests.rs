@@ -88,7 +88,8 @@ fn test_sign_stark_hash_rejects_invalid_hash() {
 /// Derive a deterministic Nostr test key from the test mnemonic.
 fn test_nostr_private_key() -> String {
     let mnemonic = "habit hope tip crystal because grunt nation idea electric witness alert like";
-    let kp = crate::account::derive_nostr_keypair(mnemonic.into(), 0, 0, None).unwrap();
+    let kp =
+        crate::account::derive_nostr_keypair(mnemonic.into(), 0.into(), 0.into(), None).unwrap();
     // The keypair wipes its own copy on drop, so hand the test a clone.
     kp.private_key.clone()
 }
