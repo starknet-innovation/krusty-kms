@@ -43,6 +43,9 @@ All notable changes to the published Rust crates are documented here.
   Calls require additional stack headroom; coverage is compiler-dependent.
 - `bip39` is built without `std`, which in 3.0.0 also enabled `serde` and made
   `bip39::Mnemonic` serializable.
+- Gateway operation errors retain at most 1 KiB of provider-controlled detail
+  and release oversized backing allocations before entering the operation
+  store, limiting memory growth from repeated RPC failures.
 
 ### Fixed
 
