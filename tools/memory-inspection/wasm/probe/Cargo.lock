@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -748,7 +748,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-common"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "hex",
  "serde",
@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-crypto"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "crypto-bigint",
  "getrandom 0.2.17",

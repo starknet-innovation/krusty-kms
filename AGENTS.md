@@ -112,7 +112,7 @@ Release steps (commands are in the playbook; do not copy them here):
 1. **Pick the version.** Start from current `main`. Confirm its workspace version is the
    latest published `krusty-kms` on crates.io and that the last `publish.yml` run
    succeeded. Read `## [Unreleased]` and `git log v<last>..origin/main`. The crates are
-   2.x and follow semver: a patch bump when every bullet is `Fixed` or `Security`; a
+   3.x and follow semver: a patch bump when every bullet is `Fixed` or `Security`; a
    minor bump when any bullet is `Added`, `Deprecated` or a non-breaking `Changed`; a
    major bump only for a **Breaking** bullet or any `Removed` entry (removing public
    API is breaking). Pick the bump from `## [Unreleased]`.
@@ -122,17 +122,20 @@ Release steps (commands are in the playbook; do not copy them here):
    override, so it rejects a bump too small for the API changes it detects (a patch
    over pending additions fails with "requires new minor version"; a missing tag fails
    closed). It does not lint a changed return type on an inherent method or free
-   function: treat that as **Breaking** by hand. A breaking change is not merged past a
+   function: treat that as **Breaking** by hand. A deterministic key/address change
+   for valid inputs is also **Breaking**, even if signatures stay the same; document
+   recovery/migration for accounts created with the previous derivation.
+   A breaking change is not merged past a
    red semver check within a major; it waits for the next major plan, and lands in
    that major's release PR, because only a version-bumping PR is checked at its
    actual increment. If `## [Unreleased]` is empty, there is
    nothing to release.
 2. **Branch and bump.** On a focused release branch, change the root
    `[workspace.package].version`. Internal `krusty-kms-*` path dependency requirements
-   in `crates/*/Cargo.toml` (currently `2.0.0`) need no move for compatibility on patch
-   and minor bumps, because `^2.0.0` covers every 2.x. Raise a requirement's lower
-   bound when the dependent crate starts using an API added in a later 2.x of that
-   dependency; otherwise a lockfile still on the older version satisfies the range and
+   in `crates/*/Cargo.toml` (currently `3.0.0`) need no move for compatibility on patch
+   and minor bumps, because `^3.0.0` covers every 3.x. Raise a requirement's lower
+   bound when the dependent crate starts using an API or relying on behavior added
+   in a later 3.x of that dependency (including security invariants); otherwise a lockfile still on the older version satisfies the range and
    fails to compile. Move every
    requirement to the new major on a major bump.
 3. **Changelog.** Rename the pending notes into `## [<version>] - YYYY-MM-DD` and keep
