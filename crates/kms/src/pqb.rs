@@ -156,7 +156,7 @@ impl PqbVault {
     /// Derive public commitments, recovery points and the exact locking script.
     pub fn public_material(&self) -> Result<PqbPublicMaterial> {
         let commitments = std::array::from_fn(|i| {
-            let preimage = Zeroizing::new(<[u8; 32]>::from(Sha256::digest(self.hors(i).as_ref())));
+            let preimage = key::take_secret_digest(&mut Sha256::digest(self.hors(i).as_ref()));
             require_wiped_hash::<Ripemd160>();
             Ripemd160::digest(preimage.as_ref()).into()
         });

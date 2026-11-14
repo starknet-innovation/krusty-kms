@@ -6,6 +6,17 @@ use serde_json::Value;
 fn vectors() -> Value {
     serde_json::from_str(include_str!("../../tests/fixtures/pqb_kms_vectors.json")).unwrap()
 }
+
+#[test]
+fn transferring_a_secret_digest_preserves_bytes_and_wipes_the_source() {
+    let mut digest = Sha256::digest(b"abc"); // Public SHA-256 test vector.
+    let secret = key::take_secret_digest(&mut digest);
+    assert_eq!(
+        hex::encode(secret.as_ref()),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+    assert!(digest.iter().all(|byte| *byte == 0));
+}
 fn bytes(s: &Value) -> Vec<u8> {
     hex::decode(s.as_str().unwrap()).unwrap()
 }

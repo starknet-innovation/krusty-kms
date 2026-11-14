@@ -5,7 +5,7 @@ use super::{PqbVault, Result};
 use crypto_bigint::{NonZero, U256};
 use k256::ecdsa::SigningKey;
 use sha2::{Digest, Sha256, Sha512};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 const ORDER_MINUS_ONE: NonZero<U256> = NonZero::<U256>::new_unwrap(U256::from_be_hex(
     "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364140",
@@ -18,7 +18,7 @@ impl PqbVault {
         h.update(self.seed.as_ref());
         h.update(b"|");
         h.update(label.as_bytes());
-        Zeroizing::new(h.finalize().into())
+        take_secret_digest(&mut h.finalize())
     }
     pub(super) fn hors(&self, index: usize) -> Zeroizing<[u8; 20]> {
         let secret = self.secret(&format!("r2g4-hors-{index}"));
@@ -38,6 +38,15 @@ impl PqbVault {
         bytes.copy_from_slice(&digest[..32]);
         signing_key(&bytes)
     }
+}
+
+/// Transfer a secret digest into wiped storage and clear the hash output too.
+/// The hash's zeroize feature covers its state, not its returned output buffer.
+pub(super) fn take_secret_digest(output: &mut sha2::digest::Output<Sha256>) -> Zeroizing<[u8; 32]> {
+    let mut secret = Zeroizing::new([0; 32]);
+    secret.copy_from_slice(output);
+    output.as_mut_slice().zeroize();
+    secret
 }
 
 /// PQB maps 256 bits to [1,n-1] using mod(n-1)+1, not mod n.

@@ -32,7 +32,7 @@ impl PqbVault {
             let mut h = Sha256::new();
             h.update(seed.as_ref());
             h.update(format!("|{j}").as_bytes());
-            let digest = Zeroizing::new(<[u8; 32]>::from(h.finalize()));
+            let digest = super::key::take_secret_digest(&mut h.finalize());
             let x = Zeroizing::new(U256::from_be_slice(digest.as_ref()));
             let s = Zeroizing::new((*x >> 6u32) | (U256::ONE << 250u32));
             let bytes = Zeroizing::new(<[u8; 32]>::from(s.to_be_bytes()));

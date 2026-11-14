@@ -174,7 +174,10 @@ impl PqbVault {
             slot.copy_from_slice(self.hors(usize::from(index)).as_ref());
         }
         for (slot, index) in out.round1.iter_mut().zip(request.selection.round1) {
-            slot.copy_from_slice(&Sha256::digest(self.hors(usize::from(index)).as_ref()));
+            let preimage = super::key::take_secret_digest(&mut Sha256::digest(
+                self.hors(usize::from(index)).as_ref(),
+            ));
+            slot.copy_from_slice(preimage.as_ref());
         }
         let menus = self.menus()?;
         for (stage, menu) in menus.iter().enumerate() {
