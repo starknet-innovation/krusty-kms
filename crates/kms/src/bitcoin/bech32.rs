@@ -18,7 +18,7 @@ const GENERATORS: [u32; 5] = [
 const BECH32_CONST: u32 = 1;
 
 /// Encode a segwit v0 program as a lowercase bech32 address.
-pub(super) fn encode_segwit_v0(hrp: &str, program: &[u8]) -> Result<String> {
+pub(crate) fn encode_segwit_v0(hrp: &str, program: &[u8]) -> Result<String> {
     let mut data = vec![0u8];
     data.extend(to_base32(program));
 

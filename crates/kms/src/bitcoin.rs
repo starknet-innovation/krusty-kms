@@ -31,12 +31,12 @@
 // slice must be checked and turned into an error; test modules opt out.
 #![deny(clippy::indexing_slicing)]
 
-mod bech32;
-mod bip32;
+pub(crate) mod bech32;
+pub(crate) mod bip32;
 mod bip322;
 mod keys;
 mod psbt;
-mod tx;
+pub(crate) mod tx;
 
 #[cfg(test)]
 mod tests;
@@ -44,3 +44,4 @@ mod tests;
 pub use bip322::{sign_bip322_simple, Bip322Encoding};
 pub use keys::{derive_bitcoin_p2wpkh_keypair, BitcoinP2wpkhKeyPair, BITCOIN_COIN_TYPE};
 pub use psbt::sign_bitcoin_psbt_inputs;
+pub(crate) use psbt::sign_pqb_deposit_psbt;

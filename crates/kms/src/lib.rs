@@ -15,6 +15,7 @@ pub mod multisig;
 pub mod nostr_application_data;
 mod nostr_nip44;
 pub mod nostr_signing;
+pub mod pqb;
 pub mod qsb_hors;
 pub mod stark_signing;
 pub mod strk20;

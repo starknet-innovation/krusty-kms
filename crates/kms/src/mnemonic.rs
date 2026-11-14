@@ -68,6 +68,22 @@ fn parse_mnemonic(phrase: &str) -> Result<Zeroizing<Mnemonic>> {
         .map_err(invalid)
 }
 
+/// Restore a PQB BIP85 child without returning entropy across the public API.
+pub(crate) fn child_entropy_32(phrase: &str) -> Result<Zeroizing<[u8; 32]>> {
+    scrubbed(|| {
+        let mnemonic = parse_mnemonic(phrase)?;
+        let entropy = Zeroizing::new(mnemonic.to_entropy());
+        if entropy.len() != 32 {
+            return Err(KmsError::InvalidMnemonic(
+                "PQB requires a 24-word BIP85 child".into(),
+            ));
+        }
+        let mut out = Zeroizing::new([0; 32]);
+        out.copy_from_slice(&entropy);
+        Ok(out)
+    })
+}
+
 /// The canonical phrase (words joined by single spaces), in a buffer sized
 /// up front so it never reallocates and leaves a partial copy behind.
 fn phrase_of(mnemonic: &Mnemonic) -> Zeroizing<String> {

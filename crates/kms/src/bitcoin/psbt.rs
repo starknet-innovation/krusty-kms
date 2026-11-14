@@ -7,6 +7,11 @@
 mod fields;
 mod input_rules;
 
+mod signing;
+
+pub(crate) use signing::sign_pqb_deposit_psbt;
+use signing::sign_with;
+
 use super::keys::P2wpkhSigner;
 use super::tx::{
     malformed, write_compact_size, write_var_bytes, OutPoint, Reader, Transaction, TxOut,
@@ -136,27 +141,6 @@ pub fn sign_bitcoin_psbt_inputs(
     input_indices: &[u32],
 ) -> Result<String> {
     sign_with(&P2wpkhSigner::new(private_key)?, psbt_base64, input_indices)
-}
-
-/// `sign_bitcoin_psbt_inputs` for a signer that is already set up.
-fn sign_with(signer: &P2wpkhSigner, psbt_base64: &str, input_indices: &[u32]) -> Result<String> {
-    let mut psbt = Psbt::parse(&decode_bounded(psbt_base64)?)?;
-
-    let indices = checked_indices(input_indices, psbt.inputs.len())?;
-    let midstate = psbt.unsigned_tx.sighash_midstate();
-    for index in indices {
-        let amount = signable_amount(&psbt, index, signer)?;
-        let sighash =
-            psbt.unsigned_tx
-                .p2wpkh_sighash_all(&midstate, index, &signer.pubkey_hash, amount)?;
-        let signature = signer.sign_sighash_all(&sighash)?;
-        let map = psbt
-            .inputs
-            .get_mut(index)
-            .ok_or_else(|| out_of_range(index))?;
-        put_partial_signature(map, &signer.public_key, signature);
-    }
-    Ok(BASE64.encode(psbt.serialize()))
 }
 
 /// Decode at most `MAX_PSBT_BYTES`, refusing longer text before decoding it.
