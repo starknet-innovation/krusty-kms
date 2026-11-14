@@ -12,6 +12,9 @@
 
 Krusty provides BIP-39/44 key derivation for Starknet and Nostr domains, deterministic Stark and Nostr signing, OpenZeppelin account descriptor/address calculation, Tongo confidential proof generation, and a focused Starknet client/gateway surface.
 
+PQB vault key-management primitives are available in `krusty_kms::pqb`; see
+[the integration guide](docs/pqb-kms.md) for the disclosure and journal boundary.
+
 ## Published Crates
 
 Maintainers should follow the [crates.io release playbook](docs/crates-release.md).

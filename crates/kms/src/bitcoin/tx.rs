@@ -9,27 +9,27 @@ use krusty_kms_common::{KmsError, Result};
 use sha2::{Digest, Sha256};
 
 /// The only sighash type this module signs.
-pub(super) const SIGHASH_ALL: u8 = 0x01;
+pub(crate) const SIGHASH_ALL: u8 = 0x01;
 
-pub(super) fn malformed(what: impl core::fmt::Display) -> KmsError {
+pub(crate) fn malformed(what: impl core::fmt::Display) -> KmsError {
     KmsError::DeserializationError(format!("malformed bitcoin data: {what}"))
 }
 
-pub(super) fn double_sha256(data: &[u8]) -> [u8; 32] {
+pub(crate) fn double_sha256(data: &[u8]) -> [u8; 32] {
     Sha256::digest(Sha256::digest(data)).into()
 }
 
 /// A bounds-checked cursor over untrusted bytes.
-pub(super) struct Reader<'a> {
+pub(crate) struct Reader<'a> {
     bytes: &'a [u8],
 }
 
 impl<'a> Reader<'a> {
-    pub(super) fn new(bytes: &'a [u8]) -> Self {
+    pub(crate) fn new(bytes: &'a [u8]) -> Self {
         Self { bytes }
     }
 
-    pub(super) fn take(&mut self, len: usize) -> Result<&'a [u8]> {
+    pub(crate) fn take(&mut self, len: usize) -> Result<&'a [u8]> {
         let left = self.bytes.len();
         let (head, tail) = self
             .bytes
@@ -58,14 +58,14 @@ impl<'a> Reader<'a> {
     }
 
     /// Read a minimally encoded CompactSize and return it as a length.
-    pub(super) fn compact_size(&mut self) -> Result<usize> {
+    pub(crate) fn compact_size(&mut self) -> Result<usize> {
         usize::try_from(self.compact_u64()?)
             .map_err(|_| malformed("CompactSize does not fit in memory"))
     }
 
     /// Read a minimally encoded CompactSize as a number, such as a PSBT key
     /// type, which need not fit in memory.
-    pub(super) fn compact_u64(&mut self) -> Result<u64> {
+    pub(crate) fn compact_u64(&mut self) -> Result<u64> {
         let (value, minimum) = match self.array::<1>()?[0] {
             0xfd => (u64::from(u16::from_le_bytes(self.array()?)), 0xfd),
             0xfe => (u64::from(u32::from_le_bytes(self.array()?)), 0x1_0000),
@@ -79,17 +79,17 @@ impl<'a> Reader<'a> {
     }
 
     /// The bytes not yet read.
-    pub(super) fn rest(&self) -> &'a [u8] {
+    pub(crate) fn rest(&self) -> &'a [u8] {
         self.bytes
     }
 
     /// Read a CompactSize length prefix and that many bytes.
-    pub(super) fn var_bytes(&mut self) -> Result<&'a [u8]> {
+    pub(crate) fn var_bytes(&mut self) -> Result<&'a [u8]> {
         let len = self.compact_size()?;
         self.take(len)
     }
 
-    pub(super) fn finish(&self) -> Result<()> {
+    pub(crate) fn finish(&self) -> Result<()> {
         if self.bytes.is_empty() {
             Ok(())
         } else {
@@ -98,7 +98,7 @@ impl<'a> Reader<'a> {
     }
 }
 
-pub(super) fn write_compact_size(out: &mut Vec<u8>, len: usize) {
+pub(crate) fn write_compact_size(out: &mut Vec<u8>, len: usize) {
     // usize -> u64 is lossless on every supported target.
     let value = len as u64;
     match value {
@@ -118,16 +118,16 @@ pub(super) fn write_compact_size(out: &mut Vec<u8>, len: usize) {
     }
 }
 
-pub(super) fn write_var_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+pub(crate) fn write_var_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
     write_compact_size(out, bytes.len());
     out.extend_from_slice(bytes);
 }
 
 /// A previous output reference; `txid` is in internal (wire) byte order.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct OutPoint {
-    pub(super) txid: [u8; 32],
-    pub(super) vout: u32,
+pub(crate) struct OutPoint {
+    pub(crate) txid: [u8; 32],
+    pub(crate) vout: u32,
 }
 
 impl OutPoint {
@@ -138,16 +138,16 @@ impl OutPoint {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct TxIn {
-    pub(super) previous_output: OutPoint,
-    pub(super) script_sig: Vec<u8>,
-    pub(super) sequence: u32,
+pub(crate) struct TxIn {
+    pub(crate) previous_output: OutPoint,
+    pub(crate) script_sig: Vec<u8>,
+    pub(crate) sequence: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct TxOut {
-    pub(super) value: u64,
-    pub(super) script_pubkey: Vec<u8>,
+pub(crate) struct TxOut {
+    pub(crate) value: u64,
+    pub(crate) script_pubkey: Vec<u8>,
 }
 
 impl TxOut {
@@ -159,21 +159,21 @@ impl TxOut {
     }
 
     /// Parse a standalone output, as stored in a PSBT `witness_utxo`.
-    pub(super) fn parse_exact(bytes: &[u8]) -> Result<Self> {
+    pub(crate) fn parse_exact(bytes: &[u8]) -> Result<Self> {
         let mut reader = Reader::new(bytes);
         let output = Self::parse(&mut reader)?;
         reader.finish()?;
         Ok(output)
     }
 
-    pub(super) fn serialize_into(&self, out: &mut Vec<u8>) {
+    pub(crate) fn serialize_into(&self, out: &mut Vec<u8>) {
         out.extend(self.value.to_le_bytes());
         write_var_bytes(out, &self.script_pubkey);
     }
 }
 
 /// The transaction-wide part of a BIP-143 SIGHASH_ALL preimage.
-pub(super) struct SighashMidstate {
+pub(crate) struct SighashMidstate {
     hash_prevouts: [u8; 32],
     hash_sequence: [u8; 32],
     hash_outputs: [u8; 32],
@@ -181,11 +181,11 @@ pub(super) struct SighashMidstate {
 
 /// A transaction without its witness data, which no caller here needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct Transaction {
-    pub(super) version: u32,
-    pub(super) inputs: Vec<TxIn>,
-    pub(super) outputs: Vec<TxOut>,
-    pub(super) lock_time: u32,
+pub(crate) struct Transaction {
+    pub(crate) version: u32,
+    pub(crate) inputs: Vec<TxIn>,
+    pub(crate) outputs: Vec<TxOut>,
+    pub(crate) lock_time: u32,
 }
 
 impl Transaction {
@@ -193,7 +193,7 @@ impl Transaction {
     /// unsigned transaction. Empty input and output lists are allowed, as in
     /// BIP-174's valid vectors; a witness-serialized transaction then fails
     /// to parse exactly, because its marker reads as an empty input list.
-    pub(super) fn parse_legacy(bytes: &[u8]) -> Result<Self> {
+    pub(crate) fn parse_legacy(bytes: &[u8]) -> Result<Self> {
         let mut reader = Reader::new(bytes);
         let version = reader.u32_le()?;
         let inputs = parse_inputs(&mut reader)?;
@@ -212,7 +212,7 @@ impl Transaction {
     /// Bitcoin Core's deserialization rules: minimal CompactSizes, no trailing
     /// bytes, and no witness record whose stacks are all empty. A transaction
     /// with no inputs or no outputs, which no real coin comes from, is refused.
-    pub(super) fn parse_network(bytes: &[u8]) -> Result<Self> {
+    pub(crate) fn parse_network(bytes: &[u8]) -> Result<Self> {
         let mut reader = Reader::new(bytes);
         let version = reader.u32_le()?;
         let segwit = reader.starts_with(&[0x00, 0x01]);
@@ -247,7 +247,7 @@ impl Transaction {
         })
     }
 
-    pub(super) fn serialize_legacy(&self) -> Vec<u8> {
+    pub(crate) fn serialize_legacy(&self) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend(self.version.to_le_bytes());
         write_compact_size(&mut out, self.inputs.len());
@@ -265,14 +265,14 @@ impl Transaction {
     }
 
     /// The txid in internal byte order (reverse of the usual hex display).
-    pub(super) fn txid(&self) -> [u8; 32] {
+    pub(crate) fn txid(&self) -> [u8; 32] {
         double_sha256(&self.serialize_legacy())
     }
 
     /// BIP-143's `hashPrevouts`, `hashSequence` and `hashOutputs` for
     /// SIGHASH_ALL. They cover the whole transaction, so they are computed
     /// once and shared by every input signed, which keeps signing linear.
-    pub(super) fn sighash_midstate(&self) -> SighashMidstate {
+    pub(crate) fn sighash_midstate(&self) -> SighashMidstate {
         let mut prevouts = Vec::with_capacity(36 * self.inputs.len());
         let mut sequences = Vec::with_capacity(4 * self.inputs.len());
         for each in &self.inputs {
@@ -293,7 +293,7 @@ impl Transaction {
     /// BIP-143 SIGHASH_ALL digest for input `index` spending a P2WPKH output
     /// of `amount` satoshis locked to `pubkey_hash`, given this transaction's
     /// `sighash_midstate`.
-    pub(super) fn p2wpkh_sighash_all(
+    pub(crate) fn p2wpkh_sighash_all(
         &self,
         midstate: &SighashMidstate,
         index: usize,

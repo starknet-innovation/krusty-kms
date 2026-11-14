@@ -25,7 +25,7 @@ const HARDENED: u32 = 0x8000_0000;
 /// # Errors
 ///
 /// `CryptoError` when the master key or a child key is invalid.
-pub(super) fn derive_private_key(seed: &[u8], path: &[u32]) -> Result<Zeroizing<[u8; 32]>> {
+pub(crate) fn derive_private_key(seed: &[u8], path: &[u32]) -> Result<Zeroizing<[u8; 32]>> {
     let mut output = hmac_sha512(b"Bitcoin seed", &[seed])?;
     let mut key = Zeroizing::new(parse_scalar(&output, "master key")?);
     let mut chain_code = Zeroizing::new([0u8; 32]);

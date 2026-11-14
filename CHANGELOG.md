@@ -6,6 +6,12 @@ All notable changes to the published Rust crates are documented here.
 
 ### Added
 
+- `krusty_kms::pqb` provides fixed-profile PQB vault derivation, public locking
+  scripts and grinder points, transaction-bound selective disclosure, legacy
+  SIGHASH_ALL co-signing and strict P2WPKH deposit PSBT signing. Seeds and
+  private keys stay inside the vault. One-time exposure journaling and grind
+  verification remain the caller's responsibility.
+
 - `krusty_kms_crypto::range::validate_bit_size` exposes the shared
   `1..=128` range-proof width check to callers.
 - `krusty_kms::mnemonic_from_entropy(entropy)`, which encodes caller-supplied

@@ -32,6 +32,10 @@ unicode-normalization = { version = "0.1.25", default-features = false }
 bitcoin_hashes = { version = "0.14.1", default-features = false }
 # `zeroize` makes SHA-2 hashers wipe their state on drop; zeroizing_hmac requires it.
 sha2 = { workspace = true, features = ["zeroize"] }
+# PQB hashes secret menu signatures with SHA-1; wipe its state on drop too.
+sha1 = { version = "0.11", default-features = false, features = ["zeroize"] }
+# PQB's chained HORS commitments hash a still-secret SHA256 preimage.
+ripemd = { version = "0.2", default-features = false, features = ["zeroize"] }
 sha3 = "0.12"
 num-bigint.workspace = true
 crypto-bigint.workspace = true
