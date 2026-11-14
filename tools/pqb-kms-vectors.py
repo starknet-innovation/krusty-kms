@@ -40,7 +40,6 @@ for packet in v['export']['cases'][-1]['packets']:
 # Deposit signing with real, internally consistent previous transactions for
 # Krusty's strict non_witness_utxo check; no chain funds are involved.
 from pqb import seedcli
-from pqb import _research
 from test_framework.messages import CTransaction, CTxIn, CTxOut, COutPoint
 
 def varbytes(data):
