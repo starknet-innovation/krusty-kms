@@ -45,6 +45,30 @@ work and `.github/workflows/rust.yml`; do not duplicate its cargo command sequen
 - Optional `--ignored` suites are exercised by
   `.github/workflows/ignored-integration.yml` (weekly compile + manual dispatch).
 
+### Pull requests (mandatory independent review)
+
+Any agent that pushes a branch for a pull request to this repository must have the
+change fully reviewed by an independent review agent **before** opening the PR, and
+must address every finding first.
+
+- **Independent:** the reviewer is a separate agent or subagent with a fresh context.
+  It is not the agent that wrote the change and does not get the author's reasoning or
+  conclusions. Give it the full diff against the PR's base branch (normally
+  `origin/main`), the PR's purpose, and the files it needs to read, then let it form
+  its own view.
+- **Full review:** the whole diff, not a sample. Cover correctness, security
+  (key material, secret hygiene, input validation, `unsafe`), public API and semver
+  impact, FFI/WASM boundary changes, tests, and fit with `CONTRIBUTING.md`
+  ("Review standards") and `docs/maintainability-guardrails.md`.
+- **Address findings first:** fix each finding, or, when it is a false positive or out
+  of scope, record why in the PR description. If the fixes are more than trivial, run
+  the review again on the updated diff. Rerun the appropriate `tools/check.sh` mode
+  after the fixes. Do not open the PR while a finding is unresolved.
+- **Record it:** the PR description says that an independent review was run, lists
+  what it found, and states how each finding was resolved.
+- This applies to every PR an agent opens, including release PRs, docs-only changes
+  and follow-up fixes. It adds to human review and CI; it does not replace them.
+
 ### crates.io releases (maintainers and agents)
 
 Read [`docs/crates-release.md`](docs/crates-release.md) before preparing or operating
