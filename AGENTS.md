@@ -81,8 +81,8 @@ draft ready for review.
   "hardening fix") in the PR description and in review comments alike.
 - **Later pushes:** commits pushed to an open PR (for example fixes for human or bot
   review comments) need an independent review of the new delta before pushing, with
-  its findings addressed as above and recorded in a PR comment, unless they would be exempt from re-review under the rule
-  above.
+  its findings addressed as above and recorded in a PR comment, unless they would be
+  exempt from re-review under the rule above.
 - **No reviewer available:** if the environment cannot start an independent reviewer,
   do not open the PR, mark a draft ready, or push reviewable commits to an open PR.
   Push to a separate branch if needed, report that review is pending, and hand off to
