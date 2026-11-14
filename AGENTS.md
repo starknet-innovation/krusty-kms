@@ -47,25 +47,46 @@ work and `.github/workflows/rust.yml`; do not duplicate its cargo command sequen
 
 ### Pull requests (mandatory independent review)
 
-Any agent that pushes a branch for a pull request to this repository must have the
-change fully reviewed by an independent review agent **before** opening the PR, and
-must address every finding first.
+Any agent opening a pull request in this repository, as a draft or ready for review,
+must first have the change fully reviewed by an independent review agent and must
+address every finding before the PR is opened. The same gate applies before marking a
+draft ready for review.
 
-- **Independent:** the reviewer is a separate agent or subagent with a fresh context.
-  It is not the agent that wrote the change and does not get the author's reasoning or
-  conclusions. Give it the full diff against the PR's base branch (normally
-  `origin/main`), the PR's purpose, and the files it needs to read, then let it form
-  its own view.
+- **Independent:** the reviewer is a separate agent or subagent. It may be the same
+  model, but it starts from a fresh context and does not inherit the author's
+  conversation, reasoning or conclusions. Give it the full diff against the PR's base
+  branch (normally `origin/main`), the PR's purpose, and the files it needs to read,
+  then let it form its own view. Automated reviewers that run after the PR is open
+  (for example Greptile) do not satisfy this requirement.
 - **Full review:** the whole diff, not a sample. Cover correctness, security
   (key material, secret hygiene, input validation, `unsafe`), public API and semver
-  impact, FFI/WASM boundary changes, tests, and fit with `CONTRIBUTING.md`
-  ("Review standards") and `docs/maintainability-guardrails.md`.
-- **Address findings first:** fix each finding, or, when it is a false positive or out
-  of scope, record why in the PR description. If the fixes are more than trivial, run
-  the review again on the updated diff. Rerun the appropriate `tools/check.sh` mode
-  after the fixes. Do not open the PR while a finding is unresolved.
-- **Record it:** the PR description says that an independent review was run, lists
-  what it found, and states how each finding was resolved.
+  impact, FFI/WASM boundary changes, tests, and fit with
+  [`CONTRIBUTING.md` "Review standards"](CONTRIBUTING.md#review-standards) and
+  [`docs/maintainability-guardrails.md`](docs/maintainability-guardrails.md).
+- **Address findings first:** fix each finding, or explain why it is a false positive
+  or out of scope. Do not open the PR while a finding is unresolved.
+  - Any fix other than a typo, formatting or broken-link correction requires a
+    re-review of the updated diff. This includes changes to rules in `AGENTS.md`,
+    `CONTRIBUTING.md`, `SECURITY.md` or `docs/`. Rerun the appropriate
+    `tools/check.sh` mode after the fixes.
+  - A high- or medium-severity finding may be dismissed only if the re-review accepts
+    the reasoning or a human maintainer does. Otherwise stop and ask a human.
+- **Record it:** add an "Independent review" section to the PR description (for
+  release PRs, under Verification) saying that the review ran, what it found, and how
+  each finding was resolved. If a finding is a security vulnerability that the PR does
+  not fully fix, do not describe it in the PR: hand it to a human maintainer to report
+  privately as `SECURITY.md` describes, and note only that a finding was reported
+  privately. Keep a fixed but unreleased vulnerability out of public PR wording until
+  disclosure is coordinated: describe such a finding neutrally (for example
+  "hardening fix") in the PR description and in review comments alike.
+- **Later pushes:** commits pushed to an open PR (for example fixes for human or bot
+  review comments) need an independent review of the new delta before pushing, with
+  its findings addressed as above and recorded in a PR comment, unless they would be exempt from re-review under the rule
+  above.
+- **No reviewer available:** if the environment cannot start an independent reviewer,
+  do not open the PR, mark a draft ready, or push reviewable commits to an open PR.
+  Push to a separate branch if needed, report that review is pending, and hand off to
+  a human.
 - This applies to every PR an agent opens, including release PRs, docs-only changes
   and follow-up fixes. It adds to human review and CI; it does not replace them.
 
@@ -121,8 +142,9 @@ Release steps (commands are in the playbook; do not copy them here):
    ranges moved.
 5. **Verify.** Run `cargo check --workspace --all-targets` to refresh `Cargo.lock`, then
    the playbook's `cargo package --locked` preflight and `bash tools/check.sh all`.
-6. **Open the PR** titled `chore(release): prepare Krusty <version>`, with Summary,
-   Design, Verification and Publication sections. Merging it is the maintainer's call.
+6. **Open the PR** after the independent review (see Pull requests above), titled
+   `chore(release): prepare Krusty <version>`, with Summary, Design, Verification and
+   Publication sections. Merging it is the maintainer's call.
 7. **Tag after merge.** A maintainer tags the merged `main` commit as `v<version>` and
    pushes it. The tag rulesets let only the repository Admin role create `v*` tags. The
    `crates-io` environment then waits for reviewer approval or an admin bypass.
