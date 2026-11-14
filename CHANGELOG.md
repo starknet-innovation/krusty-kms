@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-14
+
+Minor release adding PQB vault primitives, Nostr envelope metadata and mnemonic
+entropy encoding, with input-validation and secret-memory hardening. PQB remains
+a research construction; callers own exposure journaling, funding checks and
+puzzle verification. No real PQB solve or on-chain spend was validated by Krusty.
+
 ### Added
 
 - `krusty_kms::pqb` provides fixed-profile PQB vault derivation, public locking
