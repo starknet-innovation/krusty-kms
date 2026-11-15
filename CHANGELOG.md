@@ -4,6 +4,11 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-11-15
+
+Adds PQB support to the WASM npm package for wallet integrations, with opaque
+Rust-owned vault/request handles and built-package compatibility checks.
+
 ### Added
 
 - Opaque WASM PQB vault/request handles for derivation, public material,

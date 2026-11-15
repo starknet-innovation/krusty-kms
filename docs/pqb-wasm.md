@@ -1,13 +1,12 @@
 # PQB in the WASM npm package
 
 Import `WasmPqbVault` from `@starknetfoundation/krusty-kms-wasm` after the usual
-WASM initialization. These additive exports are proposed for **3.1.0**; the
-immutable published 3.0.0 package has no PQB exports. This change does not publish
-or bump the workspace. A separate reviewed release PR must follow
-[the release playbook](crates-release.md), verify current published versions and
-last release runs, refresh the lockfile, package preflight and canonical checks.
-Merging a version bump starts the npm workflow, which needs protected-environment
-approval. Bramble must pin the new published immutable version before shipping.
+WASM initialization. These additive exports are introduced in **3.1.0**; the
+immutable published 3.0.0 package has no PQB exports. The 3.1.0 release must complete
+[the release playbook](crates-release.md) before packages become available.
+Merging the release version bump starts the npm workflow, which needs
+protected-environment approval. Bramble must pin the new immutable published
+3.1.0 version before shipping; a source merge alone does not make it available.
 
 ## Flow
 
