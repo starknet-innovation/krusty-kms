@@ -72,10 +72,18 @@ This package is generated with `wasm-pack --target web` and is intended for
 browser-oriented ESM toolchains that support loading WebAssembly modules.
 
 This package takes the Krusty workspace version and is supported for
-production use on the stable 2.x line. Its JavaScript exports follow semantic
-versioning: removing or changing an export waits for a new major version.
-Security fixes go to the latest 2.x release; see `SECURITY.md` in the
-repository for how to report a vulnerability.
+production use on the stable 3.x line. Its JavaScript API follows semantic
+versioning: breaking export or deterministic key/address behavior changes
+require a new major version. Security fixes go to the latest 3.x release; see
+the [security policy](https://github.com/starknet-innovation/krusty-kms/blob/main/SECURITY.md)
+for how to report a vulnerability.
+
+Before upgrading from 2.0.0, read the
+[3.0 migration guide](https://github.com/starknet-innovation/krusty-kms/blob/main/docs/migration-3.0.md).
+`deriveArgentLegacyKeypair`, `deriveArgentLegacyPublicKey` and ArgentLegacy
+discovery change keys for inputs whose intermediate Ethereum key has leading
+zero bytes. Preserve the 2.0.0 recovery path for affected existing accounts;
+upgrading does not move their funds or change their owner.
 
 ## License
 
