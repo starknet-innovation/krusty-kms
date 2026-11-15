@@ -70,11 +70,96 @@ pub fn tongo_to_erc20(tongo_amount: u128, rate: u128) -> Result<u128> {
     utils::tongo_to_base_units(tongo_amount, rate)
 }
 
-/// Authenticated encryption balance (raw on-chain representation).
+/// Layout used to decode an authenticated balance hint from Cairo felts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AEBalanceLayout {
+    /// Earlier Krusty calldata: ciphertext limbs in byte order; nonce high aligned.
+    Legacy,
+    /// Cairo integer layout: ciphertext limbs reversed; nonce low aligned.
+    Current,
+}
+
+/// One possible decoding of an authenticated balance hint.
+#[derive(Debug, Clone, Copy)]
+pub struct AEBalanceCandidate {
+    pub layout: AEBalanceLayout,
+    pub ciphertext: [u8; 64],
+    pub nonce: [u8; 24],
+}
+
+/// Authenticated encryption balance decoded from on-chain Cairo felts.
+///
+/// The public `ciphertext` and `nonce` are the reader's best-effort layout
+/// guess. A sender can make the layouts overlap, so an auditor must try both
+/// [`Self::candidates`]. The limb layout does not identify the encryption
+/// format: either candidate may need either the context-aware or legacy
+/// decryptor. Verify any authenticated result against the declared ElGamal
+/// balance or a validated proof.
 #[derive(Debug, Clone)]
 pub struct AEBalance {
     pub ciphertext: [u8; 64],
     pub nonce: [u8; 24],
+    layout: AEBalanceLayout,
+    // The legacy decoder discards these eight bytes from the low Cairo limb.
+    // They are needed to reconstruct a sender-chosen current candidate.
+    low_limb_tail: [u8; 8],
+}
+
+impl AEBalance {
+    pub(crate) fn from_decoded(
+        ciphertext: [u8; 64],
+        nonce: [u8; 24],
+        layout: AEBalanceLayout,
+        low_limb_tail: [u8; 8],
+    ) -> Self {
+        Self {
+            ciphertext,
+            nonce,
+            layout,
+            low_limb_tail,
+        }
+    }
+
+    /// Both limb interpretations, with the reader's heuristic choice first.
+    /// Try each candidate with both auditor decryptors as needed; the layout
+    /// alone does not identify the encryption format.
+    pub fn candidates(&self) -> [AEBalanceCandidate; 2] {
+        let mut alternate_ciphertext = [0u8; 64];
+        for (target, source) in alternate_ciphertext
+            .as_chunks_mut::<16>()
+            .0
+            .iter_mut()
+            .zip(self.ciphertext.as_chunks::<16>().0.iter().rev())
+        {
+            target.copy_from_slice(source);
+        }
+        let mut alternate_nonce = [0u8; 24];
+        let alternate_layout = match self.layout {
+            AEBalanceLayout::Legacy => {
+                alternate_nonce[..8].copy_from_slice(&self.nonce[8..16]);
+                alternate_nonce[8..16].copy_from_slice(&self.nonce[16..24]);
+                alternate_nonce[16..].copy_from_slice(&self.low_limb_tail);
+                AEBalanceLayout::Current
+            }
+            AEBalanceLayout::Current => {
+                alternate_nonce[8..16].copy_from_slice(&self.nonce[..8]);
+                alternate_nonce[16..].copy_from_slice(&self.nonce[8..16]);
+                AEBalanceLayout::Legacy
+            }
+        };
+        [
+            AEBalanceCandidate {
+                layout: self.layout,
+                ciphertext: self.ciphertext,
+                nonce: self.nonce,
+            },
+            AEBalanceCandidate {
+                layout: alternate_layout,
+                ciphertext: alternate_ciphertext,
+                nonce: alternate_nonce,
+            },
+        ]
+    }
 }
 
 #[cfg(test)]

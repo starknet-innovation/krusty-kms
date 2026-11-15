@@ -53,8 +53,8 @@ pub use provider::create_provider;
 pub use tx::TxBuilder;
 pub use types::{
     decrypt_cipher_balance_with_limit, decrypt_cipher_balance_with_limit as decrypt_cipher_balance,
-    erc20_to_tongo, tongo_to_erc20, AccountState, CipherBalance, DecryptedAccountState,
-    DEFAULT_DECRYPT_SEARCH_LIMIT,
+    erc20_to_tongo, tongo_to_erc20, AEBalance, AEBalanceCandidate, AEBalanceLayout, AccountState,
+    CipherBalance, DecryptedAccountState, DEFAULT_DECRYPT_SEARCH_LIMIT,
 };
 pub use wallet::deploy::{
     deploy_oz_account, deploy_oz_account_with_fee_ceiling, estimate_deploy_fee, DeployResult,
