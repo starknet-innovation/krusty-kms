@@ -125,6 +125,7 @@ check_wasm() {
   fi
   run npm ci --prefix cross-tests
   run npm run check:wasm-types --prefix cross-tests
+  run npm run verify:pqb-wasm --prefix cross-tests
 }
 
 check_rust() {

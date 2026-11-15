@@ -27,6 +27,7 @@ mod felt_input;
 pub mod hashing;
 pub mod nostr_application_data;
 mod numeric_input;
+pub mod pqb;
 pub mod proof;
 pub mod qsb_hors;
 mod secret_input;

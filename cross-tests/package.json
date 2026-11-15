@@ -7,12 +7,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "check:wasm-types": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler src/verify-wasm-null-types.ts",
+    "check:wasm-types": "tsc --ignoreConfig --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler src/verify-wasm-null-types.ts src/verify-pqb-wasm-types.ts",
     "verify": "tsx src/verify-rust-proofs.ts",
     "verify:wasm": "tsx src/verify-wasm-bindings.ts",
     "verify:snip12": "tsx src/verify-snip12-vectors.ts",
     "verify:tx-hashes": "tsx src/generate-tx-hash-vectors.ts",
-    "test": "npm run verify"
+    "test": "npm run verify",
+    "verify:pqb-wasm": "node src/verify-pqb-wasm.mjs"
   },
   "dependencies": {
     "@fatsolutions/tongo-sdk": "1.3.2",
