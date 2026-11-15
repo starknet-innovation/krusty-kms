@@ -59,7 +59,7 @@ fn committed_reference_scripts_menus_and_deposits() {
     }
     for d in v["deposits"].as_array().unwrap() {
         let mut vault = fixture_vault(&d["seed"]);
-        vault.network = network(d["network"].as_str().unwrap()).unwrap();
+        vault.network = network(&d["network"].as_str().unwrap().into()).unwrap();
         let got = value(vault.deposit().unwrap());
         assert_eq!(got["address"], d["address"]);
         assert_eq!(got["publicKey"], d["pubkey"]);

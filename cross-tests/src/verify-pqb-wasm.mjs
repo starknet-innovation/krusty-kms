@@ -70,6 +70,12 @@ try {
     assert.throws(() => WasmPqbVault.fromMnemonic(mnemonic,n,network));
   }
   for (const net of ['', 'mainnet','testnet','MAIN']) assert.throws(() => derive(0,net));
+  const networkMemory = wasm.memory.buffer.byteLength;
+  for (const net of ['x'.repeat(32 * 1024 * 1024),null,undefined,23,{},new String('main')]) {
+    assert.throws(() => WasmPqbVault.fromMnemonic(mnemonic,0,net), /PQB network must/);
+    assert.throws(() => WasmPqbVault.fromChildMnemonic(v.restoration[0].words,net), /PQB network must/);
+  }
+  assert.equal(wasm.memory.buffer.byteLength,networkMemory);
   assert.throws(() => WasmPqbVault.fromChildMnemonic(mnemonic,'main'));
   assert.throws(() => WasmPqbVault.fromMnemonic('bad',0,'main'));
   for (const n of [-1,0.5,NaN,Infinity,2**32,'0',null,undefined,true,0n]) {
@@ -118,6 +124,19 @@ try {
   const other = derive(2); assert.throws(() => other.signDepositPsbt(psbt(),[0])); drop(other);
   for (const inputs of [[],[1],[0,0],[-1],[0.1],[2**32],[NaN],['0'],new Uint32Array([0])])
     assert.throws(() => vault.signDepositPsbt(psbt(),inputs));
+  // A Proxy may change its reported length; iterate only the validated snapshot.
+  let lengthReads = 0, elementReads = 0;
+  const changingLength = new Proxy([], { get(_target,key) {
+    if (key === 'length') return ++lengthReads === 1 ? 1 : 0xffffffff;
+    if (key === '0') { elementReads++; return 0; }
+  } });
+  assert.throws(() => vault.signDepositPsbt('bad',changingLength));
+  assert.equal(lengthReads,1); assert.equal(elementReads,1);
+  const invalidLength = new Proxy([], { get(_target,key) {
+    if (key === 'length') return 100001;
+    throw new Error('Elements must not be read before length validation');
+  } });
+  assert.throws(() => vault.signDepositPsbt('bad',invalidLength), /Invalid index array length/);
   assert.throws(() => vault.signDepositPsbt('bad',[0]));
   // Oversized JS strings must fail before any bulk copy into linear memory.
   const memoryBefore = wasm.memory.buffer.byteLength;

@@ -43,6 +43,8 @@ try {
 `free()`. Prepared requests contain private Rust fields, not editable JS request
 data. Mutating `info()` or `publicMaterial()` copies does not change authorization.
 A request from another vault fails. An exact retry returns identical bytes.
+The native vault reuses immutable public material across these operations; returned
+JS public objects remain independent copies. No secret witness table is cached.
 Computing a digest is **not** exposure prevention: the caller's durable journal
 must permanently reject a different digest even after process loss or restoration.
 Each BIP85 child may back at most one vault. Restoration does not recover a journal.
@@ -62,7 +64,8 @@ range; selections and PSBT input indices must be plain JS arrays, not typed arra
 - `WasmPqbVault.fromChildMnemonic(words: string, network: string): WasmPqbVault`
   restores the **24-word child**, rather than treating it as a new root.
 - Networks are exactly `main`, `testnet4`, `regtest`; the network binds derivation
-  and is retained for `deposit()`. No default network or secret export exists.
+  and is retained for `deposit()`. Network text is checked as at most eight JS
+  characters before copying. No default network or secret export exists.
 - `publicMaterial(): PqbPublicMaterial` returns:
   `{ script, scriptSha256, commitments, cosigPublicKey, menus }`.
   `script` is 4,908 bytes; `scriptSha256` is 32 bytes; `commitments` is 109

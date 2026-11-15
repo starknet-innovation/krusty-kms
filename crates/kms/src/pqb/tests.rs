@@ -3,7 +3,7 @@ use super::*;
 use crate::bitcoin::tx::Transaction;
 use serde_json::Value;
 
-fn vectors() -> Value {
+pub(super) fn vectors() -> Value {
     serde_json::from_str(include_str!("../../tests/fixtures/pqb_kms_vectors.json")).unwrap()
 }
 
@@ -31,7 +31,7 @@ fn network(s: &str) -> PqbNetwork {
         _ => panic!("test chain"),
     }
 }
-fn selection(s: &Value) -> PqbSelection {
+pub(super) fn selection(s: &Value) -> PqbSelection {
     let default = serde_json::json!([
         [3, 14, 25, 36, 47, 58, 69, 80],
         [10, 21, 32, 43, 54, 65, 76, 87, 98]
@@ -57,7 +57,7 @@ fn selection(s: &Value) -> PqbSelection {
     )
     .unwrap()
 }
-fn unsigned(s: &Value) -> Vec<u8> {
+pub(super) fn unsigned(s: &Value) -> Vec<u8> {
     let mut tx = Transaction::parse_legacy(&bytes(&s["tx"])).unwrap();
     for input in &mut tx.inputs {
         input.script_sig.clear();

@@ -29,11 +29,11 @@ impl WasmPqbVault {
     pub fn from_mnemonic(
         mnemonic: String,
         #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue,
-        network_name: &str,
+        #[wasm_bindgen(unchecked_param_type = "string")] network_name: js_sys::JsString,
         passphrase: Option<String>,
     ) -> Result<WasmPqbVault, JsValue> {
         let (mnemonic, passphrase) = (Zeroizing::new(mnemonic), passphrase.map(Zeroizing::new));
-        let network = network(network_name)?;
+        let network = network(&network_name)?;
         let index = crate::numeric_input::u32(index, "BIP85 index")?;
         let vault = PqbVault::from_mnemonic(
             &mnemonic,
@@ -50,9 +50,12 @@ impl WasmPqbVault {
 
     /// Restore the 24-word BIP85 child phrase, never a wallet root phrase.
     #[wasm_bindgen(js_name = fromChildMnemonic)]
-    pub fn from_child_mnemonic(words: String, network_name: &str) -> Result<WasmPqbVault, JsValue> {
+    pub fn from_child_mnemonic(
+        words: String,
+        #[wasm_bindgen(unchecked_param_type = "string")] network_name: js_sys::JsString,
+    ) -> Result<WasmPqbVault, JsValue> {
         let words = Zeroizing::new(words);
-        let network = network(network_name)?;
+        let network = network(&network_name)?;
         let vault = PqbVault::from_child_mnemonic(&words, network).map_err(error)?;
         Ok(Self {
             vault: Some(vault),

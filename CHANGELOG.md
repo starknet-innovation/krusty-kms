@@ -8,7 +8,8 @@ All notable changes to the published Rust crates are documented here.
 
 - Opaque WASM PQB vault/request handles for derivation, public material,
   transaction-bound selected disclosure and strict deposit PSBT signing. Callers
-  must durably journal before authorization. See [integration](docs/pqb-wasm.md).
+  must durably journal before authorization. Native PQB vaults cache immutable
+  public material across operations. See [integration](docs/pqb-wasm.md).
 
 ## [3.0.0] - 2026-11-14
 
