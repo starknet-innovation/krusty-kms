@@ -4,6 +4,16 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-14
+
+Major release correcting Argent legacy derivation for Ethereum keys with leading
+zero bytes. This changes deterministic keys for affected inputs; follow the
+[2.0 to 3.0 migration guide](docs/migration-3.0.md) before upgrading a wallet.
+Also adds PQB vault primitives, Nostr envelope metadata and mnemonic entropy
+encoding, with input-validation and secret-memory hardening. PQB remains
+a research construction; callers own exposure journaling, funding checks and
+puzzle verification. No real PQB solve or on-chain spend was validated by Krusty.
+
 ### Added
 
 - `krusty_kms::pqb` provides fixed-profile PQB vault derivation, public locking
@@ -25,6 +35,12 @@ All notable changes to the published Rust crates are documented here.
 
 ### Changed
 
+- **Breaking:** `derive_argent_legacy_private_key` and
+  `derive_stark_from_eth_key` strip leading zero bytes from the Ethereum key
+  before re-seeding BIP-32, matching Argent X. Affected valid inputs produce a
+  different key from 2.0.0. The WASM Argent legacy exports and ArgentLegacy
+  discovery candidates inherit this change. Preserve access to accounts created
+  with Krusty 2.0.0 using the migration guide; upgrading does not move funds.
 - `compute_total_randomness(&[])` now returns an invalid-width error instead
   of `Ok(Felt::ZERO)`.
 
@@ -73,10 +89,6 @@ All notable changes to the published Rust crates are documented here.
 - `generate_mnemonic` returns `KmsError::CryptoError` when the OS entropy
   source fails instead of panicking, which aborted `panic = "abort"` hosts and
   trapped the WASM instance.
-- `derive_argent_legacy_private_key` and `derive_stark_from_eth_key` now strip
-  leading zero bytes from the Ethereum key before re-seeding BIP-32, matching
-  Argent X. About 1 phrase in 256 previously derived a key that matched no
-  Ready (Argent X) legacy account; those keys change.
 
 ## [2.0.0] - 2026-11-07
 
