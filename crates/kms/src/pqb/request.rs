@@ -121,7 +121,7 @@ impl PqbVault {
         selection: PqbSelection,
     ) -> Result<PqbRequest> {
         let tx = validate_transaction(transaction, input_index)?;
-        let public = self.public_material()?;
+        let public = self.cached_public_material()?;
         if &public.script_sha256 != expected_lock_hash {
             return Err(invalid("locking script does not belong to vault"));
         }
@@ -161,7 +161,7 @@ impl PqbVault {
     /// not store that journal or check puzzle solutions. A request prepared by
     /// another vault is refused before any secret is released.
     pub fn authorize(&self, request: &PqbRequest) -> Result<PqbDisclosure> {
-        if self.public_material()?.script_sha256 != request.script_hash {
+        if self.cached_public_material()?.script_sha256 != request.script_hash {
             return Err(invalid("request belongs to another vault"));
         }
         let mut out = PqbDisclosure {

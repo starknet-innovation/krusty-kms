@@ -73,6 +73,21 @@ crates/wasm/src/lib.rs: wasm_bindgen(js_name=serializePublicKey) | pub fn serial
 crates/wasm/src/lib.rs: wasm_bindgen(js_name=deserializePublicKey) | pub fn deserialize_public_key(hex: &str) -> Result<types::WasmPoint, JsValue>
 crates/wasm/src/nostr_application_data.rs: wasm_bindgen(js_name=wrapNostrApplicationData) | pub fn wrap_nostr_application_data(mnemonic: String, #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue, #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue, passphrase: Option<String>, recipient_public_key: &str, identifier: &str, content: String) -> Result<String, JsValue>
 crates/wasm/src/nostr_application_data.rs: wasm_bindgen(js_name=openNostrApplicationData) | pub fn open_nostr_application_data(mnemonic: String, #[wasm_bindgen(unchecked_param_type = "number")] address_index: JsValue, #[wasm_bindgen(unchecked_param_type = "number")] account_index: JsValue, passphrase: Option<String>, event_json: &str) -> Result<String, JsValue>
+crates/wasm/src/pqb/output.rs: wasm_bindgen(typescript_custom_section) | const TYPES: &str = r#" export interface PqbPublicMenu { r: string;
+crates/wasm/src/pqb.rs: pub struct WasmPqbVault {
+crates/wasm/src/pqb.rs: pub struct WasmPqbRequest {
+crates/wasm/src/pqb.rs: impl WasmPqbVault {
+crates/wasm/src/pqb.rs: wasm_bindgen(js_name=fromMnemonic) | pub fn from_mnemonic(mnemonic: String, #[wasm_bindgen(unchecked_param_type = "number")] index: JsValue, #[wasm_bindgen(unchecked_param_type = "string")] network_name: js_sys::JsString, passphrase: Option<String>) -> Result<WasmPqbVault, JsValue>
+crates/wasm/src/pqb.rs: wasm_bindgen(js_name=fromChildMnemonic) | pub fn from_child_mnemonic(words: String, #[wasm_bindgen(unchecked_param_type = "string")] network_name: js_sys::JsString) -> Result<WasmPqbVault, JsValue>
+crates/wasm/src/pqb.rs: wasm_bindgen(js_name=publicMaterial, unchecked_return_type=PqbPublicMaterial) | pub fn public_material(&self) -> Result<JsValue, JsValue>
+crates/wasm/src/pqb.rs: wasm_bindgen(unchecked_return_type=PqbDeposit) | pub fn deposit(&self) -> Result<JsValue, JsValue>
+crates/wasm/src/pqb.rs: wasm_bindgen(js_name=prepareDisclosure) | pub fn prepare_disclosure(&self, #[wasm_bindgen(unchecked_param_type = "string")] transaction_hex: js_sys::JsString, #[wasm_bindgen(unchecked_param_type = "number")] input_index: JsValue, #[wasm_bindgen(unchecked_param_type = "string")] expected_script_hash: js_sys::JsString, #[wasm_bindgen(unchecked_param_type = "number[]")] round0: JsValue, #[wasm_bindgen(unchecked_param_type = "number[]")] round1: JsValue, #[wasm_bindgen(unchecked_param_type = "number[]")] menus: JsValue) -> Result<WasmPqbRequest, JsValue>
+crates/wasm/src/pqb.rs: wasm_bindgen(unchecked_return_type=PqbDisclosure) | pub fn authorize(&self, request: &WasmPqbRequest) -> Result<JsValue, JsValue>
+crates/wasm/src/pqb.rs: wasm_bindgen(js_name=signDepositPsbt) | pub fn sign_deposit_psbt(&self, #[wasm_bindgen(unchecked_param_type = "string")] psbt_base64: js_sys::JsString, #[wasm_bindgen(unchecked_param_type = "number[]")] input_indices: JsValue) -> Result<String, JsValue>
+crates/wasm/src/pqb.rs: pub fn dispose(&mut self)
+crates/wasm/src/pqb.rs: impl WasmPqbRequest {
+crates/wasm/src/pqb.rs: wasm_bindgen(unchecked_return_type=PqbRequestInfo) | pub fn info(&self) -> Result<JsValue, JsValue>
+crates/wasm/src/pqb.rs: pub fn dispose(&mut self)
 crates/wasm/src/proof.rs: #[derive(Debug, Clone, Serialize, Deserialize)] | wasm_bindgen(getter_with_clone) | pub struct WasmFundParams { pub amount: String; pub nonce: String; pub chain_id: String; pub tongo_address: String; pub sender_address: String; pub current_cipher_l_x: String; pub current_cipher_l_y: String; pub current_cipher_r_x: String; pub current_cipher_r_y: String; pub auditor_public_key: Option<String> }
 crates/wasm/src/proof.rs: impl WasmFundParams {
 crates/wasm/src/proof.rs: wasm_bindgen(constructor) | pub fn new(amount: String, nonce: String, chain_id: String, tongo_address: String, sender_address: String, current_cipher_l_x: String, current_cipher_l_y: String, current_cipher_r_x: String, current_cipher_r_y: String) -> Self

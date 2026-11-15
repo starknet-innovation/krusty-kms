@@ -8,7 +8,7 @@
 //!
 //! # Authorization boundary
 //!
-//! These are stateless primitives. Before [`PqbVault::authorize`], the caller
+//! These primitives do not maintain disclosure state. Before [`PqbVault::authorize`], the caller
 //! must durably journal [`PqbRequest::digest`] as exposed and forever refuse a
 //! different request for that vault, including after restore. The caller also
 //! verifies funding, destinations, fees and grind solutions. Structural request
@@ -21,6 +21,8 @@
 //! SHA-1 and RIPEMD-160 secret-bearing hash states also wipe on drop.
 //! Compiler-created copies and register spills are outside the guarantee. See `mnemonic` for BIP39 memory limitations.
 
+#[cfg(test)]
+mod cache_tests;
 mod key;
 mod lock;
 mod menu;
@@ -33,6 +35,7 @@ use krusty_kms_common::{KmsError, Result};
 pub use request::{PqbDisclosure, PqbRequest, PqbSelection};
 use ripemd::Ripemd160;
 use sha2::{Digest, Sha256, Sha512};
+use std::sync::OnceLock;
 use zeroize::Zeroizing;
 
 /// A supported chain. Names are part of the frozen vault-seed binding.
@@ -103,6 +106,7 @@ pub struct PqbDeposit {
 /// A PQB seed owner. This type deliberately has no secret export operation.
 pub struct PqbVault {
     seed: Zeroizing<[u8; 32]>,
+    public: OnceLock<PqbPublicMaterial>,
 }
 impl core::fmt::Debug for PqbVault {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -114,6 +118,7 @@ impl PqbVault {
     pub fn from_seed(seed: &[u8; 32]) -> Self {
         Self {
             seed: Zeroizing::new(*seed),
+            public: OnceLock::new(),
         }
     }
 
@@ -123,6 +128,7 @@ impl PqbVault {
         let tag = format!("pqb/vault-seed|hybrid|PQB|real|{}", network.name());
         Ok(Self {
             seed: crate::zeroizing_hmac::hmac::<Sha256, 32>(entropy, &[tag.as_bytes()])?,
+            public: OnceLock::new(),
         })
     }
 
@@ -153,8 +159,24 @@ impl PqbVault {
         Self::from_child_entropy(&child, network)
     }
 
-    /// Derive public commitments, recovery points and the exact locking script.
+    /// Return an independent copy of the vault's immutable public material.
+    /// Public derivation is cached per vault; no secret witnesses are cached.
     pub fn public_material(&self) -> Result<PqbPublicMaterial> {
+        self.cached_public_material().cloned()
+    }
+
+    fn cached_public_material(&self) -> Result<&PqbPublicMaterial> {
+        if self.public.get().is_none() {
+            // The seed never changes. Concurrent first calls may derive twice,
+            // but only one immutable public value is retained; failures retry.
+            let _ = self.public.set(self.derive_public_material()?);
+        }
+        self.public
+            .get()
+            .ok_or_else(|| invalid("public material initialization failed"))
+    }
+
+    fn derive_public_material(&self) -> Result<PqbPublicMaterial> {
         let commitments = std::array::from_fn(|i| {
             let preimage = key::take_secret_digest(&mut Sha256::digest(self.hors(i).as_ref()));
             require_wiped_hash::<Ripemd160>();

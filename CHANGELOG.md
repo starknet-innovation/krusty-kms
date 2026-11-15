@@ -4,6 +4,13 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Opaque WASM PQB vault/request handles for derivation, public material,
+  transaction-bound selected disclosure and strict deposit PSBT signing. Callers
+  must durably journal before authorization. Native PQB vaults cache immutable
+  public material across operations. See [integration](docs/pqb-wasm.md).
+
 ## [3.0.0] - 2026-11-14
 
 Major release correcting Argent legacy derivation for Ethereum keys with leading
