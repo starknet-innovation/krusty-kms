@@ -7,7 +7,7 @@ import { WasmPqbVault, initSync, deriveQsbCommitments, qsbRevealDigest,
 initSync({ module: readFileSync(new URL('../../crates/wasm/pkg/krusty_kms_wasm_bg.wasm', import.meta.url)) });
 const v = JSON.parse(readFileSync(new URL('../fixtures/pqb-wasm.json', import.meta.url)));
 const native = JSON.parse(readFileSync(new URL('../../crates/kms/tests/fixtures/pqb_kms_vectors.json', import.meta.url)));
-const { mnemonic, index, network, passphrase } = v.wallet;
+const { mnemonic, index, network, passphrase } = native.wallets[v.walletIndex];
 const derive = (i = index, net = network, pass = passphrase) => WasmPqbVault.fromMnemonic(mnemonic,i,net,pass);
 const vault = derive();
 const hash = v.publicMaterial.scriptSha256;

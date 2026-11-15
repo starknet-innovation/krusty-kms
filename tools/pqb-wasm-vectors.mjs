@@ -10,8 +10,8 @@ const { stagesFromLock } = await ref('grind.ts');
 const { serializeTx } = await ref('tx.ts');
 const { hex, fromHex, fromInt } = await ref('primitives.ts');
 const v = JSON.parse(readFileSync(new URL('../crates/kms/tests/fixtures/pqb_kms_vectors.json', import.meta.url)));
-const wallet = v.wallets[0];
-const lock = buildLock('PQB', fromHex(wallet.seed));
+const walletIndex = 0; // Reference the committed PUBLIC vector, without copying its input fields.
+const lock = buildLock('PQB', fromHex(v.wallets[walletIndex].seed));
 const round0 = [80,3,14,25,36,47,58,69], round1 = [98,10,21,32,43,54,65,76,87], menus = [11,15,14];
 const spend = assemble(lock, { txid: 'cc'.repeat(32), vout: 1, amount: 250000 },
   [[242000, fromHex('0014000102030405060708090a0b0c0d0e0f10111213')]],
@@ -28,7 +28,7 @@ const publicMaterial = {
 console.log(JSON.stringify({
   note: 'PUBLIC TEST VALUES ONLY. Assembly vector, not a solved puzzle.',
   qsbAppCommit: 'f76891fb1a67f25d5dc97afd4e23ede707cd77d1', sourceCommit: v.source_commit,
-  wallet: { mnemonic: wallet.mnemonic, passphrase: wallet.passphrase, index: wallet.index, network: wallet.network },
+  walletIndex,
   restoration: v.bip85.children.flatMap(c => ['main','regtest'].map(network => ({
     words: c.words, network, scriptSha256: buildLock('PQB', fromHex(c.seeds[`PQB|True|${network}`])).sha256,
   }))),

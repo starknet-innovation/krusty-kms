@@ -2,12 +2,7 @@
   "note": "PUBLIC TEST VALUES ONLY. Assembly vector, not a solved puzzle.",
   "qsbAppCommit": "f76891fb1a67f25d5dc97afd4e23ede707cd77d1",
   "sourceCommit": "eccdd09772edf14ab37fc63992b0626ad7ff2221",
-  "wallet": {
-    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-    "passphrase": "",
-    "index": 0,
-    "network": "main"
-  },
+  "walletIndex": 0,
   "restoration": [
     {
       "words": "puppy ocean match cereal symbol another shed magic wrap hammer bulb intact gadget divorce twin tonight reason outdoor destroy simple truth cigar social volcano",
