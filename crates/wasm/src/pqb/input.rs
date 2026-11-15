@@ -37,12 +37,16 @@ pub(super) fn deposit_indices(value: &JsValue) -> Result<Vec<u32>, JsValue> {
         .map(|i| crate::numeric_input::u32(a.get(i), "deposit input index"))
         .collect()
 }
-pub(super) fn hash(text: &str) -> Result<[u8; 32], JsValue> {
-    if text.len() != 64 || !canonical_hex(text) {
+pub(super) fn hash(text: &js_sys::JsString) -> Result<[u8; 32], JsValue> {
+    if !text.is_string() || text.length() != 64 {
+        return Err(error("Expected 64 lowercase hex script hash characters"));
+    }
+    let text = String::from(text);
+    if !canonical_hex(&text) {
         return Err(error("Expected 64 lowercase hex script hash characters"));
     }
     let mut out = [0; 32];
-    hex::decode_to_slice(text, &mut out).map_err(error)?;
+    hex::decode_to_slice(&text, &mut out).map_err(error)?;
     Ok(out)
 }
 fn canonical_hex(text: &str) -> bool {
@@ -60,4 +64,15 @@ pub(super) fn transaction(text: &js_sys::JsString) -> Result<Vec<u8>, JsValue> {
         return Err(error("Expected lowercase unprefixed transaction hex"));
     }
     hex::decode(text).map_err(error)
+}
+
+/// Match the native parser's encoded 4 MiB limit before copying text out of JS.
+pub(super) fn psbt(text: &js_sys::JsString) -> Result<String, JsValue> {
+    const MAX_BASE64_CHARS: u32 = (4 * 1024 * 1024_u32).div_ceil(3) * 4;
+    if !text.is_string() || text.length() > MAX_BASE64_CHARS {
+        return Err(error(format!(
+            "Expected PSBT base64 of at most {MAX_BASE64_CHARS} characters"
+        )));
+    }
+    Ok(String::from(text))
 }

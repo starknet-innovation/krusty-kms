@@ -78,14 +78,14 @@ impl WasmPqbVault {
         &self,
         #[wasm_bindgen(unchecked_param_type = "string")] transaction_hex: js_sys::JsString,
         #[wasm_bindgen(unchecked_param_type = "number")] input_index: JsValue,
-        expected_script_hash: &str,
+        #[wasm_bindgen(unchecked_param_type = "string")] expected_script_hash: js_sys::JsString,
         #[wasm_bindgen(unchecked_param_type = "number[]")] round0: JsValue,
         #[wasm_bindgen(unchecked_param_type = "number[]")] round1: JsValue,
         #[wasm_bindgen(unchecked_param_type = "number[]")] menus: JsValue,
     ) -> Result<WasmPqbRequest, JsValue> {
         let vault = self.live()?;
         let input_index = crate::numeric_input::u32(input_index, "input index")?;
-        let hash = input::hash(expected_script_hash)?;
+        let hash = input::hash(&expected_script_hash)?;
         let selection = PqbSelection::new(indices(&round0)?, indices(&round1)?, indices(&menus)?)
             .map_err(error)?;
         let request = vault
@@ -113,12 +113,12 @@ impl WasmPqbVault {
     #[wasm_bindgen(js_name = signDepositPsbt)]
     pub fn sign_deposit_psbt(
         &self,
-        psbt_base64: &str,
+        #[wasm_bindgen(unchecked_param_type = "string")] psbt_base64: js_sys::JsString,
         #[wasm_bindgen(unchecked_param_type = "number[]")] input_indices: JsValue,
     ) -> Result<String, JsValue> {
         let inputs = input::deposit_indices(&input_indices)?;
         self.live()?
-            .sign_deposit_psbt(psbt_base64, &inputs)
+            .sign_deposit_psbt(&input::psbt(&psbt_base64)?, &inputs)
             .map_err(error)
     }
 

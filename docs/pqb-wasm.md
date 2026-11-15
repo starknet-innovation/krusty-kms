@@ -75,7 +75,8 @@ range; selections and PSBT input indices must be plain JS arrays, not typed arra
   pinning has two variants, each round has four.
 - `prepareDisclosure(txHex: string, inputIndex: number, expectedScriptHash: string,
   round0: number[], round1: number[], menus: number[]): WasmPqbRequest`.
-  `expectedScriptHash` is exactly 32 bytes. HORS arrays have exactly 8 and 9
+  `expectedScriptHash` is checked as exactly 64 JS characters before copying,
+  then validated as 32 lowercase hex bytes. HORS arrays have exactly 8 and 9
   indices, each below 109, distinct within and across rounds. Menus have three
   indices below 12,16,16. **All ordering is preserved**, never sorted.
 - `request.info(): PqbRequestInfo` returns
@@ -92,7 +93,9 @@ range; selections and PSBT input indices must be plain JS arrays, not typed arra
   network-specific Bech32 P2WPKH address, 22-byte output script and compressed
   33-byte SEC1 key.
 - `signDepositPsbt(psbtBase64: string, inputIndices: number[]): string` returns
-  a version-0 PSBT as base64. Rust requires matching full `non_witness_utxo` and
+  a version-0 PSBT as base64. Base64 text is checked in JS before copying and
+  limited to 5,592,408 characters (the encoded 4 MiB limit); Rust additionally
+  limits the decoded PSBT to 4 MiB. Rust requires matching full `non_witness_utxo` and
   `witness_utxo`, owned P2WPKH inputs, and SIGHASH_ALL (absent means ALL).
   No finalization or broadcast. Wrong ownership, conflicting UTXOs, unsupported
   sighashes, invalid or duplicate indices fail.

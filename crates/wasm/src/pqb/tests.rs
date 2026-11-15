@@ -69,12 +69,12 @@ fn committed_reference_scripts_menus_and_deposits() {
         let vault = fixture_vault(&p["seed"]);
         assert_eq!(
             vault
-                .sign_deposit_psbt(p["psbt"].as_str().unwrap(), js(json!([0])))
+                .sign_deposit_psbt(p["psbt"].as_str().unwrap().into(), js(json!([0])))
                 .unwrap(),
             p["signed_psbt"]
         );
         assert!(vault
-            .sign_deposit_psbt(p["psbt"].as_str().unwrap(), js(json!([1])))
+            .sign_deposit_psbt(p["psbt"].as_str().unwrap().into(), js(json!([1])))
             .is_err());
     }
 }
@@ -99,7 +99,7 @@ fn committed_reference_disclosures() {
             .prepare_disclosure(
                 unsigned(s).into(),
                 0.into(),
-                &hash,
+                hash.as_str().into(),
                 js(selection[0].clone()),
                 js(selection[1].clone()),
                 js(json!([menu("pin"), menu("0"), menu("1")])),

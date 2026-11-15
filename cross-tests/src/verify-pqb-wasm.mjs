@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { WasmPqbVault, initSync, deriveQsbCommitments, qsbRevealDigest,
   revealQsbPreimages, getVersion, poseidonHash } from '../../crates/wasm/pkg/krusty_kms_wasm.js';
-initSync({ module: readFileSync(new URL('../../crates/wasm/pkg/krusty_kms_wasm_bg.wasm', import.meta.url)) });
+const wasm = initSync({ module: readFileSync(new URL('../../crates/wasm/pkg/krusty_kms_wasm_bg.wasm', import.meta.url)) });
 const v = JSON.parse(readFileSync(new URL('../fixtures/pqb-wasm.json', import.meta.url)));
 const native = JSON.parse(readFileSync(new URL('../../crates/kms/tests/fixtures/pqb_kms_vectors.json', import.meta.url)));
 const { mnemonic, index, network, passphrase } = native.wallets[v.walletIndex];
@@ -119,6 +119,22 @@ try {
   for (const inputs of [[],[1],[0,0],[-1],[0.1],[2**32],[NaN],['0'],new Uint32Array([0])])
     assert.throws(() => vault.signDepositPsbt(psbt(),inputs));
   assert.throws(() => vault.signDepositPsbt('bad',[0]));
+  // Oversized JS strings must fail before any bulk copy into linear memory.
+  const memoryBefore = wasm.memory.buffer.byteLength;
+  const oversized = 'A'.repeat(32 * 1024 * 1024);
+  assert.throws(() => vault.signDepositPsbt(oversized,[0]), /Expected PSBT base64/);
+  assert.throws(() => prepare(v.transaction,0,oversized), /Expected 64 lowercase hex/);
+  assert.equal(wasm.memory.buffer.byteLength,memoryBefore);
+  const encodedLimit = Math.ceil((4 * 1024 * 1024) / 3) * 4;
+  assert.throws(() => vault.signDepositPsbt('A'.repeat(encodedLimit+1),[0]), /Expected PSBT base64/);
+  // The boundary permits at-limit text; the native decoder enforces decoded size.
+  assert.throws(() => vault.signDepositPsbt('A'.repeat(encodedLimit),[0]), /PSBT is larger/);
+  for (const value of [null,undefined,23,{},new String('a'.repeat(64))]) {
+    assert.throws(() => vault.signDepositPsbt(value,[0]), /Expected PSBT base64/);
+    assert.throws(() => vault.prepareDisclosure(v.transaction,0,value,v.round0,v.round1,v.menus),
+      /Expected 64 lowercase hex/);
+  }
+  assert.deepEqual(vault.publicMaterial(),v.publicMaterial);
   vault.dispose(); vault.dispose();
   for (const call of [()=>vault.publicMaterial(),()=>vault.deposit(),()=>prepare(),
     ()=>vault.signDepositPsbt(psbt(),[0])]) assert.throws(call);
