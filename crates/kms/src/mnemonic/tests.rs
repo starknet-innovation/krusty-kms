@@ -105,6 +105,18 @@ fn seed_matches_trezor_vectors() {
     }
 }
 
+#[test]
+fn seed_preserves_unicode_17_passphrase_normalization() {
+    let phrase = mnemonic_from_entropy(&[0; 16]).unwrap();
+    // Unicode 18 assigns U+1ADE a combining class and reorders the two marks.
+    let seed = mnemonic_to_seed(&phrase, "a\u{1ade}\u{0323}").unwrap();
+    assert_eq!(
+        hex::encode(seed),
+        "c3938c8dc49eee0e9f2b4402a06ebc0a2ea735ae859c5b9c22816b33d92088cd\
+         27da780ca2705ca6f6f9f6c6d2e204d97bf8464494e37ce523f487e8804736c4"
+    );
+}
+
 /// Differential check against `bip39`'s own `to_seed`, over every word
 /// count, phrases on both sides of the one-block key limit, and
 /// passphrases that NFKD changes.
