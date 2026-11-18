@@ -13,4 +13,8 @@
 # fail the build too rather than scrolling past as warnings.
 
 [advisories]
-ignore = []
+ignore = [
+    # serde_with records its optional chrono dependency in Cargo.lock, but
+    # the workspace does not enable it. Remove once chrono leaves Cargo.lock.
+    "RUSTSEC-2026-0543",
+]
