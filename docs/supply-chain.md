@@ -76,6 +76,16 @@ version the `starknet-rust` 0.19.1 stack already links) instead of a second 0.9.
 copy, which removed `starknet-rust-crypto` 0.9.0, `starknet-rust-curve` 0.6.0 and
 `crypto-bigint` 0.5.5 from the lockfile.
 
+## Workspace audit exceptions
+
+The workspace-root [`.cargo/audit.toml`](../.cargo/audit.toml) temporarily ignores
+[RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543.html), which
+marks `chrono` unmaintained. Cargo records it in `Cargo.lock` as an optional
+`serde_with` dependency. CI and both publishing workflows run
+`bash tools/check.sh audit`, which fails if any workspace build with all features
+and targets can reach `chrono` and treats all other audit warnings as errors.
+Remove the exception and its reachability check when `chrono` leaves `Cargo.lock`.
+
 ## `account_sdk` (Cartridge Controller, git-only)
 
 - Used only by `crates/controller`, which is **workspace-excluded** and
@@ -84,9 +94,8 @@ copy, which removed `starknet-rust-crypto` 0.9.0, `starknet-rust-curve` 0.6.0 an
 - Pinned by **commit rev** (not tag) in `crates/controller/Cargo.toml`: git
   tags are mutable, so a tag pin could be silently repointed upstream.
 - Its cargo-audit ignores live in `crates/controller/.cargo/audit.toml`,
-  scoped to that crate. The workspace-root `.cargo/audit.toml` ignore list is
-  intentionally empty — keep it that way unless an advisory affects the root
-  `Cargo.lock` and genuinely cannot be fixed.
+  scoped to that crate. Root exceptions apply to the production lockfile and
+  are documented under [Workspace audit exceptions](#workspace-audit-exceptions).
 - The crate is its own workspace root (`[workspace]` in its manifest), so it
   resolves into `crates/controller/Cargo.lock`, never into the production
   lockfile. Audit it from its own directory so cargo-audit reads that file:

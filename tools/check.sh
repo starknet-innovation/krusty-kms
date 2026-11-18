@@ -22,6 +22,7 @@ Modes:
   examples    Check the maintained examples
   test        Run native workspace and NATS-feature tests
   guardrails  Run fast local maintainability fitness checks
+  audit       Check dependency advisories and the temporary chrono exception
   memory      Inspect native + WASM mnemonic memory with a no-scrub control
   memory-native
               Inspect optimized native mnemonic memory
@@ -64,6 +65,17 @@ check_examples() {
 check_tests() {
   run cargo test --workspace --locked --exclude krusty-kms-wasm
   run cargo test -p krusty-kms-client --locked --features nats
+}
+
+check_audit() {
+  # The exception in .cargo/audit.toml only applies while chrono is unused.
+  local dependency_tree
+  dependency_tree="$(cargo tree --locked --workspace --all-features --target all --prefix none --format '{p}')"
+  if grep -q '^chrono v' <<< "$dependency_tree"; then
+    echo 'chrono is reachable in the workspace dependency graph. Remove the RUSTSEC-2026-0543 exception or disable the dependency.' >&2
+    exit 1
+  fi
+  run cargo audit --deny warnings
 }
 
 check_guardrails() {
@@ -183,6 +195,9 @@ case "$mode" in
     ;;
   guardrails)
     check_guardrails
+    ;;
+  audit)
+    check_audit
     ;;
   memory)
     check_memory all

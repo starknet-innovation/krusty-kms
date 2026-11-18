@@ -8,9 +8,12 @@
 # affected version. The controller is audited from its own lockfile, run from
 # its own directory, never through this file.
 #
-# CI runs `cargo audit --deny warnings` against the root Cargo.lock in rust.yml
-# and again in both publishing workflows, so unmaintained/unsound advisories
-# fail the build too rather than scrolling past as warnings.
+# CI and both publishing workflows run `bash tools/check.sh audit` against the
+# root Cargo.lock, treating unmaintained and unsound advisories as errors.
 
 [advisories]
-ignore = []
+ignore = [
+    # serde_with records optional chrono in Cargo.lock. The audit check fails if
+    # chrono becomes reachable. Remove the exception and guard when it leaves Cargo.lock.
+    "RUSTSEC-2026-0543",
+]

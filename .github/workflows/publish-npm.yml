@@ -50,7 +50,7 @@ jobs:
       # and `npm pack --dry-run` in the publish job are not a substitute.
       - run: bash tools/check.sh wasm
       - run: cargo install cargo-audit --version 0.22.1 --locked
-      - run: cargo audit --deny warnings
+      - run: bash tools/check.sh audit
       - run: cargo install cargo-deny --version 0.19.8 --locked
       - run: cargo deny check
 
