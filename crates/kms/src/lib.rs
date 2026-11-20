@@ -17,6 +17,7 @@ mod nostr_nip44;
 pub mod nostr_signing;
 pub mod pqb;
 pub mod qsb_hors;
+pub mod selector;
 pub mod stark_signing;
 pub mod strk20;
 pub mod tx_hash;
@@ -68,9 +69,10 @@ pub use qsb_hors::{
     derive_qsb_commitments, qsb_reveal_digest, reveal_qsb_preimages, QsbCommitment, QsbCommitments,
     QsbPreimages, QsbRevealDigest, QsbRevealIndices, QsbVault,
 };
+pub use selector::selector_from_name;
 pub use stark_signing::{
     is_stark_public_key, sign_stark_hash, stark_public_key, validate_stark_private_key,
-    StarkSignature,
+    verify_stark_signature, StarkSignature,
 };
 pub use strk20::{
     derive_scoped_strk20_viewing_key, derive_strk20_viewing_key, fold_strk20_viewing_key,
