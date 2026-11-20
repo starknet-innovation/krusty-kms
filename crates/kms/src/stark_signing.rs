@@ -14,7 +14,7 @@
 //! - out-of-range message values are rejected explicitly
 
 use krusty_kms_common::{KmsError, SecretFelt};
-use starknet_crypto::{get_public_key, rfc6979_generate_k, sign, Felt, SignError};
+use starknet_crypto::{get_public_key, rfc6979_generate_k, sign, verify, Felt, SignError};
 
 /// Stark curve order n (order of the generator point).
 ///
@@ -103,10 +103,33 @@ pub fn sign_stark_hash(private_key: &Felt, hash: &Felt) -> Result<StarkSignature
     }
 }
 
+/// Verify a Stark ECDSA signature `(r, s)` over `hash` under `public_key`.
+///
+/// `public_key` is the signer's x-coordinate; either curve point with that x
+/// is accepted, as on-chain. No secret is involved.
+///
+/// Returns `Ok(true)` only for a valid signature. `Ok(false)` means the
+/// signature does not match the key and hash. `Err` means malformed input:
+/// `hash` not below `2^251`, `r` or `s` zero or not below `2^251` (likewise
+/// the inverse of `s` modulo the curve order), or `public_key` not an
+/// x-coordinate on the curve. Both `Ok(false)` and `Err` mean **reject**.
+///
+/// Stark ECDSA is malleable: when `(r, s)` verifies, `(r, n - s)` does too if
+/// it is in range. Do not use signature bytes as a unique identifier; count
+/// co-signers by public key.
+pub fn verify_stark_signature(
+    public_key: &Felt,
+    hash: &Felt,
+    r: &Felt,
+    s: &Felt,
+) -> Result<bool, KmsError> {
+    verify(public_key, hash, r, s)
+        .map_err(|error| KmsError::CryptoError(format!("invalid stark signature input: {error}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use starknet_crypto::verify;
 
     #[test]
     fn sign_stark_hash_is_deterministic() {
@@ -128,6 +151,46 @@ mod tests {
         let verified = verify(&signed.public_key, &hash, &signed.r, &signed.s).unwrap();
 
         assert!(verified);
+    }
+
+    #[test]
+    fn verify_stark_signature_accepts_valid_and_rejects_everything_else() {
+        let hash = Felt::from(0x1234u64);
+        let signed = sign_stark_hash(&Felt::from(42u64), &hash).unwrap();
+        let (pk, r, s) = (signed.public_key, signed.r, signed.s);
+        let other_pk = stark_public_key(&Felt::from(43u64)).unwrap();
+        let too_big = Felt::from_hex_unchecked(
+            "0x800000000000000000000000000000000000000000000000000000000000000", // 2^251
+        );
+
+        assert!(verify_stark_signature(&pk, &hash, &r, &s).unwrap());
+
+        // Mismatches: Ok(false).
+        assert!(!verify_stark_signature(&pk, &(hash + Felt::ONE), &r, &s).unwrap());
+        assert!(!verify_stark_signature(&pk, &hash, &(r + Felt::ONE), &s).unwrap());
+        assert!(!verify_stark_signature(&pk, &hash, &r, &(s + Felt::ONE)).unwrap());
+        assert!(!verify_stark_signature(&pk, &hash, &s, &r).unwrap());
+        assert!(!verify_stark_signature(&other_pk, &hash, &r, &s).unwrap());
+
+        // Malformed input: Err, never a panic.
+        assert!(verify_stark_signature(&pk, &hash, &Felt::ZERO, &s).is_err());
+        assert!(verify_stark_signature(&pk, &hash, &r, &Felt::ZERO).is_err());
+        assert!(verify_stark_signature(&pk, &hash, &too_big, &s).is_err());
+        assert!(verify_stark_signature(&pk, &hash, &r, &too_big).is_err());
+        assert!(verify_stark_signature(&pk, &too_big, &r, &s).is_err());
+        // Zero is not an x-coordinate on the curve (see `is_stark_public_key`).
+        assert!(verify_stark_signature(&Felt::ZERO, &hash, &r, &s).is_err());
+    }
+
+    #[test]
+    fn verify_stark_signature_accepts_the_malleated_signature() {
+        // Pins the documented malleability: callers must not key on (r, s).
+        let hash = Felt::from(0x1234u64);
+        let signed = sign_stark_hash(&Felt::from(42u64), &hash).unwrap();
+        let order = Felt::from_hex(STARK_CURVE_ORDER_HEX).unwrap();
+        let flipped = order - signed.s;
+
+        assert!(verify_stark_signature(&signed.public_key, &hash, &signed.r, &flipped).unwrap());
     }
 
     #[test]
