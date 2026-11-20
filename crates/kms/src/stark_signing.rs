@@ -1,4 +1,4 @@
-//! Deterministic Stark-curve ECDSA signing utilities.
+//! Deterministic Stark-curve ECDSA signing utilities, plus keyless verification.
 //!
 //! Inputs:
 //! - a Stark private key scalar
@@ -12,6 +12,7 @@
 //! - signing is deterministic via RFC-6979 with cairo-compatible seed retry
 //! - the helper signs the caller-supplied felt directly; it does not hash bytes
 //! - out-of-range message values are rejected explicitly
+//! - verification takes no secret; `Ok(false)` and `Err` both mean reject
 
 use krusty_kms_common::{KmsError, SecretFelt};
 use starknet_crypto::{get_public_key, rfc6979_generate_k, sign, verify, Felt, SignError};
@@ -117,6 +118,7 @@ pub fn sign_stark_hash(private_key: &Felt, hash: &Felt) -> Result<StarkSignature
 /// Stark ECDSA is malleable: when `(r, s)` verifies, `(r, n - s)` does too if
 /// it is in range. Do not use signature bytes as a unique identifier; count
 /// co-signers by public key.
+#[must_use = "Ok(false) and Err both mean reject"]
 pub fn verify_stark_signature(
     public_key: &Felt,
     hash: &Felt,
@@ -180,6 +182,38 @@ mod tests {
         assert!(verify_stark_signature(&pk, &too_big, &r, &s).is_err());
         // Zero is not an x-coordinate on the curve (see `is_stark_public_key`).
         assert!(verify_stark_signature(&Felt::ZERO, &hash, &r, &s).is_err());
+    }
+
+    #[test]
+    fn verify_stark_signature_accepts_an_external_vector() {
+        // crypto-cpp vector, as carried by starknet-rust-crypto's own tests.
+        let public_key = Felt::from_hex_unchecked(
+            "0x01ef15c18599971b7beced415a40f0c7deacfd9b0d1819e03d723d8bc943cfca",
+        );
+        let r = Felt::from_hex_unchecked(
+            "0x0411494b501a98abd8262b0da1351e17899a0c4ef23dd2f96fec5ba847310b20",
+        );
+        let s = Felt::from_hex_unchecked(
+            "0x0405c3191ab3883ef2b763af35bc5f5d15b3b4e99461d70e84c654a351a7c81b",
+        );
+
+        assert!(verify_stark_signature(&public_key, &Felt::TWO, &r, &s).unwrap());
+        assert!(!verify_stark_signature(&public_key, &Felt::THREE, &r, &s).unwrap());
+    }
+
+    #[test]
+    fn verify_stark_signature_accepts_either_point_with_the_public_key_x() {
+        // Keys d and n - d are the two points sharing one x-coordinate.
+        let hash = Felt::from(0x1234u64);
+        let key = Felt::from(42u64);
+        let negated_key = Felt::from_hex(STARK_CURVE_ORDER_HEX).unwrap() - key;
+        let public_key = stark_public_key(&key).unwrap();
+        assert_eq!(public_key, stark_public_key(&negated_key).unwrap());
+
+        for signer in [key, negated_key] {
+            let signed = sign_stark_hash(&signer, &hash).unwrap();
+            assert!(verify_stark_signature(&public_key, &hash, &signed.r, &signed.s).unwrap());
+        }
     }
 
     #[test]
