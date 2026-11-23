@@ -133,7 +133,8 @@ pub fn sign_stark_hash(private_key: &Felt, hash: &Felt) -> Result<StarkSignature
 /// When `(r, s)` verifies, `(r, n - s)` does too if it is in range. Do not use
 /// signature bytes as a unique identifier; count co-signers by public key.
 /// Because either point with the key's x is accepted, `(r, s)` also verifies
-/// over `n - hash`; that is harmless only because the caller recomputes `hash`.
+/// over `n - hash` if that is in range; that is harmless only because the
+/// caller recomputes `hash`.
 pub fn verify_stark_signature(
     public_key: &Felt,
     hash: &Felt,
