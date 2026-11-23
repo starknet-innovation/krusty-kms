@@ -13,6 +13,9 @@ The derivation, address, and signing files are byte-identical copies of the
 shared vectors in `fixtures/vectors/` at the repository root; that directory's
 README lists what each covers. The account-class, Bitcoin, hashing, selector,
 SNIP-12, and transaction-hash parity vectors are consumed only by the `krusty-kms` tests.
+`selector_vectors.json` holds selectors produced by starknet.js
+`hash.getSelectorFromName` (version in its `source`); regenerate it with
+starknet.js, and `cross-tests/src/verify-selector-vectors.ts` re-verifies it.
 Keep the shared copies in sync when regenerating vectors, and edit the JSON
 only through the test tooling that consumes it.
 

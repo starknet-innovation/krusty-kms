@@ -1,5 +1,5 @@
 {
-  "source": "starknet.js hash.getSelectorFromName (starknet ^10.8.0); re-verified by cross-tests/src/verify-selector-vectors.ts",
+  "source": "starknet.js hash.getSelectorFromName (starknet 10.8.0); re-verified by cross-tests/src/verify-selector-vectors.ts",
   "vectors": [
     {
       "name": "transfer",

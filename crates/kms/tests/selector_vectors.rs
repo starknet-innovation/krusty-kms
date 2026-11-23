@@ -22,7 +22,10 @@ struct Vector {
 fn selector_from_name_matches_starknet_js() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("fixtures/selector_vectors.json")).unwrap();
-    assert!(!fixture.vectors.is_empty());
+    // The rows where starknet.js and starknet-rs disagree must stay pinned.
+    for required in ["__default__", "__l1_default__", "tränsfer"] {
+        assert!(fixture.vectors.iter().any(|v| v.name == required));
+    }
 
     for vector in fixture.vectors {
         assert_eq!(

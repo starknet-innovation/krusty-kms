@@ -76,6 +76,8 @@ pub fn stark_public_key(private_key: &Felt) -> Result<Felt, KmsError> {
 }
 
 /// Sign a caller-supplied felt using deterministic RFC-6979 Stark ECDSA.
+///
+/// A zero `hash` is signed, but [`verify_stark_signature`] rejects it.
 pub fn sign_stark_hash(private_key: &Felt, hash: &Felt) -> Result<StarkSignature, KmsError> {
     validate_stark_private_key(private_key)?;
     let mut seed = None;
@@ -122,13 +124,16 @@ pub fn sign_stark_hash(private_key: &Felt, hash: &Felt) -> Result<StarkSignature
 /// and never take it from untrusted input such as a stored proposal. Anyone
 /// can construct a `(hash, r, s)` triple that verifies under a given public
 /// key when they are free to pick the hash. A zero hash is the simplest case
-/// (`r = s = public_key` verifies with no private key) and is rejected here,
-/// unlike on-chain; that guard does not replace recomputing the hash.
+/// (for a public key below `2^251`, `r = s = public_key` satisfies the raw
+/// check with no private key) and is rejected here; that guard does not
+/// replace recomputing the hash.
 ///
 /// # Malleability
 ///
 /// When `(r, s)` verifies, `(r, n - s)` does too if it is in range. Do not use
 /// signature bytes as a unique identifier; count co-signers by public key.
+/// Because either point with the key's x is accepted, `(r, s)` also verifies
+/// over `n - hash`; that is harmless only because the caller recomputes `hash`.
 pub fn verify_stark_signature(
     public_key: &Felt,
     hash: &Felt,
@@ -189,7 +194,10 @@ mod tests {
 
         assert!(verify_stark_signature(&pk, &hash, &r, &s).is_ok());
 
-        // Mismatches.
+        // Mismatches: in-range input that upstream reports as `Ok(false)`.
+        assert_eq!(verify(&other_pk, &hash, &r, &s).ok(), Some(false));
+        let mismatch = verify_stark_signature(&other_pk, &hash, &r, &s).unwrap_err();
+        assert!(mismatch.to_string().contains("does not match"));
         assert!(verify_stark_signature(&pk, &(hash + Felt::ONE), &r, &s).is_err());
         assert!(verify_stark_signature(&pk, &hash, &(r + Felt::ONE), &s).is_err());
         assert!(verify_stark_signature(&pk, &hash, &r, &(s + Felt::ONE)).is_err());
