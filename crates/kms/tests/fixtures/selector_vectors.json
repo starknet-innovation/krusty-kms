@@ -1,0 +1,41 @@
+{
+  "source": "starknet.js hash.getSelectorFromName (starknet ^10.8.0); re-verified by cross-tests/src/verify-selector-vectors.ts",
+  "vectors": [
+    {
+      "name": "transfer",
+      "selector": "0x83afd3f4caedc6eebf44246fe54e38c95e3179a5ec9ea81740eca5b482d12e"
+    },
+    {
+      "name": "__execute__",
+      "selector": "0x15d40a3d6ca2ac30f4031e42be28da9b056fef9bb7357ac5e85627ee876e5ad"
+    },
+    {
+      "name": "__validate__",
+      "selector": "0x162da33a4585851fe8d3af3c2a9c60b557814e221e0d4f30ff0b2189d9c7775"
+    },
+    {
+      "name": "initialize",
+      "selector": "0x79dc0da7c54b95f10aa182ad0a46400db63156920adb65eca2654c0945a463"
+    },
+    {
+      "name": "__default__",
+      "selector": "0x2e4c01ac72b840834c6c3146a782496a90a442ac831e5188090c1d33a7c0f50"
+    },
+    {
+      "name": "__l1_default__",
+      "selector": "0x1ac445d7a589d19896ced0342d3d23fc7a05f2d7feaf2cd89e84104c86b5937"
+    },
+    {
+      "name": "tränsfer",
+      "selector": "0x3be15c7fd92c64deb763e0e8cf047ddc58d71d2f2445f81d0e251862207e62b"
+    },
+    {
+      "name": "转账",
+      "selector": "0x9ef5c663874316bb827ff240a721889b45786f83b46c9854fda19a277d3295"
+    },
+    {
+      "name": "",
+      "selector": "0x1d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+    }
+  ]
+}

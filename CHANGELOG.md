@@ -10,8 +10,10 @@ All notable changes to the published Rust crates are documented here.
   `starknet_keccak`, as starknet.js computes it, with no `__default__` special
   case) and `verify_stark_signature` (Stark ECDSA verification under an
   x-coordinate public key) in `krusty-kms`. Both are keyless. Verification
-  treats `Err` and `Ok(false)` alike as reject, and signatures are malleable,
-  so count signers by public key.
+  returns `Ok(())` only for a valid signature and rejects a zero hash. It
+  verifies the given felt directly, so callers must recompute the hash from
+  the signed data and never take it from untrusted input. Signatures are
+  malleable, so count signers by public key.
 
 ## [3.1.0] - 2026-11-15
 

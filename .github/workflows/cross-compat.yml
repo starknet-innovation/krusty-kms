@@ -58,3 +58,7 @@ jobs:
       - name: Verify SNIP-12 vectors with starknet.js
         working-directory: cross-tests
         run: npm run verify:snip12
+
+      - name: Verify selector vectors with starknet.js
+        working-directory: cross-tests
+        run: npm run verify:selectors

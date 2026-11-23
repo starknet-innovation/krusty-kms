@@ -6,8 +6,10 @@ use starknet_types_core::felt::Felt;
 /// Entrypoint selector for `name`: `starknet_keccak` of its UTF-8 bytes, i.e.
 /// Keccak-256 with the top 6 bits cleared.
 ///
-/// This is the plain hash, as starknet.js `getSelectorFromName` computes it,
-/// so a co-signer recomputes the selector a starknet.js proposer used. It
+/// This is the plain hash, as starknet.js `getSelectorFromName` computes it
+/// (pinned by `tests/fixtures/selector_vectors.json`, which CI re-verifies
+/// with starknet.js), so a co-signer recomputes the selector a starknet.js
+/// proposer used. It
 /// deliberately differs from cairo-lang and starknet-rs
 /// `get_selector_from_name`, which map the Cairo 0 default entrypoints
 /// `__default__` and `__l1_default__` to `0` and reject non-ASCII names.
