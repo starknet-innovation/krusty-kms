@@ -17,6 +17,11 @@ All notable changes to the published Rust crates are documented here.
   the signed data and never take it from untrusted input. Signatures are
   malleable, so count signers by public key.
 
+### Security
+
+- Update the workspace lockfile to `url` 2.5.9, addressing
+  [RUSTSEC-2026-0592](https://rustsec.org/advisories/RUSTSEC-2026-0592.html).
+
 ## [3.1.0] - 2026-11-15
 
 Adds PQB support to the WASM npm package for wallet integrations, with opaque
