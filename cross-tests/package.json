@@ -11,6 +11,7 @@
     "verify": "tsx src/verify-rust-proofs.ts",
     "verify:wasm": "tsx src/verify-wasm-bindings.ts",
     "verify:snip12": "tsx src/verify-snip12-vectors.ts",
+    "verify:selectors": "tsx src/verify-selector-vectors.ts",
     "verify:tx-hashes": "tsx src/generate-tx-hash-vectors.ts",
     "test": "npm run verify",
     "verify:pqb-wasm": "node src/verify-pqb-wasm.mjs"
