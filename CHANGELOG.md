@@ -4,6 +4,8 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-11-23
+
 ### Added
 
 - `selector_from_name` (entrypoint selector from a name: the plain
