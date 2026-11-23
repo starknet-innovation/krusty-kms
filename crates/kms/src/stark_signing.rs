@@ -230,6 +230,28 @@ mod tests {
     }
 
     #[test]
+    fn verify_stark_signature_rejects_cancellation_tuples_without_panicking() {
+        // Inputs chosen so one candidate point `(hash/s)G ± (r/s)Q` is the
+        // point at infinity. With Q = ±G and s = 1 those are `hash + r = n`
+        // and `hash = r`. Upstream must report a mismatch, not unwind; this
+        // pins that across dependency updates.
+        let order = Felt::from_hex(STARK_CURVE_ORDER_HEX).unwrap();
+        let two_pow_251 = Felt::from_hex_unchecked(
+            "0x800000000000000000000000000000000000000000000000000000000000000",
+        );
+        let pk = stark_public_key(&Felt::ONE).unwrap();
+
+        let hash = two_pow_251 - Felt::ONE;
+        let r = order - hash;
+        assert_eq!(verify(&pk, &hash, &r, &Felt::ONE).ok(), Some(false));
+        assert!(verify_stark_signature(&pk, &hash, &r, &Felt::ONE).is_err());
+
+        let same = Felt::from(12345u64);
+        assert_eq!(verify(&pk, &same, &same, &Felt::ONE).ok(), Some(false));
+        assert!(verify_stark_signature(&pk, &same, &same, &Felt::ONE).is_err());
+    }
+
+    #[test]
     fn verify_stark_signature_accepts_an_external_vector() {
         // crypto-cpp vector, as carried by starknet-rust-crypto's own tests.
         let public_key = Felt::from_hex_unchecked(
