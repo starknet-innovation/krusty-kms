@@ -22,10 +22,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Internal crates
-krusty-kms-sdk = { version = "3.0.0", path = "../sdk", default-features = false }
-krusty-kms-common = { version = "3.0.0", path = "../common" }
-krusty-kms-crypto = { version = "3.0.0", path = "../crypto", default-features = false }
-krusty-kms = { version = "3.0.0", path = "../kms", default-features = false }
+krusty-kms-sdk = { version = "4.0.0", path = "../sdk", default-features = false }
+krusty-kms-common = { version = "4.0.0", path = "../common" }
+krusty-kms-crypto = { version = "4.0.0", path = "../crypto", default-features = false }
+krusty-kms = { version = "4.0.0", path = "../kms", default-features = false }
 
 # WASM bindings
 wasm-bindgen = "0.2"

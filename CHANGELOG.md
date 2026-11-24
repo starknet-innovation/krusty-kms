@@ -4,6 +4,68 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-24
+
+Key and address derivation is unchanged from 3.x. Read the
+[4.0 migration guide](docs/migration-4.0.md) before upgrading.
+
+### Added
+
+- `decrypt_private_key_bounded` for untrusted direct-key metadata and the WASM
+  `decryptPrivateKeyHighCost` export for deliberate legacy recovery. The
+  default direct-key scrypt ceiling is available as `DEFAULT_SCRYPT_N_MAX`.
+- `encrypt_for_auditor_with_context` and `decrypt_as_auditor_with_context`
+  produce and read the pinned Tongo 1.3.2 audit-hint format. The client exposes
+  both possible Cairo/legacy decodings through `AEBalance::candidates` because
+  a sender-chosen nonce can make the wire layouts overlap.
+- WASM errors created from `WasmError` now expose their documented `code`
+  property alongside `message` for programmatic handling.
+
+### Changed
+
+- **Breaking:** Direct `encrypt_private_key` rejects scrypt N above 2^18, and
+  default WASM `decryptPrivateKey` rejects older high-cost N with a
+  serialization error that names `decryptPrivateKeyHighCost`. Trusted Rust
+  callers can still use legacy `decrypt_private_key` to recover keys with N up
+  to 2^20. Import JSON and encoded salt are checked before parsing or decoding.
+- **Breaking:** Direct decryption requires the public `EncryptedKey.salt` field
+  to contain exactly 16 bytes. `encrypt_keystore` and WASM `encryptKeystore`
+  reject native plaintext over 4096 bytes; v3 imports reject N·r·p above 2^21
+  even when the memory footprint alone is within the old ceiling.
+- **Breaking:** Direct private-key encryption caps plaintext at 1 MiB minus the
+  16-byte authentication tag; direct decryption caps ciphertext at 1 MiB.
+  Keystore imports cap decoded KDF salts at 128 bytes.
+- **Breaking:** WASM scrypt-N inputs must be exact JavaScript numbers; numeric
+  strings that wasm-bindgen previously coerced are rejected with a structured
+  `SERIALIZATION_ERROR`.
+- **Breaking:** Tongo auditor-enabled operations now produce the pinned Tongo
+  1.3.2 audit hint format, including HKDF context, authenticated plaintext, and
+  Cairo `u512`/`u256` limb order. The shared serializer and C ABI emit the
+  corrected Cairo layout for identical input bytes. Historical Krusty hints
+  remain readable when callers try both `AEBalance` byte candidates and the
+  relevant decryptor; they are not Tongo 1.3.2 audit hints. `AEBalance` now
+  stores layout metadata, so downstream struct-literal construction and
+  exhaustive destructuring require changes.
+- **Breaking:** `krusty-kms-client`'s `nats` feature depends on `async-nats`
+  0.53. `NatsMultisigCoordinator::new` takes an `async_nats::Client` from that
+  version, and `NatsMultisigCoordinator::connect` inherits its stricter TLS and
+  discovered-server verification.
+
+### Deprecated
+
+- `encrypt_for_auditor` and `decrypt_as_auditor` retain the legacy Krusty
+  format. Use their context-aware counterparts for Tongo operations.
+
+### Security
+
+- Wipe scrypt's B, V and T scratch buffers after key derivation, including
+  failed decryption, while preserving the locked scrypt output format.
+- Bound new direct scrypt encryption and default WASM decryption to the same
+  256 MiB budget as imported keystores, and cap v3 keystore total work.
+- `async-nats` 0.52 stops a received header value containing a line break from
+  panicking the connection task, which any publisher on a subscribed subject
+  could trigger.
+
 ## [3.2.0] - 2026-11-23
 
 ### Added
@@ -62,27 +124,6 @@ puzzle verification. No real PQB solve or on-chain spend was validated by Krusty
   can reject replays. WASM `openNostrApplicationData` adds `wrapId`, `rumorId`
   and `createdAt` to its JSON result. `createdAt` is a decimal string to
   preserve the full timestamp when parsed by JavaScript.
-- `encrypt_for_auditor_with_context` and `decrypt_as_auditor_with_context`
-  produce and read the pinned Tongo 1.3.2 audit-hint format. The client exposes
-  both possible Cairo/legacy decodings through `AEBalance::candidates` because
-  a sender-chosen nonce can make the wire layouts overlap.
-
-### Changed
-
-- **Breaking:** Tongo auditor-enabled operations now produce the pinned Tongo 1.3.2 audit
-  hint format, including HKDF context, authenticated plaintext, and Cairo
-  `u512`/`u256` limb order. The shared serializer and C ABI emit the corrected
-  Cairo layout for identical input bytes. Historical Krusty hints remain
-  readable when callers try both `AEBalance` byte candidates and the relevant
-  decryptor; the limb layout alone does not select the encryption format.
-  They are not Tongo 1.3.2 audit hints. `AEBalance` now stores
-  layout metadata, so downstream struct-literal construction and exhaustive
-  destructuring require changes.
-
-### Deprecated
-
-- `encrypt_for_auditor` and `decrypt_as_auditor` retain the legacy Krusty
-  format. Use their context-aware counterparts for Tongo operations.
 
 ### Changed
 

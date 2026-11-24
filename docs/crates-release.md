@@ -23,7 +23,7 @@ package is released by [`.github/workflows/publish-npm.yml`](../.github/workflow
 - Normal feature and fix PRs must not bump the root workspace version. Keep their
   notes under `## [Unreleased]`; create the dated entry and bump the version only in a
   focused release PR. Read every `## [Unreleased]` bullet before choosing the
-  increment. The crates are 3.x and follow semver:
+  increment. The crates are 4.x and follow semver:
   - **patch**: every bullet is `Fixed` or `Security`;
   - **minor**: any `Added`, `Deprecated` or non-breaking `Changed` bullet;
   - **major**: any bullet marked **Breaking**, or any `Removed` entry (removing public
@@ -166,10 +166,10 @@ instead.
    version bump while a previous release version is pending publication.
 2. Change the root `[workspace.package].version` in `Cargo.toml`. Workspace crates
    inherit this version; do not assign a one-off version to an individual published crate.
-   Internal `krusty-kms-*` path dependency requirements (currently `3.0.0`) need no move
-   for compatibility on patch and minor releases, because `^3.0.0` covers every 3.x.
+   Internal `krusty-kms-*` path dependency requirements (currently `4.0.0`) need no move
+   for compatibility on patch and minor releases, because `^4.0.0` covers every 4.x.
    Raise a requirement's lower bound when the dependent crate starts using an API or
-   relying on behavior added in a later 3.x of that dependency (for example `3.1.0`),
+   relying on behavior added in a later 4.x of that dependency (for example `4.1.0`),
    including security invariants; otherwise a downstream
    lockfile that still holds the older version satisfies the range and fails to
    compile. On a major release, move every requirement to the new version.

@@ -76,9 +76,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "async-nats"
-version = "0.51.0"
+version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4f92759f418774b78c36ef07885849150ce950c67d9bcdeff8a9c253f57d9a1"
+checksum = "486635b3139935dcea5b88d219c5998aefa3c5b99e9a204312b93ac3aa10b30f"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -445,6 +445,7 @@ dependencies = [
  "block-buffer 0.12.1",
  "crypto-common 0.2.2",
  "inout",
+ "zeroize",
 ]
 
 [[package]]
@@ -1739,7 +1740,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -1758,7 +1759,9 @@ dependencies = [
  "krusty-kms-crypto",
  "num-bigint 0.5.1",
  "num-traits",
+ "pbkdf2",
  "ripemd",
+ "salsa20",
  "scrypt",
  "serde",
  "serde_json",
@@ -1775,7 +1778,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-cabi"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "hex",
  "krusty-kms",
@@ -1791,7 +1794,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-client"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "async-nats",
  "async-trait",
@@ -1818,7 +1821,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-common"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "hex",
  "serde",
@@ -1831,7 +1834,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-crypto"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "criterion",
  "crypto-bigint",
@@ -1851,7 +1854,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-domain"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "hex",
  "krusty-kms-common",
@@ -1863,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-gateway"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "async-trait",
  "hex",
@@ -1884,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-oracle"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
@@ -1896,7 +1899,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-sdk"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "chacha20poly1305",
  "criterion",
@@ -1915,7 +1918,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-wallet-api"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "async-trait",
  "krusty-kms-common",
@@ -1931,7 +1934,7 @@ dependencies = [
 
 [[package]]
 name = "krusty-kms-wasm"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.4.3",
@@ -2023,7 +2026,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "mental-poker"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "criterion",
  "getrandom 0.2.17",
@@ -2041,7 +2044,7 @@ dependencies = [
 
 [[package]]
 name = "mental-poker-wasm"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "getrandom 0.2.17",
  "getrandom 0.4.3",
@@ -2430,7 +2433,7 @@ dependencies = [
 
 [[package]]
 name = "qb-game"
-version = "3.2.0"
+version = "4.0.0"
 dependencies = [
  "hex",
  "krusty-kms-crypto",
@@ -3710,11 +3713,9 @@ dependencies = [
  "http",
  "httparse",
  "rand 0.10.3",
- "rustls-pki-types",
  "sha1_smol",
  "simdutf8",
  "tokio",
- "tokio-rustls",
  "tokio-util",
 ]
 

@@ -8,15 +8,18 @@
   Deterministic key management, Starknet account tooling, and protocol cryptography in Rust.
 </p>
 
-> **Status**: Krusty is on the stable 3.x line and the published crates and the npm package listed below are supported for production use. Their public API follows semantic versioning: breaking changes wait for a new major version. The internal crates and the experimental gaming crates are not covered by this commitment. See [SECURITY.md](SECURITY.md) for supported versions and how to report a vulnerability.
+> **Status**: Krusty is on the stable 4.x line and the published crates and the npm package listed below are supported for production use. Their public API follows semantic versioning: breaking changes wait for a new major version. The internal crates and the experimental gaming crates are not covered by this commitment. See [SECURITY.md](SECURITY.md) for supported versions and how to report a vulnerability.
 
 Krusty provides BIP-39/44 key derivation for Starknet and Nostr domains, deterministic Stark and Nostr signing, OpenZeppelin account descriptor/address calculation, Tongo confidential proof generation, and a focused Starknet client/gateway surface.
 
 PQB vault key-management primitives are available in `krusty_kms::pqb`; see
 [the integration guide](docs/pqb-kms.md) for the disclosure and journal boundary.
 
-For upgrades from 2.0.0, read the [3.0 migration guide](docs/migration-3.0.md):
-Argent legacy derivation changes keys for affected inputs with leading zero bytes.
+For upgrades from 3.x, read the [4.0 migration guide](docs/migration-4.0.md):
+key derivation is unchanged, but key encryption limits, Tongo audit hints and the
+NATS coordinator's `async-nats` version change. For upgrades from 2.0.0, read the
+[3.0 migration guide](docs/migration-3.0.md) first: Argent legacy derivation
+changes keys for affected inputs with leading zero bytes.
 
 ## Published Crates
 

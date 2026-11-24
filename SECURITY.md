@@ -2,15 +2,18 @@
 
 ## Supported versions
 
-Krusty is on the stable 3.x line. Security fixes go to the latest 3.x release
+Krusty is on the stable 4.x line. Security fixes go to the latest 4.x release
 of the published crates.io crates and of the
 `@starknetfoundation/krusty-kms-wasm` npm package, as listed in the
-[README](README.md). Upgrade to the newest 3.x release to receive them:
-semantic versioning keeps upgrades within the 3.x line free of breaking API
+[README](README.md). Upgrade to the newest 4.x release to receive them:
+semantic versioning keeps upgrades within the 4.x line free of breaking API
 changes. For the npm package, that covers its JavaScript export surface.
-Upgrading from 2.0.0 changes Argent legacy derivation for some inputs; follow
+Upgrading from 3.x does not change key derivation, but tightens key encryption
+inputs and changes the Tongo audit hint format; follow
+[the 4.0 migration guide](docs/migration-4.0.md). Upgrading from 2.0.0 also
+changes Argent legacy derivation for some inputs; follow
 [the 3.0 migration guide](docs/migration-3.0.md) before upgrading a wallet.
-Releases before 3.0.0 are retained for migration/recovery compatibility and are
+Releases before 4.0.0 are retained for migration/recovery compatibility and are
 not the current supported security-fix line.
 
 The internal crates (`krusty-kms-oracle`, `krusty-kms-controller`,
