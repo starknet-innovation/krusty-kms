@@ -47,6 +47,9 @@ jobs:
       - name: Generate cross-compat vectors from Rust
         run: cargo test -p krusty-kms-sdk --test cross_compat -- --ignored --nocapture
 
+      - name: Generate audited operation hints from Rust
+        run: cargo test -p krusty-kms-sdk --test audit_hint_compat -- --ignored --nocapture
+
       - name: Install cross-tests dependencies
         working-directory: cross-tests
         run: npm ci
@@ -54,6 +57,10 @@ jobs:
       - name: Verify Rust proofs with TypeScript
         working-directory: cross-tests
         run: npx tsx src/verify-rust-proofs.ts
+
+      - name: Decrypt Rust audit hints with TypeScript
+        working-directory: cross-tests
+        run: npm run verify:audit-hints
 
       - name: Verify SNIP-12 vectors with starknet.js
         working-directory: cross-tests

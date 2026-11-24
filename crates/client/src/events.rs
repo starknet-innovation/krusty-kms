@@ -1,6 +1,9 @@
 //! Tongo event reader — fetches and parses on-chain events.
 
+mod ae_balance;
 mod pagination;
+
+use ae_balance::parse_ae_balance;
 
 use crate::abi::tongo_events;
 use crate::types::{AEBalance, CipherBalance};
@@ -186,29 +189,6 @@ fn get_felt(felts: &[StarknetRsFelt], index: usize) -> Result<&StarknetRsFelt> {
             felts.len()
         ))
     })
-}
-
-/// Parse AEBalance from event data: 6 felts (4 for u512 ciphertext + 2 for u256 nonce).
-fn parse_ae_balance(felts: &[StarknetRsFelt], offset: usize) -> Result<AEBalance> {
-    if felts.len() < offset + 6 {
-        return Err(KmsError::DeserializationError(
-            "Not enough felts for AEBalance".to_string(),
-        ));
-    }
-
-    // Ciphertext: 4 felts → 64 bytes (each felt provides 16 bytes from low portion)
-    let mut ciphertext = [0u8; 64];
-    for i in 0..4 {
-        let bytes = felts[offset + i].to_bytes_be();
-        ciphertext[i * 16..(i + 1) * 16].copy_from_slice(&bytes[16..32]);
-    }
-
-    // Nonce: u256 (low, high) stores the 24 bytes followed by 8 zero bytes.
-    let mut nonce = [0u8; 24];
-    nonce[..16].copy_from_slice(&felts[offset + 5].to_bytes_be()[16..32]);
-    nonce[16..].copy_from_slice(&felts[offset + 4].to_bytes_be()[16..24]);
-
-    Ok(AEBalance { ciphertext, nonce })
 }
 
 // ── Reader ──────────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@
     },
     {
       "path": "crates/client/src/events.rs",
-      "lines": 707
+      "lines": 687
     },
     {
       "path": "crates/client/src/multisig/types.rs",
