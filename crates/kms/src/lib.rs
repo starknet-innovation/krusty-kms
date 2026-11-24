@@ -1,6 +1,7 @@
 //! Deterministic key derivation, account descriptors, and Stark/Nostr signing.
 
 #![forbid(unsafe_code)]
+#![deny(clippy::disallowed_methods)]
 
 pub mod account;
 pub mod account_class;
@@ -17,6 +18,7 @@ mod nostr_nip44;
 pub mod nostr_signing;
 pub mod pqb;
 pub mod qsb_hors;
+mod scrypt_wiping;
 pub mod selector;
 pub mod stark_signing;
 pub mod strk20;

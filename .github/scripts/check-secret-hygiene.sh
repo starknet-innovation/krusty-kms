@@ -18,6 +18,11 @@ if ! grep -n 'SecretFelt(\*\*\*)' "$root/crates/common/src/secret_felt.rs" >/dev
   failed=1
 fi
 
+# 3) Native KDF entry points must not import or call upstream scrypt.
+if ! python3 "$root/.github/scripts/check-scrypt-entrypoints.py" "$root"; then
+  failed=1
+fi
+
 # Advisory only: discourage println of exposed secrets outside tests.
 while IFS= read -r match; do
   echo "::warning::$match"

@@ -66,6 +66,25 @@ def main():
         if not run.stdout.rstrip().endswith(
                 f"native result=pass mode={args.mode} iterations=4 scanned_bytes=65536"):
             raise RuntimeError("missing successful inspection terminator")
+        heap = subprocess.run(
+            [str(target / "release/krusty-scrypt-heap-inspection"), args.mode],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        if heap.returncode != 0:
+            raise RuntimeError(f"scrypt heap inspection exited {heap.returncode}: {heap.stderr.strip()}")
+        pattern = re.compile(r"scrypt phase=([1234]) large_frees=(\d+) "
+                             r"nonzero_large_frees=(\d+) block_frees=(\d+) "
+                             r"nonzero_block_frees=(\d+)")
+        heap_records = [pattern.fullmatch(line).groups() for line in heap.stdout.splitlines()
+                        if pattern.fullmatch(line)]
+        if len(heap_records) != 4 or [row[0] for row in heap_records] != ["1", "2", "3", "4"]:
+            raise RuntimeError("incomplete scrypt heap inspection")
+        if not heap.stdout.rstrip().endswith(f"scrypt result=pass mode={args.mode}"):
+            raise RuntimeError("missing successful scrypt inspection terminator")
+        report["scrypt_heap"] = [{"phase": int(phase), "large_frees": int(large),
+                                   "nonzero_large_frees": int(nonzero_large),
+                                   "block_frees": int(blocks),
+                                   "nonzero_block_frees": int(nonzero_blocks)}
+                                  for phase, large, nonzero_large, blocks, nonzero_blocks in heap_records]
         report["status"] = "passed"
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         report["error"] = str(error)

@@ -14,7 +14,7 @@ Executable fitness checks that keep this workspace reviewable. Policy lives in
 | PR size | `.github/scripts/check-pr-size.sh` | >400 changed lines or >10 production Rust files without justification |
 | Crate dependency DAG | `.github/scripts/check-dependency-layers.sh` | Forbidden `krusty-*` edges; unknown crates fail closed |
 | `unsafe` policy | crate attrs + `.github/scripts/check-unsafe-allowlist.sh` | Missing `forbid`/`deny(unsafe_code)`; `allow(unsafe_code)` on any crate root but `crates/ffi`; stray `unsafe` (tokenised scan, self-tested by `test-check-unsafe-allowlist.sh`) |
-| Secret hygiene | `.github/scripts/check-secret-hygiene.sh` | `SecretFelt` Display / missing Debug redaction |
+| Secret hygiene | `.github/scripts/check-secret-hygiene.sh` + KMS Clippy `disallowed_methods` | `SecretFelt` Display / missing Debug redaction; production calls to upstream non-wiping `scrypt::scrypt` (including aliases) |
 | Workflow action pinning | `.github/scripts/check-workflow-actions-pinned.sh` | Mutable refs, local actions, aliases, digest-less images, or invalid YAML in any workflow |
 | FFI header freeze | `.github/scripts/check-ffi-surface.sh` | `kms.h` drift across packages |
 | WASM export freeze | `.github/scripts/check-wasm-exports.sh` | `wasm_bindgen` surface drift |
