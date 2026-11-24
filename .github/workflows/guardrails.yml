@@ -152,6 +152,13 @@ jobs:
               export PR_BODY="$(jq -r '.[0].body // empty' <<<"$pulls")"
             fi
             PR_AUTHOR="$(jq -r '.[0].user.login // empty' <<<"$pulls")"
+            # The PR author only describes the pushed range when the push adds
+            # one commit (squash, rebase or merge) directly on the previous
+            # main; otherwise apply the strict check.
+            parent="$(git rev-parse --verify -q "${GITHUB_SHA}^1")" || parent=""
+            if [[ -z "${BEFORE_SHA:-}" || "$parent" != "$BEFORE_SHA" ]]; then
+              PR_AUTHOR=""
+            fi
             export PR_AUTHOR
           fi
           bash .github/scripts/check-design-note.sh

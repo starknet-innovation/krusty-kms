@@ -128,6 +128,13 @@ version requirements. Any other manifest change on them (a new or removed
 dependency, `features`, `optional`, `package`, ...) still needs one, as do public
 API and baseline/snapshot changes. A version bump of a dependency whose types are
 public can still break the API; the semver job, not this check, covers that.
+On `push` to `main` the exemption applies only when the push adds one commit
+(squash, rebase or merge) directly on the previous `main` and that commit belongs
+to the Dependabot PR. On Dependabot PRs, dependency entries are compared as
+parsed TOML with version requirements masked, so a version-only bump passes
+whatever its spelling, while a dependency rewritten into a different form (for
+example `foo = "1"` to `foo = { version = "2" }`) still needs a note. This path
+needs Python 3.11 or later (`tomllib`).
 
 Keep notes to 1–2 pages: inputs/outputs, invariants, failure modes, and the
 smallest interface that works.

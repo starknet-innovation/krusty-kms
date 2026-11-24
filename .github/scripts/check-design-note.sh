@@ -16,6 +16,12 @@ dependency_bot=0
 if [[ "$pr_author" == "dependabot[bot]" ]]; then
   dependency_bot=1
   echo "design-note check: Dependabot PR; dependency version changes exempt"
+  # The masked comparison needs tomllib; without it the diff would see two
+  # empty sides and pass, so fail closed instead.
+  if ! python3 -c 'import tomllib' 2>/dev/null; then
+    echo "::error::design-note check needs Python 3.11+ (tomllib) for Dependabot PRs"
+    exit 1
+  fi
 fi
 
 if [[ -z "$base_ref" ]]; then
