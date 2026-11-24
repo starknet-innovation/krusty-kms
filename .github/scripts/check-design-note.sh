@@ -10,6 +10,13 @@ export PYTHONPATH="$root/.github/scripts${PYTHONPATH:+:$PYTHONPATH}"
 base_ref="${GUARDRAILS_BASE_REF:-}"
 pr_body="${PR_BODY:-}"
 fail_closed="${GUARDRAILS_FAIL_CLOSED:-}"
+pr_author="${PR_AUTHOR:-}"
+
+dependency_bot=0
+if [[ "$pr_author" == "dependabot[bot]" ]]; then
+  dependency_bot=1
+  echo "design-note check: Dependabot PR; dependency version changes exempt"
+fi
 
 if [[ -z "$base_ref" ]]; then
   if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
@@ -50,12 +57,13 @@ is_src_rs() {
 
 # Root Cargo.toml centralizes production deps under [workspace.dependencies].
 workspace_dep_entries() {
-  python3 - "$1" <<'PY'
+  python3 - "$1" "$dependency_bot" <<'PY'
 import sys
 from lib.surfaces import workspace_dep_entries as entries
+from lib.surfaces import mask_dep_versions
 
 for entry in entries(open(sys.argv[1]).read()):
-    print(entry)
+    print(mask_dep_versions(entry) if sys.argv[2] == "1" else entry)
 PY
 }
 
@@ -77,12 +85,12 @@ root_cargo_workspace_deps_changed() {
 }
 
 crate_production_dep_entries() {
-  python3 - "$1" <<'PY'
+  python3 - "$1" "$dependency_bot" <<'PY'
 import sys
-from lib.surfaces import production_dep_entries
+from lib.surfaces import mask_dep_versions, production_dep_entries
 
 for entry in production_dep_entries(open(sys.argv[1]).read()):
-    print(entry)
+    print(mask_dep_versions(entry) if sys.argv[2] == "1" else entry)
 PY
 }
 

@@ -123,6 +123,12 @@ Non-trivial public API, dependency, or boundary changes need:
 - a `## Design` section in the PR description (except for security/boundary baseline
   updates, which require the file)
 
+Dependabot PRs (author `dependabot[bot]`) need no note for changed dependency
+version requirements. Any other manifest change on them (a new or removed
+dependency, `features`, `optional`, `package`, ...) still needs one, as do public
+API and baseline/snapshot changes. A version bump of a dependency whose types are
+public can still break the API; the semver job, not this check, covers that.
+
 Keep notes to 1–2 pages: inputs/outputs, invariants, failure modes, and the
 smallest interface that works.
 

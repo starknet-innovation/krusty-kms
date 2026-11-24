@@ -2941,6 +2941,26 @@ def _group_feature_lines(lines: list[str]) -> list[tuple[str, str]]:
     return entries
 
 
+_VERSION_FIELD = re.compile(r'\bversion\s*=\s*"[^"]*"')
+
+
+def mask_dep_versions(entry: str) -> str:
+    """Replace version requirements in a dependency entry with ``"*"``.
+
+    Two masked entries are equal when the dependencies differ only in their
+    version requirements (Dependabot's bumps). Feature tables are unchanged.
+    """
+    name, sep, body = entry.partition(_ENTRY_SEP)
+    if not sep or name.startswith("[features]"):
+        return entry
+    shorthand = re.compile(rf'^({re.escape(name)}\s*=\s*)"[^"]*"$')
+    lines = []
+    for line in body.split(_ENTRY_SEP):
+        line = shorthand.sub(r'\1"*"', line)
+        lines.append(_VERSION_FIELD.sub('version = "*"', line))
+    return name + sep + _ENTRY_SEP.join(lines)
+
+
 def production_dep_entries(cargo_text: str) -> list[str]:
     """Sorted atomic production dependency/feature records for manifest diffing."""
     entries: list[str] = []
