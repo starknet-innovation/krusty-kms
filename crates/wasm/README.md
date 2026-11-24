@@ -80,10 +80,12 @@ for how to report a vulnerability.
 
 Before upgrading from 3.x, read the
 [4.0 migration guide](https://github.com/starknet-innovation/krusty-kms/blob/main/docs/migration-4.0.md).
-Key derivation is unchanged. `decryptPrivateKey` rejects scrypt N above 2^18
-(use `decryptPrivateKeyHighCost` to recover older keys), scrypt-N arguments
-must be numbers rather than numeric strings, and auditor-enabled Tongo proofs
-emit the Tongo 1.3.2 audit hint format.
+Key derivation is unchanged. `encryptPrivateKey` rejects scrypt N above 2^18
+with a `CRYPTO_ERROR`; `decryptPrivateKey` rejects it with a
+`SERIALIZATION_ERROR` (use `decryptPrivateKeyHighCost` to recover older keys)
+and throws `Error` objects with a `code` instead of bare strings. Scrypt-N
+arguments must be numbers rather than numeric strings, and auditor-enabled
+Tongo proofs emit the Tongo 1.3.2 audit hint format.
 
 Before upgrading from 2.0.0, read the
 [3.0 migration guide](https://github.com/starknet-innovation/krusty-kms/blob/main/docs/migration-3.0.md).

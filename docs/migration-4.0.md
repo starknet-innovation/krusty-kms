@@ -23,11 +23,16 @@ scrypt budget (N up to 2^18 with r=8).
   - direct plaintext is capped at 1 MiB minus the 16-byte tag, and direct
     ciphertext at 1 MiB;
   - `encrypt_keystore` / `encryptKeystore` reject plaintext over 4096 bytes;
-  - v3 keystore imports reject N·r·p above 2^21 and KDF salts over 128 bytes.
+  - keystore imports reject JSON over 1 MiB, and v3 imports reject N·r·p above
+    2^21.
 - **WASM scrypt-N arguments must be JavaScript numbers.** Numeric strings that
   wasm-bindgen used to coerce (for example `"16384"`) now fail with a
   structured `SERIALIZATION_ERROR`. Errors created from `WasmError` also carry
   their `code` property.
+- **WASM `decryptPrivateKey` throws `Error` objects.** Malformed hex used to
+  throw a bare string such as `"Invalid nonce hex: …"`; it now throws an
+  `Error` with `code: "SERIALIZATION_ERROR"` and a message starting
+  "Serialization error: ". Check `error.code` rather than the type or text.
 
 ## Tongo audit hints
 
@@ -36,14 +41,12 @@ Auditor-enabled Tongo operations now emit the format the pinned
 emit different felts for the same input bytes, and `AEBalance` gained layout
 fields.
 
-- Code that builds `AEBalance` with a struct literal or matches it exhaustively
-  must add the new fields (or use `..`).
 - To read hints written by Krusty 3.x or earlier, try every
   `AEBalance::candidates()` byte layout with both `decrypt_as_auditor_with_context`
   and the deprecated `decrypt_as_auditor`. A decrypted balance is
   sender-controlled; check it against the ElGamal balance or proof.
-- `encrypt_for_auditor` and `decrypt_as_auditor` keep the legacy Krusty format
-  and are deprecated. Use the `_with_context` functions for Tongo operations.
+- `encrypt_for_auditor`, `decrypt_as_auditor`, `encrypt_audit_hint` and
+  `decrypt_audit_hint` keep the legacy Krusty format and are deprecated. Use the `_with_context` functions for Tongo operations.
 - An audited balance must fit in `u32` and the operation nonce in `u64`;
   auditor-enabled operations fail otherwise.
 

@@ -27,14 +27,20 @@ Key and address derivation is unchanged from 3.x. Read the
   default WASM `decryptPrivateKey` rejects older high-cost N with a
   serialization error that names `decryptPrivateKeyHighCost`. Trusted Rust
   callers can still use legacy `decrypt_private_key` to recover keys with N up
-  to 2^20. Import JSON and encoded salt are checked before parsing or decoding.
+  to 2^20.
 - **Breaking:** Direct decryption requires the public `EncryptedKey.salt` field
   to contain exactly 16 bytes. `encrypt_keystore` and WASM `encryptKeystore`
   reject native plaintext over 4096 bytes; v3 imports reject N·r·p above 2^21
   even when the memory footprint alone is within the old ceiling.
 - **Breaking:** Direct private-key encryption caps plaintext at 1 MiB minus the
-  16-byte authentication tag; direct decryption caps ciphertext at 1 MiB.
-  Keystore imports cap decoded KDF salts at 128 bytes.
+  16-byte authentication tag; direct decryption caps ciphertext at 1 MiB. Both
+  keystore imports reject JSON over 1 MiB before parsing, and check encoded
+  salt length before decoding it.
+- **Breaking:** WASM `decryptPrivateKey` throws an `Error` with a `code` (for
+  malformed hex, `SERIALIZATION_ERROR` and a message starting
+  "Serialization error: ") instead of a bare string such as
+  `"Invalid nonce hex: …"`. Code that checks `typeof error === "string"` or
+  matches the old text must change.
 - **Breaking:** WASM scrypt-N inputs must be exact JavaScript numbers; numeric
   strings that wasm-bindgen previously coerced are rejected with a structured
   `SERIALIZATION_ERROR`.
@@ -44,8 +50,8 @@ Key and address derivation is unchanged from 3.x. Read the
   corrected Cairo layout for identical input bytes. Historical Krusty hints
   remain readable when callers try both `AEBalance` byte candidates and the
   relevant decryptor; they are not Tongo 1.3.2 audit hints. `AEBalance` now
-  stores layout metadata, so downstream struct-literal construction and
-  exhaustive destructuring require changes.
+  stores layout metadata, so the same wire bytes can decode to a different
+  `ciphertext`/`nonce` pair than in 3.x.
 - **Breaking:** `krusty-kms-client`'s `nats` feature depends on `async-nats`
   0.53. `NatsMultisigCoordinator::new` takes an `async_nats::Client` from that
   version, and `NatsMultisigCoordinator::connect` inherits its stricter TLS and
@@ -53,8 +59,10 @@ Key and address derivation is unchanged from 3.x. Read the
 
 ### Deprecated
 
-- `encrypt_for_auditor` and `decrypt_as_auditor` retain the legacy Krusty
-  format. Use their context-aware counterparts for Tongo operations.
+- `encrypt_for_auditor`, `decrypt_as_auditor`, `encrypt_audit_hint` and
+  `decrypt_audit_hint` retain the legacy Krusty format. Use
+  `encrypt_for_auditor_with_context` and `decrypt_as_auditor_with_context` for
+  Tongo operations. Builds with `-D warnings` will flag remaining calls.
 
 ### Security
 
@@ -64,7 +72,8 @@ Key and address derivation is unchanged from 3.x. Read the
   256 MiB budget as imported keystores, and cap v3 keystore total work.
 - `async-nats` 0.52 stops a received header value containing a line break from
   panicking the connection task, which any publisher on a subscribed subject
-  could trigger.
+  could trigger. 0.53 fixes how the client decides to use TLS and which
+  discovered cluster servers it trusts.
 
 ## [3.2.0] - 2026-11-23
 

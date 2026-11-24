@@ -174,3 +174,43 @@ fn test_transfer_zero_amount() {
     let result = transfer(&account, params);
     assert!(result.is_err());
 }
+
+/// Both transfer audit records must fit the pinned Tongo auditor's `u32`
+/// balance and `u64` nonce; reject before proving.
+#[test]
+fn test_transfer_audit_hint_rejects_values_outside_tongo_widths() {
+    use krusty_kms_common::KmsError;
+    use krusty_kms_crypto::StarkCurve;
+    let mut account = create_test_account();
+    let params = |account: &crate::TongoAccount, nonce: Felt| TransferParams {
+        recipient_public_key: StarkCurve::mul_generator(&Felt::from(99u64)),
+        amount: 100,
+        nonce,
+        chain_id: Felt::ONE,
+        tongo_address: Felt::ONE,
+        sender_address: Felt::ONE,
+        current_balance: encrypt_balance_for_account(account, 0, Felt::from(42u64)),
+        bit_size: 32,
+        auditor_pub_key: Some(StarkCurve::mul_generator(&Felt::from(888u64))),
+    };
+
+    // The remaining balance exceeds u32 even though the amount does not.
+    account.set_balance(u128::from(u32::MAX) + 1000);
+    let err = transfer(&account, params(&account, Felt::ONE))
+        .err()
+        .expect("remaining audited balance above u32 must fail");
+    assert!(
+        matches!(err, KmsError::InvalidAmount(ref m) if m.contains("Tongo audit")),
+        "{err:?}"
+    );
+
+    account.set_balance(1000);
+    let wide_nonce = Felt::from(u128::from(u64::MAX) + 1);
+    let err = transfer(&account, params(&account, wide_nonce))
+        .err()
+        .expect("audit nonce above u64 must fail");
+    assert!(
+        matches!(err, KmsError::InvalidAmount(ref m) if m.contains("Tongo audit")),
+        "{err:?}"
+    );
+}

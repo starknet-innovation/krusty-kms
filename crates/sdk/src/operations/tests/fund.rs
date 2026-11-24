@@ -118,3 +118,57 @@ fn test_fund_rejects_funded_balance_overflow() {
         .expect("fund must reject a wrapping balance");
     assert!(matches!(err, KmsError::InvalidAmount(_)), "{err:?}");
 }
+
+fn fund_params_with_auditor(account: &TongoAccount, nonce: Felt, auditor: bool) -> FundParams {
+    FundParams {
+        amount: 1,
+        nonce,
+        chain_id: Felt::ONE,
+        tongo_address: Felt::from(123456u64),
+        sender_address: Felt::from(0xCAFEu64),
+        auditor_pub_key: auditor.then(|| StarkCurve::mul_generator(&Felt::from(9999u64))),
+        current_balance: encrypt_balance_for_account(account, 0, Felt::from(12345u64)),
+    }
+}
+
+/// The pinned Tongo auditor reads a `u32` balance and a `u64` nonce; an
+/// auditor-enabled fund must fail before proving instead of emitting an
+/// unreadable hint, while the same inputs still work without an auditor.
+#[test]
+fn test_fund_audit_hint_rejects_values_outside_tongo_widths() {
+    let mut account = create_test_account();
+    account.set_balance(u128::from(u32::MAX));
+    let err = fund(
+        &account,
+        fund_params_with_auditor(&account, Felt::ONE, true),
+    )
+    .err()
+    .expect("audited balance above u32 must fail");
+    assert!(
+        matches!(err, KmsError::InvalidAmount(ref m) if m.contains("Tongo audit")),
+        "{err:?}"
+    );
+    assert!(fund(
+        &account,
+        fund_params_with_auditor(&account, Felt::ONE, false)
+    )
+    .is_ok());
+
+    account.set_balance(0);
+    let wide_nonce = Felt::from(u128::from(u64::MAX) + 1);
+    let err = fund(
+        &account,
+        fund_params_with_auditor(&account, wide_nonce, true),
+    )
+    .err()
+    .expect("audit nonce above u64 must fail");
+    assert!(
+        matches!(err, KmsError::InvalidAmount(ref m) if m.contains("Tongo audit")),
+        "{err:?}"
+    );
+    assert!(fund(
+        &account,
+        fund_params_with_auditor(&account, wide_nonce, false)
+    )
+    .is_ok());
+}

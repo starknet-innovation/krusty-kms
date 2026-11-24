@@ -1,5 +1,7 @@
 # Tongo audit hint compatibility
 
+Status: shipped in Krusty 4.0.0 ([release note](2026-11-24-release-4.0.0.md)). References below to "2.x" or to waiting for a major describe the line this was written against.
+
 ## Decision
 
 Auditor-enabled operations emit the 64-byte AE hint format used by the pinned

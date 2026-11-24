@@ -1,5 +1,7 @@
 # Wiping scrypt scratch
 
+Status: shipped in Krusty 4.0.0 ([release note](2026-11-24-release-4.0.0.md)). References below to "2.x" or to waiting for a major describe the line this was written against.
+
 ## Context
 
 The locked RustCrypto `scrypt` 0.12.0 KDF creates ordinary `Vec<u8>` buffers

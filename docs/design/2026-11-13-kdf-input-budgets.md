@@ -1,5 +1,7 @@
 # Password KDF input budgets
 
+Status: shipped in Krusty 4.0.0 ([release note](2026-11-24-release-4.0.0.md)). References below to "2.x" or to waiting for a major describe the line this was written against.
+
 ## Context
 
 The direct private-key API previously accepted scrypt `N=2^20`, which asks for
