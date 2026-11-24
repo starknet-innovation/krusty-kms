@@ -135,6 +135,7 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           GITHUB_BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           GH_TOKEN: ${{ github.token }}
           GUARDRAILS_FAIL_CLOSED: "1"
         run: |
@@ -145,8 +146,20 @@ jobs:
             git fetch --no-tags origin "${BEFORE_SHA}" || true
             export GUARDRAILS_BASE_REF="${BEFORE_SHA}"
           fi
-          if [[ -z "${PR_BODY:-}" && "${{ github.event_name }}" == "push" ]]; then
-            export PR_BODY="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '.[0].body // empty')"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            pulls="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls")" || pulls='[]'
+            if [[ -z "${PR_BODY:-}" ]]; then
+              export PR_BODY="$(jq -r '.[0].body // empty' <<<"$pulls")"
+            fi
+            PR_AUTHOR="$(jq -r '.[0].user.login // empty' <<<"$pulls")"
+            # The PR author only describes the pushed range when the push adds
+            # one commit (squash, rebase or merge) directly on the previous
+            # main; otherwise apply the strict check.
+            parent="$(git rev-parse --verify -q "${GITHUB_SHA}^1")" || parent=""
+            if [[ -z "${BEFORE_SHA:-}" || "$parent" != "$BEFORE_SHA" ]]; then
+              PR_AUTHOR=""
+            fi
+            export PR_AUTHOR
           fi
           bash .github/scripts/check-design-note.sh
 

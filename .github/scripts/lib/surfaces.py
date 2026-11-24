@@ -2941,6 +2941,50 @@ def _group_feature_lines(lines: list[str]) -> list[tuple[str, str]]:
     return entries
 
 
+def _mask_version(value: object) -> object:
+    if isinstance(value, str):
+        return "*"
+    if isinstance(value, dict) and isinstance(value.get("version"), str):
+        return {**value, "version": "*"}
+    return value
+
+
+def mask_dep_versions(entry: str) -> str:
+    """Replace version requirements in a dependency entry with ``"*"``.
+
+    The entry body is parsed as TOML, so quoted keys, either string style and
+    comments are handled and no other value is touched. Two masked entries are
+    equal when the dependencies differ only in their version requirements
+    (Dependabot's bumps). Feature entries, and bodies that do not parse, are
+    returned unchanged, which keeps the comparison strict.
+    """
+    import tomllib  # Python 3.11+; only the Dependabot path needs it.
+
+    name, sep, body = entry.partition(_ENTRY_SEP)
+    if not sep or name.startswith("[features]"):
+        return entry
+    try:
+        parsed = tomllib.loads(body.replace(_ENTRY_SEP, "\n"))
+    except tomllib.TOMLDecodeError:
+        return entry
+    if (
+        not name.startswith("[")
+        and list(parsed) == [name]
+        and name not in _DEP_KNOWN_FIELDS
+    ):
+        # `name = "1"` or `name = { version = "1", ... }`.
+        masked: object = {name: _mask_version(parsed[name])}
+    else:
+        # Field table: a `[dependencies.name]` header body, or dotted
+        # `name.field = ...` lines, which arrive without the `name.` prefix.
+        # Only its `version` field is masked.
+        masked = _mask_version(parsed)
+    try:
+        return name + sep + json.dumps(masked, sort_keys=True)
+    except TypeError:  # TOML dates and times are not JSON values.
+        return entry
+
+
 def production_dep_entries(cargo_text: str) -> list[str]:
     """Sorted atomic production dependency/feature records for manifest diffing."""
     entries: list[str] = []
@@ -4401,6 +4445,71 @@ def _assert_file_size_ratchet_checks() -> None:
         assert any("baselining does not waive" in line for line in lines)
 
 
+def _assert_mask_dep_versions_checks() -> None:
+    sep = _ENTRY_SEP
+
+    def same(before: str, after: str) -> bool:
+        return mask_dep_versions(before) == mask_dep_versions(after)
+
+    # Version-only bumps compare equal, whatever the TOML spelling.
+    exempt = [
+        (f'foo{sep}foo = "1"', f'foo{sep}foo = "2"'),
+        (f'foo{sep}foo = "1" # pinned', f'foo{sep}foo = "2" # pinned'),
+        (f"foo{sep}\"foo\" = '1'", f"foo{sep}\"foo\" = '2'"),
+        (f"foo{sep}foo = {{ version = '1' }}", f"foo{sep}foo = {{ version = '2' }}"),
+        (
+            f'foo{sep}foo = {{ version = "1", optional = true }}',
+            f'foo{sep}foo = {{ version = "2", optional = true }}',
+        ),
+        (
+            f'[dependencies.foo]{sep}version = "1"{sep}features = ["a"]',
+            f'[dependencies.foo]{sep}version = "2"{sep}features = ["a"]',
+        ),
+    ]
+    for before, after in exempt:
+        assert same(before, after), (before, after)
+
+    # Anything other than the version requirement still differs.
+    strict = [
+        (
+            f"foo{sep}foo = {{ version = \"1\", path = 'v/version=\"old\"' }}",
+            f"foo{sep}foo = {{ version = \"1\", path = 'v/version=\"new\"' }}",
+        ),
+        (f'foo{sep}foo = {{ version = "1" }}', f'foo{sep}foo = {{ version = "1", features = ["a"] }}'),
+        (f'foo{sep}foo = "1"', f'foo{sep}foo = {{ version = "2" }}'),
+        (f'[dependencies.foo]{sep}version = "1"', f'[dependencies.foo]{sep}version = "1"{sep}optional = true'),
+        (f'foo{sep}foo = {{ git = "u", rev = "a" }}', f'foo{sep}foo = {{ git = "u", rev = "b" }}'),
+        (f'foo{sep}foo = {{ package = "a", version = "1" }}', f'foo{sep}foo = {{ package = "b", version = "1" }}'),
+        (f'foo{sep}workspace = true', f'foo{sep}workspace = true{sep}features = ["a"]'),
+        (f'[features].nats{sep}nats = ["dep:a"]', f'[features].nats{sep}nats = ["dep:b"]'),
+    ]
+    for before, after in strict:
+        assert not same(before, after), (before, after)
+
+    # Dotted fields, as production_dep_entries actually emits them.
+    def dotted(lines: str) -> list[str]:
+        return production_dep_entries(f"[dependencies]\n{lines}\n")
+
+    assert dotted('foo.version = "1"\nfoo.features = ["a"]') == [
+        f'foo{sep}version = "1"{sep}features = ["a"]'
+    ]
+    for before, after, equal in [
+        ('foo.version = "1"\nfoo.features = ["a"]', 'foo.version = "2"\nfoo.features = ["a"]', True),
+        ('foo.version = "1"', 'foo.version = "2"', True),
+        ('foo.path = "../a"', 'foo.path = "../b"', False),
+        ('foo.git = "https://a"', 'foo.git = "https://b"', False),
+        ('foo.version = "1"\nfoo.features = ["a"]', 'foo.version = "1"\nfoo.features = ["b"]', False),
+    ]:
+        got = [mask_dep_versions(e) for e in dotted(before)] == [
+            mask_dep_versions(e) for e in dotted(after)
+        ]
+        assert got == equal, (before, after)
+
+    # A body that does not parse is compared verbatim.
+    assert mask_dep_versions(f'foo{sep}foo = "1') == f'foo{sep}foo = "1'
+
+
 if __name__ == "__main__":
     _assert_surfaces_self_checks()
     _assert_file_size_ratchet_checks()
+    _assert_mask_dep_versions_checks()
