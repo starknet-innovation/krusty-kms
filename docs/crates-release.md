@@ -229,12 +229,16 @@ the `crates-io` deployment. An administrator may instead use **Start all waiting
 and record why the review is being bypassed. After approval or an administrator
 bypass, the workflow verifies the tag and packages, authenticates with OIDC, publishes
 the crates in dependency order, waits for each to appear on crates.io, and revokes the
-token.
+token. A separate `github-release` job then creates the GitHub Release
+`Krusty <version>` on the tag. Its notes are that version's `CHANGELOG.md` section, with
+repository-relative links pinned to the tag (`.github/scripts/release-notes.sh`). The
+release is marked Latest only when its tag is the highest `v*` tag. The job holds no
+crates.io token and needs only `contents: write`.
 
 ## Verify and recover
 
-The release is complete only when the `Publish to crates.io` workflow is successful and
-the log reports each crate as visible on crates.io.
+The release is complete only when the `Publish to crates.io` workflow is successful, the
+log reports each crate as visible on crates.io, and the GitHub Release for the tag exists.
 
 ```bash
 gh run list --workflow publish.yml --limit 5
@@ -245,6 +249,20 @@ If a run is interrupted or fails after some crates were published, rerun the **s
 workflow run. `.github/scripts/publish-crate.sh` checks the exact crate version first,
 so already-published crates are skipped and the remaining crates continue in dependency
 order.
+The `github-release` job also skips a published release that already exists, so rerunning
+it alone (for example after a transient GitHub API error) is safe. It does not see draft
+releases; delete a stray draft on the tag before rerunning. The `publish` job builds the
+same notes before authenticating, so a bad changelog section fails before any crate is
+published. If the job still fails for a non-transient reason after the crates are out,
+a maintainer creates the release by hand from the same notes, run from a checkout of
+the tag (`git checkout v<version>`) so the changelog and script match what was released:
+
+```bash
+bash .github/scripts/release-notes.sh <version> v<version> > notes.md
+gh release create v<version> --verify-tag --title "Krusty <version>" --notes-file notes.md
+```
+
+Pass `--latest=false` when the tag is not the highest `vX.Y.Z` tag.
 
 If the failure requires changing source, package metadata, or the workflow, do not reuse
 the existing tag. Make the fix on a new branch, increment the patch version, merge it,
