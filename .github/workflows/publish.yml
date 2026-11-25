@@ -173,3 +173,43 @@ jobs:
           --header "Authorization: Bearer ${CARGO_REGISTRY_TOKEN}"
           --header "User-Agent: krusty-kms-trusted-publishing"
           https://crates.io/api/v1/trusted_publishing/tokens
+
+  # Runs only after every crate is on crates.io. It holds no crates.io token and
+  # only needs to write the release, so it is a separate, minimal job.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          # A rerun after a partial failure must not fail or duplicate the release.
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "GitHub Release ${GITHUB_REF_NAME} already exists; nothing to do"
+            exit 0
+          fi
+          notes="${RUNNER_TEMP}/release-notes.md"
+          bash .github/scripts/release-notes.sh "${version}" "${GITHUB_REF_NAME}" > "${notes}"
+          # Only the highest v* tag becomes Latest, so a patch on an older
+          # major does not take over the repository's front page.
+          highest="$(git tag --list 'v*' --sort=-version:refname | head -n1)"
+          latest=false
+          if [[ "${highest}" == "${GITHUB_REF_NAME}" ]]; then
+            latest=true
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "Krusty ${version}" \
+            --notes-file "${notes}" \
+            --latest="${latest}"

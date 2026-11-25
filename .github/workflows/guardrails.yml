@@ -109,6 +109,7 @@ jobs:
           bash .github/scripts/check-workflow-actions-pinned.sh
           bash .github/scripts/test-check-workflow-actions-pinned.sh
           bash .github/scripts/test-publish-npm.sh
+          bash .github/scripts/test-release-notes.sh
 
       - name: FFI surface freeze
         run: bash .github/scripts/check-ffi-surface.sh
