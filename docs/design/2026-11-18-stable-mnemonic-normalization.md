@@ -14,3 +14,7 @@ Unicode 18 depending on their own lockfile. An exact manifest pin to
 A regression vector covers a passphrase whose combining marks reorder under
 Unicode 18. Any future table upgrade that changes an existing seed requires
 versioned derivation and a recovery path for existing wallets.
+
+The hold is enforced twice: `.github/dependabot.yml` ignores
+`unicode-normalization`, and the regression test fails if the lockfile moves
+it by any other route. Removing one leaves only the other.
