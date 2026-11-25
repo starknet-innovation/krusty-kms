@@ -254,7 +254,8 @@ it alone (for example after a transient GitHub API error) is safe. It does not s
 releases; delete a stray draft on the tag before rerunning. The `publish` job builds the
 same notes before authenticating, so a bad changelog section fails before any crate is
 published. If the job still fails for a non-transient reason after the crates are out,
-a maintainer creates the release by hand from the same notes:
+a maintainer creates the release by hand from the same notes, run from a checkout of
+the tag (`git checkout v<version>`) so the changelog and script match what was released:
 
 ```bash
 bash .github/scripts/release-notes.sh <version> v<version> > notes.md
