@@ -44,7 +44,11 @@ if [[ -z "${body//[[:space:]]/}" ]]; then
 fi
 
 # Pin `](path)` links that are neither absolute URLs (no `:`) nor in-page
-# anchors (`#...`) to the tag. `./` prefixes are dropped.
-base="https://github.com/${repository}/blob/${tag}/"
+# anchors (`#...`) to the tag. `./` and `/` prefixes are dropped. Images use
+# raw/ so they render; rewritten URLs contain `:` and are not matched again.
+blob="https://github.com/${repository}/blob/${tag}/"
+raw="https://github.com/${repository}/raw/${tag}/"
 printf '%s\n' "${body}" \
-  | sed -E "s#\]\((\./)?([^)#:][^):]*)\)#](${base}\2)#g"
+  | sed -E \
+    -e "s#(!\[[^]]*\])\((\./|/)?([^)#:][^):]*)\)#\1(${raw}\3)#g" \
+    -e "s#\]\((\./|/)?([^)#:][^):]*)\)#](${blob}\2)#g"

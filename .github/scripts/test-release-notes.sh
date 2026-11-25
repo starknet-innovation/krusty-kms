@@ -30,6 +30,8 @@ cat >"$fixture_dir/CHANGELOG.md" <<'EOF'
 
 Read the [guide](docs/migration-2.0.md) and [notes](./docs/notes.md).
 Keep [upstream](https://example.com/a) and [anchor](#added) links.
+See [a section](docs/a.md#sec), [titled](docs/t.md "T"), [rooted](/docs/r.md)
+and ![diagram](docs/d.png).
 
 ### Added
 
@@ -48,6 +50,8 @@ actual="$(bash "$notes" 2.0.0 v2.0.0)"
 expected="$(cat <<'EOF'
 Read the [guide](https://github.com/owner/repo/blob/v2.0.0/docs/migration-2.0.md) and [notes](https://github.com/owner/repo/blob/v2.0.0/docs/notes.md).
 Keep [upstream](https://example.com/a) and [anchor](#added) links.
+See [a section](https://github.com/owner/repo/blob/v2.0.0/docs/a.md#sec), [titled](https://github.com/owner/repo/blob/v2.0.0/docs/t.md "T"), [rooted](https://github.com/owner/repo/blob/v2.0.0/docs/r.md)
+and ![diagram](https://github.com/owner/repo/raw/v2.0.0/docs/d.png).
 
 ### Added
 

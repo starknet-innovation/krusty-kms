@@ -249,8 +249,19 @@ If a run is interrupted or fails after some crates were published, rerun the **s
 workflow run. `.github/scripts/publish-crate.sh` checks the exact crate version first,
 so already-published crates are skipped and the remaining crates continue in dependency
 order.
-The `github-release` job also skips a release that already exists, so rerunning it alone
-(for example after a transient GitHub API error) is safe.
+The `github-release` job also skips a published release that already exists, so rerunning
+it alone (for example after a transient GitHub API error) is safe. It does not see draft
+releases; delete a stray draft on the tag before rerunning. The `publish` job builds the
+same notes before authenticating, so a bad changelog section fails before any crate is
+published. If the job still fails for a non-transient reason after the crates are out,
+a maintainer creates the release by hand from the same notes:
+
+```bash
+bash .github/scripts/release-notes.sh <version> v<version> > notes.md
+gh release create v<version> --verify-tag --title "Krusty <version>" --notes-file notes.md
+```
+
+Pass `--latest=false` when the tag is not the highest `vX.Y.Z` tag.
 
 If the failure requires changing source, package metadata, or the workflow, do not reuse
 the existing tag. Make the fix on a new branch, increment the patch version, merge it,

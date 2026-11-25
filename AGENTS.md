@@ -152,7 +152,7 @@ Release steps (commands are in the playbook; do not copy them here):
    pushes it. The tag rulesets let only the repository Admin role create `v*` tags. The
    `crates-io` environment then waits for reviewer approval or an admin bypass. After the
    crates publish, the workflow creates the GitHub Release from the version's changelog
-   section; do not create it by hand.
+   section; create it by hand only through the recovery steps in `docs/crates-release.md`.
 
 The WASM npm package (`@starknetfoundation/krusty-kms-wasm`) takes the workspace
 version. `publish-npm.yml` runs on merge to `main` and skips versions already on npm.
