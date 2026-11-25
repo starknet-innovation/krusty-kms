@@ -6,6 +6,10 @@ publish = false
 
 [workspace]
 
+[[bin]]
+name = "krusty-scrypt-heap-inspection"
+path = "src/bin/scrypt_heap.rs"
+
 [dependencies]
 krusty-kms = { path = "../../../crates/kms", default-features = false }
 bip39 = { version = "3.0.0", default-features = false, features = ["alloc", "zeroize"] }

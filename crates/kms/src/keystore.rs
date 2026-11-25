@@ -7,13 +7,17 @@
 use aes::cipher::{KeyIvInit, StreamCipher};
 use aes::Aes128;
 use krusty_kms_common::{KmsError, Result};
-use scrypt::{scrypt, Params as ScryptParams};
+use scrypt::Params as ScryptParams;
 use sha3::{Digest, Keccak256};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
+mod input_limits;
+use input_limits::{decode_salt, parse_keystore_json, validate_native_mnemonic_length};
+
 use crate::encryption::{
     decrypt_with_key, derive_scrypt_key, encrypt_with_key, scrypt_log_n, xnonce,
+    SCRYPT_MEMORY_CEILING_BYTES,
 };
 
 type Aes128Ctr = ctr::Ctr128BE<Aes128>;
@@ -53,28 +57,16 @@ const SCRYPT_P_MAX: u32 = 16;
 // so anything shorter than 32 bytes would panic instead of erroring.
 const SCRYPT_DKLEN_MIN: usize = 32;
 const SCRYPT_DKLEN_MAX: usize = 64;
-const SCRYPT_MEMORY_CEILING_BYTES: u64 = 256 * 1024 * 1024;
+/// Generous ceiling for either supported keystore format before JSON parsing
+/// or hex decoding. A native mnemonic or v3 private key is far smaller.
+const MAX_KEYSTORE_JSON_BYTES: usize = 1024 * 1024;
+// Count each ROMix lane as N*r units. The common N=2^18, r=8, p=1 cost
+// reaches this ceiling, while high-p imports cannot multiply CPU work freely.
+const SCRYPT_WORK_CEILING: u64 = (1 << 18) * 8;
 /// Largest accepted KDF salt. Both keystore formats write 16- or 32-byte
 /// salts; scrypt's PBKDF2 stage re-hashes the salt `4·r·p` times, so an
 /// attacker-sized salt is work done before the password is checked.
 const MAX_KEYSTORE_SALT_BYTES: usize = 128;
-
-/// Decode `kdfparams.salt` and bound its length before any KDF work.
-fn decode_salt(value: &serde_json::Value) -> Result<Vec<u8>> {
-    let salt = hex::decode(
-        value
-            .as_str()
-            .ok_or_else(|| KmsError::DeserializationError("Missing salt".to_string()))?,
-    )
-    .map_err(|e| KmsError::DeserializationError(format!("Invalid salt hex: {e}")))?;
-    if salt.len() > MAX_KEYSTORE_SALT_BYTES {
-        return Err(KmsError::DeserializationError(format!(
-            "kdfparams.salt is {} bytes (limit {MAX_KEYSTORE_SALT_BYTES})",
-            salt.len()
-        )));
-    }
-    Ok(salt)
-}
 
 fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Result<()> {
     let _log_n = scrypt_log_n(n)?;
@@ -98,6 +90,14 @@ fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Resu
     if memory > SCRYPT_MEMORY_CEILING_BYTES {
         return Err(KmsError::DeserializationError(format!(
             "scrypt params request ~{memory} bytes of memory (ceiling {SCRYPT_MEMORY_CEILING_BYTES})"
+        )));
+    }
+    let work = u64::from(n)
+        .saturating_mul(u64::from(r))
+        .saturating_mul(u64::from(p));
+    if work > SCRYPT_WORK_CEILING {
+        return Err(KmsError::DeserializationError(format!(
+            "scrypt params request {work} work units (ceiling {SCRYPT_WORK_CEILING})"
         )));
     }
     Ok(())
@@ -129,6 +129,7 @@ fn validate_scrypt_resource_params(n: u32, r: u32, p: u32, dklen: usize) -> Resu
 /// * `scrypt_n` - Scrypt cost parameter N (a power of 2 up to 2^18; larger
 ///   values would exceed the 256 MiB memory ceiling `decrypt_keystore` enforces)
 pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result<String> {
+    validate_native_mnemonic_length(mnemonic)?;
     // The same ceiling `decrypt_keystore` applies, so every keystore this
     // function writes can be read back by the same SDK.
     validate_scrypt_resource_params(scrypt_n, 8, 1, 32)?;
@@ -170,8 +171,7 @@ pub fn encrypt_keystore(mnemonic: &str, password: &str, scrypt_n: u32) -> Result
 /// * `keystore_json` - JSON keystore string produced by [`encrypt_keystore`]
 /// * `password` - The password used during encryption
 pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String> {
-    let v: serde_json::Value = serde_json::from_str(keystore_json)
-        .map_err(|e| KmsError::DeserializationError(format!("Invalid keystore JSON: {e}")))?;
+    let v = parse_keystore_json(keystore_json)?;
 
     let version = v["version"]
         .as_u64()
@@ -204,7 +204,7 @@ pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String> {
             .ok_or_else(|| KmsError::DeserializationError("Missing ciphertext".to_string()))?,
     )
     .map_err(|e| KmsError::DeserializationError(format!("Invalid ciphertext hex: {e}")))?;
-
+    input_limits::validate_native_ciphertext_length(&ciphertext)?;
     // Validate before deriving, so a malformed nonce costs no KDF work.
     xnonce(&nonce)?;
 
@@ -245,8 +245,7 @@ pub fn decrypt_keystore(keystore_json: &str, password: &str) -> Result<String> {
 /// # Returns
 /// The decrypted content as a hex-encoded string (typically a private key).
 pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<String> {
-    let v: serde_json::Value = serde_json::from_str(keystore_json)
-        .map_err(|e| KmsError::DeserializationError(format!("Invalid keystore JSON: {e}")))?;
+    let v = parse_keystore_json(keystore_json)?;
 
     let version = v["version"]
         .as_u64()
@@ -316,8 +315,7 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
     let params = ScryptParams::new(log_n, r, p)
         .map_err(|e| KmsError::CryptoError(format!("Invalid scrypt params: {e}")))?;
     let mut derived_key = Zeroizing::new(vec![0u8; dklen]);
-    scrypt(password.as_bytes(), &salt, &params, &mut derived_key)
-        .map_err(|e| KmsError::CryptoError(format!("Scrypt KDF failed: {e}")))?;
+    crate::scrypt_wiping::scrypt(password.as_bytes(), &salt, &params, &mut derived_key)?;
 
     let aes_key = &derived_key[..V3_DKLEN / 2];
     let mac_key = &derived_key[V3_DKLEN / 2..V3_DKLEN];
@@ -345,10 +343,11 @@ pub fn decrypt_ethers_keystore(keystore_json: &str, password: &str) -> Result<St
 
     Ok(hex::encode(&*plaintext))
 }
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::disallowed_methods)] // Differential vectors use upstream scrypt.
     use super::*;
+    use ::scrypt::scrypt as upstream_scrypt;
 
     mod limits;
 
@@ -392,8 +391,7 @@ mod tests {
 
     #[test]
     fn decrypt_ethers_keystore_known_vector() {
-        // Build a test keystore by manually encrypting a known private key
-        // using the ethers.js format (AES-128-CTR + scrypt).
+        // Build an ethers.js AES-128-CTR/scrypt test keystore for a known key.
         let private_key_bytes =
             hex::decode("4c0883a69102937d6231471b5dbb6204fe512961708279f696ae35e0c2a1b5ce")
                 .unwrap();
@@ -406,7 +404,7 @@ mod tests {
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
-        scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
+        upstream_scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
         // Encrypt with AES-128-CTR
         let aes_key = &derived_key[..16];
@@ -461,7 +459,7 @@ mod tests {
         let log_n = scrypt_log_n(TEST_SCRYPT_N).unwrap();
         let params = ScryptParams::new(log_n, 8, 1).unwrap();
         let mut derived_key = vec![0u8; 32];
-        scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
+        upstream_scrypt(password.as_bytes(), &salt, &params, &mut derived_key).unwrap();
 
         let ciphertext = vec![0u8; 32];
         let mut mac_input = Vec::new();

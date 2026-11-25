@@ -1,6 +1,7 @@
 //! Deterministic key derivation, account descriptors, and Stark/Nostr signing.
 
 #![forbid(unsafe_code)]
+#![deny(clippy::disallowed_methods)]
 
 pub mod account;
 pub mod account_class;
@@ -17,6 +18,7 @@ mod nostr_nip44;
 pub mod nostr_signing;
 pub mod pqb;
 pub mod qsb_hors;
+mod scrypt_wiping;
 pub mod selector;
 pub mod stark_signing;
 pub mod strk20;
@@ -50,8 +52,8 @@ pub use discovery::{
     DerivationType, DerivedKeypair, DerivedKeypairWithSecrets, WalletType,
 };
 pub use encryption::{
-    decrypt_private_key, decrypt_with_key, encrypt_private_key, encrypt_with_key, EncryptedKey,
-    EncryptedPayload,
+    decrypt_private_key, decrypt_private_key_bounded, decrypt_with_key, encrypt_private_key,
+    encrypt_with_key, EncryptedKey, EncryptedPayload,
 };
 pub use eth_signer::{EthCoordinate, EthSigner};
 pub use keystore::{decrypt_ethers_keystore, decrypt_keystore, encrypt_keystore};

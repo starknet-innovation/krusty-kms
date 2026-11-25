@@ -112,7 +112,7 @@ Release steps (commands are in the playbook; do not copy them here):
 1. **Pick the version.** Start from current `main`. Confirm its workspace version is the
    latest published `krusty-kms` on crates.io and that the last `publish.yml` run
    succeeded. Read `## [Unreleased]` and `git log v<last>..origin/main`. The crates are
-   3.x and follow semver: a patch bump when every bullet is `Fixed` or `Security`; a
+   4.x and follow semver: a patch bump when every bullet is `Fixed` or `Security`; a
    minor bump when any bullet is `Added`, `Deprecated` or a non-breaking `Changed`; a
    major bump only for a **Breaking** bullet or any `Removed` entry (removing public
    API is breaking). Pick the bump from `## [Unreleased]`.
@@ -132,10 +132,10 @@ Release steps (commands are in the playbook; do not copy them here):
    nothing to release.
 2. **Branch and bump.** On a focused release branch, change the root
    `[workspace.package].version`. Internal `krusty-kms-*` path dependency requirements
-   in `crates/*/Cargo.toml` (currently `3.0.0`) need no move for compatibility on patch
-   and minor bumps, because `^3.0.0` covers every 3.x. Raise a requirement's lower
+   in `crates/*/Cargo.toml` (currently `4.0.0`) need no move for compatibility on patch
+   and minor bumps, because `^4.0.0` covers every 4.x. Raise a requirement's lower
    bound when the dependent crate starts using an API or relying on behavior added
-   in a later 3.x of that dependency (including security invariants); otherwise a lockfile still on the older version satisfies the range and
+   in a later 4.x of that dependency (including security invariants); otherwise a lockfile still on the older version satisfies the range and
    fails to compile. Move every
    requirement to the new major on a major bump.
 3. **Changelog.** Rename the pending notes into `## [<version>] - YYYY-MM-DD` and keep

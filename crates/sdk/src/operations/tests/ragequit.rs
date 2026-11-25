@@ -26,3 +26,29 @@ fn test_ragequit() {
     let proof = result.unwrap();
     assert_eq!(proof.amount, 1000);
 }
+
+/// The pinned Tongo auditor reads a `u64` nonce; reject a wider one before
+/// proving.
+#[test]
+fn test_ragequit_audit_hint_rejects_nonce_above_u64() {
+    use krusty_kms_common::KmsError;
+    use krusty_kms_crypto::StarkCurve;
+    let mut account = create_test_account();
+    account.set_balance(1000);
+    let params = RagequitParams {
+        recipient_address: Felt::from(999u64),
+        nonce: Felt::from(u128::from(u64::MAX) + 1),
+        chain_id: Felt::ONE,
+        tongo_address: Felt::ONE,
+        sender_address: Felt::ONE,
+        current_balance: encrypt_balance_for_account(&account, 1000, Felt::from(42u64)),
+        auditor_key: Some(StarkCurve::mul_generator(&Felt::from(888u64))),
+    };
+    let err = ragequit(&account, params)
+        .err()
+        .expect("audit nonce above u64 must fail");
+    assert!(
+        matches!(err, KmsError::InvalidAmount(ref m) if m.contains("Tongo audit")),
+        "{err:?}"
+    );
+}
