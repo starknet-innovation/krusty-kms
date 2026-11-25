@@ -20,7 +20,7 @@ updates:
       # 0.1.26 moves to Unicode 18 tables, which changes BIP-39 seeds for some
       # passphrases. Keep the lockfile on 0.1.25 until a versioned derivation
       # and recovery path exist; see
-      # docs/design/2026-11-18-stable-mnemonic-normalization.md. This also
+      # docs/design/2026-11-18-stable-mnemonic-normalization.md. This likely also
       # stops Dependabot security PRs for it: handle advisories by hand. The
       # real guard is the seed_preserves_unicode_17_passphrase_normalization
       # test, which fails if another bump or `cargo update` moves it.
