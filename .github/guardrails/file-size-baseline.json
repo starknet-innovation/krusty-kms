@@ -126,7 +126,7 @@
     },
     {
       "path": "crates/kms/src/derivation.rs",
-      "lines": 688
+      "lines": 628
     },
     {
       "path": "crates/kms/src/keystore/tests/limits.rs",

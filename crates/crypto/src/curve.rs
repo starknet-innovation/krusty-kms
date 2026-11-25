@@ -44,7 +44,7 @@ impl StarkCurve {
         GENERATOR_H_INNER.clone()
     }
 
-    /// Multiply a point by a scalar using a regularized double-and-add algorithm.
+    /// Multiply a point by a scalar using double-and-add.
     ///
     /// # Arguments
     /// * `scalar` - The scalar multiplier
@@ -52,6 +52,10 @@ impl StarkCurve {
     ///
     /// # Returns
     /// The resulting point after scalar multiplication
+    ///
+    /// # Security
+    ///
+    /// Not constant-time for a secret scalar; see [`Self::mul_generator`].
     ///
     /// Cyclomatic Complexity: 2 (loop + conditional)
     pub fn mul(scalar: &Felt, point: Option<&ProjectivePoint>) -> ProjectivePoint {
@@ -65,7 +69,15 @@ impl StarkCurve {
 
     /// Multiply the generator by a scalar.
     ///
-    /// Uses a regularized double-and-add algorithm for scalar multiplication.
+    /// # Security
+    ///
+    /// Not constant-time for a secret scalar. The double-and-add below does
+    /// the same sequence of point operations for every scalar bit, but the
+    /// point addition it calls returns early while the accumulator is still
+    /// the identity, that is until the lowest set bit is reached. Timing
+    /// therefore reveals how many low bits of the scalar are zero, and the
+    /// underlying field arithmetic is not constant-time either. Do not rely
+    /// on this to hide a private key from an attacker who can time it.
     ///
     /// Cyclomatic Complexity: 1
     pub fn mul_generator(scalar: &Felt) -> ProjectivePoint {
@@ -83,6 +95,12 @@ impl StarkCurve {
     /// Field/group arithmetic in `starknet-types-core` / lambdaworks is still
     /// not constant-time, so this is a best-effort mitigation of scalar-bit
     /// branching only — not a fully constant-time EC implementation.
+    ///
+    /// One leak is known and specific: `&result + &temp` goes through
+    /// lambdaworks' `operate_with`, which returns its other operand at once
+    /// when either point is the identity. `result` is the identity until the
+    /// lowest set scalar bit, so those leading iterations are cheaper and
+    /// their count (the number of low zero bits) shows in the timing.
     ///
     /// Cyclomatic Complexity: 3 (nested loops)
     fn scalar_mul(point: &ProjectivePoint, scalar: &Felt) -> ProjectivePoint {

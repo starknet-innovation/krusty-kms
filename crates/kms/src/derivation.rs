@@ -9,8 +9,14 @@
 //! `Zeroizing` arrays, `k256` scalars and `crypto-bigint` integers held in
 //! `Zeroizing`, and the crate's internal wiped HMAC (`zeroizing_hmac`). Not wiped:
 //! copies the compiler makes when it moves a value, register spills, and
-//! temporaries inside `k256`, `crypto-bigint`, and the SHA-2 functions. The
-//! keys these functions return (`Felt`, `[u8; 32]`) are the caller's to wipe.
+//! temporaries inside `k256`, `crypto-bigint`, and the SHA-2 functions.
+//!
+//! The `*_secret_key` functions return [`SecretFelt`] or `Zeroizing<[u8; 32]>`,
+//! which wipe themselves on drop. Their older counterparts return `Felt` or
+//! `[u8; 32]`: both are `Copy`, so the copy left in the callee's return slot
+//! cannot be wiped by anyone. Prefer the `*_secret_key` functions.
+//! [`derive_private_key`] has no secret variant of its own; call
+//! [`derive_secret_key_with_coin_type`] with [`TONGO_COIN_TYPE`].
 
 use crate::mnemonic::mnemonic_to_seed;
 use crate::zeroizing_hmac::hmac;
@@ -68,6 +74,8 @@ impl core::fmt::Debug for TongoKeyPair {
 
 /// Derive a private key from a mnemonic with a custom coin type.
 ///
+/// The key is returned in a [`SecretFelt`], which wipes itself on drop.
+///
 /// # Arguments
 /// * `mnemonic` - BIP-39 mnemonic phrase
 /// * `index` - Address index (default: 0)
@@ -86,13 +94,13 @@ impl core::fmt::Debug for TongoKeyPair {
 /// - Key grinding fails (invalid curve point)
 ///
 /// # Cyclomatic Complexity: 2
-pub fn derive_private_key_with_coin_type(
+pub fn derive_secret_key_with_coin_type(
     mnemonic: &str,
     index: u32,
     account_index: u32,
     coin_type: u32,
     passphrase: Option<&str>,
-) -> Result<Felt> {
+) -> Result<SecretFelt> {
     require_unhardened_component(index, "index")?;
     require_unhardened_component(account_index, "account_index")?;
     require_unhardened_component(coin_type, "coin_type")?;
@@ -114,9 +122,26 @@ pub fn derive_private_key_with_coin_type(
     let derived = derive_path(&master.0, &master.1, &path)?;
 
     // Grind the key to ensure it's in the valid range
-    let ground_key = grind_key(&derived.0)?;
+    grind_secret_key(&derived.0)
+}
 
-    Ok(ground_key)
+/// [`derive_secret_key_with_coin_type`] returning a plain `Felt`.
+///
+/// `Felt` is `Copy`, so the key cannot be wiped from the return slot. Prefer
+/// [`derive_secret_key_with_coin_type`].
+///
+/// # Errors
+///
+/// The same as [`derive_secret_key_with_coin_type`].
+pub fn derive_private_key_with_coin_type(
+    mnemonic: &str,
+    index: u32,
+    account_index: u32,
+    coin_type: u32,
+    passphrase: Option<&str>,
+) -> Result<Felt> {
+    derive_secret_key_with_coin_type(mnemonic, index, account_index, coin_type, passphrase)
+        .map(|key| *key.expose_secret())
 }
 
 /// Derive a Tongo private key from a mnemonic.
@@ -164,11 +189,11 @@ pub fn derive_keypair_with_coin_type(
     passphrase: Option<&str>,
 ) -> Result<TongoKeyPair> {
     let private_key =
-        derive_private_key_with_coin_type(mnemonic, index, account_index, coin_type, passphrase)?;
-    let public_key = compute_public_key(&private_key)?;
+        derive_secret_key_with_coin_type(mnemonic, index, account_index, coin_type, passphrase)?;
+    let public_key = compute_public_key(private_key.expose_secret())?;
 
     Ok(TongoKeyPair {
-        private_key: SecretFelt::new(private_key),
+        private_key,
         public_key,
     })
 }
@@ -215,7 +240,8 @@ impl core::fmt::Debug for NostrKeyPair {
 /// Derive a Nostr private key from a mnemonic.
 ///
 /// Unlike Tongo keys, Nostr keys are raw secp256k1 scalars without grinding.
-/// This is compatible with other Nostr wallets that follow SLIP-44.
+/// This is compatible with other Nostr wallets that follow SLIP-44. The key is
+/// returned in a `Zeroizing` buffer, which wipes itself on drop.
 ///
 /// # Derivation Path
 /// `m/44'/1237'/account_index'/0/index`
@@ -231,12 +257,12 @@ impl core::fmt::Debug for NostrKeyPair {
 /// Returns [`KmsError`] if:
 /// - Mnemonic is invalid (`InvalidMnemonic`)
 /// - Key derivation fails (`CryptoError`)
-pub fn derive_nostr_private_key(
+pub fn derive_nostr_secret_key(
     mnemonic: &str,
     index: u32,
     account_index: u32,
     passphrase: Option<&str>,
-) -> Result<[u8; 32]> {
+) -> Result<Zeroizing<[u8; 32]>> {
     require_unhardened_component(index, "index")?;
     require_unhardened_component(account_index, "account_index")?;
 
@@ -258,7 +284,24 @@ pub fn derive_nostr_private_key(
 
     // Return raw secp256k1 key without grinding
     // Nostr uses secp256k1 directly, no conversion needed
-    Ok(*derived.0)
+    Ok(derived.0)
+}
+
+/// [`derive_nostr_secret_key`] returning a plain `[u8; 32]`.
+///
+/// The array is `Copy`, so the key cannot be wiped from the return slot.
+/// Prefer [`derive_nostr_secret_key`].
+///
+/// # Errors
+///
+/// The same as [`derive_nostr_secret_key`].
+pub fn derive_nostr_private_key(
+    mnemonic: &str,
+    index: u32,
+    account_index: u32,
+    passphrase: Option<&str>,
+) -> Result<[u8; 32]> {
+    derive_nostr_secret_key(mnemonic, index, account_index, passphrase).map(|key| *key)
 }
 
 /// Derive a Nostr keypair from a mnemonic.
@@ -280,10 +323,10 @@ pub fn derive_nostr_keypair(
     account_index: u32,
     passphrase: Option<&str>,
 ) -> Result<NostrKeyPair> {
-    let private_key = derive_nostr_private_key(mnemonic, index, account_index, passphrase)?;
+    let private_key = derive_nostr_secret_key(mnemonic, index, account_index, passphrase)?;
 
     // Derive secp256k1 public key
-    let signing_key = SigningKey::from_bytes((&private_key).into())
+    let signing_key = SigningKey::from_bytes((&*private_key).into())
         .map_err(|e| KmsError::CryptoError(format!("Invalid secp256k1 key: {}", e)))?;
     let verifying_key = signing_key.verifying_key();
 
@@ -297,7 +340,7 @@ pub fn derive_nostr_keypair(
     public_key.copy_from_slice(x_bytes);
 
     Ok(NostrKeyPair {
-        private_key,
+        private_key: *private_key,
         public_key,
     })
 }
@@ -314,11 +357,13 @@ pub fn derive_nostr_keypair(
 /// * `eth_private_key` - 32-byte Ethereum private key (from m/44'/60'/0'/0/0)
 /// * `index` - Address index (default: 0)
 /// * `account_index` - Account index (default: 0)
-pub fn derive_stark_from_eth_key(
+///
+/// The key is returned in a [`SecretFelt`], which wipes itself on drop.
+pub fn derive_stark_secret_key_from_eth_key(
     eth_private_key: &[u8; 32],
     index: u32,
     account_index: u32,
-) -> Result<Felt> {
+) -> Result<SecretFelt> {
     require_unhardened_component(index, "index")?;
     require_unhardened_component(account_index, "account_index")?;
 
@@ -335,7 +380,20 @@ pub fn derive_stark_from_eth_key(
         index,
     ];
 
-    grind_key(&derive_path(&master.0, &master.1, &path)?.0)
+    grind_secret_key(&derive_path(&master.0, &master.1, &path)?.0)
+}
+
+/// [`derive_stark_secret_key_from_eth_key`] returning a plain `Felt`.
+///
+/// `Felt` is `Copy`, so the key cannot be wiped from the return slot. Prefer
+/// [`derive_stark_secret_key_from_eth_key`].
+pub fn derive_stark_from_eth_key(
+    eth_private_key: &[u8; 32],
+    index: u32,
+    account_index: u32,
+) -> Result<Felt> {
+    derive_stark_secret_key_from_eth_key(eth_private_key, index, account_index)
+        .map(|key| *key.expose_secret())
 }
 
 /// Derive a Starknet private key from a mnemonic using old Argent's double
@@ -347,11 +405,13 @@ pub fn derive_stark_from_eth_key(
 ///    ETH key, not a Stark key; ethers.js returns the raw secp256k1 scalar)
 /// 3. Raw ETH key bytes → re-seed BIP-32 → m/44'/9004'/0'/0/{index}
 /// 4. grindKey → Stark private key
-pub fn derive_argent_legacy_private_key(
+///
+/// The key is returned in a [`SecretFelt`], which wipes itself on drop.
+pub fn derive_argent_legacy_secret_key(
     mnemonic: &str,
     index: u32,
     account_index: u32,
-) -> Result<Felt> {
+) -> Result<SecretFelt> {
     // Step 1: BIP-39 seed (no passphrase, matching ethers.js HDNodeWallet.fromPhrase)
     let seed = Zeroizing::new(mnemonic_to_seed(mnemonic, "")?);
 
@@ -369,7 +429,19 @@ pub fn derive_argent_legacy_private_key(
     // NO grind_key here — ethersWallet.privateKey is the raw BIP-32 derived key
 
     // Step 3-4: Use ETH key as seed for second BIP-32 tree, then grind
-    derive_stark_from_eth_key(&eth_derived.0, index, account_index)
+    derive_stark_secret_key_from_eth_key(&eth_derived.0, index, account_index)
+}
+
+/// [`derive_argent_legacy_secret_key`] returning a plain `Felt`.
+///
+/// `Felt` is `Copy`, so the key cannot be wiped from the return slot. Prefer
+/// [`derive_argent_legacy_secret_key`].
+pub fn derive_argent_legacy_private_key(
+    mnemonic: &str,
+    index: u32,
+    account_index: u32,
+) -> Result<Felt> {
+    derive_argent_legacy_secret_key(mnemonic, index, account_index).map(|key| *key.expose_secret())
 }
 
 /// Derive master key from seed using HMAC-SHA512 with "Bitcoin seed" key.
@@ -490,8 +562,10 @@ fn derive_path(
 /// The key difference from scure-starknet: we append a single byte (u8) counter,
 /// not a big-endian u32.
 ///
+/// The key is returned in a [`SecretFelt`], which wipes itself on drop.
+///
 /// # Cyclomatic Complexity: 2
-pub fn grind_key(key_seed: &[u8; 32]) -> Result<Felt> {
+pub fn grind_secret_key(key_seed: &[u8; 32]) -> Result<SecretFelt> {
     // Use u8 counter like Swift implementation
     for i in 0u8..=255 {
         // Hash keySeed || i (single byte)
@@ -514,15 +588,23 @@ pub fn grind_key(key_seed: &[u8; 32]) -> Result<Felt> {
         }
 
         // Convert to 32-byte array (big-endian)
-        let mut k_bytes: [u8; 32] = k.to_be_bytes().into();
-        let key = Felt::from_bytes_be(&k_bytes);
-        k_bytes.zeroize();
-        return Ok(key);
+        let encoded = Zeroizing::new(k.to_be_bytes());
+        let mut k_bytes = Zeroizing::new([0u8; 32]);
+        k_bytes.copy_from_slice(encoded.as_ref());
+        return Ok(SecretFelt::new(Felt::from_bytes_be(&k_bytes)));
     }
 
     Err(KmsError::CryptoError(
         "Failed to grind key after 256 iterations".to_string(),
     ))
+}
+
+/// [`grind_secret_key`] returning a plain `Felt`.
+///
+/// `Felt` is `Copy`, so the key cannot be wiped from the return slot. Prefer
+/// [`grind_secret_key`].
+pub fn grind_key(key_seed: &[u8; 32]) -> Result<Felt> {
+    grind_secret_key(key_seed).map(|key| *key.expose_secret())
 }
 
 /// Compute the Stark curve public key from a private key.
@@ -543,146 +625,4 @@ fn compute_public_key(private_key: &Felt) -> Result<ProjectivePoint> {
 mod reference_test;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const TEST_MNEMONIC: &str =
-        "habit hope tip crystal because grunt nation idea electric witness alert like";
-
-    #[test]
-    fn test_derive_private_key() {
-        let result = derive_private_key(TEST_MNEMONIC, 0, 0, None);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_derive_keypair() {
-        let keypair = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_ne!(keypair.private_key, Felt::ZERO);
-    }
-
-    #[test]
-    fn test_deterministic_derivation() {
-        let keypair1 = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair2 = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-
-        assert_eq!(keypair1.private_key, keypair2.private_key);
-    }
-
-    #[test]
-    fn test_different_indices_produce_different_keys() {
-        let keypair0 = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair1 = derive_keypair(TEST_MNEMONIC, 1, 0, None).unwrap();
-
-        assert_ne!(keypair0.private_key, keypair1.private_key);
-    }
-
-    #[test]
-    fn test_different_accounts_produce_different_keys() {
-        let keypair_acc0 = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair_acc1 = derive_keypair(TEST_MNEMONIC, 0, 1, None).unwrap();
-
-        assert_ne!(keypair_acc0.private_key, keypair_acc1.private_key);
-    }
-
-    #[test]
-    fn test_passphrase_changes_keys() {
-        let without_passphrase = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let with_passphrase = derive_keypair(TEST_MNEMONIC, 0, 0, Some("test_passphrase")).unwrap();
-        assert_ne!(without_passphrase.private_key, with_passphrase.private_key);
-    }
-
-    #[test]
-    fn test_empty_passphrase_same_as_none() {
-        let with_none = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let with_empty = derive_keypair(TEST_MNEMONIC, 0, 0, Some("")).unwrap();
-        assert_eq!(with_none.private_key, with_empty.private_key);
-    }
-
-    #[test]
-    fn test_derive_keypair_with_coin_type() {
-        let keypair =
-            derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, TONGO_COIN_TYPE, None).unwrap();
-        let standard = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_eq!(keypair.private_key, standard.private_key);
-    }
-
-    #[test]
-    fn test_derive_keypair_with_starknet_coin_type() {
-        let keypair =
-            derive_keypair_with_coin_type(TEST_MNEMONIC, 0, 0, STARKNET_COIN_TYPE, None).unwrap();
-        let tongo = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        // Different coin types should produce different keys
-        assert_ne!(keypair.private_key, tongo.private_key);
-    }
-
-    #[test]
-    fn test_invalid_mnemonic() {
-        let result = derive_keypair("invalid mnemonic words that are not valid", 0, 0, None);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_derive_nostr_private_key() {
-        let result = derive_nostr_private_key(TEST_MNEMONIC, 0, 0, None);
-        assert!(result.is_ok());
-        let key = result.unwrap();
-        assert_ne!(key, [0u8; 32]);
-    }
-
-    #[test]
-    fn test_derive_nostr_keypair() {
-        let keypair = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_ne!(keypair.private_key, [0u8; 32]);
-        assert_ne!(keypair.public_key, [0u8; 32]);
-    }
-
-    #[test]
-    fn test_nostr_keypair_deterministic() {
-        let keypair1 = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair2 = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        assert_eq!(keypair1.private_key, keypair2.private_key);
-        assert_eq!(keypair1.public_key, keypair2.public_key);
-    }
-
-    #[test]
-    fn test_nostr_different_indices() {
-        let keypair0 = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair1 = derive_nostr_keypair(TEST_MNEMONIC, 1, 0, None).unwrap();
-        assert_ne!(keypair0.private_key, keypair1.private_key);
-    }
-
-    #[test]
-    fn test_nostr_different_accounts() {
-        let keypair_acc0 = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let keypair_acc1 = derive_nostr_keypair(TEST_MNEMONIC, 0, 1, None).unwrap();
-        assert_ne!(keypair_acc0.private_key, keypair_acc1.private_key);
-    }
-
-    #[test]
-    fn test_nostr_different_from_tongo() {
-        // Nostr keys should be different from Tongo keys (different coin type, no grinding)
-        let nostr = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let tongo = derive_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-
-        // Convert Felt to bytes for comparison
-        let tongo_bytes = tongo.private_key.expose_secret().to_bytes_be();
-        assert_ne!(nostr.private_key.as_slice(), tongo_bytes.as_slice());
-    }
-
-    #[test]
-    fn test_nostr_keypair_debug_redacts_private_key() {
-        let keypair = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let debug = format!("{:?}", keypair);
-        assert!(debug.contains("private_key: \"***\""));
-        let priv_hex = hex::encode(keypair.private_key);
-        assert!(!debug.contains(&priv_hex));
-    }
-
-    #[test]
-    fn test_nostr_passphrase_changes_keys() {
-        let without = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, None).unwrap();
-        let with = derive_nostr_keypair(TEST_MNEMONIC, 0, 0, Some("test")).unwrap();
-        assert_ne!(without.private_key, with.private_key);
-    }
-}
+mod tests;
