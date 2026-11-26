@@ -1,6 +1,7 @@
 //! Narrow starknet.js compatibility for values the pinned SNIP-12 encoder differs on.
 
 use super::{
+    domain::{decode, domain_type_hash},
     invalid_typed_data_error, CanonicalTypedDataEnvelope, RejectDuplicateKeys,
     MAX_TYPED_DATA_JSON_BYTES,
 };
@@ -10,11 +11,10 @@ use starknet_crypto::{pedersen_hash, poseidon_hash, poseidon_hash_many};
 use starknet_rust_core::{
     crypto::compute_hash_on_elements,
     types::typed_data::{
-        CommonTypeReference, Encoder, EnumDefinition, FullTypeReference, ObjectValue, Revision,
-        StructDefinition, TypeDefinition, TypeReference, Value,
+        CommonTypeReference, Encoder, EnumDefinition, ObjectValue, Revision, StructDefinition,
+        TypeDefinition, TypeReference, Value,
     },
-    types::TypedData as StarknetTypedData,
-    utils::{cairo_short_string_to_felt, starknet_keccak},
+    utils::cairo_short_string_to_felt,
 };
 use starknet_types_core::felt::Felt;
 
@@ -36,108 +36,67 @@ pub(super) fn compute_typed_data_message_hash_impl(
     }
 
     reject_duplicate_json_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
-    let mut envelope: CanonicalTypedDataEnvelope =
+    let envelope: CanonicalTypedDataEnvelope =
         serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
-    // starknet.js allows a revision field in a legacy domain type. The pinned
-    // Rust decoder insists on the three-field definition, so remove only this
-    // known extra field for decoding and retain it for the domain hash.
-    let legacy_revision_field = strip_legacy_revision_field(&mut envelope)?;
-    let domain = serde_json::to_value(&envelope.domain).map_err(|_| invalid_typed_data_error())?;
-    let domain_type_name = if envelope.types.get("StarkNetDomain").is_some() {
-        "StarkNetDomain"
-    } else {
-        "StarknetDomain"
+    // As in starknet.js, the domain's revision value selects the revision and
+    // so which domain type applies.
+    let revision = match &envelope.domain.revision {
+        None => Revision::V0,
+        Some(value) => {
+            serde_json::from_value(value.clone()).map_err(|_| invalid_typed_data_error())?
+        }
     };
-    let domain_type = envelope
-        .types
-        .get(domain_type_name)
-        .cloned()
-        .ok_or_else(invalid_typed_data_error)?;
-    let typed_data: StarknetTypedData = serde_json::from_value(
-        serde_json::to_value(envelope).map_err(|_| invalid_typed_data_error())?,
-    )
-    .map_err(|_| invalid_typed_data_error())?;
-    message_hash(
-        &typed_data,
-        *account_address,
-        &domain_type,
-        &domain,
-        legacy_revision_field,
-    )
-}
-
-/// The legacy domain type may declare `revision: felt` when its value is "0".
-/// Keep the declaration's presence so its four-field type hash is used below.
-pub(super) fn strip_legacy_revision_field(
-    envelope: &mut CanonicalTypedDataEnvelope,
-) -> Result<bool> {
-    if envelope.domain.revision.as_ref() != Some(&serde_json::json!("0")) {
-        return Ok(false);
+    // starknet.js accepts revision 0 only as an absent value or the string
+    // "0"; the pinned decoder also accepts the number 0.
+    if revision == Revision::V0
+        && envelope
+            .domain
+            .revision
+            .as_ref()
+            .is_some_and(|value| value != "0")
+    {
+        return Err(invalid_typed_data_error());
     }
-    let Some(fields) = envelope
-        .types
-        .get_mut("StarkNetDomain")
-        .and_then(serde_json::Value::as_array_mut)
-    else {
-        return Ok(false);
-    };
-    if fields.len() == 4 && fields[3] == serde_json::json!({"name":"revision","type":"felt"}) {
-        fields.pop();
-        return Ok(true);
-    }
-    Ok(false)
-}
-
-pub(super) fn message_hash(
-    typed_data: &StarknetTypedData,
-    address: Felt,
-    domain_type: &serde_json::Value,
-    domain: &serde_json::Value,
-    legacy_revision_field: bool,
-) -> Result<Felt> {
-    let encoder = typed_data.encoder();
-    let domain_name = match typed_data.revision() {
+    let domain_name = match revision {
         Revision::V0 => "StarkNetDomain",
         Revision::V1 => "StarknetDomain",
     };
-    let definition = domain_definition(typed_data.revision(), legacy_revision_field);
-    // The decoder validated the domain type after removing the one supported
-    // legacy extension. Reject any unexpected shape before hashing it.
-    let expected_len = definition.fields.len();
-    let actual_len = domain_type
-        .as_array()
-        .map(std::vec::Vec::len)
-        .ok_or_else(invalid_typed_data_error)?;
-    if actual_len != expected_len - usize::from(legacy_revision_field) {
+    let serde_json::Value::Object(types) = envelope.types else {
         return Err(invalid_typed_data_error());
-    }
-    let mut domain_for_hash = domain.clone();
-    if typed_data.revision() == Revision::V0 && !legacy_revision_field {
-        // A three-field legacy domain may still supply revision "0". As in
-        // starknet.js, only fields declared by the type contribute to its hash.
-        domain_for_hash
+    };
+    let (typed_data, definition) =
+        decode(revision, types, envelope.primary_type, envelope.message)?;
+
+    let mut domain =
+        serde_json::to_value(&envelope.domain).map_err(|_| invalid_typed_data_error())?;
+    if !definition
+        .fields
+        .iter()
+        .any(|field| field.name == "revision")
+    {
+        // An undeclared revision only selects the revision. Every other
+        // domain value must be declared, or encode_struct rejects it, so the
+        // signature covers everything a wallet would display.
+        domain
             .as_object_mut()
             .ok_or_else(invalid_typed_data_error)?
             .remove("revision");
     }
     let domain_value: Value =
-        serde_json::from_value(domain_for_hash).map_err(|_| invalid_typed_data_error())?;
-    let domain_hash = encode_domain(encoder, &definition, &domain_value, legacy_revision_field)?;
+        serde_json::from_value(domain).map_err(|_| invalid_typed_data_error())?;
+    let encoder = typed_data.encoder();
+    let domain_type_hash = domain_type_hash(revision, domain_name, &definition);
+    let domain_hash = encode_struct(encoder, domain_type_hash, &definition, &domain_value)?;
     let message_hash = if typed_data.primary_type().common().is_domain(domain_name) {
-        encode_domain(
-            encoder,
-            &definition,
-            typed_data.message(),
-            legacy_revision_field,
-        )?
+        encode_struct(encoder, domain_type_hash, &definition, typed_data.message())?
     } else {
         encode_value(encoder, typed_data.primary_type(), typed_data.message())?
     };
     let prefix =
         cairo_short_string_to_felt("StarkNet Message").map_err(|_| invalid_typed_data_error())?;
     Ok(hash_elements(
-        typed_data.revision(),
-        &[prefix, domain_hash, address, message_hash],
+        revision,
+        &[prefix, domain_hash, *account_address, message_hash],
     ))
 }
 
@@ -149,45 +108,6 @@ impl DomainReference for CommonTypeReference<'_> {
     fn is_domain(&self, domain_name: &str) -> bool {
         matches!(self, Self::Custom(name) if *name == domain_name)
     }
-}
-
-fn domain_definition(revision: Revision, legacy_revision_field: bool) -> StructDefinition {
-    let field_type = match revision {
-        Revision::V0 => FullTypeReference::Felt,
-        Revision::V1 => FullTypeReference::ShortString,
-    };
-    let mut fields = ["name", "version", "chainId"]
-        .into_iter()
-        .map(|name| {
-            starknet_rust_core::types::typed_data::FieldDefinition::new(
-                name.into(),
-                field_type.clone(),
-            )
-        })
-        .collect::<Vec<_>>();
-    if revision == Revision::V1 || legacy_revision_field {
-        fields.push(starknet_rust_core::types::typed_data::FieldDefinition::new(
-            "revision".into(),
-            field_type,
-        ));
-    }
-    StructDefinition { fields }
-}
-
-fn encode_domain(
-    encoder: &Encoder,
-    definition: &StructDefinition,
-    value: &Value,
-    legacy_revision_field: bool,
-) -> Result<Felt> {
-    let signature = match (encoder.revision(), legacy_revision_field) {
-        (Revision::V0, false) => "StarkNetDomain(name:felt,version:felt,chainId:felt)",
-        (Revision::V0, true) => "StarkNetDomain(name:felt,version:felt,chainId:felt,revision:felt)",
-        (Revision::V1, false) => "\"StarknetDomain\"(\"name\":\"shortstring\",\"version\":\"shortstring\",\"chainId\":\"shortstring\",\"revision\":\"shortstring\")",
-        (Revision::V1, true) => return Err(invalid_typed_data_error()),
-    };
-    let type_hash = starknet_keccak(signature.as_bytes());
-    encode_struct(encoder, type_hash, definition, value)
 }
 
 fn hash_elements(revision: Revision, elements: &[Felt]) -> Felt {

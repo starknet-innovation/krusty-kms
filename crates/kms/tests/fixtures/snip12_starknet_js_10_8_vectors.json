@@ -782,6 +782,299 @@
           "Name": "0X1F"
         }
       }
+    },
+    {
+      "name": "domain_domain_fields_reordered",
+      "account_address": "0x1234",
+      "expected_hash": "0x674c8adff1c7412142e64b4f2e6545576bed80aa7b6ab3caf587eaec816a62b",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ]
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
+    },
+    {
+      "name": "domain_domain_revision_not_declared",
+      "account_address": "0x1234",
+      "expected_hash": "0x7b2289d2d18dc34d983d705eac41b5aec475107ab3117e751dffbf1fecdbd38",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ]
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
+    },
+    {
+      "name": "domain_domain_only_name_declared",
+      "account_address": "0x1234",
+      "expected_hash": "0x13e483f5345f5a19003259c638d9fef400d5998f27d82ab2b51b5c8d9d10803",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ]
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "revision": "1"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
+    },
+    {
+      "name": "domain_domain_chain_id_declared_felt",
+      "account_address": "0x1234",
+      "expected_hash": "0x200efadd43429a0b3d8f05d373a171aaf4c01cdfc5eaf82798e65a43c029bd4",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "felt"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ]
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
+    },
+    {
+      "name": "domain_unused_empty_struct_declared",
+      "account_address": "0x1234",
+      "expected_hash": "0x14f20d462d48c73b919d2cd8dd96d49043afd2617157e564d91ba2f65d569ac",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ],
+          "Unused": []
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
+    },
+    {
+      "name": "domain_unused_legacy_domain_declared",
+      "account_address": "0x1234",
+      "expected_hash": "0x14f20d462d48c73b919d2cd8dd96d49043afd2617157e564d91ba2f65d569ac",
+      "typed_data": {
+        "types": {
+          "StarknetDomain": [
+            {
+              "name": "name",
+              "type": "shortstring"
+            },
+            {
+              "name": "version",
+              "type": "shortstring"
+            },
+            {
+              "name": "chainId",
+              "type": "shortstring"
+            },
+            {
+              "name": "revision",
+              "type": "shortstring"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ],
+          "StarkNetDomain": [
+            {
+              "name": "name",
+              "type": "felt"
+            },
+            {
+              "name": "version",
+              "type": "felt"
+            },
+            {
+              "name": "chainId",
+              "type": "felt"
+            }
+          ]
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "version": "1",
+          "chainId": "SN_MAIN",
+          "revision": "1"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
+    },
+    {
+      "name": "domain_legacy_domain_fields_reordered",
+      "account_address": "0x1234",
+      "expected_hash": "0x13e5e3d770f6bfd6a606e1c32fe94883a1ce86c558dd64f980029c9a1f0e82e",
+      "typed_data": {
+        "types": {
+          "StarkNetDomain": [
+            {
+              "name": "chainId",
+              "type": "felt"
+            },
+            {
+              "name": "name",
+              "type": "felt"
+            },
+            {
+              "name": "version",
+              "type": "felt"
+            }
+          ],
+          "Msg": [
+            {
+              "name": "a",
+              "type": "felt"
+            }
+          ]
+        },
+        "primaryType": "Msg",
+        "domain": {
+          "name": "App",
+          "version": "1",
+          "chainId": "SN_MAIN"
+        },
+        "message": {
+          "a": "0x1"
+        }
+      }
     }
   ]
 }

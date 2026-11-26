@@ -10,6 +10,9 @@ use std::{collections::HashSet, fmt};
 
 #[path = "typed_data_compat.rs"]
 mod compat;
+#[path = "typed_data_domain.rs"]
+mod domain;
+use domain::CanonicalTypedDataDomain;
 
 /// Maximum accepted typed-data JSON size.
 ///
@@ -25,7 +28,7 @@ const INVALID_TYPED_DATA_ERROR: &str = "typed data is not valid canonical SNIP-1
 /// Validate the signed envelope before handing its fields to the reference
 /// encoder. `TypedData` itself intentionally ignores unknown top-level keys,
 /// which is unsafe for signing UIs that display the complete JSON document.
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CanonicalTypedDataEnvelope {
     types: serde_json::Value,
@@ -33,17 +36,6 @@ struct CanonicalTypedDataEnvelope {
     #[serde(rename = "primaryType")]
     primary_type: serde_json::Value,
     message: serde_json::Value,
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-struct CanonicalTypedDataDomain {
-    name: serde_json::Value,
-    version: serde_json::Value,
-    #[serde(rename = "chainId")]
-    chain_id: serde_json::Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    revision: Option<serde_json::Value>,
 }
 
 fn invalid_typed_data_error() -> KmsError {
@@ -123,8 +115,11 @@ impl<'de> Visitor<'de> for RejectDuplicateKeys {
 
 /// Compute the canonical SNIP-12 message hash for an account.
 ///
-/// The document's domain and type definitions select SNIP-12 revision 0 or 1.
-/// Unsupported, inconsistent, or noncanonical documents are rejected.
+/// The domain's `revision` selects SNIP-12 revision 0 or 1. As in starknet.js,
+/// the domain is hashed from its declared type, so its fields may be any
+/// order or subset of `name`, `version`, `chainId` and `revision`. Unsupported
+/// or inconsistent documents, and domain or message values their types do not
+/// declare (other than the domain's `revision`), are rejected.
 pub fn compute_typed_data_message_hash(
     typed_data_json: &str,
     account_address: &Felt,

@@ -38,6 +38,18 @@ All notable changes to the published Rust crates are documented here.
   the number of low zero bits. Behavior is unchanged.
 - Account discovery in `krusty-kms` holds each derived private key in a
   `SecretFelt` while it builds candidates.
+- `compute_typed_data_message_hash` now hashes the SNIP-12 domain from its
+  declared type, as starknet.js does: domain fields in any order, a subset of
+  `name`, `version`, `chainId` and `revision`, and `felt` fields in revision 1.
+  Unused empty structs and an unused domain type of the other revision are
+  ignored. A message field typed as the domain type is still
+  rejected. Undeclared domain values other than `revision` are still rejected,
+  and digests of previously accepted documents are unchanged (#276).
+- `compute_typed_data_message_hash` now rejects some documents it used to hash,
+  which starknet.js either rejects or could hash differently: a `types` entry
+  named after a built-in or preset type (such as `felt`, `u256` or `enum`), a
+  numeric revision `0`, and an explicit `null` domain `name`, `version` or
+  `chainId` (#276).
 
 ## [4.0.0] - 2026-11-24
 
