@@ -10,6 +10,9 @@ use std::{collections::HashSet, fmt};
 
 #[path = "typed_data_compat.rs"]
 mod compat;
+#[path = "typed_data_domain.rs"]
+mod domain;
+use domain::CanonicalTypedDataDomain;
 
 /// Maximum accepted typed-data JSON size.
 ///
@@ -33,41 +36,6 @@ struct CanonicalTypedDataEnvelope {
     #[serde(rename = "primaryType")]
     primary_type: serde_json::Value,
     message: serde_json::Value,
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-#[serde(deny_unknown_fields)]
-struct CanonicalTypedDataDomain {
-    // `present` keeps an explicit null as `Some(Null)`, so it is rejected
-    // rather than treated as an absent, undeclared field.
-    #[serde(
-        default,
-        deserialize_with = "present",
-        skip_serializing_if = "Option::is_none"
-    )]
-    name: Option<serde_json::Value>,
-    #[serde(
-        default,
-        deserialize_with = "present",
-        skip_serializing_if = "Option::is_none"
-    )]
-    version: Option<serde_json::Value>,
-    #[serde(
-        default,
-        rename = "chainId",
-        deserialize_with = "present",
-        skip_serializing_if = "Option::is_none"
-    )]
-    chain_id: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    revision: Option<serde_json::Value>,
-}
-
-fn present<'de, D>(deserializer: D) -> std::result::Result<Option<serde_json::Value>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    serde::Deserialize::deserialize(deserializer).map(Some)
 }
 
 fn invalid_typed_data_error() -> KmsError {
