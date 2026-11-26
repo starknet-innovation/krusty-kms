@@ -1,11 +1,7 @@
 //! Narrow starknet.js compatibility for values the pinned SNIP-12 encoder differs on.
 
-use super::{
-    invalid_typed_data_error, CanonicalTypedDataEnvelope, RejectDuplicateKeys,
-    MAX_TYPED_DATA_JSON_BYTES,
-};
+use super::{invalid_typed_data_error, CanonicalTypedDataEnvelope, MAX_TYPED_DATA_JSON_BYTES};
 use krusty_kms_common::{KmsError, Result};
-use serde::de::DeserializeSeed;
 use starknet_crypto::{pedersen_hash, poseidon_hash, poseidon_hash_many};
 use starknet_rust_core::{
     crypto::compute_hash_on_elements,
@@ -18,11 +14,8 @@ use starknet_rust_core::{
 };
 use starknet_types_core::felt::Felt;
 
-fn reject_duplicate_json_keys(json: &str) -> serde_json::Result<()> {
-    let mut deserializer = serde_json::Deserializer::from_str(json);
-    RejectDuplicateKeys.deserialize(&mut deserializer)?;
-    deserializer.end()
-}
+#[path = "typed_data_checks.rs"]
+mod checks;
 
 pub(super) fn compute_typed_data_message_hash_impl(
     typed_data_json: &str,
@@ -35,9 +28,10 @@ pub(super) fn compute_typed_data_message_hash_impl(
         )));
     }
 
-    reject_duplicate_json_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
+    checks::reject_duplicate_json_keys(typed_data_json).map_err(|_| invalid_typed_data_error())?;
     let mut envelope: CanonicalTypedDataEnvelope =
         serde_json::from_str(typed_data_json).map_err(|_| invalid_typed_data_error())?;
+    checks::reject_unsupported_type_names(&envelope)?;
     // starknet.js allows a revision field in a legacy domain type. The pinned
     // Rust decoder insists on the three-field definition, so remove only this
     // known extra field for decoding and retain it for the domain hash.

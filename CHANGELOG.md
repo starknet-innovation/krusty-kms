@@ -39,6 +39,21 @@ All notable changes to the published Rust crates are documented here.
 - Account discovery in `krusty-kms` holds each derived private key in a
   `SecretFelt` while it builds candidates.
 
+### Fixed
+
+- `compute_typed_data_message_hash` now refuses SNIP-12 documents it would
+  have hashed differently from starknet.js, instead of returning a hash the
+  dapp cannot verify
+  ([#275](https://github.com/starknet-innovation/krusty-kms/issues/275)):
+  - a declared type named after a built-in or preset type (such as `u256`,
+    `felt` or `ContractAddress`), or whose name ends in `*`, contains `(`, `)`
+    or `,`, or has surrounding whitespace;
+  - a type or field name containing `"`, `\`, a control character or a
+    character above U+FFFF;
+  - an enum variant type with spaces around its parts, such as `(felt, felt)`;
+  - on revision 0, a reference to `u256`, `TokenAmount`, `NftId` or `enum`, or
+    an enum definition, all of which exist only in revision 1.
+
 ## [4.0.0] - 2026-11-24
 
 Key and address derivation is unchanged from 3.x. Read the
