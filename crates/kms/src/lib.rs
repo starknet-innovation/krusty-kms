@@ -42,10 +42,12 @@ pub use bitcoin::{
     BitcoinP2wpkhKeyPair, BITCOIN_COIN_TYPE,
 };
 pub use derivation::{
-    derive_argent_legacy_private_key, derive_keypair, derive_keypair_with_coin_type,
-    derive_nostr_keypair, derive_nostr_private_key, derive_private_key,
-    derive_private_key_with_coin_type, derive_stark_from_eth_key, grind_key, NostrKeyPair,
-    TongoKeyPair, NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
+    derive_argent_legacy_private_key, derive_argent_legacy_secret_key, derive_keypair,
+    derive_keypair_with_coin_type, derive_nostr_keypair, derive_nostr_private_key,
+    derive_nostr_secret_key, derive_private_key, derive_private_key_with_coin_type,
+    derive_secret_key_with_coin_type, derive_stark_from_eth_key,
+    derive_stark_secret_key_from_eth_key, grind_key, grind_secret_key, NostrKeyPair, TongoKeyPair,
+    NOSTR_COIN_TYPE, STARKNET_COIN_TYPE, TONGO_COIN_TYPE,
 };
 pub use discovery::{
     derive_discovery_keypairs, generate_candidates, CandidateAccount, CandidateAccountWithSecrets,
@@ -73,11 +75,12 @@ pub use qsb_hors::{
 };
 pub use selector::selector_from_name;
 pub use stark_signing::{
-    is_stark_public_key, sign_stark_hash, stark_public_key, validate_stark_private_key,
-    verify_stark_signature, StarkSignature,
+    is_stark_public_key, sign_stark_hash, sign_stark_hash_with_public_key, stark_public_key,
+    validate_stark_private_key, verify_stark_signature, StarkSignature,
 };
 pub use strk20::{
-    derive_scoped_strk20_viewing_key, derive_strk20_viewing_key, fold_strk20_viewing_key,
+    derive_scoped_strk20_secret_viewing_key, derive_scoped_strk20_viewing_key,
+    derive_strk20_viewing_key, fold_strk20_secret_viewing_key, fold_strk20_viewing_key,
     strk20_viewing_key_message_hash, STRK20_VIEWING_KEY_DOMAIN,
 };
 pub use tx_hash::{

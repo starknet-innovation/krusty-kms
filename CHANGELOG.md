@@ -4,6 +4,41 @@ All notable changes to the published Rust crates are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Secret-returning derivation in `krusty-kms`:
+  `derive_secret_key_with_coin_type`, `derive_argent_legacy_secret_key`,
+  `derive_stark_secret_key_from_eth_key`, `grind_secret_key`,
+  `fold_strk20_secret_viewing_key` and
+  `derive_scoped_strk20_secret_viewing_key` return a `SecretFelt`, and
+  `derive_nostr_secret_key` returns `Zeroizing<[u8; 32]>`. They derive the
+  same keys as `derive_private_key_with_coin_type`,
+  `derive_argent_legacy_private_key`, `derive_stark_from_eth_key`,
+  `grind_key`, `fold_strk20_viewing_key`,
+  `derive_scoped_strk20_viewing_key` and `derive_nostr_private_key`, whose
+  `Felt` and `[u8; 32]` results are `Copy` and leave a copy of the key that
+  cannot be wiped. Prefer the new functions; the older ones are unchanged.
+- `sign_stark_hash_with_public_key` in `krusty-kms` signs for a caller that
+  already holds the public key. It does not recompute the key from the private
+  key; it checks the new signature under the supplied public key instead and
+  fails if it does not verify. That catches a key passed by mistake but does
+  not prove the public key belongs to the private key. `(r, s)` equals what
+  `sign_stark_hash` returns.
+
+### Changed
+
+- STRK20 viewing-key reduction and folding (`derive_strk20_viewing_key`,
+  `fold_strk20_viewing_key` and the scoped derivation) use fixed-size
+  `crypto-bigint` integers in wiped buffers, with no branch on the key in
+  the reduction and fold, instead of heap-allocated `num-bigint` values. The
+  surrounding hashing and `Felt` conversions are still not constant-time. The
+  derived keys are unchanged.
+- `StarkCurve::mul_generator` and `StarkCurve::mul` in `krusty-kms-crypto` now
+  document that they are not constant-time for a secret scalar: timing reveals
+  the number of low zero bits. Behavior is unchanged.
+- Account discovery in `krusty-kms` holds each derived private key in a
+  `SecretFelt` while it builds candidates.
+
 ## [4.0.0] - 2026-11-24
 
 Key and address derivation is unchanged from 3.x. Read the

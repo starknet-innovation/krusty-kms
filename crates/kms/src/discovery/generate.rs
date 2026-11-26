@@ -7,7 +7,7 @@ use crate::account_class::{
     deployment_classes, AccountClass, AccountFamily, ArgentAccount, ArgentCairo0,
     ArgentConstructorLayout, BraavosAccount, KnownAccountClass, OpenZeppelinAccount, SaltPolicy,
 };
-use crate::derivation::{derive_argent_legacy_private_key, derive_private_key_with_coin_type};
+use crate::derivation::{derive_argent_legacy_secret_key, derive_secret_key_with_coin_type};
 use crate::mnemonic::validate_mnemonic;
 use crate::stark_signing::stark_public_key;
 use krusty_kms_common::{KmsError, Result};
@@ -58,23 +58,23 @@ pub fn derive_discovery_keypairs(mnemonic: &str, max_index: u32) -> Result<Vec<D
     for index in 0..max_index {
         // Direct derivation (Braavos / new Argent / OZ all share this key)
         let direct_pk =
-            derive_private_key_with_coin_type(mnemonic, index, 0, STARKNET_COIN_TYPE, None)?;
-        let direct_pubk = stark_public_key(&direct_pk)?;
+            derive_secret_key_with_coin_type(mnemonic, index, 0, STARKNET_COIN_TYPE, None)?;
+        let direct_pubk = stark_public_key(direct_pk.expose_secret())?;
         keypairs.push(DerivedKeypair {
             derivation_type: DerivationType::Direct,
             public_key: felt_hex(&direct_pubk),
-            private_key: felt_hex(&direct_pk),
+            private_key: felt_hex(direct_pk.expose_secret()),
             derivation_index: index,
             derivation_path: format!("m/44'/9004'/0'/0/{index}"),
         });
 
         // Argent legacy double derivation
-        let legacy_pk = derive_argent_legacy_private_key(mnemonic, index, 0)?;
-        let legacy_pubk = stark_public_key(&legacy_pk)?;
+        let legacy_pk = derive_argent_legacy_secret_key(mnemonic, index, 0)?;
+        let legacy_pubk = stark_public_key(legacy_pk.expose_secret())?;
         keypairs.push(DerivedKeypair {
             derivation_type: DerivationType::ArgentLegacy,
             public_key: felt_hex(&legacy_pubk),
-            private_key: felt_hex(&legacy_pk),
+            private_key: felt_hex(legacy_pk.expose_secret()),
             derivation_index: index,
             derivation_path: format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}"),
         });
@@ -267,11 +267,11 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
     for index in 0..max_index {
         // (a) Direct derivation — shared by Braavos, new Argent, OZ
         let direct_pk =
-            derive_private_key_with_coin_type(mnemonic, index, 0, STARKNET_COIN_TYPE, None)?;
-        let direct_pubk = stark_public_key(&direct_pk)?;
+            derive_secret_key_with_coin_type(mnemonic, index, 0, STARKNET_COIN_TYPE, None)?;
+        let direct_pubk = stark_public_key(direct_pk.expose_secret())?;
         let direct_path = format!("m/44'/9004'/0'/0/{index}");
         let direct = DerivedKey {
-            private_key: &direct_pk,
+            private_key: direct_pk.expose_secret(),
             public_key: &direct_pubk,
             index,
             path: &direct_path,
@@ -281,11 +281,11 @@ pub fn generate_candidates(mnemonic: &str, max_index: u32) -> Result<Vec<Candida
         push_oz_candidates(&mut candidates, &classes, &direct)?;
 
         // (b) Legacy double derivation — old Argent
-        let legacy_pk = derive_argent_legacy_private_key(mnemonic, index, 0)?;
-        let legacy_pubk = stark_public_key(&legacy_pk)?;
+        let legacy_pk = derive_argent_legacy_secret_key(mnemonic, index, 0)?;
+        let legacy_pubk = stark_public_key(legacy_pk.expose_secret())?;
         let legacy_path = format!("m/44'/60'/0'/0/0 -> m/44'/9004'/0'/0/{index}");
         let legacy = DerivedKey {
-            private_key: &legacy_pk,
+            private_key: legacy_pk.expose_secret(),
             public_key: &legacy_pubk,
             index,
             path: &legacy_path,
