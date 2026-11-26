@@ -6,7 +6,11 @@ domain's `revision` value selects the revision. The declared domain fields may
 be any order or subset of `name`, `version`, `chainId` and `revision`, typed
 `felt`, or `shortstring` in revision 1. The pinned `starknet-rust-core` decoder
 accepts only the canonical domain type, so it decodes the message with that
-type and placeholder domain values, and krusty hashes the domain itself.
+type and placeholder domain values, and krusty hashes the domain itself. A
+message field typed as the domain type is rejected (the decoder keeps the
+domain type out of its type map, so the reference is undefined), so it can
+never be hashed with that canonical type; a domain `primaryType` is hashed from the declared
+type.
 
 The rule stays exact-or-fail-closed. A domain value the type does not declare
 is rejected, except `revision`, so a displayed value cannot go unsigned. Types

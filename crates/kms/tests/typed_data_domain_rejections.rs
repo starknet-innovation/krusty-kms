@@ -226,3 +226,58 @@ fn explicit_null_domain_values_are_rejected() {
         assert!(hash(&document).is_err(), "{field}");
     }
 }
+
+#[test]
+fn domain_type_referenced_by_a_message_field_is_rejected() {
+    // The decoder sees only the canonical domain type, so a field of that type
+    // must never hash: it would differ from starknet.js for this declaration.
+    let reordered = json!([
+        {"name": "chainId", "type": "shortstring"},
+        {"name": "name", "type": "shortstring"},
+        {"name": "version", "type": "shortstring"},
+        {"name": "revision", "type": "shortstring"}
+    ]);
+    let domain_value =
+        json!({"name": "Example", "version": "1", "chainId": "SN_MAIN", "revision": "1"});
+
+    // Each shape hashes with the same struct under another name, so only the
+    // domain reference is refused.
+    for (name, refusal) in [("Dom", false), ("StarknetDomain", true)] {
+        let cases = [
+            (
+                json!([{"name": "d", "type": name}]),
+                json!({"d": domain_value}),
+            ),
+            (
+                json!([{"name": "d", "type": format!("{name}*")}]),
+                json!({"d": [domain_value]}),
+            ),
+            (
+                json!([{"name": "e", "type": "enum", "contains": "E"}]),
+                json!({"e": {"B": ["0x1", domain_value]}}),
+            ),
+        ];
+        for (msg_type, message) in cases {
+            let mut document = v1_document();
+            document["types"]["StarknetDomain"] = reordered.clone();
+            document["types"]["Dom"] = reordered.clone();
+            document["types"]["E"] = json!([{"name": "B", "type": format!("(felt,{name})")}]);
+            document["types"]["Msg"] = msg_type;
+            document["message"] = message;
+            assert_eq!(hash(&document).is_err(), refusal, "{name}: {document}");
+        }
+    }
+
+    // A domain primary type is hashed from its declared type (starknet.js
+    // 10.8.0 digest).
+    let mut document = v1_document();
+    document["types"]["StarknetDomain"] = reordered;
+    document["primaryType"] = json!("StarknetDomain");
+    document["message"] = domain_value;
+    assert_eq!(
+        hash(&document).unwrap(),
+        Felt::from_hex_unchecked(
+            "0x6dedea56066699aa9cb3b8ba1af7b096732fe846f32b2cb89fb28e80c95e5fa"
+        )
+    );
+}

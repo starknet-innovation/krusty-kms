@@ -42,7 +42,8 @@ All notable changes to the published Rust crates are documented here.
   declared type, as starknet.js does: domain fields in any order, a subset of
   `name`, `version`, `chainId` and `revision`, and `felt` fields in revision 1.
   Unused empty structs and an unused domain type of the other revision are
-  ignored. Undeclared domain values other than `revision` are still rejected,
+  ignored. A message field typed as the domain type is still
+  rejected. Undeclared domain values other than `revision` are still rejected,
   and digests of previously accepted documents are unchanged (#276).
 - `compute_typed_data_message_hash` now rejects some documents it used to hash,
   which starknet.js either rejects or could hash differently: a `types` entry
